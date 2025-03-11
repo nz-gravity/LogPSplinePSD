@@ -7,7 +7,7 @@ from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
 from scipy.interpolate import interp1d
 import scipy
-
+import matplotlib.pyplot as plt
 
 class LogPSplines:
 
@@ -164,3 +164,20 @@ def generate_data():
 
 
 
+
+
+def main():
+
+    t, noise = generate_data()
+    fs = 1/ (t[1] - t[0])
+
+    # plot the data + periodogram
+    fig, ax = plt.subplots(2, 1, figsize=(4, 6))
+    ax[0].plot(t, noise)
+    ax[1].magnitude_spectrum(noise, Fs=fs, scale='dB', color='C1')
+    plt.tight_layout()
+    plt.show()
+
+
+if __name__ == '__main__':
+    main()

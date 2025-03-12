@@ -7,10 +7,11 @@ import scipy.signal
 from jax import numpy as jnp
 import jax
 import optax
-from scipy.interpolate import interp1d
 from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
+
+from log_psplines.datasets import Periodogram, Timeseries
 
 
 class LogPSplines:
@@ -121,27 +122,13 @@ def generate_basis_and_penalty_matrix(
     return jnp.array(basis_matrix), jnp.array(p)
 
 
-@dataclasses.dataclass
-class Periodogram:
-    freqs: jnp.ndarray
-    power: jnp.ndarray
-
-    @property
-    def fs(self) -> float:
-        """Sampling frequency computed from the frequency array."""
-        return float(2 * self.freqs[-1])
-
-    def highpass(self, min_freq: float) -> "Periodogram":
-        """Return a new Periodogram with frequencies above a threshold."""
-        mask = self.freqs > min_freq
-        return Periodogram(self.freqs[mask], self.power[mask])
-
-
 
 
 
 def data_peak_knots(
-    periodogram: Periodogram, n_knots: int, frac_uniform: float = 0.0, frac_log: float = 0.8
+    periodogram: Periodogram, n_knots: int,
+        frac_uniform: float = 0.0,
+        frac_log: float = 0.8
 ) -> np.ndarray:
     """Select knots with a mix of uniform, log-spaced, and density-based placement.
 
@@ -216,22 +203,6 @@ Args:
     return knots
 
 
-
-@dataclasses.dataclass
-class Timeseries:
-    t: jnp.ndarray
-    y: jnp.ndarray
-
-    @property
-    def fs(self) -> float:
-        """Sampling frequency computed from the time array."""
-        return float(1 / (self.t[1] - self.t[0]))
-
-    def to_periodogram(self) -> "Periodogram":
-        """Compute the one-sided periodogram of the timeseries."""
-        freq = jnp.fft.rfftfreq(len(self.y), d=1 / self.fs)
-        power = jnp.abs(jnp.fft.rfft(self.y)) ** 2 / len(self.y)
-        return Periodogram(freq[1:], power[1:])
 
 
 def generate_data() -> Timeseries:

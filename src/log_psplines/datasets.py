@@ -8,6 +8,10 @@ class Timeseries:
     y: jnp.ndarray
 
     @property
+    def n(self):
+        return len(self.t)
+
+    @property
     def fs(self) -> float:
         """Sampling frequency computed from the time array."""
         return float(1 / (self.t[1] - self.t[0]))
@@ -24,6 +28,10 @@ class Timeseries:
 class Periodogram:
     freqs: jnp.ndarray
     power: jnp.ndarray
+
+    @property
+    def n(self):
+        return len(self.freqs)
 
     @property
     def fs(self) -> float:

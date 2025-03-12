@@ -1,12 +1,12 @@
 import dataclasses
 from typing import Tuple
 
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
+import optax
 import scipy.signal
 from jax import numpy as jnp
-import jax
-import optax
 from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
@@ -18,15 +18,21 @@ class LogPSplines:
     """Model for log power splines using a B-spline basis and a penalty matrix."""
 
     def __init__(
-            self,
-            knots: np.ndarray,
-            degree: int,
-            diffMatrixOrder: int = 2,
-            n: int = None,
+        self,
+        knots: np.ndarray,
+        degree: int,
+        diffMatrixOrder: int = 2,
+        n: int = None,
     ):
-        assert degree > diffMatrixOrder, "Degree must be larger than diffMatrixOrder."
+        assert (
+            degree > diffMatrixOrder
+        ), "Degree must be larger than diffMatrixOrder."
         assert degree in [0, 1, 2, 3, 4, 5], "Degree must be between 0 and 5."
-        assert diffMatrixOrder in [0, 1, 2], "diffMatrixOrder must be 0, 1, or 2."
+        assert diffMatrixOrder in [
+            0,
+            1,
+            2,
+        ], "diffMatrixOrder must be 0, 1, or 2."
         assert len(knots) >= degree, f"#knots: {len(knots)}, degree: {degree}"
 
         self.knots = knots
@@ -56,7 +62,9 @@ class LogPSplines:
         return weighted_splines - jnp.log(2 * jnp.pi)
 
 
-def lnlikelihood(lndata_log: jnp.ndarray, log_psplines: LogPSplines, weights: jnp.ndarray) -> float:
+def lnlikelihood(
+    lndata_log: jnp.ndarray, log_psplines: LogPSplines, weights: jnp.ndarray
+) -> float:
     """Compute the Whittle log likelihood.
 
     Args:
@@ -77,14 +85,12 @@ def lnlikelihood(lndata_log: jnp.ndarray, log_psplines: LogPSplines, weights: jn
     return lnlike
 
 
-
-
 def generate_basis_and_penalty_matrix(
-        knots: np.ndarray,
-        degree: int,
-        n_grid_points: int,
-        diffMatrixOrder: int,
-        epsilon: float = 1e-6,
+    knots: np.ndarray,
+    degree: int,
+    n_grid_points: int,
+    diffMatrixOrder: int,
+    epsilon: float = 1e-6,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Generate a B-spline basis matrix and penalty matrix.
 
@@ -99,63 +105,67 @@ def generate_basis_and_penalty_matrix(
         A tuple (basis_matrix, penalty_matrix) as JAX arrays.
     """
     order = degree + 1
-    basis = BSplineBasis(domain_range=[0,1], order=order, knots=knots)
+    basis = BSplineBasis(domain_range=[0, 1], order=order, knots=knots)
     grid_points = np.linspace(0, 1, n_grid_points)
-    basis_matrix = basis.to_basis().to_grid(grid_points).data_matrix.squeeze().T
+    basis_matrix = (
+        basis.to_basis().to_grid(grid_points).data_matrix.squeeze().T
+    )
 
     # Augment knots with boundary values for proper normalization.
     knots_with_boundary = np.concatenate(
         [np.repeat(0, degree), knots, np.repeat(1, degree)]
     )
     n_knots_total = len(knots_with_boundary)
-    mid_to_end = knots_with_boundary[degree + 1:]
+    mid_to_end = knots_with_boundary[degree + 1 :]
     start_to_mid = knots_with_boundary[: (n_knots_total - degree - 1)]
     norm_factor = (mid_to_end - start_to_mid) / (degree + 1)
     norm_factor[norm_factor == 0] = np.inf  # Prevent division by zero.
     basis_matrix = basis_matrix / norm_factor
 
     # Compute the penalty matrix using L2 regularization.
-    regularization = L2Regularization(LinearDifferentialOperator(diffMatrixOrder))
+    regularization = L2Regularization(
+        LinearDifferentialOperator(diffMatrixOrder)
+    )
     p = regularization.penalty_matrix(basis)
     p = p / np.max(p)
     p = p + epsilon * np.eye(p.shape[1])
     return jnp.array(basis_matrix), jnp.array(p)
 
 
-
-
-
 def data_peak_knots(
-    periodogram: Periodogram, n_knots: int,
-        frac_uniform: float = 0.0,
-        frac_log: float = 0.8
+    periodogram: Periodogram,
+    n_knots: int,
+    frac_uniform: float = 0.0,
+    frac_log: float = 0.8,
 ) -> np.ndarray:
     """Select knots with a mix of uniform, log-spaced, and density-based placement.
 
-         Instead of using a fixed grid (via log‐ or geomspace) to “force” a knot allocation,
-     you can let the periodogram’s power distribution guide you. For example,
-     you can interpret the (normalized) power as a probability density over frequency,
-     compute its cumulative distribution function (CDF), and then choose knots at equally
-     spaced quantiles of that CDF. In regions where the power (and hence “spikiness”) is higher,
-      the CDF rises faster, so more knots will be allocated there.
+             Instead of using a fixed grid (via log‐ or geomspace) to “force” a knot allocation,
+         you can let the periodogram’s power distribution guide you. For example,
+         you can interpret the (normalized) power as a probability density over frequency,
+         compute its cumulative distribution function (CDF), and then choose knots at equally
+         spaced quantiles of that CDF. In regions where the power (and hence “spikiness”) is higher,
+          the CDF rises faster, so more knots will be allocated there.
 
-    Ensures the first and last knots are at the min and max frequency.
-    The remaining knots are allocated:
-    - `frac_uniform`: Using uniform spacing.
-    - `frac_log`: Using logarithmic spacing.
-    - The rest: Using power-based density sampling.
+        Ensures the first and last knots are at the min and max frequency.
+        The remaining knots are allocated:
+        - `frac_uniform`: Using uniform spacing.
+        - `frac_log`: Using logarithmic spacing.
+        - The rest: Using power-based density sampling.
 
-Args:
-        periodogram: Periodogram object with freqs and power.
-        n_knots: Total number of knots to select.
-        frac_uniform: Fraction of knots to place uniformly (can be 0).
-        frac_log: Fraction of knots to place logarithmically (can be 0).
+    Args:
+            periodogram: Periodogram object with freqs and power.
+            n_knots: Total number of knots to select.
+            frac_uniform: Fraction of knots to place uniformly (can be 0).
+            frac_log: Fraction of knots to place logarithmically (can be 0).
 
-    Returns:
-        An array of knot locations (frequencies).
+        Returns:
+            An array of knot locations (frequencies).
     """
     if n_knots < 2:
-        raise ValueError("At least two knots are required (min and max frequencies).")
+        raise ValueError(
+            "At least two knots are required (min and max frequencies)."
+        )
 
     min_freq, max_freq = periodogram.freqs[0], periodogram.freqs[-1]
 
@@ -174,12 +184,16 @@ Args:
 
     # Uniformly spaced knots (excluding min/max)
     uniform_knots = (
-        np.linspace(min_freq, max_freq, n_uniform + 2)[1:-1] if n_uniform > 0 else np.array([])
+        np.linspace(min_freq, max_freq, n_uniform + 2)[1:-1]
+        if n_uniform > 0
+        else np.array([])
     )
 
     # Log-spaced knots (excluding min/max)
     log_knots = (
-        np.logspace(np.log10(min_freq), np.log10(max_freq), n_log + 2)[1:-1] if n_log > 0 else np.array([])
+        np.logspace(np.log10(min_freq), np.log10(max_freq), n_log + 2)[1:-1]
+        if n_log > 0
+        else np.array([])
     )
 
     # Power-based density sampling
@@ -194,15 +208,15 @@ Args:
         density_knots = np.interp(quantiles, cdf, periodogram.freqs)
 
     # Combine and sort
-    knots = np.concatenate(([min_freq], uniform_knots, log_knots, density_knots, [max_freq]))
+    knots = np.concatenate(
+        ([min_freq], uniform_knots, log_knots, density_knots, [max_freq])
+    )
     knots = np.sort(knots)  # Ensure order
 
     # normalize to [0, 1]
     knots = (knots - min_freq) / (max_freq - min_freq)
     print(f"Selected knots: {knots}")
     return knots
-
-
 
 
 def generate_data() -> Timeseries:
@@ -217,7 +231,10 @@ def generate_data() -> Timeseries:
 
 
 def optimize_logpsplines_weights(
-        noise_f: Periodogram, log_psplines: LogPSplines, init_weights: jnp.ndarray, num_steps: int = 1000
+    noise_f: Periodogram,
+    log_psplines: LogPSplines,
+    init_weights: jnp.ndarray,
+    num_steps: int = 1000,
 ) -> jnp.ndarray:
     """
     Optimize spline weights by directly minimizing the negative Whittle log likelihood.
@@ -260,28 +277,48 @@ def main():
 
     # Determine knots based on the periodogram frequencies and initialize the spline model.
     knots = data_peak_knots(noise_f, n_knots=20)
-    spline_model = LogPSplines(knots=knots, degree=3, diffMatrixOrder=2, n=len(noise_f.freqs))
+    spline_model = LogPSplines(
+        knots=knots, degree=3, diffMatrixOrder=2, n=len(noise_f.freqs)
+    )
     init_weights = jnp.zeros(spline_model.n_basis)
 
     # Compute the initial log likelihood.
-    lnl_initial = lnlikelihood(jnp.log(noise_f.power), spline_model, init_weights)
+    lnl_initial = lnlikelihood(
+        jnp.log(noise_f.power), spline_model, init_weights
+    )
     print("Initial log likelihood:", lnl_initial)
 
     # Optimize the spline weights by directly minimizing the negative log likelihood.
-    optimized_weights = optimize_logpsplines_weights(noise_f, spline_model, init_weights)
-    spline = jnp.exp(spline_model(optimized_weights)) * scale ** 2
+    optimized_weights = optimize_logpsplines_weights(
+        noise_f, spline_model, init_weights
+    )
+    spline = jnp.exp(spline_model(optimized_weights)) * scale**2
 
-    lnl_final = lnlikelihood(jnp.log(noise_f.power), spline_model, optimized_weights)
+    lnl_final = lnlikelihood(
+        jnp.log(noise_f.power), spline_model, optimized_weights
+    )
     print("Final log likelihood:", lnl_final)
 
     # Plot the timeseries and periodogram with the fitted spline model.
     fig, ax = plt.subplots(1, 1, figsize=(4, 3))
-    ax.loglog(noise_f.freqs, noise_f.power * scale ** 2, color="lightgray", label="Data")
+    ax.loglog(
+        noise_f.freqs,
+        noise_f.power * scale**2,
+        color="lightgray",
+        label="Data",
+    )
     ax.loglog(noise_f.freqs, spline, label="Spline", color="tab:orange")
 
     # get freq of knots (knots are at % of the freqs)
     idx = (knots * len(noise_f.freqs)).astype(int)
-    ax.loglog(noise_f.freqs[idx], spline[idx], "o", label="Knots", color="tab:orange", ms=4)
+    ax.loglog(
+        noise_f.freqs[idx],
+        spline[idx],
+        "o",
+        label="Knots",
+        color="tab:orange",
+        ms=4,
+    )
     ax.legend(frameon=False)
     ax.set_xlabel("Frequency (Hz)")
     ax.set_ylabel("Power")

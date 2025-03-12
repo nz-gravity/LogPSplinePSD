@@ -1,0 +1,39 @@
+name: Python Package Workflow
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+          ref: main       # Replace with your branch
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+          pre-commit install
+
+      - name: pre-commit
+        run: pre-commit run --all-files --verbose --show-diff-on-failure
+        continue-on-error: true  # Allow failure for this step
+
+      - name: pytest
+        run: pytest --cov='starccato_jax' --cov-report term-missing --cov-report=xml
+
+      - name: Coveralls
+        uses: coverallsapp/github-action@v2

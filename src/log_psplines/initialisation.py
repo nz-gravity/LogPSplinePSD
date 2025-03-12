@@ -9,10 +9,10 @@ from .sampling import lnlikelihood
 
 
 def optimize_logpsplines_weights(
-    noise_f: Periodogram,
+    pdgrm: Periodogram,
     log_psplines: LogPSplines,
     init_weights: jnp.ndarray,
-    num_steps: int = 1000,
+    num_steps: int = 5000,
 ) -> jnp.ndarray:
     """
     Optimize spline weights by directly minimizing the negative Whittle log likelihood.
@@ -22,11 +22,12 @@ def optimize_logpsplines_weights(
 
     # Now we assume that the likelihood function expects log power,
     # so compute the log of the power spectrum.
-    noise_f_log = jnp.log(noise_f.power)
+    log_pdgrm = jnp.log(pdgrm.power)
 
     # Define the loss as the negative log likelihood.
+    @jax.jit
     def compute_loss(weights: jnp.ndarray) -> float:
-        return -lnlikelihood(noise_f_log, log_psplines, weights)
+        return -lnlikelihood(log_pdgrm, log_psplines(weights))
 
     optimizer = optax.adam(learning_rate=1e-2)
     opt_state = optimizer.init(init_weights)

@@ -13,7 +13,7 @@ requires-python = ">=3.9"
 description = "LogPsplines in JAX"
 readme = "README.rst"
 authors = [
-    { name = "Starccato Team", email = "avi.vajpeyi@gmail.com" },
+    { name = "Avi Vajpeyi", email = "avi.vajpeyi@gmail.com" },
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -23,7 +23,9 @@ classifiers = [
     "Programming Language :: Python :: 3.8",
 ]
 dependencies = [
+    "scikit-fda",
     "jax",
+    "optax",
     "numpy",
     "matplotlib",
     "tqdm",

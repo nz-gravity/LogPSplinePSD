@@ -1,4 +1,0 @@
-scikit-fda
-jax
-matplotlib
-numpy

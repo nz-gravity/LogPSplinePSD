@@ -55,7 +55,7 @@ def test_spline_init(mock_timeseries: Timeseries, outdir):
 
     # Compute the initial log likelihood.
     lnl_initial = lnlikelihood(
-        jnp.log(noise_f.power), spline_model, init_weights
+        jnp.log(noise_f.power), spline_model(init_weights)
     )
     print("Initial log likelihood:", lnl_initial)
     # check lnl is finite
@@ -68,7 +68,7 @@ def test_spline_init(mock_timeseries: Timeseries, outdir):
     spline = jnp.exp(spline_model(optimized_weights)) * scale**2
 
     lnl_final = lnlikelihood(
-        jnp.log(noise_f.power), spline_model, optimized_weights
+        jnp.log(noise_f.power), spline_model(optimized_weights)
     )
     print("Final log likelihood:", lnl_final)
 

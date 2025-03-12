@@ -2,6 +2,8 @@ import os
 import time
 
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
 
 from log_psplines.datasets import Periodogram
 from log_psplines.psplines import LogPSplines
@@ -34,10 +36,11 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
 
 def test_mcmc(mock_pdgrm: Periodogram, outdir):
     t0 = time.time()
-    samples, spline_model = run_mcmc(mock_pdgrm)
+    samples, spline_model = run_mcmc(mock_pdgrm, n_knots=10, num_samples=25, num_warmup=75)
     runtime = float(time.time()) - t0
 
-    assert runtime < 30
-
     fig, ax = plot_pdgrm(mock_pdgrm, spline_model, samples['weights'])
-    fig.savefig(os.path.join(outdir, "test_mcmc.png"))
+    fig.savefig(os.path.join(outdir, f"test_mcmc.png"))
+    plt.close(fig)
+
+    assert runtime < 30

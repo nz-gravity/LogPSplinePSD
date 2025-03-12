@@ -10,7 +10,11 @@ fig, ax = plot_pdgrm(pdgrm)
 ax.loglog(true_psd.freqs, true_psd.power, color="k", label="True PSD")
 plt.savefig("lvk_noise.png", bbox_inches="tight")
 
-samples, spline_model = run_mcmc(pdgrm, num_warmup=150, num_samples=100)
-fig, ax = plot_pdgrm(pdgrm, spline_model, samples['weights'],show_knots=False)
+samples, spline_model = run_mcmc(pdgrm, num_warmup=500, num_samples=1000, n_knots=30)
+try:
+    fig, ax = plot_pdgrm(pdgrm, spline_model, samples['weights'],show_knots=True)
+except Exception as e:
+    fig, ax = plot_pdgrm(pdgrm, spline_model, samples['weights'], show_knots=False)
 ax.loglog(true_psd.freqs, true_psd.power, color="k", label="True PSD")
 plt.savefig("lvk_noise_and_splines.png", bbox_inches="tight")
+

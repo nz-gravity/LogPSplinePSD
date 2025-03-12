@@ -1,10 +1,13 @@
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
+import jax
+from .psplines import build_spline
 
 LOG2PI = jnp.log(2.0 * jnp.pi)
 
 
+@jax.jit
 def whittle_lnlike(ln_pdgrm: jnp.ndarray, ln_spline: jnp.ndarray):
     integrand = ln_spline + jnp.exp(ln_pdgrm - ln_spline - LOG2PI)
     return -0.5 * jnp.sum(integrand)
@@ -50,8 +53,7 @@ def bayesian_model(
     numpyro.factor("ln_prior", log_prior_v)  # really only need the log prior for v
 
     # 5) Build the log-splinens
-    ln_spline = jnp.sum(w[:, None] * lnspline_basis.T, axis=0)
+    ln_spline = build_spline(lnspline_basis, w)
 
     # 6) Add the Whittle likelihood
     numpyro.factor("ln_likelihood", whittle_lnlike(log_pdgrm, ln_spline))
-

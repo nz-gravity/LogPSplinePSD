@@ -74,8 +74,7 @@ def init_basis_and_penalty(
     basis_matrix = (
         basis.to_basis().to_grid(grid_points).data_matrix.squeeze().T
     )
-
-    # Augment knots with boundary values for proper normalization.
+    # normalise basis matrix elements (for numerical stability)
     knots_with_boundary = np.concatenate(
         [np.repeat(0, degree), knots, np.repeat(1, degree)]
     )
@@ -100,7 +99,7 @@ def init_knots(
         periodogram: Periodogram,
         n_knots: int,
         frac_uniform: float = 0.0,
-        frac_log: float = 0.8,
+        frac_log: float = 0.7,
 ) -> np.ndarray:
     """Select knots with a mix of uniform, log-spaced, and density-based placement.
 

@@ -19,15 +19,17 @@ def run_mcmc(
         num_warmup=500,
         num_samples=1000,
         rng_key=0,
+        verbose=True,
+        **spline_kwgs
 ):
     # Initialize the model + starting values
     rng_key = jax.random.PRNGKey(rng_key)
     log_pdgrm = jnp.log(pdgrm.power)
     spline_model = LogPSplines.from_periodogram(
         pdgrm,
-        n_knots=20,
-        degree=3,
-        diffMatrixOrder=2,
+        n_knots=spline_kwgs.get("n_knots", 10),
+        degree=spline_kwgs.get("degree", 3),
+        diffMatrixOrder=spline_kwgs.get("diffMatrixOrder", 2),
     )
     delta_0 = alpha_delta / beta_delta
     phi_0 = alpha_phi / (beta_phi * delta_0)
@@ -39,12 +41,13 @@ def run_mcmc(
 
     # Setup and run MCMC using NUTS
     kernel = NUTS(bayesian_model, init_strategy=init_strategy)
-    mcmc = MCMC(kernel, num_warmup=num_warmup, num_samples=num_samples, progress_bar=True, jit_model_args=True)
+    mcmc = MCMC(kernel, num_warmup=num_warmup, num_samples=num_samples, progress_bar=verbose, jit_model_args=True)
     mcmc.run(
         rng_key,
         log_pdgrm,
         spline_model.basis,
         spline_model.penalty_matrix,
+        spline_model.L,
         alpha_phi,
         beta_phi,
         alpha_delta,

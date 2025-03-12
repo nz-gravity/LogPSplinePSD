@@ -10,6 +10,10 @@
 [Ss]cripts
 pyvenv.cfg
 *.png
+*.DS_Store
+plots/
+*.npy
+*output/
 .venv
 pip-selfcheck.json
 *.idea

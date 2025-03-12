@@ -4,12 +4,15 @@ from log_psplines.datasets import Periodogram
 from log_psplines.psplines import LogPSplines
 
 
-def plot_pdgrm(pdgrm: Periodogram, spline_model: LogPSplines = None, weights=None, show_knots=True):
-    fig, ax = plt.subplots(1, 1, figsize=(4, 3))
+def plot_pdgrm(pdgrm: Periodogram, spline_model: LogPSplines = None, weights=None, show_knots=True, ax=None, pdgrm_color="lightgray"):
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(4, 3))
+    fig = ax.get_figure()
+
     ax.loglog(
         pdgrm.freqs,
         pdgrm.power,
-        color="lightgray",
+        color=pdgrm_color,
         label="Data",
     )
     if spline_model is not None:

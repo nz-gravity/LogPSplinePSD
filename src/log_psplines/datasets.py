@@ -6,6 +6,7 @@ import jax.numpy as jnp
 class Timeseries:
     t: jnp.ndarray
     y: jnp.ndarray
+    std: float = 1.0
 
     @property
     def n(self):
@@ -22,6 +23,11 @@ class Timeseries:
         power = jnp.abs(jnp.fft.rfft(self.y)) ** 2 / len(self.y)
         return Periodogram(freq[1:], power[1:])
 
+    def standardise(self):
+        """Standardise the timeseries to have zero mean and unit variance."""
+        self.std = float(jnp.std(self.y))
+        y = (self.y - jnp.mean(self.y)) / self.std
+        return Timeseries(self.t, y, self.std)
 
 
 @dataclasses.dataclass

@@ -179,5 +179,4 @@ def init_knots(
 
     # normalize to [0, 1]
     knots = (knots - min_freq) / (max_freq - min_freq)
-    print(f"Selected knots: {knots}")
     return knots

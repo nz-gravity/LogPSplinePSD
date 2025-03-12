@@ -53,6 +53,5 @@ def bayesian_model(
     ln_spline = jnp.sum(w[:, None] * lnspline_basis.T, axis=0)
 
     # 6) Add the Whittle likelihood
-
     numpyro.factor("ln_likelihood", whittle_lnlike(log_pdgrm, ln_spline))
 

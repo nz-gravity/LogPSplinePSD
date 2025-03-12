@@ -20,16 +20,15 @@ def run_mcmc(
         num_samples=1000,
         rng_key=0,
 ):
+    # Initialize the model + starting values
     rng_key = jax.random.PRNGKey(rng_key)
     log_pdgrm = jnp.log(pdgrm.power)
-
     spline_model = LogPSplines.from_periodogram(
         pdgrm,
         n_knots=20,
         degree=3,
         diffMatrixOrder=2,
     )
-
     delta_0 = alpha_delta / beta_delta
     phi_0 = alpha_phi / (beta_phi * delta_0)
     init_strategy = init_to_value(values=dict(
@@ -38,11 +37,9 @@ def run_mcmc(
         weights=spline_model.weights
     ))
 
-    # Set up NUTS
+    # Setup and run MCMC using NUTS
     kernel = NUTS(bayesian_model, init_strategy=init_strategy)
-    mcmc = MCMC(kernel, num_warmup=num_warmup, num_samples=num_samples, progress_bar=True)
-
-    # Run the sampler
+    mcmc = MCMC(kernel, num_warmup=num_warmup, num_samples=num_samples, progress_bar=True, jit_model_args=True)
     mcmc.run(
         rng_key,
         log_pdgrm,
@@ -54,6 +51,5 @@ def run_mcmc(
         beta_delta
     )
 
-    # Return the samples (phi, w, etc.)
     samples = mcmc.get_samples()
     return samples, spline_model

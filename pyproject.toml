@@ -1,0 +1,131 @@
+[build-system]
+requires = [
+    "setuptools>=64",
+    "setuptools-scm>=8.0",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "log_psplines"
+dynamic = ["version"] # scm versioning (using tags)
+requires-python = ">=3.9"
+description = "LogPsplines in JAX"
+readme = "README.rst"
+authors = [
+    { name = "Starccato Team", email = "avi.vajpeyi@gmail.com" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.8",
+]
+dependencies = [
+    "jax",
+    "numpy",
+    "matplotlib",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "flake8>=5.0.4",
+    "black>=22.12.0",
+    "black[jupyter]>=22.12.0",
+    "isort",
+    "mypy",
+    "jupyter-book",
+    "pre-commit"
+]
+
+[tool.setuptools_scm]
+version_file = "src/log_psplines/_version.py"
+
+[tool.semantic_release]
+version_variable = "src/log_psplines/_version.py:__version__"
+version_source = "commit"
+commit_version_number = true
+commit_subject = "chore(release): {version}"
+commit_message = "chore(release): {version}"
+tag_format = "v{version}"
+no_local_version = true
+
+
+[tool.semantic_release.changelog]
+changelog_file = "CHANGELOG.rst"
+
+[project.urls]  # Optional
+"Homepage" = "https://starccato.github.io/log_psplines/"
+"Bug Reports" = "https://giuthub.com/starccato/log_psplines/issues"
+"Source" = "https://github.com/starccato/log_psplines/"
+
+
+[tool.setuptools]
+package-data = { "log_psplines" = [""] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+
+[tool.black]
+line-length = 79
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 79
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = [
+    "log_psplines"
+]
+
+[tool.coverage.paths]
+source = [
+    "src/log_psplines",
+    "**/site-packages/log_psplines"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug",
+    "raise AssertionError",
+    "raise NotImplentedError",
+    "if 0:",
+    "if __name__ == .__main__.:"
+]
+
+ignore_errors = true
+
+[tool.coverage.html]
+title = "log_psplines Coverage Test Report"
+
+
+[[tool.mypy.overrides]]
+module = "matplotlib.*,scipy.*,numba.*,bilby.*"
+ignore_missing_imports = true

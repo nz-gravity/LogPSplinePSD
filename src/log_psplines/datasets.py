@@ -1,4 +1,5 @@
 import dataclasses
+
 import jax.numpy as jnp
 
 
@@ -34,6 +35,7 @@ class Timeseries:
 class Periodogram:
     freqs: jnp.ndarray
     power: jnp.ndarray
+    filtered: bool = False
 
     @property
     def n(self):
@@ -47,5 +49,23 @@ class Periodogram:
     def highpass(self, min_freq: float) -> "Periodogram":
         """Return a new Periodogram with frequencies above a threshold."""
         mask = self.freqs > min_freq
-        return Periodogram(self.freqs[mask], self.power[mask])
+        return Periodogram(self.freqs[mask], self.power[mask], filtered=True)
 
+    def to_timeseries(self) -> "Timeseries":
+        """Compute the inverse FFT of the periodogram."""
+        y = jnp.fft.irfft(self.power, n=2 * (self.n - 1))
+        t = jnp.linspace(0, 1 / self.fs, len(y))
+        return Timeseries(t, y)
+
+    def __mul__(self, other):
+        return Periodogram(self.freqs, self.power * other)
+
+    def __truediv__(self, other):
+        return Periodogram(self.freqs, self.power / other)
+
+
+def compute_welsch_psd(
+    freqs: jnp.ndarray, power: jnp.ndarray, alpha: float = 2.0
+) -> jnp.ndarray:
+    """Compute the Welsch power spectral density of a periodogram."""
+    return power / (1 + (freqs / alpha) ** 2)

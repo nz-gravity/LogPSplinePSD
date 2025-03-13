@@ -1,11 +1,12 @@
+from dataclasses import dataclass
+from typing import Union
+
 import numpy as np
 from jax import numpy as jnp
-import jax
 
+from .bayesian_model import build_spline
 from .datasets import Periodogram
-from .initialisation import init_basis_and_penalty, init_weights, init_knots
-
-from dataclasses import dataclass
+from .initialisation import init_basis_and_penalty, init_knots, init_weights
 
 
 @dataclass
@@ -19,7 +20,7 @@ class LogPSplines:
     penalty_matrix: jnp.ndarray
     knots: np.ndarray
     weights: jnp.ndarray
-    L: jnp.ndarray
+    parametric_model: Union[jnp.ndarray, None] = None
 
     def __post_init__(self):
         if self.degree < self.diffMatrixOrder:
@@ -32,18 +33,22 @@ class LogPSplines:
             raise ValueError(f"#knots: {self.n_knots}, degree: {self.degree}")
 
     def __repr__(self):
-        return f"LogPSplines(knots={self.knots}, degree={self.degree}, n={self.n})"
+        return f"LogPSplines(knots={self.n_knots}, degree={self.degree}, n={self.n})"
 
     @classmethod
     def from_periodogram(
-            cls,
-            periodogram: Periodogram,
-            n_knots: int,
-            degree: int,
-            diffMatrixOrder: int = 2,
-            knot_kwargs: dict = {},
+        cls,
+        periodogram: Periodogram,
+        n_knots: int,
+        degree: int,
+        diffMatrixOrder: int = 2,
+        parametric_model: jnp.ndarray = None,
+        knot_kwargs: dict = {},
     ):
-        knots = init_knots(periodogram, n_knots, **knot_kwargs)
+        knots = init_knots(
+            n_knots, periodogram, parametric_model, **knot_kwargs
+        )
+        # compute degree based on the number of knots
         basis, penalty_matrix = init_basis_and_penalty(
             knots, degree, periodogram.n, diffMatrixOrder
         )
@@ -55,11 +60,19 @@ class LogPSplines:
             basis=basis,
             penalty_matrix=penalty_matrix,
             weights=jnp.zeros(basis.shape[1]),
-            L=cholesky(penalty_matrix, lower=True),
+            parametric_model=parametric_model,
         )
         weights = init_weights(jnp.log(periodogram.power), model)
         model.weights = weights
         return model
+
+    @property
+    def log_parametric_model(self) -> jnp.ndarray:
+        if not hasattr(self, "_log_parametric_model"):
+            if self.parametric_model is None:
+                self.parametric_model = jnp.ones(self.n)
+            self._log_parametric_model = jnp.log(self.parametric_model)
+        return self._log_parametric_model
 
     @property
     def order(self) -> int:
@@ -78,9 +91,3 @@ class LogPSplines:
         if weights is None:
             weights = self.weights
         return build_spline(self.basis, weights)
-
-
-
-@jax.jit
-def build_spline(ln_spline_basis:jnp.ndarray, weights:jnp.ndarray):
-    return jnp.sum(weights[:, None] * ln_spline_basis.T, axis=0)

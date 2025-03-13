@@ -9,11 +9,14 @@
 [Ll]ocal
 [Ss]cripts
 pyvenv.cfg
+*.hdf5
+*.pdf
 *.png
 *.DS_Store
 plots/
 *.npy
 *output/
+*.txt
 .venv
 pip-selfcheck.json
 *.idea
@@ -276,3 +279,5 @@ cython_debug/
 #.idea/
 
 /src/log_psplines/_version.py
+/docs/studies/lvk/lvkdata_cache.pkl
+/docs/studies/lvk/strain_cache.hdf5

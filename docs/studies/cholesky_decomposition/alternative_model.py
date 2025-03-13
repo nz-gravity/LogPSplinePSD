@@ -1,18 +1,21 @@
+import jax
 import jax.numpy as jnp
+import jax.scipy.linalg as linalg
 import numpyro
 import numpyro.distributions as dist
-import jax
-import jax.scipy.linalg as linalg
-from log_psplines.bayesian_model import whittle_lnlike, build_spline
+
+from log_psplines.bayesian_model import build_spline, whittle_lnlike
 
 
 def bayesian_model(
-        log_pdgrm: jnp.ndarray,  # shape (Nfreq,) - log of the observed periodogram
-        lnspline_basis: jnp.ndarray,  # shape (kbasis, Nfreq,) - matrix of spline basis functions
-        penalty_matrix: jnp.ndarray,  # shape (kbasis, kbasis) - penalty matrix P
-        L: jnp.ndarray,  # Cholesky factor of the penalty matrix (L=cholesky(penalty_matrix, lower=True))
-        alpha_phi, beta_phi,  # for phi | delta: Gamma(alpha_phi, delta * beta_phi)
-        alpha_delta, beta_delta,  # for delta: Gamma(alpha_delta, beta_delta)
+    log_pdgrm: jnp.ndarray,  # shape (Nfreq,) - log of the observed periodogram
+    lnspline_basis: jnp.ndarray,  # shape (kbasis, Nfreq,) - matrix of spline basis functions
+    penalty_matrix: jnp.ndarray,  # shape (kbasis, kbasis) - penalty matrix P
+    L: jnp.ndarray,  # Cholesky factor of the penalty matrix (L=cholesky(penalty_matrix, lower=True))
+    alpha_phi,
+    beta_phi,  # for phi | delta: Gamma(alpha_phi, delta * beta_phi)
+    alpha_delta,
+    beta_delta,  # for delta: Gamma(alpha_delta, beta_delta)
 ):
     """
     Bayesian model using a reparameterized spline prior with Cholesky decomposition.
@@ -26,14 +29,20 @@ def bayesian_model(
       - The likelihood is given by the Whittle likelihood.
     """
     # 1) Sample delta and phi.
-    delta = numpyro.sample("delta", dist.Gamma(concentration=alpha_delta, rate=beta_delta))
-    phi = numpyro.sample("phi", dist.Gamma(concentration=alpha_phi, rate=delta * beta_phi))
+    delta = numpyro.sample(
+        "delta", dist.Gamma(concentration=alpha_delta, rate=beta_delta)
+    )
+    phi = numpyro.sample(
+        "phi", dist.Gamma(concentration=alpha_phi, rate=delta * beta_phi)
+    )
 
     # 2) Reparameterize the spline weights.
     k = penalty_matrix.shape[0]
 
     # Sample tilde_w ~ Normal(0, I) in k dimensions.
-    tilde_w = numpyro.sample("tilde_w", dist.Normal(jnp.zeros(k), jnp.ones(k)).to_event(1))
+    tilde_w = numpyro.sample(
+        "tilde_w", dist.Normal(jnp.zeros(k), jnp.ones(k)).to_event(1)
+    )
 
     # Transform tilde_w to obtain w:
     #    w = L^{-1} tilde_w / sqrt(phi)

@@ -1,31 +1,34 @@
-import jax
-import jax.numpy as jnp
-import optax
-import numpy as np
+import warnings
 from typing import Tuple
 
-
-from .bayesian_model import whittle_lnlike
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
 from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
+from tensorflow_probability.python.internal.backend.jax import unique
 
+from .bayesian_model import whittle_lnlike
 from .datasets import Periodogram
 
 __all__ = ["init_weights", "init_basis_and_penalty", "init_knots"]
 
 
 def init_weights(
-        log_pdgrm: jnp.ndarray,
-        log_psplines: "LogPSplines",
-        init_weights: jnp.ndarray = None,
-        num_steps: int = 5000,
+    log_pdgrm: jnp.ndarray,
+    log_psplines: "LogPSplines",
+    init_weights: jnp.ndarray = None,
+    num_steps: int = 5000,
 ) -> jnp.ndarray:
     """
     Optimize spline weights by directly minimizing the negative Whittle log likelihood.
 
     This function wraps the optimization loop in a JAX-compiled loop using jax.lax.fori_loop.
     """
+    log_param = log_psplines.log_parametric_model
+
     if init_weights is None:
         init_weights = jnp.zeros(log_psplines.n_basis)
     optimizer = optax.adam(learning_rate=1e-2)
@@ -34,7 +37,7 @@ def init_weights(
     # Define the loss as the negative log likelihood.
     @jax.jit
     def compute_loss(weights: jnp.ndarray) -> float:
-        return -whittle_lnlike(log_pdgrm, log_psplines(weights))
+        return -whittle_lnlike(log_pdgrm, log_psplines(weights) + log_param)
 
     def step(i, state):
         weights, opt_state = state
@@ -50,11 +53,11 @@ def init_weights(
 
 
 def init_basis_and_penalty(
-        knots: np.ndarray,
-        degree: int,
-        n_grid_points: int,
-        diffMatrixOrder: int,
-        epsilon: float = 1e-6,
+    knots: np.ndarray,
+    degree: int,
+    n_grid_points: int,
+    diffMatrixOrder: int,
+    epsilon: float = 1e-6,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Generate a B-spline basis matrix and penalty matrix.
 
@@ -79,7 +82,7 @@ def init_basis_and_penalty(
         [np.repeat(0, degree), knots, np.repeat(1, degree)]
     )
     n_knots_total = len(knots_with_boundary)
-    mid_to_end = knots_with_boundary[degree + 1:]
+    mid_to_end = knots_with_boundary[degree + 1 :]
     start_to_mid = knots_with_boundary[: (n_knots_total - degree - 1)]
     norm_factor = (mid_to_end - start_to_mid) / (degree + 1)
     norm_factor[norm_factor == 0] = np.inf  # Prevent division by zero.
@@ -96,10 +99,11 @@ def init_basis_and_penalty(
 
 
 def init_knots(
-        periodogram: Periodogram,
-        n_knots: int,
-        frac_uniform: float = 0.0,
-        frac_log: float = 0.7,
+    n_knots: int,
+    periodogram: Periodogram,
+    parametric_model: jnp.ndarray = None,
+    frac_uniform: float = 0.0,
+    frac_log: float = 0.5,
 ) -> np.ndarray:
     """Select knots with a mix of uniform, log-spaced, and density-based placement.
 
@@ -163,6 +167,11 @@ def init_knots(
     density_knots = np.array([])
     if n_density > 0:
         power = periodogram.power.copy()
+        if parametric_model is not None:
+            power -= parametric_model
+            # ensure power is positive
+            power = power + np.abs(np.min(power))
+
         density = power / np.sum(power)
         cdf = np.cumsum(density)
 
@@ -174,8 +183,14 @@ def init_knots(
     knots = np.concatenate(
         ([min_freq], uniform_knots, log_knots, density_knots, [max_freq])
     )
-    knots = np.sort(knots)  # Ensure order
 
-    # normalize to [0, 1]
-    knots = (knots - min_freq) / (max_freq - min_freq)
-    return knots
+    knots = np.sort(knots)  # Ensure order
+    knots = (knots - min_freq) / (max_freq - min_freq)  # Normalize to [0, 1]
+
+    unique_knots = np.unique(knots)
+    if len(unique_knots) < len(knots):
+        warnings.warn(
+            f"Some knots were dropped due to duplication. [{n_knots}->{len(unique_knots)}]"
+        )
+
+    return unique_knots

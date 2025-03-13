@@ -68,9 +68,16 @@ class LVKData:
         self._freq = freqs[freq_mask]
         return psd_array[:, freq_mask]
 
-    @cached_property
-    def welch_psd(self):
-        return np.median(self.psds, axis=0)
+    def welch_psd(self, n_segments: int = None):
+        if n_segments is None:
+            n_segments = self.n_segments
+        if n_segments > self.n_segments:
+            raise ValueError("Number of segments exceeds available data.")
+        print(
+            f"Computing median PSD from {n_segments}/{self.n_segments} segments..."
+        )
+        psds = self.psds[:n_segments]
+        return np.median(psds, axis=0)
 
     @classmethod
     def download(

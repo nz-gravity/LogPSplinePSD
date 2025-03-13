@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import jax
 import jax.numpy as jnp
 from numpyro.infer import MCMC, NUTS
@@ -20,7 +22,7 @@ def run_mcmc(
     rng_key=0,
     verbose=True,
     **spline_kwgs,
-):
+) -> Tuple[MCMC, LogPSplines]:
     # Initialize the model + starting values
     rng_key = jax.random.PRNGKey(rng_key)
     log_pdgrm = jnp.log(pdgrm.power)
@@ -59,5 +61,4 @@ def run_mcmc(
         beta_delta,
     )
 
-    samples = mcmc.get_samples()
-    return samples, spline_model
+    return mcmc, spline_model

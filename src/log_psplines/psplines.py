@@ -4,6 +4,7 @@ import jax
 
 from .datasets import Periodogram
 from .initialisation import init_basis_and_penalty, init_weights, init_knots
+from .bayesian_model import build_spline
 
 from dataclasses import dataclass
 
@@ -19,7 +20,8 @@ class LogPSplines:
     penalty_matrix: jnp.ndarray
     knots: np.ndarray
     weights: jnp.ndarray
-    L: jnp.ndarray
+
+    # L: jnp.ndarray
 
     def __post_init__(self):
         if self.degree < self.diffMatrixOrder:
@@ -55,7 +57,7 @@ class LogPSplines:
             basis=basis,
             penalty_matrix=penalty_matrix,
             weights=jnp.zeros(basis.shape[1]),
-            L=cholesky(penalty_matrix, lower=True),
+            # L=cholesky(penalty_matrix, lower=True),
         )
         weights = init_weights(jnp.log(periodogram.power), model)
         model.weights = weights
@@ -78,9 +80,3 @@ class LogPSplines:
         if weights is None:
             weights = self.weights
         return build_spline(self.basis, weights)
-
-
-
-@jax.jit
-def build_spline(ln_spline_basis:jnp.ndarray, weights:jnp.ndarray):
-    return jnp.sum(weights[:, None] * ln_spline_basis.T, axis=0)

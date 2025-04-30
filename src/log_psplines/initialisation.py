@@ -19,7 +19,9 @@ def init_weights(
         log_pdgrm: jnp.ndarray,
         log_psplines: "LogPSplines",
         init_weights: jnp.ndarray = None,
-        num_steps: int = 5000,
+        num_steps: int = 500,
+        lr: float = 1e-3,
+        verbose: bool = True,
 ) -> jnp.ndarray:
     """
     Optimize spline weights by directly minimizing the negative Whittle log likelihood.
@@ -28,13 +30,24 @@ def init_weights(
     """
     if init_weights is None:
         init_weights = jnp.zeros(log_psplines.n_basis)
-    optimizer = optax.adam(learning_rate=1e-2)
+    optimizer = optax.adam(learning_rate=lr)
     opt_state = optimizer.init(init_weights)
+
+    import matplotlib.pyplot as plt
 
     # Define the loss as the negative log likelihood.
     @jax.jit
     def compute_loss(weights: jnp.ndarray) -> float:
-        return -whittle_lnlike(log_pdgrm, log_psplines(weights))
+        # return -whittle_lnlike(log_pdgrm, log_psplines(weights))
+        log_model = log_psplines(weights)
+        mse = jnp.mean((log_model - log_pdgrm) ** 2)
+        return mse
+
+
+    # sanity check -- no nans!
+    loss = compute_loss(init_weights)
+    if jnp.isnan(loss):
+        raise ValueError("Weights of 0 lead to a NaN...")
 
     def step(i, state):
         weights, opt_state = state
@@ -46,6 +59,11 @@ def init_weights(
     init_state = (init_weights, opt_state)
     final_state = jax.lax.fori_loop(0, num_steps, step, init_state)
     final_weights, _ = final_state
+
+    loss = compute_loss(final_weights)
+    if jnp.isnan(loss):
+        raise ValueError("Initialised weights leading to a NaN... Something is wrong.")
+
     return final_weights
 
 

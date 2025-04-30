@@ -2,7 +2,6 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 import jax
-from .psplines import build_spline
 
 LOG2PI = jnp.log(2.0 * jnp.pi)
 
@@ -10,7 +9,11 @@ LOG2PI = jnp.log(2.0 * jnp.pi)
 @jax.jit
 def whittle_lnlike(ln_pdgrm: jnp.ndarray, ln_spline: jnp.ndarray):
     integrand = ln_spline + jnp.exp(ln_pdgrm - ln_spline - LOG2PI)
-    return -0.5 * jnp.sum(integrand)
+    return -0.5 * jnp.nansum(integrand)
+
+@jax.jit
+def build_spline(ln_spline_basis:jnp.ndarray, weights:jnp.ndarray):
+    return jnp.sum(weights[:, None] * ln_spline_basis.T, axis=0)
 
 
 def bayesian_model(

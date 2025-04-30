@@ -47,7 +47,6 @@ def run_mcmc(
         log_pdgrm,
         spline_model.basis,
         spline_model.penalty_matrix,
-        spline_model.L,
         alpha_phi,
         beta_phi,
         alpha_delta,

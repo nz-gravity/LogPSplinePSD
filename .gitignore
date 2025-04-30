@@ -7,6 +7,7 @@
 [Ll]ib
 [Ll]ib64
 [Ll]ocal
+outdir
 [Ss]cripts
 pyvenv.cfg
 *.png

@@ -1,9 +1,10 @@
 import os
-import pytest
 
 import numpy as np
+import pytest
 import scipy
-from log_psplines.datasets import Timeseries, Periodogram
+
+from log_psplines.datasets import Periodogram, Timeseries
 
 
 @pytest.fixture

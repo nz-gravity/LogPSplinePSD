@@ -33,7 +33,7 @@ jobs:
         continue-on-error: true  # Allow failure for this step
 
       - name: pytest
-        run: pytest --cov='starccato_jax' --cov-report term-missing --cov-report=xml
+        run: pytest --cov='log_psplines' --cov-report term-missing --cov-report=xml
 
       - name: Coveralls
         uses: coverallsapp/github-action@v2

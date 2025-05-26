@@ -34,10 +34,11 @@ def init_weights(
     optimizer = optax.adam(learning_rate=1e-2)
     opt_state = optimizer.init(init_weights)
 
-    # Define the loss as the negative log likelihood.
     @jax.jit
     def compute_loss(weights: jnp.ndarray) -> float:
-        return -whittle_lnlike(log_pdgrm, log_psplines(weights) + log_param)
+        lnmodel = log_psplines(weights) + log_param
+        mse = jnp.mean((log_pdgrm - lnmodel) ** 2)
+        return mse
 
     def step(i, state):
         weights, opt_state = state

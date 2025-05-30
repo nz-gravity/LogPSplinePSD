@@ -1,10 +1,10 @@
 # Book settings
-title: "SGVB-psd"
-author: "Jianan, Avi and friends"
-copyright: "2024"
+title: "LogPSplinePSD"
+author: "NZ Gravity"
+copyright: "2025"
 exclude_patterns: [_build, Thumbs.db, .DS_Store, "**.ipynb_checkpoints"]
 only_build_toc_files: true
-logo: "_static/logo_100.png"
+# logo: "_static/logo_100.png"
 
 
 execute:
@@ -15,7 +15,7 @@ html:
   use_issues_button: true
   use_multitoc_numbering: false
   home_page_in_navbar: false
-  favicon: "_static/favicon.png"
+  # favicon: "_static/favicon.png"
   comments:
     hypothesis: false
     utterances: false
@@ -30,7 +30,7 @@ launch_buttons:
   colab_url: "https://colab.research.google.com"
 
 repository:
-  url: https://github.com/nz-gravity/sgvb_psd
+  url: https://github.com/nz-gravity/LogPsplinePSD
   path_to_book: docs
   branch: main
 

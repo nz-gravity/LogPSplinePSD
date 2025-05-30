@@ -1,6 +1,3 @@
-
-
-
 LogPSplinePSD
 =============
 
@@ -50,72 +47,26 @@ This fixed-basis P-spline approach avoids reversible-jump MCMC over knot numbers
 
 Installation
 ------------
+::
 
-Clone the repository::
+    pip install LogPSplinePSD
 
-    git clone https://github.com/avivajpeyi/LogPSplinePSD.git
-    cd LogPSplinePSD
-
-Install dependencies via pip::
-
-    pip install -r requirements.txt
-
-Or with conda::
-
-    conda env create -f environment.yml
-    conda activate logpsplinepsd
 
 Basic Usage
 -----------
 
-Save the following as `demo.py` and run to perform a quick demonstration of PSD fitting::
+See `demo.py <https://github.com/nz-gravity/LogPSplinePSD/tree/main/docs>`_
 
-    import time
-    import jax.numpy as jnp
-    import matplotlib.pyplot as plt
-    from log_psplines.datasets import Periodogram
-    from log_psplines.psplines import LogPSplines
-    from log_psplines.bayesian_model import whittle_lnlike
-    from log_psplines.mcmc import run_mcmc
-    from log_psplines.plotting import plot_pdgrm, plot_trace
 
-    # Generate sample periodogram
-    freqs, power = Periodogram.generate_sample(n=1024, fs=1.0)
-    pdgrm = Periodogram(freqs=freqs, power=power)
+.. literalinclude:: demo.py
+   :language: python
+   :linenos:
 
-    # Initialize model
-    model = LogPSplines.from_periodogram(pdgrm, n_knots=25, degree=3, diffMatrixOrder=2)
+.. image:: https://github.com/nz-gravity/LogPSplinePSD/raw/main/docs/demo.png
+   :alt: Demo Image
+   :align: center
 
-    # Compute initial log-likelihood
-    lnl0 = whittle_lnlike(jnp.log(pdgrm.power), model(jnp.zeros(model.weights.shape)))
-    print(f"Initial log-likelihood: {lnl0:.2f}")
 
-    # Run MCMC sampling
-    mcmc, _ = run_mcmc(pdgrm, n_knots=25, num_samples=500, num_warmup=500)
-
-    # Plot and save results
-    samples = mcmc.get_samples()
-    fig1, _ = plot_pdgrm(pdgrm, model, samples['weights'])
-    fig1.savefig('periodogram_fit.png')
-    fig2 = plot_trace(mcmc)
-    fig2.savefig('traceplot.png')
-    print('Demo complete: periodogram_fit.png, traceplot.png')
-
-Documentation
--------------
-
-- `docs/` contains Sphinx sources for detailed API documentation.
-- `examples/` holds Jupyter notebooks illustrating various workflows.
-
-To build HTML documentation::
-
-    cd docs
-    make html
-
-License
--------
-
-MIT License. See `LICENSE`.
 
 Author
 ------

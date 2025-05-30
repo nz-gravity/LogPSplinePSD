@@ -1,3 +1,4 @@
+import time
 from typing import Tuple
 
 import jax
@@ -49,6 +50,7 @@ def run_mcmc(
         progress_bar=verbose,
         jit_model_args=True,
     )
+    t0 = time.time()
     mcmc.run(
         rng_key,
         log_pdgrm,
@@ -60,5 +62,7 @@ def run_mcmc(
         alpha_delta,
         beta_delta,
     )
+    # add attribute to the MCMC object for the spline model
+    setattr(mcmc, "runtime", time.time() - t0)
 
     return mcmc, spline_model

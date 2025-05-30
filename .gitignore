@@ -281,3 +281,6 @@ cython_debug/
 /src/log_psplines/_version.py
 /docs/studies/lvk/lvkdata_cache.pkl
 /docs/studies/lvk/strain_cache.hdf5
+
+
+*.h5

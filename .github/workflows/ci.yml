@@ -1,4 +1,4 @@
-name: Python Package Workflow
+name: Tests and Coverage
 
 on:
   push:

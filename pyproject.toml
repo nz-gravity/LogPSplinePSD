@@ -29,6 +29,7 @@ dependencies = [
     "numpy",
     "matplotlib",
     "tqdm",
+    "numpyro"
 ]
 
 [project.optional-dependencies]

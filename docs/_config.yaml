@@ -1,0 +1,38 @@
+# Book settings
+title: "SGVB-psd"
+author: "Jianan, Avi and friends"
+copyright: "2024"
+exclude_patterns: [_build, Thumbs.db, .DS_Store, "**.ipynb_checkpoints"]
+only_build_toc_files: true
+logo: "_static/logo_100.png"
+
+
+execute:
+  execute_notebooks: off
+
+html:
+  use_repository_button: true
+  use_issues_button: true
+  use_multitoc_numbering: false
+  home_page_in_navbar: false
+  favicon: "_static/favicon.png"
+  comments:
+    hypothesis: false
+    utterances: false
+
+latex:
+  latex_engine: pdflatex
+  use_jupyterbook_latex: true
+
+# Launch button settings
+launch_buttons:
+  notebook_interface: classic
+  colab_url: "https://colab.research.google.com"
+
+repository:
+  url: https://github.com/nz-gravity/sgvb_psd
+  path_to_book: docs
+  branch: main
+
+sphinx:
+  extra_extensions: ['sphinx.ext.autodoc', 'sphinx_inline_tabs']

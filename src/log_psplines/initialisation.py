@@ -8,7 +8,6 @@ import optax
 from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
-from tensorflow_probability.python.internal.backend.jax import unique
 
 from .bayesian_model import whittle_lnlike
 from .datasets import Periodogram

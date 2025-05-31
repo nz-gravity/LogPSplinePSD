@@ -1,9 +1,9 @@
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from lvk_data import LVKData
 
 from log_psplines.datasets import Periodogram
+from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm, plot_trace
 
@@ -12,7 +12,7 @@ fmin, fmax = 10, 2048
 
 lvk_data = LVKData.load()
 pdgrm_pwr = lvk_data.psds[0]
-welch_psd = lvk_data.welch_psd
+welch_psd = lvk_data.welch_psd(32)
 freqs = jnp.array(lvk_data._freq)
 
 

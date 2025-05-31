@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from log_psplines.bayesian_model import whittle_lnlike
-from log_psplines.datasets import Periodogram
+from log_psplines.datasets import Periodogram, Timeseries
+from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm, plot_trace
 from log_psplines.psplines import LogPSplines
@@ -35,16 +36,22 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
 
 
 def test_mcmc(mock_pdgrm: Periodogram, outdir):
-    t0 = time.time()
+
+    ar_data = ARData(order=2, duration=8.0, fs=1024.0, sigma=1.0, seed=42)
+    pdgm = (
+        Timeseries(ar_data.ts, ar_data.psd_theoretical)
+        .to_periodogram()
+        .highpass(5)
+    )
+
     mcmc, spline_model = run_mcmc(
         mock_pdgrm, n_knots=30, num_samples=250, num_warmup=1000
     )
-    runtime = float(time.time()) - t0
     samples = mcmc.get_samples()
 
     fig, ax = plot_pdgrm(mock_pdgrm, spline_model, samples["weights"])
     fig.savefig(os.path.join(outdir, f"test_mcmc.png"))
     plt.close(fig)
 
-    assert runtime < 30
+    assert mcmc.runtime < 30
     plot_trace(mcmc, os.path.join(outdir, "traceplot.png"))

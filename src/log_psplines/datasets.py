@@ -30,12 +30,20 @@ class Timeseries:
         y = (self.y - jnp.mean(self.y)) / self.std
         return Timeseries(self.t, y, self.std)
 
+    def __repr__(self):
+        return f"Timeseries(n={len(t)}, std={self.std:.3f}, fs={self.fs:.3f})"
+
 
 @dataclasses.dataclass
 class Periodogram:
     freqs: jnp.ndarray
     power: jnp.ndarray
     filtered: bool = False
+
+    def __post_init__(self):
+        # assert no nans
+        if jnp.isnan(self.freqs).any() or jnp.isnan(self.power).any():
+            raise ValueError("Frequency or power contains NaN values.")
 
     @property
     def n(self):
@@ -62,6 +70,9 @@ class Periodogram:
 
     def __truediv__(self, other):
         return Periodogram(self.freqs, self.power / other)
+
+    def __repr__(self):
+        return f"Periodogram(n={self.n}, fs={self.fs:.3f}, filtered={self.filtered})"
 
 
 def compute_welsch_psd(

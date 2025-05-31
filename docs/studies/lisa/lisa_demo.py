@@ -84,4 +84,29 @@ psd_approx = PSDApprox.fit(ts, window_size=51)
 
 fig, ax = plot_pdgrm(pdgmrm)
 psd_approx.plot(ax)
-plt.show()
+plt.legend()
+plt.savefig("lisa_pdgrm.png", dpi=300, bbox_inches="tight")
+
+
+# Run MCMC to fit the model
+mcmc, spline_model = run_mcmc(
+    pdgrm=pdgmrm,
+    parametric_model=psd_approx.power[1:],
+    n_knots=30,
+    degree=3,
+    diffMatrixOrder=2,
+    num_warmup=500,
+    num_samples=1000,
+    rng_key=42,
+)
+# Plot the results
+fig, ax = plot_pdgrm(
+    pdgrm=pdgmrm,
+    spline_model=spline_model,
+    weights=mcmc.get_samples()["weights"].mean(axis=0),
+    show_knots=True,
+    use_uniform_ci=True,
+    use_parametric_model=True,
+)
+ax.set_title("LISA Data Periodogram with Fitted Model")
+plt.savefig("lisa_fitted_model.png", dpi=300, bbox_inches="tight")

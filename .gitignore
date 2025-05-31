@@ -283,4 +283,6 @@ cython_debug/
 /docs/studies/lvk/strain_cache.hdf5
 
 
+*.gwf
+
 *.h5

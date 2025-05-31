@@ -9,7 +9,6 @@ from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
 
-from .bayesian_model import whittle_lnlike
 from .datasets import Periodogram
 
 __all__ = ["init_weights", "init_basis_and_penalty", "init_knots"]
@@ -166,7 +165,7 @@ def init_knots(
     # Power-based density sampling
     density_knots = np.array([])
     if n_density > 0:
-        power = periodogram.power.copy()
+        power = np.array(periodogram.power.copy(), dtype=np.float64)
         if parametric_model is not None:
             power -= parametric_model
             # ensure power is positive
@@ -186,6 +185,8 @@ def init_knots(
 
     knots = np.sort(knots)  # Ensure order
     knots = (knots - min_freq) / (max_freq - min_freq)  # Normalize to [0, 1]
+    # drop any nans that got through
+    knots = knots[~np.isnan(knots)]
 
     unique_knots = np.unique(knots)
     if len(unique_knots) < len(knots):

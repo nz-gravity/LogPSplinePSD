@@ -43,7 +43,8 @@ dev = [
     "isort",
     "mypy",
     "jupyter-book",
-    "pre-commit"
+    "pre-commit",
+    "gwpy"
 ]
 
 [tool.setuptools_scm]

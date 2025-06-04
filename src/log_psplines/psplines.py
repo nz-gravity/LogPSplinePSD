@@ -33,7 +33,7 @@ class LogPSplines:
             raise ValueError(f"#knots: {self.n_knots}, degree: {self.degree}")
 
     def __repr__(self):
-        return f"LogPSplines(knots={self.n_knots}, degree={self.degree}, n={self.n})"
+        return f"LogPSplines(knots={self.n_knots}, degree={self.degree}, n={self.n})"  # , sparsity={self.basis_sparsity:.2f}, penalty_sparsity={self.penalty_sparsity:.2f})"
 
     @classmethod
     def from_periodogram(
@@ -91,3 +91,18 @@ class LogPSplines:
         if weights is None:
             weights = self.weights
         return build_spline(self.basis, weights)
+
+
+#     @property
+#     def basis_sparsity(self) -> jnp.ndarray:
+#         """Compute the sparsity of the spline basis."""
+#         return _compute_sparsity(self.basis)
+#
+#     @property
+#     def penalty_sparsity(self) -> jnp.ndarray:
+#         """Compute the sparsity of the penalty matrix."""
+#         return _compute_sparsity(self.penalty_matrix)
+#
+# def _compute_sparsity(x) -> jnp.ndarray:
+#     # copy x to avoid modifying the original array
+#     return jnp.count_nonzero(x) / x.size

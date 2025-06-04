@@ -64,6 +64,7 @@ if not os.path.exists(trunc_fname):
     truncated_data = lisa_data.truncate(40960, fname="truncated_lisa_data.h5")
 
 lisa_data = LISAData.from_hdf5(trunc_fname)
+lisa_data = lisa_data.truncate(8192, fname=None)  # Truncate to 16384 samples
 
 
 ## Now to fit the data
@@ -71,7 +72,7 @@ lisa_data = LISAData.from_hdf5(trunc_fname)
 from log_psplines.datasets import Timeseries
 from log_psplines.mcmc import run_mcmc
 from log_psplines.parameteric_approximation import PSDApprox
-from log_psplines.plotting import plot_pdgrm
+from log_psplines.plotting import plot_pdgrm, plot_trace
 
 ts = Timeseries(
     t=lisa_data.t,
@@ -95,18 +96,33 @@ mcmc, spline_model = run_mcmc(
     n_knots=30,
     degree=3,
     diffMatrixOrder=2,
-    num_warmup=500,
-    num_samples=1000,
+    num_warmup=4000,
+    num_samples=3000,
     rng_key=42,
 )
+samples = mcmc.get_samples()
+
+plot_trace(mcmc, "traceplot.png")
+
 # Plot the results
 fig, ax = plot_pdgrm(
     pdgrm=pdgmrm,
     spline_model=spline_model,
-    weights=mcmc.get_samples()["weights"].mean(axis=0),
+    weights=samples["weights"],
     show_knots=True,
     use_uniform_ci=True,
     use_parametric_model=True,
 )
 ax.set_title("LISA Data Periodogram with Fitted Model")
 plt.savefig("lisa_fitted_model.png", dpi=300, bbox_inches="tight")
+
+
+fig, ax = plot_pdgrm(
+    spline_model=spline_model,
+    weights=samples["weights"],
+    show_knots=True,
+    # yscalar=min_power,
+    use_parametric_model=False,
+    # freqs=freqs,
+)
+plt.savefig("just_splines.png", bbox_inches="tight", dpi=300)

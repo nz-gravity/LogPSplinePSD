@@ -9,7 +9,7 @@ from log_psplines.bayesian_model import whittle_lnlike
 from log_psplines.datasets import Periodogram, Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.mcmc import run_mcmc
-from log_psplines.plotting import plot_pdgrm, plot_trace
+from log_psplines.plotting import plot_basis, plot_pdgrm, plot_trace
 from log_psplines.psplines import LogPSplines
 
 
@@ -18,7 +18,7 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     ln_pdgrm = jnp.log(mock_pdgrm.power)
     spline_model = LogPSplines.from_periodogram(
         mock_pdgrm,
-        n_knots=20,
+        n_knots=10,
         degree=3,
         diffMatrixOrder=2,
     )
@@ -27,6 +27,10 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     lnl_initial = whittle_lnlike(ln_pdgrm, spline_model(zero_weights))
     lnl_final = whittle_lnlike(ln_pdgrm, spline_model())
     runtime = float(time.time()) - t0
+
+    plot_basis(
+        spline_model.basis, os.path.join(outdir, "test_spline_init_basis.png")
+    )
 
     assert lnl_final > lnl_initial
     assert runtime < 5

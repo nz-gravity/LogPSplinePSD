@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from jax.experimental.sparse import BCOO
 from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
@@ -87,6 +88,13 @@ def init_basis_and_penalty(
     norm_factor[norm_factor == 0] = np.inf  # Prevent division by zero.
     basis_matrix = basis_matrix / norm_factor
 
+    # swap all values below epsilon to 0
+    # TODO: this is a hack... might not work
+    # basis_matrix[basis_matrix < epsilon] = 0.0
+    # basis_matrix = dense_to_sparse_jax(basis_matrix, threshold=epsilon)
+
+    basis_matrix = jnp.array(basis_matrix)
+
     # Compute the penalty matrix using L2 regularization.
     regularization = L2Regularization(
         LinearDifferentialOperator(diffMatrixOrder)
@@ -94,7 +102,14 @@ def init_basis_and_penalty(
     p = regularization.penalty_matrix(basis)
     p = p / np.max(p)
     p = p + epsilon * np.eye(p.shape[1])
-    return jnp.array(basis_matrix), jnp.array(p)
+    return basis_matrix, jnp.array(p)
+
+
+def dense_to_sparse_jax(matrix: jnp.ndarray, threshold=1e-10) -> BCOO:
+    mask = jnp.abs(matrix) >= threshold
+    values = matrix[mask]
+    indices = jnp.argwhere(mask)
+    return BCOO((values, indices), shape=matrix.shape)
 
 
 def init_knots(

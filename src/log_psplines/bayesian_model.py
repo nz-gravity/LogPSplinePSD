@@ -15,7 +15,7 @@ def whittle_lnlike(ln_pdgrm: jnp.ndarray, ln_model: jnp.ndarray):
 
 @jax.jit
 def build_spline(ln_spline_basis: jnp.ndarray, weights: jnp.ndarray):
-    return jnp.dot(ln_spline_basis, weights)
+    return ln_spline_basis @ weights
 
 
 def bayesian_model(

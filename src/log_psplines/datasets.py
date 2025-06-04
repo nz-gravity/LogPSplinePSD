@@ -31,7 +31,7 @@ class Timeseries:
         return Timeseries(self.t, y, self.std)
 
     def __repr__(self):
-        return f"Timeseries(n={len(t)}, std={self.std:.3f}, fs={self.fs:.3f})"
+        return f"Timeseries(n={len(self.t)}, std={self.std:.3f}, fs={self.fs:.3f})"
 
 
 @dataclasses.dataclass

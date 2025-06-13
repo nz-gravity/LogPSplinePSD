@@ -1,6 +1,9 @@
 format: jb-book
 root: README.rst
-# chapters:
+chapters:
+  - file: study/runtime/runtime.rst
+  - file: study/lvk/lvk.rst
+  - file: study/lisa/lisa.rst
 # - file: api
 # - file: examples/simulation_example.ipynb
 # - file: examples/ET_example.ipynb

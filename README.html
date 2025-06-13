@@ -57,9 +57,12 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'README';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Runtime" href="studies/runtime/runtime.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -173,7 +176,12 @@
                 </a>
             </li>
         </ul>
-        
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
+<li class="toctree-l1"><a class="reference internal" href="studies/lvk/lvk.html">LVK</a></li>
+<li class="toctree-l1"><a class="reference internal" href="studies/lisa/lisa.html">LISA</a></li>
+</ul>
+
     </div>
 </nav></div>
     </div>
@@ -354,31 +362,30 @@ document.write(`
 <section id="methodology">
 <h2>Methodology<a class="headerlink" href="#methodology" title="Link to this heading">#</a></h2>
 <p>The approach follows the P-spline framework for spectral density estimation described by Maturana-Russel &amp; Meyer (2021) (arXiv:1905.01832):</p>
-<ol class="arabic">
+<ol class="arabic simple">
 <li><p><strong>Basis construction</strong>
 Define order-r B-spline basis functions \(B_k(\omega)\), \(k=1,\dots,K+r\), on an equidistant grid of interior knots in the log-frequency domain.</p></li>
 <li><p><strong>Penalized prior</strong>
 Apply a discrete \(D\)th-order difference penalty to the spline coefficients \(\{\beta_k\}\), which induces smoothness in the estimated log-PSD.</p></li>
 <li><p><strong>Knot placement (optional)</strong>
 For spectra with sharp features, knot locations can be set based on quantiles of the raw periodogram values to allocate flexibility where needed.</p></li>
-<li><p><strong>Model and likelihood</strong>
-- The log-PSD is modeled as:</p>
+</ol>
+<p>4. <strong>Model and likelihood</strong>
+The log-PSD is modeled as:</p>
 <blockquote>
-<div><p>\[
-\log f(\lambda_l) = \sum_k \beta_k \, B_k(\log \lambda_l).
-\]</p>
+<div><div class="math notranslate nohighlight">
+\[\log f(\lambda_l) = \sum_k \beta_k \, B_k(\log \lambda_l)\]</div>
 </div></blockquote>
-<ul class="simple">
-<li><p>Whittle’s approximation for the periodogram \(I_n(\lambda_l)\) yields the log-likelihood:
-\[
-\log L(\beta) \propto -\sum_{l=1}^{\nu} \bigl[ \log f(\lambda_l) + I_n(\lambda_l)/f(\lambda_l) \bigr].
-\]</p></li>
-</ul>
-</li>
+<p>Whittle’s approximation for the periodogram \(I_n(\lambda_l)\) yields the log-likelihood:</p>
+<div class="math notranslate nohighlight">
+\[\log L(\beta) \propto -\sum_{l=1}^{\nu} \left[ \log f(\lambda_l) + \frac{I_n(\lambda_l)}{f(\lambda_l)} \right]\]</div>
+<ol class="arabic simple" start="5">
 <li><p><strong>Inference</strong>
-Jointly sample the spline coefficients and penalty precision using NumPyro’s NUTS sampler.</p></li>
+Jointly sample the spline coefficients and weights using NumPyro’s NUTS sampler.</p></li>
 </ol>
 <p>This fixed-basis P-spline approach avoids reversible-jump MCMC over knot numbers and positions, reducing computational cost while retaining flexibility to capture complex spectral features.</p>
+<p>Finally, one can also provide a ‘parametric model’ of the PSD as a function that can then be ‘corrected’ non-parametrically by the spline model.
+This is useful for cases where a known functional form (e.g., power-law) is expected, but additional flexibility is needed to account for deviations in the data.</p>
 </section>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
@@ -392,7 +399,7 @@ Jointly sample the spline coefficients and penalty precision using NumPyro’s N
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="linenos"> 2</span><span class="kn">import</span><span class="w"> </span><span class="nn">scipy</span>
 <span class="linenos"> 3</span>
-<span class="linenos"> 4</span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timeseries</span>
+<span class="linenos"> 4</span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.datatypes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timeseries</span>
 <span class="linenos"> 5</span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.mcmc</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_mcmc</span>
 <span class="linenos"> 6</span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.plotting</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_pdgrm</span>
 <span class="linenos"> 7</span>
@@ -461,6 +468,15 @@ Jointly sample the spline coefficients and penalty precision using NumPyro’s N
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
+    <a class="right-next"
+       href="studies/runtime/runtime.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Runtime</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
 </div>
                 </footer>
               

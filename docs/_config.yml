@@ -1,10 +1,10 @@
 # Book settings
 title: LogPSplinePSD
-author: "NZ Gravity"
-copyright: "2025"
+author: NZ Gravity
+copyright: 2025
 exclude_patterns: [_build, Thumbs.db, .DS_Store, "**.ipynb_checkpoints"]
 only_build_toc_files: true
-logo: "_static/logo.png"
+logo: _static/logo.png
 
 
 execute:
@@ -19,6 +19,7 @@ html:
   comments:
     hypothesis: false
     utterances: false
+  logo: _static/logo.png
 
 latex:
   latex_engine: pdflatex
@@ -35,4 +36,4 @@ repository:
   branch: main
 
 sphinx:
-  extra_extensions: ['sphinx.ext.autodoc', 'sphinx_inline_tabs']
+  extra_extensions: ['sphinx.ext.autodoc']

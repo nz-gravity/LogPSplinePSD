@@ -3,7 +3,7 @@ import dataclasses
 import jax.numpy as jnp
 import numpy as np
 
-from ..datasets import Periodogram
+from ..datatypes import Periodogram
 from ..psplines import LogPSplines
 
 __all__ = ["unpack_data"]

@@ -10,7 +10,7 @@ from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
 
-from .datasets import Periodogram
+from .datatypes import Periodogram
 
 __all__ = ["init_weights", "init_basis_and_penalty", "init_knots"]
 

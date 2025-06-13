@@ -7,7 +7,7 @@ from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
 from .bayesian_model import bayesian_model
-from .datasets import Periodogram
+from .datatypes import Periodogram
 from .psplines import LogPSplines
 
 

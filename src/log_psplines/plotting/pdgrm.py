@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..datasets import Periodogram
+from ..datatypes import Periodogram
 from ..psplines import LogPSplines
 from .utils import unpack_data
 

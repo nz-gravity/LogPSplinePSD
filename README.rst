@@ -31,19 +31,28 @@ The approach follows the P-spline framework for spectral density estimation desc
    For spectra with sharp features, knot locations can be set based on quantiles of the raw periodogram values to allocate flexibility where needed.
 
 4. **Model and likelihood**
-   - The log-PSD is modeled as:
-     \\[
-     \\log f(\\lambda_l) = \\sum_k \\beta_k \\, B_k(\\log \\lambda_l).
-     \\]
-   - Whittle’s approximation for the periodogram \\(I_n(\\lambda_l)\\) yields the log-likelihood:
-     \\[
-     \\log L(\\beta) \\propto -\\sum_{l=1}^{\\nu} \\bigl[ \\log f(\\lambda_l) + I_n(\\lambda_l)/f(\\lambda_l) \\bigr].
-     \\]
+The log-PSD is modeled as:
+
+  .. math::
+
+     \log f(\lambda_l) = \sum_k \beta_k \, B_k(\log \lambda_l)
+
+
+Whittle’s approximation for the periodogram \\(I_n(\\lambda_l)\\) yields the log-likelihood:
+
+.. math::
+
+     \log L(\beta) \propto -\sum_{l=1}^{\nu} \left[ \log f(\lambda_l) + \frac{I_n(\lambda_l)}{f(\lambda_l)} \right]
+
+
 
 5. **Inference**
-   Jointly sample the spline coefficients and penalty precision using NumPyro’s NUTS sampler.
+   Jointly sample the spline coefficients and weights using NumPyro’s NUTS sampler.
 
 This fixed-basis P-spline approach avoids reversible-jump MCMC over knot numbers and positions, reducing computational cost while retaining flexibility to capture complex spectral features.
+
+Finally, one can also provide a 'parametric model' of the PSD as a function that can then be 'corrected' non-parametrically by the spline model.
+This is useful for cases where a known functional form (e.g., power-law) is expected, but additional flexibility is needed to account for deviations in the data.
 
 Installation
 ------------

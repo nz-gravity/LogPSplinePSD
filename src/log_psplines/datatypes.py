@@ -43,6 +43,7 @@ class Periodogram:
     def __post_init__(self):
         # assert no nans
         if jnp.isnan(self.freqs).any() or jnp.isnan(self.power).any():
+
             raise ValueError("Frequency or power contains NaN values.")
 
     @property

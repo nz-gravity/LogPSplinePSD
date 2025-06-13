@@ -60,6 +60,8 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'studies/lvk/lvk';</script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="LISA" href="../lisa/lisa.html" />
+    <link rel="prev" title="Runtime" href="../runtime/runtime.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -122,8 +124,6 @@
       
       
       
-        
-      
       <div class="bd-sidebar-primary bd-sidebar">
         
 
@@ -173,7 +173,12 @@
                 </a>
             </li>
         </ul>
-        
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../runtime/runtime.html">Runtime</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">LVK</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../lisa/lisa.html">LISA</a></li>
+</ul>
+
     </div>
 </nav></div>
     </div>
@@ -357,12 +362,12 @@ document.write(`
 <section id="source-code">
 <h2>Source Code<a class="headerlink" href="#source-code" title="Link to this heading">#</a></h2>
 <div class="literal-block-wrapper docutils container" id="id1">
-<div class="code-block-caption"><span class="caption-text"><cite>run_estimator.py</cite> - main script for LVK PSD estimation</span><a class="headerlink" href="#id1" title="Link to this code">#</a></div>
+<div class="code-block-caption"><span class="caption-number">Listing 2 </span><span class="caption-text"><cite>run_estimator.py</cite> - main script for LVK PSD estimation</span><a class="headerlink" href="#id1" title="Link to this code">#</a></div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Periodogram</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.datatypes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Periodogram</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.example_datasets.lvk_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">LVKData</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.mcmc</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_mcmc</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.plotting</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_pdgrm</span><span class="p">,</span> <span class="n">plot_trace</span>
@@ -429,13 +434,13 @@ document.write(`
 </div>
 </div>
 <div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text"><cite>data.py</cite> - helper functions and data preprocessing</span><a class="headerlink" href="#id2" title="Link to this code">#</a></div>
+<div class="code-block-caption"><span class="caption-number">Listing 3 </span><span class="caption-text"><cite>data.py</cite> - helper functions and data preprocessing</span><a class="headerlink" href="#id2" title="Link to this code">#</a></div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Periodogram</span><span class="p">,</span> <span class="n">Timeseries</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.datatypes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Periodogram</span><span class="p">,</span> <span class="n">Timeseries</span>
 
 <span class="n">URL</span> <span class="o">=</span> <span class="s2">&quot;https://raw.githubusercontent.com/bilby-dev/bilby/main/bilby/gw/detector/noise_curves/aLIGO_O4_high_asd.txt&quot;</span>
 
@@ -522,6 +527,24 @@ document.write(`
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
+    <a class="left-prev"
+       href="../runtime/runtime.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Runtime</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../lisa/lisa.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">LISA</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
 </div>
                 </footer>
               

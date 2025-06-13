@@ -60,6 +60,8 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'studies/runtime/runtime';</script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="LVK" href="../lvk/lvk.html" />
+    <link rel="prev" title="LogPSplinePSD" href="../../README.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -122,8 +124,6 @@
       
       
       
-        
-      
       <div class="bd-sidebar-primary bd-sidebar">
         
 
@@ -173,7 +173,12 @@
                 </a>
             </li>
         </ul>
-        
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Runtime</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../lvk/lvk.html">LVK</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../lisa/lisa.html">LISA</a></li>
+</ul>
+
     </div>
 </nav></div>
     </div>
@@ -340,13 +345,13 @@ All runs use the same data and same number of iterations – the only difference
 <a class="reference internal image-reference" href="../../_images/mcmc_runtimes.png"><img alt="../../_images/mcmc_runtimes.png" src="../../_images/mcmc_runtimes.png" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Runtime as a function of the number of knots.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+<p><span class="caption-number">Fig. 1 </span><span class="caption-text">Runtime as a function of the number of knots.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <section id="source-code">
 <h2>Source Code<a class="headerlink" href="#source-code" title="Link to this heading">#</a></h2>
 <div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text"><cite>record_runtime.py</cite> - script for runtime collection</span><a class="headerlink" href="#id2" title="Link to this code">#</a></div>
+<div class="code-block-caption"><span class="caption-number">Listing 1 </span><span class="caption-text"><cite>record_runtime.py</cite> - script for runtime collection</span><a class="headerlink" href="#id2" title="Link to this code">#</a></div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 
@@ -356,7 +361,7 @@ All runs use the same data and same number of iterations – the only difference
 <span class="kn">import</span><span class="w"> </span><span class="nn">scipy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tqdm.auto</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timeseries</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.datatypes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timeseries</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.mcmc</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_mcmc</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.plotting</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_pdgrm</span>
 
@@ -458,6 +463,24 @@ All runs use the same data and same number of iterations – the only difference
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
+    <a class="left-prev"
+       href="../../README.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">LogPSplinePSD</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../lvk/lvk.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">LVK</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
 </div>
                 </footer>
               

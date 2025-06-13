@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
-from log_psplines.datasets import Periodogram, Timeseries
+from log_psplines.datatypes import Periodogram, Timeseries
 
 URL = "https://raw.githubusercontent.com/bilby-dev/bilby/main/bilby/gw/detector/noise_curves/aLIGO_O4_high_asd.txt"
 

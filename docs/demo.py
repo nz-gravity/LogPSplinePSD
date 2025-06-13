@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 
-from log_psplines.datasets import Timeseries
+from log_psplines.datatypes import Timeseries
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm
 

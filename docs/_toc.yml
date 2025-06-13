@@ -1,12 +1,6 @@
 format: jb-book
 root: README.rst
 chapters:
-  - file: study/runtime/runtime.rst
-  - file: study/lvk/lvk.rst
-  - file: study/lisa/lisa.rst
-# - file: api
-# - file: examples/simulation_example.ipynb
-# - file: examples/ET_example.ipynb
-# - file: examples/paper_plots
-# - url: https://arxiv.org/abs/2409.13224
-#   title: Paper
+  - file: studies/runtime/runtime.rst
+  - file: studies/lvk/lvk.rst
+  - file: studies/lisa/lisa.rst

@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from log_psplines.datasets import Periodogram
+from log_psplines.datatypes import Periodogram
 from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm, plot_trace

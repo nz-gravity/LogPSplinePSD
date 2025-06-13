@@ -5,7 +5,7 @@ import numpy as np
 from jax import numpy as jnp
 
 from .bayesian_model import build_spline
-from .datasets import Periodogram
+from .datatypes import Periodogram
 from .initialisation import init_basis_and_penalty, init_knots, init_weights
 
 

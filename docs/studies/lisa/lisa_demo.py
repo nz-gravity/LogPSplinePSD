@@ -69,7 +69,7 @@ lisa_data = lisa_data.truncate(8192, fname=None)  # Truncate to 16384 samples
 
 ## Now to fit the data
 
-from log_psplines.datasets import Timeseries
+from log_psplines.datatypes import Timeseries
 from log_psplines.mcmc import run_mcmc
 from log_psplines.parameteric_approximation import PSDApprox
 from log_psplines.plotting import plot_pdgrm, plot_trace

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import scipy
 
-from log_psplines.datasets import Periodogram, Timeseries
+from log_psplines.datatypes import Periodogram, Timeseries
 
 
 @pytest.fixture

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from log_psplines.bayesian_model import whittle_lnlike
-from log_psplines.datasets import Periodogram, Timeseries
+from log_psplines.datatypes import Periodogram, Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_basis, plot_pdgrm, plot_trace

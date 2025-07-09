@@ -80,7 +80,7 @@ See `demo.py <https://github.com/nz-gravity/LogPSplinePSD/tree/main/docs>`_
 Author
 ------
 
-Avi Vajpeyi – University of Auckland
+NZ Gravity
 
 Acknowledgements
 ----------------

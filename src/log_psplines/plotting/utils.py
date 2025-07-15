@@ -1,5 +1,6 @@
 import dataclasses
 
+import arviz as az
 import jax.numpy as jnp
 import numpy as np
 
@@ -115,3 +116,139 @@ def _get_uni_ci(samples, alpha=0.1):
     upper_bound = median + k_alpha * std
 
     return lower_bound, median, upper_bound
+
+
+def plot_diagnostics(
+    idata: az.InferenceData,
+    outdir: str,
+    variables: list = ["phi", "delta"],
+    figsize: tuple = (12, 8),
+) -> None:
+    """
+    Plot MCMC diagnostics using arviz.
+
+    Parameters
+    ----------
+    idata : az.InferenceData
+        Inference data from adaptive MCMC
+    variables : list
+        Variables to plot
+    figsize : tuple
+        Figure size
+    """
+    import matplotlib.pyplot as plt
+
+    # Trace plots
+    az.plot_trace(idata, var_names=variables, figsize=figsize)
+    plt.suptitle("Trace plots - Adaptive MCMC")
+    plt.tight_layout()
+    plt.savefig(f"{outdir}/trace_plots.png")
+
+    # Summary statistics
+    print("Summary Statistics:")
+    print(az.summary(idata, var_names=variables))
+
+    # Acceptance rate plot
+    if "acceptance_rate" in idata.sample_stats:
+        fig, ax = plt.subplots(figsize=(10, 4))
+        accept_rates = idata.sample_stats.acceptance_rate.values.flatten()
+        ax.plot(accept_rates, alpha=0.7)
+        ax.axhline(
+            idata.attrs.get("target_accept_rate", 0.44),
+            color="red",
+            linestyle="--",
+            label="Target",
+        )
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Acceptance Rate")
+        ax.set_title("Acceptance Rate Over Time")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"{outdir}/acceptance_rate.png")
+
+    # Step size evolution
+    if "step_size_mean" in idata.sample_stats:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+        step_means = idata.sample_stats.step_size_mean.values.flatten()
+        step_stds = idata.sample_stats.step_size_std.values.flatten()
+
+        ax1.plot(step_means, alpha=0.7)
+        ax1.set_xlabel("Iteration")
+        ax1.set_ylabel("Mean Step Size")
+        ax1.set_title("Step Size Evolution")
+        ax1.grid(True, alpha=0.3)
+
+        ax2.plot(step_stds, alpha=0.7, color="orange")
+        ax2.set_xlabel("Iteration")
+        ax2.set_ylabel("Step Size Std")
+        ax2.set_title("Step Size Variability")
+        ax2.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(f"{outdir}/step_size_evolution.png")
+
+
+def get_weights(
+    idata: az.InferenceData,
+    thin: int = 10,
+) -> jnp.ndarray:
+    """
+    Extract weight samples from arviz InferenceData.
+
+    Parameters
+    ----------
+    idata : az.InferenceData
+        Inference data containing weight samples
+    thin : int
+        Thinning factor
+
+    Returns
+    -------
+    jnp.ndarray
+        Weight samples, shape (n_samples_thinned, n_weights)
+    """
+    # Get weight samples and flatten chains
+    weight_samples = (
+        idata.posterior.weights.values
+    )  # (chains, draws, n_weights)
+    weight_samples = weight_samples.reshape(
+        -1, weight_samples.shape[-1]
+    )  # (chains*draws, n_weights)
+
+    # Thin samples
+    return weight_samples[::thin]
+
+
+def get_psd_samples_arviz(
+    idata: az.InferenceData, spline_model: LogPSplines, thin: int = 10
+) -> jnp.ndarray:
+    """
+    Extract PSD samples from arviz InferenceData.
+
+    Parameters
+    ----------
+    idata : az.InferenceData
+        Inference data containing weight samples
+    spline_model : LogPSplines
+        Spline model for reconstruction
+    thin : int
+        Thinning factor
+
+    Returns
+    -------
+    jnp.ndarray
+        PSD samples, shape (n_samples_thinned, n_frequencies)
+    """
+    # Get weight samples and flatten chains
+    weight_samples = get_weights(idata, thin=thin)
+
+    # Compute PSD samples
+    psd_samples = []
+    for weights in weight_samples:
+        ln_spline = spline_model.basis.T @ weights
+        ln_psd = ln_spline + spline_model.log_parametric_model
+        psd_samples.append(jnp.exp(ln_psd))
+
+    return jnp.array(psd_samples)

@@ -23,7 +23,6 @@ def plot_trace(mcmc: MCMC, fname=None):
 def plot_basis(basis: np.ndarray, fname=None) -> Tuple[plt.Figure, plt.Axes]:
     """Plot the basis functions, and a histogram of the basis values"""
     fig, axes = plt.subplots(1, 2, figsize=(6, 4))
-    basis = basis.todense()
 
     ax = axes[0]
     for b in basis.T:

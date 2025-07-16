@@ -18,6 +18,7 @@ def outdir():
 @pytest.fixture
 def mock_pdgrm() -> Periodogram:
     """Generate synthetic AR noise data."""
+    np.random.seed(42)
     a_coeff = [1, -2.2137, 2.9403, -2.1697, 0.9606]
     n_samples = 1024
     fs = 100  # Sampling frequency in Hz.

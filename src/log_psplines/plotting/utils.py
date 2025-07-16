@@ -121,7 +121,7 @@ def _get_uni_ci(samples, alpha=0.1):
 def plot_diagnostics(
     idata: az.InferenceData,
     outdir: str,
-    variables: list = ["phi", "delta"],
+    variables: list = ["phi", "delta", "weights"],
     figsize: tuple = (12, 8),
 ) -> None:
     """

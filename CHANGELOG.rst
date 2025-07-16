@@ -5,6 +5,19 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.3:
+
+v0.0.3 (2025-07-16)
+===================
+
+Unknown
+-------
+
+* Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`4c72cc2`_)
+
+.. _4c72cc2: https://github.com/nz-gravity/LogPSplinePSD/commit/4c72cc2028d58dceeb717915f6bf2d9fb194a9c2
+
+
 .. _changelog-v0.0.2:
 
 v0.0.2 (2025-07-16)
@@ -13,14 +26,23 @@ v0.0.2 (2025-07-16)
 Bug Fixes
 ---------
 
+* fix: fix pypi name bug (`b4b06db`_)
+
 * fix: pypi readme fix and updating demo (`7ecc602`_)
+
+Chores
+------
+
+* chore(release): 0.0.2 (`1d35bb9`_)
 
 Unknown
 -------
 
 * Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`5121194`_)
 
+.. _b4b06db: https://github.com/nz-gravity/LogPSplinePSD/commit/b4b06db36c36e72793d659e317ce26af52108865
 .. _7ecc602: https://github.com/nz-gravity/LogPSplinePSD/commit/7ecc602bc7c066bcd9b86be4340575d10057c01c
+.. _1d35bb9: https://github.com/nz-gravity/LogPSplinePSD/commit/1d35bb982f74f1ae9be5021a983f4267b0627cfc
 .. _5121194: https://github.com/nz-gravity/LogPSplinePSD/commit/5121194a38c18dfbf31e7bcc9c3751409d4cb9b7
 
 

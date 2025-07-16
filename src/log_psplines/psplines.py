@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from typing import Union
 
+import jax
 import numpy as np
 from jax import numpy as jnp
 
-from .bayesian_model import build_spline
 from .datatypes import Periodogram
 from .initialisation import init_basis_and_penalty, init_knots, init_weights
 
@@ -91,6 +91,11 @@ class LogPSplines:
         if weights is None:
             weights = self.weights
         return build_spline(self.basis, weights)
+
+
+@jax.jit
+def build_spline(ln_spline_basis: jnp.ndarray, weights: jnp.ndarray):
+    return ln_spline_basis @ weights
 
 
 #     @property

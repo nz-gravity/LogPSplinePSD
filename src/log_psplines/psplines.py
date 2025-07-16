@@ -19,7 +19,7 @@ class LogPSplines:
     basis: jnp.ndarray
     penalty_matrix: jnp.ndarray
     knots: np.ndarray
-    weights: jnp.ndarray
+    weights: jnp.ndarray = None
     parametric_model: Union[jnp.ndarray, None] = None
 
     def __post_init__(self):

@@ -1,6 +1,5 @@
 import time
 from dataclasses import dataclass
-from typing import Any, Dict
 
 import arviz as az
 import jax.numpy as jnp
@@ -9,19 +8,14 @@ import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
-from ..psplines import LogPSplines
+from ..psplines import LogPSplines, Periodogram
 from .base_sampler import BaseSampler, SamplerConfig, log_likelihood
 
 
 @dataclass
 class NUTSConfig(SamplerConfig):
-    """Configuration for NUTS sampler."""
-
     target_accept_prob: float = 0.8
     max_tree_depth: int = 10
-
-
-# ==================== NUTS SAMPLER ====================
 
 
 def bayesian_model(
@@ -55,19 +49,16 @@ def bayesian_model(
 
 
 class NUTSSampler(BaseSampler):
-    """
-    NumPyro NUTS sampler for log P-splines.
-    """
 
     def __init__(
         self,
-        log_pdgrm: jnp.ndarray,
+        periodogram: Periodogram,
         spline_model: LogPSplines,
         config: NUTSConfig = None,
     ):
         if config is None:
             config = NUTSConfig()
-        super().__init__(log_pdgrm, spline_model, config)
+        super().__init__(periodogram, spline_model, config)
         self.config = config  # type: NUTSConfig
 
     def sample(
@@ -77,8 +68,7 @@ class NUTSSampler(BaseSampler):
         thin: int = 1,
         chains: int = 1,
         **kwargs,
-    ) -> Dict[str, Any]:
-        """Run NUTS sampling."""
+    ) -> az.InferenceData:
         # Initialize starting values
         delta_0 = self.config.alpha_delta / self.config.beta_delta
         phi_0 = self.config.alpha_phi / (self.config.beta_phi * delta_0)
@@ -106,7 +96,7 @@ class NUTSSampler(BaseSampler):
         )
 
         if self.config.verbose:
-            print(f"NUTS sampler with {chains} chain(s)")
+            print(f"NUTS sampler with {chains} chain(s) [{self.device}]")
 
         start_time = time.time()
         mcmc.run(
@@ -123,45 +113,11 @@ class NUTSSampler(BaseSampler):
         self.runtime = time.time() - start_time
 
         if self.config.verbose:
-            print(f"NUTS sampling completed in {self.runtime:.2f} seconds")
-
-        # # Get samples and sample stats
-        # samples = mcmc.get_samples()
-        # sample_stats = mcmc.get_extra_fields()
-        #
-        # # Reshape for consistency
-        # def reshape_samples(x, n_chains, n_samples):
-        #     if x.ndim == 1:
-        #         return x.reshape(n_chains, n_samples)
-        #     else:
-        #         return x.reshape(n_chains, n_samples, -1)
-        #
-        # n_chains = mcmc.num_chains
-        # n_samples_per_chain = len(samples['phi']) // n_chains
-        #
-        # reshaped_samples = {}
-        # for key, values in samples.items():
-        #     reshaped_samples[key] = reshape_samples(values, n_chains, n_samples_per_chain)
-        #
-        # reshaped_stats = {}
-        # for key, values in sample_stats.items():
-        #     reshaped_stats[key] = reshape_samples(values, n_chains, n_samples_per_chain)
+            print(f"Sampling completed in {self.runtime:.2f} seconds")
 
         return self.to_arviz(mcmc)
 
-    def to_arviz(self, results) -> az.InferenceData:
+    def to_arviz(self, results: MCMC) -> az.InferenceData:
         idata = az.from_numpyro(results)
-        idata.attrs["sampler"] = "nuts"
-        idata.attrs["target_accept_rate"] = self.config.target_accept_prob
-        idata.attrs["max_tree_depth"] = self.config.max_tree_depth
-        idata.attrs["runtime"] = self.runtime
-        idata.attrs["n_samples"] = results.num_samples
-        idata.attrs["n_warmup"] = results.num_warmup
-        idata.attrs["n_chains"] = results.num_chains
-        idata.attrs["n_weights"] = self.n_weights
-        idata.attrs["spline_degree"] = self.spline_model.degree
-        idata.attrs["n_knots"] = self.spline_model.n_knots
-
-        if self.config.outdir:
-            self.plot_diagnostics(idata)
+        idata = self._add_common_attrs_and_save(idata)
         return idata

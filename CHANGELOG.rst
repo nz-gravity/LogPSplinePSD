@@ -5,6 +5,25 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.2:
+
+v0.0.2 (2025-07-16)
+===================
+
+Bug Fixes
+---------
+
+* fix: pypi readme fix and updating demo (`7ecc602`_)
+
+Unknown
+-------
+
+* Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`5121194`_)
+
+.. _7ecc602: https://github.com/nz-gravity/LogPSplinePSD/commit/7ecc602bc7c066bcd9b86be4340575d10057c01c
+.. _5121194: https://github.com/nz-gravity/LogPSplinePSD/commit/5121194a38c18dfbf31e7bcc9c3751409d4cb9b7
+
+
 .. _changelog-v0.0.1:
 
 v0.0.1 (2025-07-16)
@@ -23,10 +42,17 @@ Bug Fixes
 
 * fix: init weights with mse istead of lnl (`9df1e5d`_)
 
+Chores
+------
+
+* chore(release): 0.0.1 (`027591f`_)
+
 Unknown
 -------
 
 * Update pypi.yml (`88c8f9b`_)
+
+* edit readme (`60af98d`_)
 
 * add: add option for mh and nuts (`3a08b99`_)
 
@@ -125,7 +151,9 @@ updates:
 .. _a43ee40: https://github.com/nz-gravity/LogPSplinePSD/commit/a43ee406b85b00fe480c36f9fbe1b45ce70a0683
 .. _235c3ec: https://github.com/nz-gravity/LogPSplinePSD/commit/235c3ec5191c5c71952a820697d4416fc9b319e5
 .. _9df1e5d: https://github.com/nz-gravity/LogPSplinePSD/commit/9df1e5d7527d08602a4402cb038e88c8aa474128
+.. _027591f: https://github.com/nz-gravity/LogPSplinePSD/commit/027591fd3b4ecd334d784f25395d7bd5353c9ab2
 .. _88c8f9b: https://github.com/nz-gravity/LogPSplinePSD/commit/88c8f9bc873be650cbcac1a2a3440db803b0afe5
+.. _60af98d: https://github.com/nz-gravity/LogPSplinePSD/commit/60af98d50e3370107a7373018d72041a7f67e11d
 .. _3a08b99: https://github.com/nz-gravity/LogPSplinePSD/commit/3a08b992d695f4bd9c9c8130989ee3de51341fed
 .. _1fb79e8: https://github.com/nz-gravity/LogPSplinePSD/commit/1fb79e8689f87f89a4363d264bb1e33fbaf9217c
 .. _b0cd698: https://github.com/nz-gravity/LogPSplinePSD/commit/b0cd6985070d56f217c4f63c6bc4f8da66c565ec

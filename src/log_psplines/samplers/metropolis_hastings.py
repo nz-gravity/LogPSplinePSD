@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 from tqdm.auto import tqdm
 
-from ..psplines import LogPSplines
+from ..psplines import LogPSplines, Periodogram
 from .base_sampler import BaseSampler, SamplerConfig, log_likelihood
 
 
@@ -31,7 +31,7 @@ class MetropolisHastingsSampler(BaseSampler):
 
     def __init__(
         self,
-        log_pdgrm: jnp.ndarray,
+        periodogram: Periodogram,
         spline_model: LogPSplines,
         config: MetropolisHastingsConfig = None,
     ):
@@ -39,7 +39,7 @@ class MetropolisHastingsSampler(BaseSampler):
         if config is None:
             config = MetropolisHastingsConfig()
 
-        super().__init__(log_pdgrm, spline_model, config)
+        super().__init__(periodogram, spline_model, config)
 
         # MH-specific state
         self.current_weights = jnp.array(spline_model.weights)
@@ -239,7 +239,9 @@ class MetropolisHastingsSampler(BaseSampler):
         start_time = time.time()
 
         if self.config.verbose:
-            print("Metropolis-Hastings with adaptive step sizes")
+            print(
+                f"Metropolis-Hastings with adaptive step sizes [{self.device}]"
+            )
 
         with tqdm(
             total=total_iterations,
@@ -306,7 +308,7 @@ class MetropolisHastingsSampler(BaseSampler):
 
                 pbar.update(1)
 
-        runtime = time.time() - start_time
+        self.runtime = time.time() - start_time
 
         if self.config.verbose:
             final_accept = (
@@ -314,7 +316,7 @@ class MetropolisHastingsSampler(BaseSampler):
                 if sample_stats["acceptance_rate"]
                 else 0
             )
-            print(f"\nSampling completed in {runtime:.2f} seconds")
+            print(f"\nSampling completed in {self.runtime:.2f} seconds")
             print(
                 f"Final acceptance rate: {final_accept:.3f} (target: {self.config.target_accept_rate})"
             )
@@ -334,7 +336,7 @@ class MetropolisHastingsSampler(BaseSampler):
             {
                 "samples": all_samples,
                 "sample_stats": sample_stats,
-                "runtime": runtime,
+                "runtime": self.runtime,
                 "n_warmup": n_warmup,
                 "n_samples": n_samples,
             }
@@ -402,20 +404,7 @@ class MetropolisHastingsSampler(BaseSampler):
             dims={**posterior_dims, **sample_stats_dims, **observed_dims},
             coords=coords,
         )
-
-        # Add metadata
-        idata.attrs["sampling_method"] = "metropolis_hastings"
-        idata.attrs["runtime"] = results["runtime"]
-        idata.attrs["n_warmup"] = results["n_warmup"]
-        idata.attrs["target_accept_rate"] = self.config.target_accept_rate
-        idata.attrs["adaptation_window"] = self.config.adaptation_window
-        idata.attrs["n_weights"] = self.n_weights
-        idata.attrs["spline_degree"] = self.spline_model.degree
-        idata.attrs["n_knots"] = self.spline_model.n_knots
-
-        if self.config.outdir:
-            self.plot_diagnostics(idata)
-
+        idata = self._add_common_attrs_and_save(idata)
         return idata
 
 

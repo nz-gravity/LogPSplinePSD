@@ -126,7 +126,6 @@ def run_mcmc(
         raise ValueError(f"Unknown arguments: {', '.join(kwgs.keys())}")
 
     # Create spline model
-    log_pdgrm = jnp.log(pdgrm.power)
     spline_model = LogPSplines.from_periodogram(
         pdgrm,
         n_knots=spline_kwargs.pop("n_knots", 10),
@@ -137,7 +136,7 @@ def run_mcmc(
 
     # Initialize sampler + run
     sampler_obj = sampler_class(
-        log_pdgrm=log_pdgrm, spline_model=spline_model, config=config
+        periodogram=pdgrm, spline_model=spline_model, config=config
     )
 
     idata = sampler_obj.sample(n_samples=n_samples, n_warmup=n_warmup)

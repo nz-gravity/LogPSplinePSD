@@ -1,21 +1,16 @@
-"""
-Sampler class hierarchy for log P-splines spectral density estimation.
-
-Provides a clean object-oriented interface with a base Sampler class and
-specialized subclasses for different sampling algorithms.
-"""
-
 import os
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import arviz as az
 import jax
 import jax.numpy as jnp
+import numpy as np
 
-from ..plotting.diagnostics import plot_diagnostics
-from ..psplines import LogPSplines, build_spline
+from ..arviz_utils import _make_dataset_from_dict, get_weights
+from ..plotting import plot_diagnostics, plot_pdgrm
+from ..psplines import LogPSplines, Periodogram, build_spline
 
 
 @jax.jit
@@ -51,23 +46,11 @@ class BaseSampler(ABC):
 
     def __init__(
         self,
-        log_pdgrm: jnp.ndarray,
+        periodogram: Periodogram,
         spline_model: LogPSplines,
         config: SamplerConfig = None,
     ):
-        """
-        Initialize base sampler.
-
-        Parameters
-        ----------
-        log_pdgrm : jnp.ndarray
-            Log periodogram data
-        spline_model : LogPSplines
-            Spline model object
-        config : SamplerConfig
-            Sampler configuration
-        """
-        self.log_pdgrm = log_pdgrm
+        self.periodogram = periodogram
         self.spline_model = spline_model
         self.config = config
 
@@ -75,12 +58,19 @@ class BaseSampler(ABC):
         self.n_weights = len(spline_model.weights)
 
         # JAX arrays for mathematical operations
+        self.log_pdgrm = jnp.log(periodogram.power)
         self.penalty_matrix = jnp.array(spline_model.penalty_matrix)
         self.basis_matrix = jnp.array(spline_model.basis)
         self.log_parametric = jnp.array(spline_model.log_parametric_model)
 
         # Random state
         self.rng_key = jax.random.PRNGKey(config.rng_key)
+
+        # Runtime tracking
+        self.runtime = np.nan
+
+        # GPU/CPU device
+        self.device = jax.devices()[0].platform
 
     @abstractmethod
     def sample(
@@ -109,8 +99,8 @@ class BaseSampler(ABC):
 
         Returns
         -------
-        dict
-            Dictionary containing samples and diagnostics
+        az.InferenceData
+            Object containing the sampling results and diagnostics
         """
         pass
 
@@ -118,14 +108,58 @@ class BaseSampler(ABC):
     def to_arviz(self, results: Any) -> az.InferenceData:
         pass
 
-    def plot_diagnostics(
-        self,
-        idata: az.InferenceData,
-        outdir: str = None,
-        variables: list = ["phi", "delta", "weights"],
-        figsize: tuple = (12, 8),
-    ) -> None:
-        if outdir is None:
-            outdir = self.config.outdir
+    def _add_common_attrs_and_save(
+        self, idata: az.InferenceData
+    ) -> az.InferenceData:
+        idata.attrs["runtime"] = self.runtime
+        idata.attrs["sampler"] = self.__class__.__name__
+        for key, value in asdict(self.config).items():
+            if isinstance(value, bool):
+                value = int(value)
+            idata.attrs[key] = value
 
-        plot_diagnostics(idata, outdir, variables=variables, figsize=figsize)
+        # Add spline model and configuration to InferenceData
+        spline = self.spline_model
+        spline_data = _make_dataset_from_dict(
+            {
+                "knots": ("knot", np.array(spline.knots)),
+                "degree": int(spline.degree),
+                "diffMatrixOrder": int(spline.diffMatrixOrder),
+                "n": int(spline.n),
+                "basis": (["obs", "basis_dim"], np.array(spline.basis)),
+                "penalty_matrix": (
+                    ["basis_dim", "basis_dim"],
+                    np.array(spline.penalty_matrix),
+                ),
+                "parametric_model": ("obs", np.array(spline.parametric_model)),
+            },
+            coords={
+                "knot": np.arange(len(spline.knots)),
+                "obs": np.arange(spline.basis.shape[0]),
+                "basis_dim": np.arange(spline.basis.shape[1]),
+            },
+        )
+        idata.add_groups(spline_model=spline_data)
+        idata.add_groups(
+            periodogram=_make_dataset_from_dict(
+                {"power": ("freq", self.periodogram.power)},
+                {"freq": self.periodogram.freqs},
+            )
+        )
+
+        # Summary statistics
+        if self.config.verbose:
+            print("Summary Statistics:")
+            print(az.summary(idata))
+
+        if self.config.outdir is not None:
+            az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")
+            plot_diagnostics(idata, self.config.outdir)
+            fig, _ = plot_pdgrm(
+                self.periodogram,
+                self.spline_model,
+                get_weights(idata),
+            )
+            fig.savefig(f"{self.config.outdir}/posterior_predictive.png")
+
+        return idata

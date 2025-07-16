@@ -28,10 +28,6 @@ def plot_diagnostics(
     plt.tight_layout()
     plt.savefig(f"{outdir}/trace_plots.png")
 
-    # Summary statistics
-    print("Summary Statistics:")
-    print(az.summary(idata, var_names=variables))
-
     # Acceptance rate plot
     if "acceptance_rate" in idata.sample_stats:
         fig, ax = plt.subplots(figsize=(10, 4))
@@ -74,45 +70,4 @@ def plot_diagnostics(
         plt.savefig(f"{outdir}/step_size_evolution.png")
 
     # NUTS-specific plots
-    if "tree_depth" in idata.sample_stats:
-        fig, axes = plt.subplots(2, 2, figsize=figsize)
-
-        tree_depths = idata.sample_stats.tree_depth.values.flatten()
-        axes[0, 0].hist(
-            tree_depths, bins=range(int(tree_depths.max()) + 2), alpha=0.7
-        )
-        axes[0, 0].set_xlabel("Tree Depth")
-        axes[0, 0].set_ylabel("Count")
-        axes[0, 0].set_title("Distribution of Tree Depths")
-
-        if "num_steps" in idata.sample_stats:
-            num_steps = idata.sample_stats.num_steps.values.flatten()
-            axes[0, 1].hist(num_steps, bins=30, alpha=0.7)
-            axes[0, 1].set_xlabel("Number of Steps")
-            axes[0, 1].set_ylabel("Count")
-            axes[0, 1].set_title("Distribution of Leapfrog Steps")
-
-        if "energy" in idata.sample_stats:
-            energy = idata.sample_stats.energy.values.flatten()
-            axes[1, 0].plot(energy, alpha=0.7)
-            axes[1, 0].set_xlabel("Iteration")
-            axes[1, 0].set_ylabel("Energy")
-            axes[1, 0].set_title("Energy Over Time")
-
-        if "diverging" in idata.sample_stats:
-            diverging = idata.sample_stats.diverging.values.flatten()
-            n_divergent = np.sum(diverging)
-            total_samples = len(diverging)
-            divergent_rate = n_divergent / total_samples
-
-            axes[1, 1].bar(
-                ["Non-divergent", "Divergent"],
-                [total_samples - n_divergent, n_divergent],
-            )
-            axes[1, 1].set_ylabel("Count")
-            axes[1, 1].set_title(
-                f"Divergent Transitions ({divergent_rate:.1%})"
-            )
-
-        plt.tight_layout()
-        plt.savefig(f"{outdir}/nuts_diagnostics.png")
+    ## ... unsure what diagnostics we should add...

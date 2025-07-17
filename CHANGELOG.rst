@@ -5,16 +5,44 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.4:
+
+v0.0.4 (2025-07-17)
+===================
+
+Bug Fixes
+---------
+
+* fix: update inference result saving/loading (`c1c6273`_)
+
+Unknown
+-------
+
+* Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`49e3a72`_)
+
+.. _c1c6273: https://github.com/nz-gravity/LogPSplinePSD/commit/c1c627301a886a792c25b60fa85dee13d173eceb
+.. _49e3a72: https://github.com/nz-gravity/LogPSplinePSD/commit/49e3a727d479206fa16eeba3b8828acb48141356
+
+
 .. _changelog-v0.0.3:
 
 v0.0.3 (2025-07-16)
 ===================
 
+Chores
+------
+
+* chore(release): 0.0.3 (`4ef53a9`_)
+
 Unknown
 -------
 
+* update readme links (`0385b74`_)
+
 * Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`4c72cc2`_)
 
+.. _4ef53a9: https://github.com/nz-gravity/LogPSplinePSD/commit/4ef53a986e41573a8b159416f0ce127aeb202872
+.. _0385b74: https://github.com/nz-gravity/LogPSplinePSD/commit/0385b745795411e7e42790da58269c43ff5611d5
 .. _4c72cc2: https://github.com/nz-gravity/LogPSplinePSD/commit/4c72cc2028d58dceeb717915f6bf2d9fb194a9c2
 
 

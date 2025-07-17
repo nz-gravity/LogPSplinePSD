@@ -61,14 +61,7 @@ class NUTSSampler(BaseSampler):
         super().__init__(periodogram, spline_model, config)
         self.config = config  # type: NUTSConfig
 
-    def sample(
-        self,
-        n_samples: int,
-        n_warmup: int = 500,
-        thin: int = 1,
-        chains: int = 1,
-        **kwargs,
-    ) -> az.InferenceData:
+    def sample(self, n_samples: int, n_warmup: int = 500, **kwargs,) -> az.InferenceData:
         # Initialize starting values
         delta_0 = self.config.alpha_delta / self.config.beta_delta
         phi_0 = self.config.alpha_phi / (self.config.beta_phi * delta_0)
@@ -90,13 +83,13 @@ class NUTSSampler(BaseSampler):
             kernel,
             num_warmup=n_warmup,
             num_samples=n_samples,
-            num_chains=chains,
+            num_chains=1,
             progress_bar=self.config.verbose,
             jit_model_args=True,
         )
 
         if self.config.verbose:
-            print(f"NUTS sampler with {chains} chain(s) [{self.device}]")
+            print(f"NUTS sampler [{self.device}]")
 
         start_time = time.time()
         mcmc.run(
@@ -112,12 +105,11 @@ class NUTSSampler(BaseSampler):
         )
         self.runtime = time.time() - start_time
 
+
         if self.config.verbose:
             print(f"Sampling completed in {self.runtime:.2f} seconds")
 
-        return self.to_arviz(mcmc)
+        samples = mcmc.get_samples()
+        stats = mcmc.get_extra_fields()
+        return self.to_arviz(samples, stats)
 
-    def to_arviz(self, results: MCMC) -> az.InferenceData:
-        idata = az.from_numpyro(results)
-        idata = self._add_common_attrs_and_save(idata)
-        return idata

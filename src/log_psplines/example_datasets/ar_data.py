@@ -2,6 +2,8 @@ from typing import Optional, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.signal import welch
+from ..datatypes import Periodogram, Timeseries
 
 
 class ARData:
@@ -85,18 +87,15 @@ class ARData:
         self.n = int(self.duration * self.fs)
         self.seed = seed
 
-        # 1) Simulate the AR(p) time series
         self.ts = self._generate_timeseries()
-
-        # 2) Build the one‐sided frequency axis
-        #    rfftfreq returns [0, 1, 2, ..., fs/2] with n//2 + 1 points
         self.freqs = np.fft.rfftfreq(self.n, d=1.0 / self.fs)
-
-        # 3) Compute theoretical PSD on that frequency grid
+        self.times = np.arange(self.n) / self.fs
         self.psd_theoretical = self._compute_theoretical_psd()
-
-        # 4) Compute the one‐sided raw periodogram (power per Hz)
         self.periodogram = self._compute_periodogram()
+
+        # convert to Timeseries and Periodogram datatypes
+        self.ts = Timeseries(t=self.times, y=self.ts, std=self.sigma)
+        self.periodogram = Periodogram(freqs=self.freqs, power=self.periodogram, filtered=False)
 
     def _generate_timeseries(self) -> np.ndarray:
         """
@@ -111,9 +110,10 @@ class ARData:
         ts : np.ndarray
             Simulated AR(p) time series of length n.
         """
+        n = self.n + 100  # Generate extra samples to avoid edge effects
         rng = np.random.default_rng(self.seed)
-        x = np.zeros(self.n, dtype=float)
-        noise = rng.normal(loc=0.0, scale=self.sigma, size=self.n)
+        x = np.zeros(n, dtype=float)
+        noise = rng.normal(loc=0.0, scale=self.sigma, size=n)
 
         # Iterate from t = p .. n-1
         for t in range(self.order, self.n):
@@ -123,7 +123,8 @@ class ARData:
                 past_terms += a_k * x[t - k]
             x[t] = past_terms + noise[t]
 
-        return x
+        # Return only the last n samples
+        return x[self.order : self.order + self.n]
 
     def _compute_theoretical_psd(self) -> np.ndarray:
         """
@@ -149,7 +150,7 @@ class ARData:
         denom_mag2 = np.abs(denom) ** 2
 
         psd_th = (self.sigma**2 / self.fs) / denom_mag2
-        return psd_th.real  # should already be float
+        return psd_th.real * 2 # should already be float
 
     def _compute_periodogram(self) -> np.ndarray:
         """
@@ -228,10 +229,22 @@ class ARData:
             t_kwargs.update(theoretical_kwargs)
 
         # Plot raw periodogram
-        ax.semilogy(self.freqs, self.periodogram, **p_kwargs)
+        ax.semilogy(self.freqs, self.periodogram.power, **p_kwargs)
 
         # Plot theoretical PSD
         ax.semilogy(self.freqs, self.psd_theoretical, **t_kwargs)
+
+        try:
+            f, Pxx = welch(
+                    self.ts.y,
+                    fs=self.fs,
+                    nperseg=min(256, len(self.ts.y)//4),
+                    scaling='density'
+                )
+            ax.semilogy(f, Pxx, label="Welch PSD", color="C3", linestyle=":")
+        except Exception as e:
+            pass
+
 
         ax.set_xlabel("Frequency [Hz]")
         ax.set_ylabel("PSD [power/Hz]")

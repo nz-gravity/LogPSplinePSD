@@ -10,7 +10,7 @@ from log_psplines.psd_diagnostics import PSDDiagnostics
 def test_plot_whitening_ar2(outdir):
     ar_data = ARData(order=2, duration=8.0, fs=1024.0, sigma=1.0, seed=42)
     psd_diag = PSDDiagnostics(
-        ts_data=ar_data.ts,
+        ts_data=ar_data.ts.y,
         fs=ar_data.fs,
         psd=ar_data.psd_theoretical,
         freqs=ar_data.freqs,

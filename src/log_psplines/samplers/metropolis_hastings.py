@@ -220,17 +220,22 @@ class MetropolisHastingsSampler(BaseSampler):
         }
 
     def sample(
-        self, n_samples: int, n_warmup: int = 500, thin: int = 1, **kwargs
+        self, n_samples: int, n_warmup: int = 500,  **kwargs
     ) -> az.InferenceData:
-        total_iterations = n_warmup + n_samples * thin
+        total_iterations = n_warmup + n_samples
 
-        all_samples = {"weights": [], "phi": [], "delta": []}
+        samples = {
+            "weights": np.empty((n_samples, self.n_weights), dtype=np.float32),
+            "phi": np.empty(n_samples, dtype=np.float32),
+            "delta": np.empty(n_samples, dtype=np.float32),
+        }
+
         sample_stats = {
-            "acceptance_rate": [],
-            "log_likelihood": [],
-            "log_prior": [],
-            "step_size_mean": [],
-            "step_size_std": [],
+            "acceptance_rate": np.empty(n_samples, dtype=np.float32),
+            "log_likelihood": np.empty(n_samples, dtype=np.float32),
+            "log_prior": np.empty(n_samples, dtype=np.float32),
+            "step_size_mean": np.empty(n_samples, dtype=np.float32),
+            "step_size_std": np.empty(n_samples, dtype=np.float32),
         }
 
         # Ensure we are warmed up + jitted before starting sampling
@@ -253,10 +258,11 @@ class MetropolisHastingsSampler(BaseSampler):
             for i in range(total_iterations):
                 step_info = self.step()
 
-                if i >= n_warmup and (i - n_warmup) % thin == 0:
-                    all_samples["weights"].append(step_info["weights"])
-                    all_samples["phi"].append(step_info["phi"])
-                    all_samples["delta"].append(step_info["delta"])
+                if i >= n_warmup:
+                    j = i - n_warmup
+                    samples["weights"][j] = step_info["weights"]
+                    samples["phi"][j] = step_info["phi"]
+                    samples["delta"][j] = step_info["delta"]
 
                     log_like = float(
                         log_likelihood(
@@ -285,19 +291,13 @@ class MetropolisHastingsSampler(BaseSampler):
                         )
                     )
 
-                    sample_stats["acceptance_rate"].append(
-                        step_info["acceptance_rate"]
-                    )
-                    sample_stats["log_likelihood"].append(log_like)
-                    sample_stats["log_prior"].append(log_prior)
-                    sample_stats["step_size_mean"].append(
-                        np.mean(step_info["step_sizes"])
-                    )
-                    sample_stats["step_size_std"].append(
-                        np.std(step_info["step_sizes"])
-                    )
+                    sample_stats["acceptance_rate"][j] = step_info["acceptance_rate"]
+                    sample_stats["log_likelihood"][j] = log_like
+                    sample_stats["log_prior"][j] = log_prior
+                    sample_stats["step_size_mean"][j] = np.mean(step_info["step_sizes"])
+                    sample_stats["step_size_std"][j] = np.std(step_info["step_sizes"])
 
-                if i % 10 == 0:
+                if i % 100 == 0:
                     phase = "Warmup" if i < n_warmup else "Sampling"
                     desc = (
                         f"{phase} | Accept: {step_info['acceptance_rate']:.3f} | "
@@ -311,101 +311,16 @@ class MetropolisHastingsSampler(BaseSampler):
         self.runtime = time.time() - start_time
 
         if self.config.verbose:
-            final_accept = (
-                np.mean(sample_stats["acceptance_rate"][-50:])
-                if sample_stats["acceptance_rate"]
-                else 0
-            )
+            final_accept = 0
+            if len(sample_stats["acceptance_rate"]) > 50:
+                final_accept = np.mean(sample_stats["acceptance_rate"][-50:])
+
             print(f"\nSampling completed in {self.runtime:.2f} seconds")
             print(
                 f"Final acceptance rate: {final_accept:.3f} (target: {self.config.target_accept_rate})"
             )
 
-        # Reshape for arviz
-        for key in all_samples:
-            all_samples[key] = np.array(all_samples[key])
-            if all_samples[key].ndim == 2:
-                all_samples[key] = all_samples[key][None, ...]
-            else:
-                all_samples[key] = all_samples[key][None, :]
-
-        for key in sample_stats:
-            sample_stats[key] = np.array(sample_stats[key])[None, :]
-
-        return self.to_arviz(
-            {
-                "samples": all_samples,
-                "sample_stats": sample_stats,
-                "runtime": self.runtime,
-                "n_warmup": n_warmup,
-                "n_samples": n_samples,
-            }
-        )
-
-    def to_arviz(self, results: Dict[str, Any]) -> az.InferenceData:
-        """
-        Convert MCMC results to arviz InferenceData format.
-
-        Parameters
-        ----------
-        results : dict
-            Results from self.sample()
-
-        Returns
-        -------
-        az.InferenceData
-            ArviZ inference data object
-        """
-        samples = results["samples"]
-        sample_stats = results["sample_stats"]
-
-        # Create coordinate system
-        coords = {
-            "chain": range(1),
-            "draw": range(results["n_samples"]),
-            "weight_dim": range(self.n_weights),
-            "freq_dim": range(len(self.log_pdgrm)),
-        }
-
-        posterior_data = {
-            "phi": samples["phi"],
-            "delta": samples["delta"],
-            "weights": samples["weights"],
-        }
-
-        posterior_dims = {
-            "phi": ["chain", "draw"],
-            "delta": ["chain", "draw"],
-            "weights": ["chain", "draw", "weight_dim"],
-        }
-
-        # Sample statistics
-        sample_stats_data = {
-            "acceptance_rate": sample_stats["acceptance_rate"],
-            "lp": sample_stats["log_likelihood"]
-            + sample_stats["log_prior"],  # log posterior
-            "log_likelihood": sample_stats["log_likelihood"],
-            "log_prior": sample_stats["log_prior"],
-            "step_size_mean": sample_stats["step_size_mean"],
-            "step_size_std": sample_stats["step_size_std"],
-        }
-
-        sample_stats_dims = {k: ["chain", "draw"] for k in sample_stats_data}
-
-        observed_data = {"log_periodogram": self.log_pdgrm}
-
-        observed_dims = {"log_periodogram": ["freq_dim"]}
-
-        # Create InferenceData object
-        idata = az.from_dict(
-            posterior=posterior_data,
-            sample_stats=sample_stats_data,
-            observed_data=observed_data,
-            dims={**posterior_dims, **sample_stats_dims, **observed_dims},
-            coords=coords,
-        )
-        idata = self._add_common_attrs_and_save(idata)
-        return idata
+        return self.to_arviz(samples, sample_stats)
 
 
 # ==================== JAX OPTIMIZED FUNCTIONS  ====================
@@ -415,7 +330,7 @@ class MetropolisHastingsSampler(BaseSampler):
 def log_prior_weights(
     weights: jnp.ndarray, phi: float, penalty_matrix: jnp.ndarray
 ) -> jnp.ndarray:
-    """JIT-compiled log prior for weights: MVN(0, (phi * P)^-1)."""
+    """log prior for weights: MVN(0, (phi * P)^-1)."""
     precision = phi * penalty_matrix
     quad_form = weights.T @ precision @ weights
     k = len(weights)
@@ -427,7 +342,7 @@ def log_prior_weights(
 def log_prior_phi(
     phi: float, delta: float, alpha_phi: float, beta_phi: float
 ) -> jnp.ndarray:
-    """JIT-compiled log prior for phi: Gamma(alpha_phi, delta * beta_phi)."""
+    """log prior for phi: Gamma(alpha_phi, delta * beta_phi)."""
     return jnp.where(
         phi > 0,
         (alpha_phi - 1) * jnp.log(phi)
@@ -442,7 +357,7 @@ def log_prior_phi(
 def log_prior_delta(
     delta: float, alpha_delta: float, beta_delta: float
 ) -> jnp.ndarray:
-    """JIT-compiled log prior for delta: Gamma(alpha_delta, beta_delta)."""
+    """log prior for delta: Gamma(alpha_delta, beta_delta)."""
     return jnp.where(
         delta > 0,
         (alpha_delta - 1) * jnp.log(delta)
@@ -485,7 +400,6 @@ def gibbs_update_phi(
     beta_phi: float,
     rng_key: jax.random.PRNGKey,
 ) -> jnp.ndarray:
-    """JIT-compiled Gibbs update for phi."""
     k = len(weights)
     quad_form = weights.T @ penalty_matrix @ weights
 

@@ -1,16 +1,17 @@
 import os
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Dict
 
 import arviz as az
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..arviz_utils import _make_dataset_from_dict, get_weights
+
 from ..plotting import plot_diagnostics, plot_pdgrm
 from ..psplines import LogPSplines, Periodogram, build_spline
+from ..arviz_utils.to_arviz import results_to_arviz
 
 
 @jax.jit
@@ -20,8 +21,7 @@ def log_likelihood(
     basis_matrix: jnp.ndarray,
     log_parametric: jnp.ndarray,
 ) -> jnp.ndarray:
-    ln_spline = build_spline(basis_matrix, weights)
-    ln_model = ln_spline + log_parametric
+    ln_model = build_spline(basis_matrix, weights, log_parametric)
     integrand = ln_model + jnp.exp(log_pdgrm - ln_model)
     return -0.5 * jnp.sum(integrand)
 
@@ -39,7 +39,8 @@ class SamplerConfig:
     outdir: str = None
 
     def __post_init__(self):
-        os.makedirs(self.outdir, exist_ok=True)
+        if self.outdir is not None:
+            os.makedirs(self.outdir, exist_ok=True)
 
 
 class BaseSampler(ABC):
@@ -73,77 +74,20 @@ class BaseSampler(ABC):
         self.device = jax.devices()[0].platform
 
     @abstractmethod
-    def sample(
-        self,
-        n_samples: int,
-        n_warmup: int = 1000,
-        thin: int = 1,
-        chains: int = 1,
-        **kwargs,
-    ) -> az.InferenceData:
-        """
-        Run MCMC sampling. Must be implemented by subclasses.
-
-        Parameters
-        ----------
-        n_samples : int
-            Number of samples to collect
-        n_warmup : int
-            Number of warmup iterations
-        thin : int
-            Thinning interval
-        chains : int
-            Number of chains
-        **kwargs
-            Additional sampler-specific arguments
-
-        Returns
-        -------
-        az.InferenceData
-            Object containing the sampling results and diagnostics
-        """
+    def sample(self, n_samples: int, n_warmup: int = 1000, **kwargs) -> az.InferenceData:
         pass
 
-    @abstractmethod
-    def to_arviz(self, results: Any) -> az.InferenceData:
-        pass
 
-    def _add_common_attrs_and_save(
-        self, idata: az.InferenceData
-    ) -> az.InferenceData:
-        idata.attrs["runtime"] = self.runtime
-        idata.attrs["sampler"] = self.__class__.__name__
-        for key, value in asdict(self.config).items():
-            if isinstance(value, bool):
-                value = int(value)
-            idata.attrs[key] = value
-
-        # Add spline model and configuration to InferenceData
-        spline = self.spline_model
-        spline_data = _make_dataset_from_dict(
-            {
-                "knots": ("knot", np.array(spline.knots)),
-                "degree": int(spline.degree),
-                "diffMatrixOrder": int(spline.diffMatrixOrder),
-                "n": int(spline.n),
-                "basis": (["obs", "basis_dim"], np.array(spline.basis)),
-                "penalty_matrix": (
-                    ["basis_dim", "basis_dim"],
-                    np.array(spline.penalty_matrix),
-                ),
-                "parametric_model": ("obs", np.array(spline.parametric_model)),
-            },
-            coords={
-                "knot": np.arange(len(spline.knots)),
-                "obs": np.arange(spline.basis.shape[0]),
-                "basis_dim": np.arange(spline.basis.shape[1]),
-            },
-        )
-        idata.add_groups(spline_model=spline_data)
-        idata.add_groups(
-            periodogram=_make_dataset_from_dict(
-                {"power": ("freq", self.periodogram.power)},
-                {"freq": self.periodogram.freqs},
+    def to_arviz(self, samples: Dict[str, np.ndarray], sample_stats:Dict[str, Any] ) -> az.InferenceData:
+        idata = results_to_arviz(
+            samples=samples,
+            sample_stats=sample_stats,
+            periodogram=self.periodogram,
+            spline_model=self.spline_model,
+            config=self.config,
+            attributes=dict(
+                device= str(self.device),
+                runtime=self.runtime,
             )
         )
 
@@ -155,11 +99,8 @@ class BaseSampler(ABC):
         if self.config.outdir is not None:
             az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")
             plot_diagnostics(idata, self.config.outdir)
-            fig, _ = plot_pdgrm(
-                self.periodogram,
-                self.spline_model,
-                get_weights(idata),
-            )
+            fig, _ = plot_pdgrm(idata=idata)
             fig.savefig(f"{self.config.outdir}/posterior_predictive.png")
+            az.summary(idata).to_csv(f"{self.config.outdir}/summary_statistics.csv")
 
         return idata

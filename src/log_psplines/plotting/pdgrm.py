@@ -5,6 +5,7 @@ import numpy as np
 from ..datatypes import Periodogram
 from ..psplines import LogPSplines
 from .utils import unpack_data
+from ..arviz_utils import get_periodogram, get_spline_model, get_weights
 
 DATA_COL = "lightgray"
 MODEL_COL = "tab:orange"
@@ -21,8 +22,13 @@ def plot_pdgrm(
     freqs=None,
     yscalar=1.0,
     ax=None,
+    idata=None,
 ):
-    # first, we unpack data
+    if idata:
+        pdgrm = get_periodogram(idata)
+        spline_model = get_spline_model(idata)
+        weights = get_weights(idata, weights)
+
     plt_data = unpack_data(
         pdgrm=pdgrm,
         spline_model=spline_model,

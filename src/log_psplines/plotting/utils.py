@@ -12,10 +12,10 @@ __all__ = ["unpack_data"]
 
 @dataclasses.dataclass
 class PlottingData:
-    freqs: jnp.ndarray = None
-    pdgrm: jnp.ndarray = None
-    model: jnp.ndarray = None
-    ci: jnp.ndarray = None
+    freqs: np.ndarray = None
+    pdgrm: np.ndarray = None
+    model: np.ndarray = None
+    ci: np.ndarray = None
 
     @property
     def n(self):
@@ -41,24 +41,21 @@ def unpack_data(
     plt_dat = PlottingData()
     if pdgrm is not None:
         plt_dat.pdgrm = np.array(pdgrm.power, dtype=np.float64) * yscalar
-        plt_dat.freqs = pdgrm.freqs
+        plt_dat.freqs = np.array(pdgrm.freqs)
 
     if spline_model is not None:
-        ln_param = spline_model.log_parametric_model
-        if not use_parametric_model:
-            ln_param = jnp.zeros_like(ln_param)
 
         if weights is None:
             # just use the initial weights/0 weights
-            ln_spline = spline_model()
+            ln_spline = spline_model(use_parametric_model=use_parametric_model)
 
         elif weights.ndim == 1:
             # only one set of weights -- no CI possible
-            ln_spline = spline_model(weights)
+            ln_spline = spline_model(weights, use_parametric_model)
 
         else:  # weights.ndim == 2
             # multiple sets of weights -- CI possible
-            ln_splines = jnp.array([spline_model(w) for w in weights])
+            ln_splines = jnp.array([spline_model(w, use_parametric_model) for w in weights])
 
             if use_uniform_ci:
                 ln_ci = _get_uni_ci(ln_splines)
@@ -67,11 +64,9 @@ def unpack_data(
                     ln_splines, q=jnp.array([16, 50, 84]), axis=0
                 )
             ln_ci = jnp.array(ln_ci)
-            plt_dat.ci = np.exp(ln_ci + ln_param, dtype=np.float64) * yscalar
+            plt_dat.ci = np.exp(ln_ci, dtype=np.float64) * yscalar
             ln_spline = ln_ci[1]
-        plt_dat.model = (
-            np.exp(ln_spline + ln_param, dtype=np.float64) * yscalar
-        )
+        plt_dat.model = np.exp(ln_spline, dtype=np.float64) * yscalar
 
     if plt_dat.freqs is None and freqs is None:
         plt_dat.freqs = np.linspace(0, 1, plt_dat.n)

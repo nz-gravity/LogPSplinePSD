@@ -20,7 +20,7 @@ def mock_pdgrm() -> Periodogram:
     """Generate synthetic AR noise data."""
     np.random.seed(42)
     a_coeff = [1, -2.2137, 2.9403, -2.1697, 0.9606]
-    n_samples = 1024
+    n_samples = 512
     fs = 100  # Sampling frequency in Hz.
     dt = 1.0 / fs
     t = np.linspace(0, (n_samples - 1) * dt, n_samples)

@@ -4,9 +4,11 @@ from typing import Union
 import jax
 import numpy as np
 from jax import numpy as jnp
+from xarray import Dataset, DataArray
 
 from .datatypes import Periodogram
 from .initialisation import init_basis_and_penalty, init_knots, init_weights
+
 
 
 @dataclass
@@ -37,13 +39,13 @@ class LogPSplines:
 
     @classmethod
     def from_periodogram(
-        cls,
-        periodogram: Periodogram,
-        n_knots: int,
-        degree: int,
-        diffMatrixOrder: int = 2,
-        parametric_model: jnp.ndarray = None,
-        knot_kwargs: dict = {},
+            cls,
+            periodogram: Periodogram,
+            n_knots: int,
+            degree: int,
+            diffMatrixOrder: int = 2,
+            parametric_model: jnp.ndarray = None,
+            knot_kwargs: dict = {},
     ):
         knots = init_knots(
             n_knots, periodogram, parametric_model, **knot_kwargs
@@ -86,17 +88,21 @@ class LogPSplines:
     def n_basis(self) -> int:
         return self.n_knots + self.degree - 1
 
-    def __call__(self, weights: jnp.ndarray = None) -> jnp.ndarray:
+    def __call__(self, weights: jnp.ndarray = None, use_parametric_model=True) -> jnp.ndarray:
         """Compute the weighted sum of the B-spline basis functions minus a constant."""
         if weights is None:
             weights = self.weights
-        return build_spline(self.basis, weights)
+        ln_para = self.log_parametric_model
+        if not use_parametric_model:
+            ln_para = jnp.zeros_like(ln_para)
+        return build_spline(self.basis, weights, ln_para)
+
+
 
 
 @jax.jit
-def build_spline(ln_spline_basis: jnp.ndarray, weights: jnp.ndarray):
-    return ln_spline_basis @ weights
-
+def build_spline(ln_spline_basis: jnp.ndarray, weights: jnp.ndarray, log_parametric: jnp.ndarray) -> jnp.ndarray:
+    return (ln_spline_basis @ weights) + log_parametric
 
 #     @property
 #     def basis_sparsity(self) -> jnp.ndarray:
@@ -111,3 +117,4 @@ def build_spline(ln_spline_basis: jnp.ndarray, weights: jnp.ndarray):
 # def _compute_sparsity(x) -> jnp.ndarray:
 #     # copy x to avoid modifying the original array
 #     return jnp.count_nonzero(x) / x.size
+

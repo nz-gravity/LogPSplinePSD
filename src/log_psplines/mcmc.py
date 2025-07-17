@@ -80,7 +80,7 @@ def run_mcmc(
     # Extract spline model kwargs
     spline_kwargs = {
         key: kwgs.pop(key)
-        for key in ["n_knots", "degree", "diffMatrixOrder"]
+        for key in ["n_knots", "degree", "diffMatrixOrder", "knot_kwargs"]
         if key in kwgs
     }
 
@@ -132,12 +132,11 @@ def run_mcmc(
         degree=spline_kwargs.pop("degree", 3),
         diffMatrixOrder=spline_kwargs.pop("diffMatrixOrder", 2),
         parametric_model=parametric_model,
+        knot_kwargs=spline_kwargs.pop("knot_kwargs", {}),
     )
 
     # Initialize sampler + run
     sampler_obj = sampler_class(
         periodogram=pdgrm, spline_model=spline_model, config=config
     )
-
-    idata = sampler_obj.sample(n_samples=n_samples, n_warmup=n_warmup)
-    return idata, spline_model
+    return sampler_obj.sample(n_samples=n_samples, n_warmup=n_warmup)

@@ -31,6 +31,7 @@ dependencies = [
     "tqdm",
     "numpyro",
     "arviz",
+    "click"
 ]
 
 [project.optional-dependencies]
@@ -134,3 +135,7 @@ title = "log_psplines Coverage Test Report"
 [[tool.mypy.overrides]]
 module = "matplotlib.*,scipy.*,numba.*,bilby.*"
 ignore_missing_imports = true
+
+
+[project.scripts]
+log_psplines_benchmark = "log_psplines.benchmark.cli:main"

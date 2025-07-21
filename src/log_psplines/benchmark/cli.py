@@ -73,13 +73,13 @@ from .runtime_benchmark import RuntimeBenchmark
     help="Number of MCMC samples to collect (warmup + samples)",
 )
 @click.option(
-    "--samplers",
+    "--sampler",
     type=click.Choice(['nuts', 'mh', 'all'], case_sensitive=False),
     default='all',
     show_default=True,
     help="Which samplers to benchmark: 'nuts', 'mh', or 'all'",
 )
-def main(outdir, num_points, reps, plot_only, min_n, max_n, min_knots, max_knots, verbose, n_mcmc, samplers):
+def main(outdir, num_points, reps, plot_only, min_n, max_n, min_knots, max_knots, verbose, n_mcmc, sampler):
     """Benchmark MCMC runtime performance."""
     benchmark = RuntimeBenchmark(outdir, verbose=verbose, n_mcmc=n_mcmc)
 
@@ -91,7 +91,7 @@ def main(outdir, num_points, reps, plot_only, min_n, max_n, min_knots, max_knots
             max_n=max_n,
             min_knots=min_knots,
             max_knots=max_knots,
-            samplers=samplers,
+            sampler=sampler,
         )
 
     benchmark.plot()

@@ -11,9 +11,8 @@ All runs use the same data and same number of iterations -- the only difference 
    Runtime as a function of the number of knots.
 
 
-Source Code
------------
 
-.. literalinclude:: record_runtime.py
-   :language: python
-   :caption: `record_runtime.py` - script for runtime collection
+.. code-block:: bash
+   :caption: `log_psplines_benchmark` - script for runtime collection
+
+   $ log_psplines_benchmark

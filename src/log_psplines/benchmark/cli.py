@@ -7,17 +7,17 @@ from .runtime_benchmark import RuntimeBenchmark
     "log_psplines_benchmark", help="Benchmark MCMC runtime performance"
 )
 @click.option(
-    "--analysis",
-    type=click.Choice(["data_size", "knots", "samplers", "all"]),
-    default="all",
-    show_default=True,
-    help="Type of analysis to run",
-)
-@click.option(
     "--outdir",
     default="plots",
     show_default=True,
     help="Output directory",
+)
+@click.option(
+    "--num-points",
+    type=int,
+    default=10,
+    show_default=True,
+    help="Number of points between min and max for analysis",
 )
 @click.option(
     "--reps",
@@ -31,26 +31,49 @@ from .runtime_benchmark import RuntimeBenchmark
     is_flag=True,
     help="Only generate plots",
 )
-def main(analysis, outdir, reps, plot_only):
+@click.option(
+    "--min-n",
+    type=int,
+    default=128,
+    show_default=True,
+    help="Minimum data size (in samples) for analysis",
+)
+@click.option(
+    "--max-n",
+    type=int,
+    default=1024,
+    show_default=True,
+    help="Maximum data size (in samples) for analysis",
+)
+@click.option(
+ '--min-knots',
+    type=int,
+    default=5,
+    show_default=True,
+    help="Minimum number of knots for analysis",
+)
+@click.option(
+    '--max-knots',
+    type=int,
+    default=30,
+    show_default=True,
+    help="Maximum number of knots for analysis",
+)
+def main(outdir, num_points, reps, plot_only, min_n, max_n, min_knots, max_knots):
     """Benchmark MCMC runtime performance."""
     benchmark = RuntimeBenchmark(outdir)
 
     if not plot_only:
-        if analysis in ["data_size", "all"]:
-            benchmark.run_data_size_analysis(reps=reps)
+        benchmark.run_analysis(
+            n_points=num_points,
+            n_reps=reps,
+            min_n=min_n,
+            max_n=max_n,
+            min_knots=min_knots,
+            max_knots=max_knots,
+        )
 
-        if analysis in ["knots", "all"]:
-            benchmark.run_knots_analysis(reps=reps)
-
-        if analysis in ["samplers", "all"]:
-            benchmark.compare_samplers(reps=reps)
-
-    # Generate plots
-    benchmark.plot_data_size_results()
-    benchmark.plot_knots_results()
-    benchmark.plot_sampler_comparison()
-    benchmark.generate_summary_report()
-
+    benchmark.plot()
     click.echo(f"Benchmark complete. Results saved to {outdir}")
 
 

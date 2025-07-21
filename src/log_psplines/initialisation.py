@@ -172,7 +172,9 @@ def init_knots(
 
     # Log-spaced knots (excluding min/max)
     log_knots = (
-        np.logspace(np.log10(min_freq), np.log10(max_freq), n_log + 2)[1:-1]
+        np.logspace(
+            np.log10(max(min_freq, 1e-10)),
+            np.log10(max_freq), n_log + 2)[1:-1]
         if n_log > 0
         else np.array([])
     )

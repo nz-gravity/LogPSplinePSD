@@ -64,6 +64,7 @@ def results_to_arviz(
     config_attrs = {k: int(v) if isinstance(v, bool) else v
                     for k, v in asdict(config).items()}
     attributes.update(config_attrs)
+    attributes.update(dict(ess=az.ess(samples).to_array().values.flatten()))
 
     # Create InferenceData with custom posterior_psd group
     idata = az.from_dict(
@@ -97,13 +98,15 @@ def _pack_spline_model(spline_model) -> Dataset:
         "diffMatrixOrder": spline_model.diffMatrixOrder,
         "n": spline_model.n,
         "basis": (["freq", "weights_dim"], np.array(spline_model.basis)),
-        "penalty_matrix": (["weights_dim", "weights_dim"], np.array(spline_model.penalty_matrix)),
+        "penalty_matrix": (["weights_dim_row", "weights_dim_col"], np.array(spline_model.penalty_matrix)),
         "parametric_model": (["freq"], np.array(spline_model.parametric_model)),
     }
 
     coords = {
         "knots_dim": np.arange(len(spline_model.knots)),
         "weights_dim": np.arange(spline_model.basis.shape[1]),
+        "weights_dim_row": np.arange(spline_model.penalty_matrix.shape[0]),
+        "weights_dim_col": np.arange(spline_model.penalty_matrix.shape[1]),
         "freq": np.arange(spline_model.basis.shape[0]),
     }
 

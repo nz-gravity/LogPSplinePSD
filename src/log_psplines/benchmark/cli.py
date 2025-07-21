@@ -46,7 +46,7 @@ from .runtime_benchmark import RuntimeBenchmark
     help="Maximum data size (in samples) for analysis",
 )
 @click.option(
- '--min-knots',
+    '--min-knots',
     type=int,
     default=5,
     show_default=True,
@@ -59,9 +59,22 @@ from .runtime_benchmark import RuntimeBenchmark
     show_default=True,
     help="Maximum number of knots for analysis",
 )
-def main(outdir, num_points, reps, plot_only, min_n, max_n, min_knots, max_knots):
+@click.option(
+    "--verbose",
+    is_flag=True,
+    default=False,
+    help="Enable verbose output",
+)
+@click.option(
+    "--n-mcmc",
+    type=int,
+    default=2000,
+    show_default=True,
+    help="Number of MCMC samples to collect (warmup + samples)",
+)
+def main(outdir, num_points, reps, plot_only, min_n, max_n, min_knots, max_knots, verbose, n_mcmc):
     """Benchmark MCMC runtime performance."""
-    benchmark = RuntimeBenchmark(outdir)
+    benchmark = RuntimeBenchmark(outdir, verbose=verbose, n_mcmc=n_mcmc)
 
     if not plot_only:
         benchmark.run_analysis(

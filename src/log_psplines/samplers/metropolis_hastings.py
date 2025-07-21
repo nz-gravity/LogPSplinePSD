@@ -245,7 +245,7 @@ class MetropolisHastingsSampler(BaseSampler):
 
         if self.config.verbose:
             print(
-                f"Metropolis-Hastings with adaptive step sizes [{self.device}]"
+                f"Metropolis-Hastings with adaptive step sizes [{self.device}] {self.rng_key}"
             )
 
         with tqdm(

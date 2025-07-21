@@ -30,15 +30,20 @@ MCMC_DEFAULTS = dict(
     verbose=False,
     n_knots=10,
     knot_kwargs=dict(frac_uniform=1.0),
+
 )
 
 
 class RuntimeBenchmark:
     """Benchmark runtime performance of MCMC sampling for different configurations."""
 
-    def __init__(self, outdir: str = "plots"):
+    def __init__(self, outdir: str = "plots", verbose: bool = False, n_mcmc: int = 2000, ):
         self.outdir = outdir
         os.makedirs(outdir, exist_ok=True)
+        self.verbose = verbose
+        self.n_mcmc = n_mcmc // 2
+        self.n_warmup = n_mcmc // 2
+
 
     def _run_data_size_analysis(
             self,
@@ -52,6 +57,9 @@ class RuntimeBenchmark:
 
         mcmc_kwgs = MCMC_DEFAULTS.copy()
         mcmc_kwgs["sampler"] = sampler
+        mcmc_kwgs["verbose"] = self.verbose
+        mcmc_kwgs["n_samples"] = self.n_mcmc
+        mcmc_kwgs["n_warmup"] = self.n_warmup
 
         assert min_n < max_n, f"min_n {min_n} must be less than max_n {max_n}"
         _ns = np.geomspace(min_n, max_n, num=num_points, dtype=int)
@@ -116,8 +124,11 @@ class RuntimeBenchmark:
 
         # MCMC parameters
         mcmc_kwgs = MCMC_DEFAULTS.copy()
+        mcmc_kwgs["verbose"] = self.verbose
         mcmc_kwgs["sampler"] = sampler
         mcmc_kwgs["pdgrm"] = pdgrm
+        mcmc_kwgs["n_samples"] = self.n_mcmc
+        mcmc_kwgs["n_warmup"] = self.n_warmup
 
         ks = np.linspace(min_knots, max_knots, num=num_points, dtype=int)
         runtimes = []

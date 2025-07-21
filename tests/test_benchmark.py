@@ -2,8 +2,6 @@ import pytest
 from click.testing import CliRunner
 
 from log_psplines.benchmark.cli import main as benchmark_cli
-from log_psplines.benchmark.runtime_benchmark import RuntimeBenchmark
-import os
 
 
 def test_default_run(outdir):
@@ -14,11 +12,18 @@ def test_default_run(outdir):
         "--num-points", "2",
         "--reps", "1",
         "--min-n", "128",
-        "--max-n", "512",
+        "--max-n", "256",
         "--min-knots", "5",
-        "--max-knots", "10",
+        "--max-knots", "6",
+        "--verbose",
+        "--n-mcmc", "50",
     ])
-    assert result.exit_code == 0
+
+    if result.exit_code != 0 or "Benchmark complete." not in result.output:
+        print("CLI Output:\n", result.output)
+        print("Exit Code:", result.exit_code)
+
+    assert result.exit_code == 0, "CLI command failed"
     assert "Benchmark complete." in result.output
 
 

@@ -89,7 +89,7 @@ class NUTSSampler(BaseSampler):
         )
 
         if self.config.verbose:
-            print(f"NUTS sampler [{self.device}]")
+            print(f"NUTS sampler [{self.device}] {self.rng_key}")
 
         start_time = time.time()
         mcmc.run(

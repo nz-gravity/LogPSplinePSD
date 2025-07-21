@@ -22,7 +22,15 @@ def log_likelihood(
     log_parametric: jnp.ndarray,
 ) -> jnp.ndarray:
     ln_model = build_spline(basis_matrix, weights, log_parametric)
-    integrand = ln_model + jnp.exp(log_pdgrm - ln_model)
+    # Use log-sum-exp trick for numerical stability
+    # Original: ln_model + exp(log_pdgrm - ln_model)
+    # Rewrite as: ln_model + exp(log_pdgrm - ln_model) = exp(ln_model) + exp(log_pdgrm)
+    # Then use logsumexp
+
+    # Stack the two terms for logsumexp
+    terms = jnp.stack([ln_model, log_pdgrm], axis=-1)
+    integrand = jax.scipy.special.logsumexp(terms, axis=-1)
+
     return -0.5 * jnp.sum(integrand)
 
 

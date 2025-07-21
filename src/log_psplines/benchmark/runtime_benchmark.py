@@ -172,9 +172,20 @@ class RuntimeBenchmark:
             max_n: float = 1024.0,
             min_knots: int = 5,
             max_knots: int = 30,
+            sampler: str = "all",
     ):
         """run analyses for both MH and NUTS samplers."""
-        for sampler in ["nuts", "mh"]:
+
+        if sampler not in ["nuts", "mh", "all"]:
+            raise ValueError(f"Invalid sampler: {sampler}. Choose from 'nuts', 'mh', or 'all'.")
+
+        samplers = []
+        if sampler == "all":
+            samplers = ["nuts", "mh"]
+        elif isinstance(sampler, str):
+            samplers = [sampler]
+
+        for sampler in samplers:
             self._run_data_size_analysis(
                 sampler=sampler,
                 min_n=min_n,

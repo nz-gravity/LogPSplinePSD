@@ -5,6 +5,28 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.5:
+
+v0.0.5 (2025-07-21)
+===================
+
+Bug Fixes
+---------
+
+* fix: add benchmarking fix for cli (`8914c67`_)
+
+Unknown
+-------
+
+* add benchmarking code (`1361278`_)
+
+* add ESS comparison (`88b8792`_)
+
+.. _8914c67: https://github.com/nz-gravity/LogPSplinePSD/commit/8914c6733dbcecd1543cde23f20553ced1a6fbba
+.. _1361278: https://github.com/nz-gravity/LogPSplinePSD/commit/1361278de8c80c9e2509480325f7f160bf833259
+.. _88b8792: https://github.com/nz-gravity/LogPSplinePSD/commit/88b879285577f13e53c844f19f18c26cb8cd4cb5
+
+
 .. _changelog-v0.0.4:
 
 v0.0.4 (2025-07-17)
@@ -15,12 +37,18 @@ Bug Fixes
 
 * fix: update inference result saving/loading (`c1c6273`_)
 
+Chores
+------
+
+* chore(release): 0.0.4 (`b4016a2`_)
+
 Unknown
 -------
 
 * Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`49e3a72`_)
 
 .. _c1c6273: https://github.com/nz-gravity/LogPSplinePSD/commit/c1c627301a886a792c25b60fa85dee13d173eceb
+.. _b4016a2: https://github.com/nz-gravity/LogPSplinePSD/commit/b4016a25e0e8ae3fa6d614cc442d36e53bfe335c
 .. _49e3a72: https://github.com/nz-gravity/LogPSplinePSD/commit/49e3a727d479206fa16eeba3b8828acb48141356
 
 

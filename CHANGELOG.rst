@@ -5,6 +5,20 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.7:
+
+v0.0.7 (2025-07-21)
+===================
+
+Unknown
+-------
+
+* t push
+Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`06db40f`_)
+
+.. _06db40f: https://github.com/nz-gravity/LogPSplinePSD/commit/06db40f2358de0081bf8845dabbcc6552882e09c
+
+
 .. _changelog-v0.0.6:
 
 v0.0.6 (2025-07-21)
@@ -13,14 +27,23 @@ v0.0.6 (2025-07-21)
 Bug Fixes
 ---------
 
+* fix: add sampler option (`09ce185`_)
+
 * fix: add RNG logging and verbosity (`e2cb737`_)
+
+Chores
+------
+
+* chore(release): 0.0.6 (`2190d9a`_)
 
 Unknown
 -------
 
 * Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`a69cd29`_)
 
+.. _09ce185: https://github.com/nz-gravity/LogPSplinePSD/commit/09ce18588a0c7100fb55d1133bfd843c46f6b17f
 .. _e2cb737: https://github.com/nz-gravity/LogPSplinePSD/commit/e2cb7372ba51127727d7598f6c1dcad7bf038449
+.. _2190d9a: https://github.com/nz-gravity/LogPSplinePSD/commit/2190d9a7dc255c4740608364d389f7fcceafb801
 .. _a69cd29: https://github.com/nz-gravity/LogPSplinePSD/commit/a69cd29df0326f764176b1ef586a270b7f6b7d2c
 
 

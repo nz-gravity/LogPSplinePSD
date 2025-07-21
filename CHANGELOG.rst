@@ -5,6 +5,25 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.6:
+
+v0.0.6 (2025-07-21)
+===================
+
+Bug Fixes
+---------
+
+* fix: add RNG logging and verbosity (`e2cb737`_)
+
+Unknown
+-------
+
+* Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`a69cd29`_)
+
+.. _e2cb737: https://github.com/nz-gravity/LogPSplinePSD/commit/e2cb7372ba51127727d7598f6c1dcad7bf038449
+.. _a69cd29: https://github.com/nz-gravity/LogPSplinePSD/commit/a69cd29df0326f764176b1ef586a270b7f6b7d2c
+
+
 .. _changelog-v0.0.5:
 
 v0.0.5 (2025-07-21)
@@ -13,7 +32,14 @@ v0.0.5 (2025-07-21)
 Bug Fixes
 ---------
 
+* fix: update runner (`85edc41`_)
+
 * fix: add benchmarking fix for cli (`8914c67`_)
+
+Chores
+------
+
+* chore(release): 0.0.5 (`f3cfd37`_)
 
 Unknown
 -------
@@ -22,7 +48,9 @@ Unknown
 
 * add ESS comparison (`88b8792`_)
 
+.. _85edc41: https://github.com/nz-gravity/LogPSplinePSD/commit/85edc41f866cfc9200c7267cceaae2a0c681fd82
 .. _8914c67: https://github.com/nz-gravity/LogPSplinePSD/commit/8914c6733dbcecd1543cde23f20553ced1a6fbba
+.. _f3cfd37: https://github.com/nz-gravity/LogPSplinePSD/commit/f3cfd3750f940f1c12740aa5fe82c7c05384df21
 .. _1361278: https://github.com/nz-gravity/LogPSplinePSD/commit/1361278de8c80c9e2509480325f7f160bf833259
 .. _88b8792: https://github.com/nz-gravity/LogPSplinePSD/commit/88b879285577f13e53c844f19f18c26cb8cd4cb5
 

@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "scikit-fda",
-    "jax",
+    "jax<=0.7.0",
     "optax",
     "numpy",
     "matplotlib",

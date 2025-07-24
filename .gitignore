@@ -10,6 +10,8 @@
 [Ss]cripts
 pyvenv.cfg
 *.hdf5
+*.nc
+*.csv
 *.pdf
 *.png
 *.DS_Store
@@ -286,3 +288,6 @@ cython_debug/
 *.gwf
 
 *.h5
+/docs/comparison_results/
+/docs/nuts_out/
+/docs/mh_out/

@@ -41,13 +41,13 @@ class PSDDiagnostics:
 
         # One-sided frequency axis (length N//2 + 1)
         self.freqs = freqs
-        if self.freqs.shape[0] != self.n // 2 + 1:
-            raise ValueError(f"freqs must have length {self.n//2 + 1}")
+        if self.freqs.shape[0] != self.n // 2:
+            raise ValueError(f"freqs must have length {self.n//2 }")
 
         # Estimated PSD (one-sided, length N//2 + 1)
         self.psd = psd
-        if self.psd.shape[0] != self.n // 2 + 1:
-            raise ValueError(f"psd must have length {self.n//2 + 1}")
+        if self.psd.shape[0] != self.n // 2:
+            raise ValueError(f"psd must have length {self.n//2 }")
 
         # If a reference PSD is provided, compute residuals and MSE
         if reference_psd is not None:
@@ -183,10 +183,10 @@ class PSDDiagnostics:
         H_full = np.fft.fft(ts_win)
 
         # Keep only positive-frequency bins (length N//2)
-        self.h_f = H_full[: n // 2]
+        self.h_f = H_full[1 : n // 2]
 
-        # Build ASD from estimated PSD (drop Nyquist bin to match length n//2)
-        asd = np.sqrt(self.psd[:-1])
+        # Build ASD from estimated PSD (drop 0 bin to match length n//2)
+        asd = np.sqrt(self.psd[1 : n // 2])
 
         # Whitened spectrum
         self.wh_f = self.h_f * np.sqrt(4.0 / self.duration) / asd
@@ -196,7 +196,7 @@ class PSDDiagnostics:
         ax1, ax2 = axes[0]
         ax3, ax4 = axes[1]
 
-        freqs_pos = self.freqs[:-1]  # drop Nyquist, so length matches h_f/asd
+        freqs_pos = self.freqs[1 : n // 2]
 
         # Top-left: |H(f)| and ASD
         ax1.semilogy(freqs_pos, np.abs(self.h_f), label=r"|H(f)|")

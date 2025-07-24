@@ -8,7 +8,8 @@ import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
-from ..psplines import LogPSplines, Periodogram
+from ..datatypes import Periodogram
+from ..psplines import LogPSplines
 from .base_sampler import BaseSampler, SamplerConfig, log_likelihood
 
 
@@ -61,7 +62,12 @@ class NUTSSampler(BaseSampler):
         super().__init__(periodogram, spline_model, config)
         self.config = config  # type: NUTSConfig
 
-    def sample(self, n_samples: int, n_warmup: int = 500, **kwargs,) -> az.InferenceData:
+    def sample(
+        self,
+        n_samples: int,
+        n_warmup: int = 500,
+        **kwargs,
+    ) -> az.InferenceData:
         # Initialize starting values
         delta_0 = self.config.alpha_delta / self.config.beta_delta
         phi_0 = self.config.alpha_phi / (self.config.beta_phi * delta_0)
@@ -105,11 +111,9 @@ class NUTSSampler(BaseSampler):
         )
         self.runtime = time.time() - start_time
 
-
         if self.config.verbose:
             print(f"Sampling completed in {self.runtime:.2f} seconds")
 
         samples = mcmc.get_samples()
         stats = mcmc.get_extra_fields()
         return self.to_arviz(samples, stats)
-

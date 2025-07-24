@@ -9,7 +9,8 @@ import jax.numpy as jnp
 import numpy as np
 from tqdm.auto import tqdm
 
-from ..psplines import LogPSplines, Periodogram
+from ..datatypes import Periodogram
+from ..psplines import LogPSplines
 from .base_sampler import BaseSampler, SamplerConfig, log_likelihood
 
 
@@ -220,7 +221,7 @@ class MetropolisHastingsSampler(BaseSampler):
         }
 
     def sample(
-        self, n_samples: int, n_warmup: int = 500,  **kwargs
+        self, n_samples: int, n_warmup: int = 500, **kwargs
     ) -> az.InferenceData:
         total_iterations = n_warmup + n_samples
 
@@ -291,11 +292,17 @@ class MetropolisHastingsSampler(BaseSampler):
                         )
                     )
 
-                    sample_stats["acceptance_rate"][j] = step_info["acceptance_rate"]
+                    sample_stats["acceptance_rate"][j] = step_info[
+                        "acceptance_rate"
+                    ]
                     sample_stats["log_likelihood"][j] = log_like
                     sample_stats["log_prior"][j] = log_prior
-                    sample_stats["step_size_mean"][j] = np.mean(step_info["step_sizes"])
-                    sample_stats["step_size_std"][j] = np.std(step_info["step_sizes"])
+                    sample_stats["step_size_mean"][j] = np.mean(
+                        step_info["step_sizes"]
+                    )
+                    sample_stats["step_size_std"][j] = np.std(
+                        step_info["step_sizes"]
+                    )
 
                 if i % 100 == 0:
                     phase = "Warmup" if i < n_warmup else "Sampling"

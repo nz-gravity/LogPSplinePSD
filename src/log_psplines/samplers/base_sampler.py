@@ -8,10 +8,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-
-from ..plotting import plot_diagnostics, plot_pdgrm
-from ..psplines import LogPSplines, Periodogram, build_spline
 from ..arviz_utils.to_arviz import results_to_arviz
+from ..datatypes import Periodogram
+from ..plotting import plot_diagnostics, plot_pdgrm
+from ..psplines import LogPSplines, build_spline
 
 
 @jax.jit
@@ -22,15 +22,7 @@ def log_likelihood(
     log_parametric: jnp.ndarray,
 ) -> jnp.ndarray:
     ln_model = build_spline(basis_matrix, weights, log_parametric)
-    # Use log-sum-exp trick for numerical stability
-    # Original: ln_model + exp(log_pdgrm - ln_model)
-    # Rewrite as: ln_model + exp(log_pdgrm - ln_model) = exp(ln_model) + exp(log_pdgrm)
-    # Then use logsumexp
-
-    # Stack the two terms for logsumexp
-    terms = jnp.stack([ln_model, log_pdgrm], axis=-1)
-    integrand = jax.scipy.special.logsumexp(terms, axis=-1)
-
+    integrand = ln_model + jnp.exp(log_pdgrm - ln_model)
     return -0.5 * jnp.sum(integrand)
 
 
@@ -82,11 +74,14 @@ class BaseSampler(ABC):
         self.device = jax.devices()[0].platform
 
     @abstractmethod
-    def sample(self, n_samples: int, n_warmup: int = 1000, **kwargs) -> az.InferenceData:
+    def sample(
+        self, n_samples: int, n_warmup: int = 1000, **kwargs
+    ) -> az.InferenceData:
         pass
 
-
-    def to_arviz(self, samples: Dict[str, np.ndarray], sample_stats:Dict[str, Any] ) -> az.InferenceData:
+    def to_arviz(
+        self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
+    ) -> az.InferenceData:
         idata = results_to_arviz(
             samples=samples,
             sample_stats=sample_stats,
@@ -94,9 +89,9 @@ class BaseSampler(ABC):
             spline_model=self.spline_model,
             config=self.config,
             attributes=dict(
-                device= str(self.device),
+                device=str(self.device),
                 runtime=self.runtime,
-            )
+            ),
         )
 
         # Summary statistics
@@ -109,6 +104,8 @@ class BaseSampler(ABC):
             plot_diagnostics(idata, self.config.outdir)
             fig, _ = plot_pdgrm(idata=idata)
             fig.savefig(f"{self.config.outdir}/posterior_predictive.png")
-            az.summary(idata).to_csv(f"{self.config.outdir}/summary_statistics.csv")
+            az.summary(idata).to_csv(
+                f"{self.config.outdir}/summary_statistics.csv"
+            )
 
         return idata

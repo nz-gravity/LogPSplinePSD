@@ -21,7 +21,7 @@ class Timeseries:
     def to_periodogram(self) -> "Periodogram":
         """Compute the one-sided periodogram of the timeseries."""
         freq = jnp.fft.rfftfreq(len(self.y), d=1 / self.fs)
-        power = jnp.abs(jnp.fft.rfft(self.y)) ** 2 / len(self.y)
+        power = 2 * jnp.abs(jnp.fft.rfft(self.y)) ** 2 / len(self.y) / self.fs
         return Periodogram(freq[1:], power[1:])
 
     def standardise(self):
@@ -74,10 +74,3 @@ class Periodogram:
 
     def __repr__(self):
         return f"Periodogram(n={self.n}, fs={self.fs:.3f}, filtered={self.filtered})"
-
-
-def compute_welsch_psd(
-    freqs: jnp.ndarray, power: jnp.ndarray, alpha: float = 2.0
-) -> jnp.ndarray:
-    """Compute the Welsch power spectral density of a periodogram."""
-    return power / (1 + (freqs / alpha) ** 2)

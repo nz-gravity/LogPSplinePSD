@@ -13,10 +13,11 @@ def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
         idata = run_mcmc(
             mock_pdgrm,
             sampler=sampler,
-            n_knots=10,
-            n_samples=1000,
-            n_warmup=1000,
+            n_knots=20,
+            n_samples=2000,
+            n_warmup=2000,
             outdir=f"{outdir}/out_{sampler}",
+            rng_key=42,
         )
 
         fig, ax = plot_pdgrm(idata=idata)

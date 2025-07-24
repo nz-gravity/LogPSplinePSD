@@ -89,16 +89,13 @@ class ARData:
         self.seed = seed
 
         self.ts = self._generate_timeseries()
-        self.freqs = np.fft.rfftfreq(self.n, d=1.0 / self.fs)
+        self.freqs = np.fft.rfftfreq(self.n, d=1.0 / self.fs)[1:]
         self.times = np.arange(self.n) / self.fs
         self.psd_theoretical = self._compute_theoretical_psd()
-        self.periodogram = self._compute_periodogram()
 
         # convert to Timeseries and Periodogram datatypes
         self.ts = Timeseries(t=self.times, y=self.ts, std=self.sigma)
-        self.periodogram = Periodogram(
-            freqs=self.freqs, power=self.periodogram, filtered=False
-        )
+        self.periodogram = self.ts.to_periodogram()
 
     def __repr__(self):
         return f"ARData(order={self.order}, n={self.n})"
@@ -157,37 +154,6 @@ class ARData:
 
         psd_th = (self.sigma**2 / self.fs) / denom_mag2
         return psd_th.real * 2  # should already be float
-
-    def _compute_periodogram(self) -> np.ndarray:
-        """
-        Compute the one‐sided raw periodogram of the simulated time series:
-
-            Pxx(f_k) = (1 / (n * fs)) * |H(f_k)|^2,
-            then double all bins except DC (k=0) and Nyquist (k=n/2) if n is even.
-
-        Returns
-        -------
-        pxx : np.ndarray
-            One‐sided periodogram (power per Hz) of length n//2 + 1.
-        """
-        # 1) Full FFT
-        H_full = np.fft.fft(self.ts)
-
-        # 2) Compute |H|^2 and normalize by (n * fs) → gives power per Hz
-        Pxx_full = (1.0 / (self.n * self.fs)) * np.abs(H_full) ** 2
-
-        # 3) Keep only the first (n//2 + 1) bins for real‐input one‐sided PSD
-        Pxx_one = Pxx_full[: self.n // 2 + 1]
-
-        # 4) Double all interior bins (1 .. n//2-1) to account for negative frequencies
-        if self.n % 2 == 0:
-            # n even → Nyquist is index n/2 and should NOT be doubled
-            Pxx_one[1:-1] *= 2.0
-        else:
-            # n odd → last index is floor(n/2), which is still not doubled
-            Pxx_one[1:] *= 2.0
-
-        return Pxx_one
 
     def plot(
         self,

@@ -2,10 +2,10 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..arviz_utils import get_periodogram, get_spline_model, get_weights
 from ..datatypes import Periodogram
 from ..psplines import LogPSplines
 from .utils import unpack_data
-from ..arviz_utils import get_periodogram, get_spline_model, get_weights
 
 DATA_COL = "lightgray"
 MODEL_COL = "tab:orange"
@@ -23,6 +23,10 @@ def plot_pdgrm(
     yscalar=1.0,
     ax=None,
     idata=None,
+    model_color=MODEL_COL,
+    model_label="Model",
+    data_color=DATA_COL,
+    data_label="Data",
 ):
     if idata:
         pdgrm = get_periodogram(idata)
@@ -47,21 +51,24 @@ def plot_pdgrm(
         ax.loglog(
             plt_data.freqs,
             plt_data.pdgrm,
-            color=DATA_COL,
-            label="Data",
+            color=data_color,
+            label=data_label,
             zorder=-10,
         )
 
     if plt_data.model is not None:
         ax.loglog(
-            plt_data.freqs, plt_data.model, label="Model", color=MODEL_COL
+            plt_data.freqs,
+            plt_data.model,
+            label=model_label,
+            color=model_color,
         )
         if plt_data.ci is not None:
             ax.fill_between(
                 plt_data.freqs,
                 plt_data.ci[0],
                 plt_data.ci[-1],
-                color=MODEL_COL,
+                color=model_color,
                 alpha=0.25,
                 lw=0,
             )

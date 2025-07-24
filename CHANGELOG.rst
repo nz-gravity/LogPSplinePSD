@@ -5,17 +5,48 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.8:
+
+v0.0.8 (2025-07-24)
+===================
+
+Bug Fixes
+---------
+
+* fix: refactoring (`cc87bfd`_)
+
+Unknown
+-------
+
+* add SVI testing (`09bc512`_)
+
+* Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`26d4210`_)
+
+.. _cc87bfd: https://github.com/nz-gravity/LogPSplinePSD/commit/cc87bfdf4a90e38f190bcf2b5a01a0c04ae53baa
+.. _09bc512: https://github.com/nz-gravity/LogPSplinePSD/commit/09bc5126823cbc28b2543c95bb76e01d7ef630b2
+.. _26d4210: https://github.com/nz-gravity/LogPSplinePSD/commit/26d4210495d5ab1b8367dd75d506cb5690ad752f
+
+
 .. _changelog-v0.0.7:
 
 v0.0.7 (2025-07-21)
 ===================
 
+Chores
+------
+
+* chore(release): 0.0.7 (`3661bf5`_)
+
 Unknown
 -------
+
+* fix typo (`bdaa71f`_)
 
 * t push
 Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`06db40f`_)
 
+.. _3661bf5: https://github.com/nz-gravity/LogPSplinePSD/commit/3661bf5da22ac4a87939910d481e81e9cac736fb
+.. _bdaa71f: https://github.com/nz-gravity/LogPSplinePSD/commit/bdaa71f4be416c7dd1a354d13c6267f64062c3ac
 .. _06db40f: https://github.com/nz-gravity/LogPSplinePSD/commit/06db40f2358de0081bf8845dabbcc6552882e09c
 
 

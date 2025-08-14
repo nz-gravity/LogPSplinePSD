@@ -3,65 +3,30 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from log_psplines.datatypes import Periodogram
-from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.mcmc import run_mcmc
-from log_psplines.plotting import plot_pdgrm, plot_trace
+from log_psplines.plotting import plot_pdgrm
+from log_psplines.preprocessing.line_locator import estimate_psd_with_lines, plot_line_summary, plot_psd_analysis, analyze_psd_lines
 
-fs = 4096
+from data import load_lvk_psd, get_lvk_noise_realisation
+
+lvk_psd = load_lvk_psd()
+lvk_noise = get_lvk_noise_realisation(sampling_frequency=4096.0, duration=32.0)
+freqs = lvk_noise.freqs
+
 fmin, fmax = 10, 2048
 
-lvk_data = LVKData.load()
-pdgrm_pwr = lvk_data.psds[0]
-welch_psd = lvk_data.welch_psd(32)
-freqs = jnp.array(lvk_data._freq)
-
-
-# cut all data outside frange
-mask = (freqs > fmin) & (freqs < fmax)
-freqs = freqs[mask]
-pdgrm_pwr = pdgrm_pwr[mask]
-welch_psd = welch_psd[mask]
-
-# for stability we move these power values higher (so not e-20, but more like e+1)
-min_power = min(pdgrm_pwr)
-pdgrm_pwr = jnp.array(pdgrm_pwr / min_power)
-welch_psd = jnp.array(welch_psd / min_power)
-
-
-analysis_pdgrm = Periodogram(freqs, pdgrm_pwr)
-mcmc, spline_model = run_mcmc(
-    analysis_pdgrm,
-    num_warmup=500,
-    num_samples=1000,
-    n_knots=30,
-    parametric_model=welch_psd,
-    frac_log=0.3,
+running_median, is_line_bin, psd_model, line_details = estimate_psd_with_lines(
+    lvk_noise.freqs, lvk_noise.power, fmin=fmin, fmax=fmax
 )
-samples = mcmc.get_samples()
-fig, ax = plot_pdgrm(
-    analysis_pdgrm,
-    spline_model,
-    samples["weights"],
-    show_knots=True,
-    yscalar=min_power,
-)
-ax.loglog(
-    freqs,
-    np.array(welch_psd, dtype=np.float64) * min_power,
-    color="k",
-    label="Welch PSD",
-    alpha=0.3,
-)
-fig.legend(bbox_to_anchor=(1.05, 1.0), loc="upper left", frameon=False)
-plt.savefig("lvk_noise_and_splines.pdf", bbox_inches="tight", dpi=300)
-plot_trace(mcmc, "traceplot.png")
 
-fig, ax = plot_pdgrm(
-    spline_model=spline_model,
-    weights=samples["weights"],
-    show_knots=True,
-    yscalar=min_power,
-    use_parametric_model=False,
-    freqs=freqs,
-)
-plt.savefig("just_splines.pdf", bbox_inches="tight", dpi=300)
+plt.figure(figsize=(10, 6))
+plt.loglog(lvk_psd.freqs, lvk_psd.power, label='LIGO PSD', color='k')
+plt.loglog(lvk_noise.freqs, lvk_noise.power, label='Observed PSD', color='blue')
+plt.plot(lvk_noise.freqs, running_median, label='Running Median', color='orange')
+for f_start, f_end, f0, bandwidth, max_ratio in line_details:
+    plt.axvspan(f_start, f_end, color='red', alpha=0.3, label='Line Interval')
+
+plt.xlabel('Frequency  (Hz)')
+plt.ylabel('Power Spectral Density')
+plt.xlim(fmin, fmax)
+plt.savefig('LVK_noise.png')

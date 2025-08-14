@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .datatypes import Timeseries
+from ..datatypes import Timeseries
 
 
 @dataclass

@@ -74,3 +74,8 @@ class Periodogram:
 
     def __repr__(self):
         return f"Periodogram(n={self.n}, fs={self.fs:.3f}, filtered={self.filtered})"
+
+    def cut(self, fmin, fmax):
+        """Return a new Periodogram with frequencies within [fmin, fmax]."""
+        mask = (self.freqs >= fmin) & (self.freqs <= fmax)
+        return Periodogram(self.freqs[mask], self.power[mask], filtered=True)

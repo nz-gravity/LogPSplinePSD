@@ -1,6 +1,5 @@
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import numpy as np
 
 from ..arviz_utils import get_periodogram, get_spline_model, get_weights
 from ..datatypes import Periodogram
@@ -27,6 +26,8 @@ def plot_pdgrm(
     model_label="Model",
     data_color=DATA_COL,
     data_label="Data",
+    show_data=True,
+    figsize=(4, 3)
 ):
     if idata:
         pdgrm = get_periodogram(idata)
@@ -44,10 +45,10 @@ def plot_pdgrm(
     )
 
     if ax is None:
-        fig, ax = plt.subplots(1, 1, figsize=(4, 3))
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
     fig = ax.get_figure()
 
-    if plt_data.pdgrm is not None:
+    if plt_data.pdgrm is not None and show_data:
         ax.loglog(
             plt_data.freqs,
             plt_data.pdgrm,

@@ -1,17 +1,18 @@
 from typing import Tuple
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import TwoSlopeNorm
 import numpy as np
 
 
-def plot_basis(basis: np.ndarray, fname=None) -> Tuple[plt.Figure, plt.Axes]:
+def plot_basis(basis: np.ndarray, axes: np.ndarray = None, fname=None) -> Tuple[plt.Figure, plt.Axes]:
     """Plot the basis functions, and a histogram of the basis values"""
-    fig, axes = plt.subplots(1, 2, figsize=(6, 4))
+    if axes is None:
+        fig, axes = plt.subplots(1, 2, figsize=(6, 4))
 
     ax = axes[0]
     for b in basis.T:
         ax.plot(b)
-    print(basis.T.shape)
     ax.set_xlabel("Sample Index")
     ax.set_ylabel("Basis Value")
 
@@ -43,8 +44,33 @@ def plot_basis(basis: np.ndarray, fname=None) -> Tuple[plt.Figure, plt.Axes]:
 
     plt.tight_layout()
 
+    fig = ax.get_figure()
+
     if fname is not None:
         plt.savefig(fname)
         plt.close(fig)
 
+
+
+    return fig, axes
+
+
+def plot_penalty(penalty: np.ndarray, ax: plt.Axes = None) -> Tuple[plt.Figure, plt.Axes]:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+    # plot the penalty matrix (BWR white for 0)
+    cmap = plt.get_cmap("bwr")
+    norm = TwoSlopeNorm(vmin=np.min(penalty), vcenter=0, vmax=np.max(penalty))
+    ax.pcolormesh(
+        penalty,
+        cmap=cmap,
+        shading="auto",
+        norm=norm,
+    )
+    ax.set_xlabel("Basis Index")
+    ax.set_ylabel("Basis Index")
+    # add a colorbar to fig
+    plt.colorbar(ax.collections[0], ax=ax)
+    fig = ax.get_figure()
     return fig, ax

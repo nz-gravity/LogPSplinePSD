@@ -106,15 +106,15 @@ def init_basis_and_penalty(
     )
 
     # Normalize basis matrix elements for numerical stability
-    knots_with_boundary = np.concatenate(
-        [np.repeat(0, degree), knots, np.repeat(1, degree)]
-    )
-    n_knots_total = len(knots_with_boundary)
-    mid_to_end = knots_with_boundary[degree + 1 :]
-    start_to_mid = knots_with_boundary[: (n_knots_total - degree - 1)]
-    norm_factor = (mid_to_end - start_to_mid) / (degree + 1)
-    norm_factor[norm_factor == 0] = np.inf  # Prevent division by zero
-    basis_matrix = basis_matrix / norm_factor
+    # knots_with_boundary = np.concatenate(
+    #     [np.repeat(0, degree), knots, np.repeat(1, degree)]
+    # )
+    # n_knots_total = len(knots_with_boundary)
+    # mid_to_end = knots_with_boundary[degree + 1 :]
+    # start_to_mid = knots_with_boundary[: (n_knots_total - degree - 1)]
+    # norm_factor = (mid_to_end - start_to_mid) / (degree + 1)
+    # norm_factor[norm_factor == 0] = np.inf  # Prevent division by zero
+    # basis_matrix = basis_matrix / norm_factor
 
     basis_matrix = jnp.array(basis_matrix)
 
@@ -136,6 +136,7 @@ def init_knots(
     method: str = "density",
     frac_uniform: float = 0.0,
     frac_log: float = 0.5,
+    knots: np.ndarray = None,
 ) -> np.ndarray:
     """
     Select knots using various placement strategies.
@@ -164,6 +165,8 @@ def init_knots(
     np.ndarray
         Array of knot locations normalized to [0, 1]
     """
+
+
     if n_knots < 2:
         raise ValueError(
             "At least two knots are required (min and max frequencies)."
@@ -174,32 +177,39 @@ def init_knots(
     if n_knots == 2:
         return np.array([0.0, 1.0])
 
-    if method == "uniform":
-        knots = np.linspace(min_freq, max_freq, n_knots)
-
-    elif method == "log":
-        # Handle zero frequency by using a small positive value
-        min_freq_log = max(min_freq, 1e-10)
-        knots = np.logspace(
-            np.log10(min_freq_log), np.log10(max_freq), n_knots
-        )
-
-    elif method == "density":
-        # Implement Patricio's quantile-based knot placement method
-        knots = _quantile_based_knots(n_knots, periodogram, parametric_model)
-
-    elif method == "mixed":
-        knots = _mixed_knot_placement(
-            n_knots, periodogram, parametric_model, frac_uniform, frac_log
-        )
-
+    if knots is not None:
+        knots = np.array(knots)
     else:
-        raise ValueError(f"Unknown knot placement method: {method}")
+
+        if method == "uniform":
+            knots = np.linspace(min_freq, max_freq, n_knots)
+
+        elif method == "log":
+            # Handle zero frequency by using a small positive value
+            min_freq_log = max(min_freq, 1e-10)
+            knots = np.logspace(
+                np.log10(min_freq_log), np.log10(max_freq), n_knots
+            )
+
+        elif method == "density":
+            # Implement Patricio's quantile-based knot placement method
+            knots = _quantile_based_knots(n_knots, periodogram, parametric_model)
+
+        elif method == "mixed":
+            knots = _mixed_knot_placement(
+                n_knots, periodogram, parametric_model, frac_uniform, frac_log
+            )
+
+        else:
+            raise ValueError(f"Unknown knot placement method: {method}")
 
     # Normalize to [0, 1] and ensure proper ordering
     knots = np.sort(knots)
     knots = (knots - min_freq) / (max_freq - min_freq)
     knots = np.clip(knots, 0.0, 1.0)
+
+    # ensure we have knots at ends 0 and 1
+    knots = np.concatenate([[0.0], knots, [1.0]])
 
     # Remove any NaNs and duplicates
     knots = knots[~np.isnan(knots)]
@@ -209,7 +219,12 @@ def init_knots(
         warnings.warn(
             f"Some knots were dropped due to duplication. [{len(knots)}->{len(unique_knots)}]"
         )
-
+        # print missing knots
+        missing_knots = set(knots) - set(unique_knots)
+        if len(missing_knots) > 0:
+            warnings.warn(
+                f"Missing knots: {', '.join(map(str, missing_knots))}"
+            )
     return unique_knots
 
 

@@ -20,8 +20,9 @@ def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
             rng_key=42,
         )
 
-        fig, ax = plot_pdgrm(idata=idata)
-        fig.savefig(os.path.join(outdir, f"test_mcmc_{sampler}.png"))
+        fig, ax = plot_pdgrm(idata=idata, show_data=False)
+        ax.set_xscale('linear')
+        fig.savefig(os.path.join(outdir, f"test_mcmc_{sampler}.png"), transparent=False)
         plt.close(fig)
 
         # check inference data saved
@@ -39,3 +40,4 @@ def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
         labels=["NUTS", "MH"],
         outdir=f"{outdir}/out_comparison",
     )
+

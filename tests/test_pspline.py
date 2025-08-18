@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from log_psplines.datatypes import Periodogram
-from log_psplines.plotting import plot_basis, plot_pdgrm
+from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
 from log_psplines.psplines.initialisation import init_basis_and_penalty
 from log_psplines.samplers.base_sampler import log_likelihood
@@ -45,7 +45,7 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     # plotting for verification
     fig, ax = plot_pdgrm(mock_pdgrm, spline_model)
     fig.savefig(f"{out}/test_spline_init.png")
-    plot_basis(spline_model.basis, f"{out}/test_spline_init_basis.png")
+    spline_model.plot_basis(out)
 
     assert (
             lnl_final > lnl_initial

@@ -22,19 +22,11 @@ def test_ar(outdir):
     plt.savefig(f"{outdir}/ar_processes.png", bbox_inches="tight", dpi=300)
 
 
-# def test_lvk_data(outdir):
-#     # Download data and compute PSDs.
-#     lvk_data = LVKData.load(
-#         detector="H1",
-#         gps_start=1126259462,
-#         duration=4,
-#         segment_duration=1,
-#         segment_overlap=0.5,
-#         min_freq=10,
-#         max_freq=512,
-#     )
-#     # Access number of segments:
-#     print("Number of segments:", lvk_data.n_segments)
-#     # Plot individual and median PSDs.
-#     fig = lvk_data.plot_psd()
-#     plt.savefig(f"{outdir}/lvk_psd.png", bbox_inches="tight")
+def test_lvk_data(outdir):
+    processor = LVKData.download_data(
+        detector="L1",
+        gps_start=1126259462,
+        duration=4,
+    )
+    processor.print_knot_info()
+    processor.plot_psd_analysis(include_lines=True, fname=f"{outdir}/lvk_psd_analysis.png")

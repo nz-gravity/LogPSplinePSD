@@ -5,9 +5,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from numba.core.types import double
 from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
+from sympy.codegen.ast import float128
 
 from ..datatypes import Periodogram
 
@@ -204,27 +206,32 @@ def init_knots(
             raise ValueError(f"Unknown knot placement method: {method}")
 
     # Normalize to [0, 1] and ensure proper ordering
+    original_knots = knots.copy()
+    knots = np.array(knots, dtype=np.float128)
     knots = np.sort(knots)
     knots = (knots - min_freq) / (max_freq - min_freq)
     knots = np.clip(knots, 0.0, 1.0)
+    # print if we have some nanas
+    if np.isnan(knots).any():
+        missing_knots = original_knots[np.isnan(knots)]
+        warnings.warn(
+            f"Some knots are NaN after normalization. "
+            f"Missing knots: {missing_knots}"
+        )
+        knots = knots[~np.isnan(knots)]
 
     # ensure we have knots at ends 0 and 1
     knots = np.concatenate([[0.0], knots, [1.0]])
-
-    # Remove any NaNs and duplicates
-    knots = knots[~np.isnan(knots)]
-    unique_knots = np.unique(knots)
+    unique_knots, counts = np.unique(knots, return_counts=True)
+    # non_unique_knots = knots[np.isin(knots, knots[counts > 1])]
 
     if len(unique_knots) < len(knots):
+        # get idx of non-unique knots
         warnings.warn(
-            f"Some knots were dropped due to duplication. [{len(knots)}->{len(unique_knots)}]"
+            f"Some knots were dropped due to duplication. [{len(knots)}->{len(unique_knots)}]. "
+            # f"Non-unique knots: {non_unique_knots}"
         )
-        # print missing knots
-        missing_knots = set(knots) - set(unique_knots)
-        if len(missing_knots) > 0:
-            warnings.warn(
-                f"Missing knots: {', '.join(map(str, missing_knots))}"
-            )
+
     return unique_knots
 
 

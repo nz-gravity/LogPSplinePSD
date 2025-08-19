@@ -28,5 +28,4 @@ def test_lvk_data(outdir):
         gps_start=1126259462,
         duration=4,
     )
-    processor.print_knot_info()
-    processor.plot_psd_analysis(include_lines=True, fname=f"{outdir}/lvk_psd_analysis.png")
+    processor.plot_psd_analysis(fname=f"{outdir}/lvk_psd_analysis.png")

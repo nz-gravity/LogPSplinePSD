@@ -17,6 +17,7 @@ from .base_sampler import BaseSampler, SamplerConfig, log_likelihood
 class NUTSConfig(SamplerConfig):
     target_accept_prob: float = 0.8
     max_tree_depth: int = 10
+    dense_mass: bool = True
 
 
 def bayesian_model(
@@ -83,6 +84,7 @@ class NUTSSampler(BaseSampler):
             init_strategy=init_strategy,
             target_accept_prob=self.config.target_accept_prob,
             max_tree_depth=self.config.max_tree_depth,
+            dense_mass=self.config.dense_mass,
         )
 
         mcmc = MCMC(

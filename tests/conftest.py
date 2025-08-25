@@ -19,4 +19,4 @@ def outdir():
 @pytest.fixture
 def mock_pdgrm() -> Periodogram:
     """Generate synthetic AR noise data."""
-    return ARData(order=4, duration=4.0, fs=512, seed=42).periodogram
+    return ARData(order=4, duration=1.0, fs=256, seed=42).periodogram

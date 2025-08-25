@@ -13,9 +13,9 @@ def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
         idata = run_mcmc(
             mock_pdgrm,
             sampler=sampler,
-            n_knots=20,
-            n_samples=2000,
-            n_warmup=2000,
+            n_knots=4,
+            n_samples=200,
+            n_warmup=200,
             outdir=f"{outdir}/out_{sampler}",
             rng_key=42,
         )

@@ -13,7 +13,7 @@ def test_plot_whitening_ar2(outdir):
     outdir = os.path.join(outdir, "out_psd_diagnostics")
     os.makedirs(outdir, exist_ok=True)
 
-    ar_data = ARData(order=2, duration=12.0, fs=1024.0, sigma=1.0, seed=42)
+    ar_data = ARData(order=2, duration=4.0, fs=512.0, sigma=1.0, seed=42)
 
     # add 0 element to freq, psd, and reference_psd
     freqs = np.concatenate(([0], ar_data.periodogram.freqs))

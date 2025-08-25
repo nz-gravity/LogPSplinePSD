@@ -43,7 +43,7 @@ def compare_results(
     plt.figure(figsize=(8, 5))
     plt.boxplot(
         [ess1, ess2],
-        labels=labels,
+        tick_labels=labels,
         showfliers=False,
         patch_artist=True,
         boxprops=dict(facecolor=colors[0]),

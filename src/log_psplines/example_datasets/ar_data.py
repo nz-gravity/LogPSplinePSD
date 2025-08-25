@@ -96,6 +96,7 @@ class ARData:
         # convert to Timeseries and Periodogram datatypes
         self.ts = Timeseries(t=self.times, y=self.ts, std=self.sigma)
         self.periodogram = self.ts.to_periodogram()
+        self.welch_psd = self._compute_welch_psd()
 
     def __repr__(self):
         return f"ARData(order={self.order}, n={self.n})"
@@ -154,6 +155,18 @@ class ARData:
 
         psd_th = (self.sigma**2 / self.fs) / denom_mag2
         return psd_th.real * 2  # should already be float
+
+    def _compute_welch_psd(self) -> Periodogram:
+        nperseg = min(256, self.n // 4)  # Use a segment length of 256 or n//4
+        freqs, Pxx = welch(
+            self.ts.y,
+            fs=self.fs,
+            nperseg=nperseg,
+            noverlap=0.5,
+            scaling="density",
+            detrend="constant",
+        )
+        return Periodogram(freqs, Pxx)
 
     def plot(
         self,

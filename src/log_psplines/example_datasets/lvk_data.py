@@ -145,7 +145,7 @@ def _extract_line_details(frequencies: np.ndarray, periodogram: np.ndarray,
 
 class LVKData:
     def __init__(self, strain: np.ndarray, psd: np.ndarray, freqs: np.ndarray,
-                 fmin: float = 20, fmax: float = 2048.0, threshold:float=10.0, window_width_hz: float = 128.0):
+                 fmin: float = 20, fmax: float = 2048.0, threshold: float = 10.0, window_width_hz: float = 128.0):
         self.strain = strain
 
         self.freqs = freqs
@@ -162,7 +162,7 @@ class LVKData:
 
     @classmethod
     def download_data(cls, detector: str = "H1", gps_start: int = 1126259462,
-                      duration: int = 1024, fmin: float = 20, fmax: float = 2048):
+                      duration: int = 1024, fmin: float = 20, fmax: float = 2048, threshold=10):
         gps_end = gps_start + duration
         print(f"Downloading {detector} data [{gps_start} - {gps_end}]")
         strain = TimeSeries.fetch_open_data(detector, gps_start, gps_end)
@@ -174,23 +174,7 @@ class LVKData:
         psd = strain.psd()
         print("Data download and validation successful.")
         return cls(strain=strain.value, psd=psd.value, freqs=psd.frequencies.value,
-                   fmin=fmin, fmax=fmax)
-
-    # @classmethod
-    # def simulate_data(cls,
-    #                     duration: float = 4.0, fs: float = 2048.0, fmin: float = 20.0,
-    #                   ):
-    #
-    #     psd_series = pycbc_psd.aLIGOAPlusDesignSensitivityT1800042(PSD_N, DF, FLOW)
-    #     ts = pycbc_noise.noise_from_psd(10 * N, DT, psd_series, seed=0)
-    #     psd = jnp.interp(
-    #         FREQS,
-    #         xp=psd_series.sample_frequencies.numpy(),
-    #         fp=psd_series.data
-    #     ) * (FS * N / 2.0)  # Scale PSD to match FFT normalization
-    #     noise = np.array(ts.data[:N])  # Use first N samples of noise
-    #
-
+                   fmin=fmin, fmax=fmax, threshold=threshold)
 
     def _identify_lines(self) -> None:
         """Identify spectral lines using single-scale approach."""
@@ -241,7 +225,8 @@ class LVKData:
             for line in self.line_analysis_result.line_details:
                 line_center = (line.f_start + line.f_end) / 2
                 knots.extend([line.f_start, line.f_end, line_center])
-                knots.extend([line.f_start-min_separation, line.f_end+min_separation])
+                knots.extend([line.f_start - min_separation, line.f_end + min_separation])
+                knots.extend([line.f_start - 2 * min_separation, line.f_end + 2 * min_separation])
                 line_regions.append((line.f_start, line.f_end))
 
         # Only add background knots that DON'T fall within line regions
@@ -324,4 +309,3 @@ class LVKData:
         plt.tight_layout()
         plt.savefig(fname, bbox_inches='tight', dpi=300)
         print(f"Plot saved as {fname}")
-

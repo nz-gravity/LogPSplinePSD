@@ -174,7 +174,7 @@ def init_knots(
             "At least two knots are required (min and max frequencies)."
         )
 
-    min_freq, max_freq = periodogram.freqs[0], periodogram.freqs[-1]
+    min_freq, max_freq = float(periodogram.freqs[0]), float(periodogram.freqs[-1])
 
     if n_knots == 2:
         return np.array([0.0, 1.0])

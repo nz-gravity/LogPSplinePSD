@@ -3,6 +3,7 @@ from log_psplines.datatypes import Periodogram, Timeseries
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm
 import os
+import numpy as np
 
 def test_lvk_mcmc(outdir):
     out = os.path.join(outdir, "out_lvk_mcmc")
@@ -11,24 +12,24 @@ def test_lvk_mcmc(outdir):
         detector="L1",
         gps_start=1126259462,
         duration=4,
-        fmin=20,
-        fmax=1024
+        fmin=256,
+        fmax=512
     )
     lvk_data.plot_psd_analysis(
-        include_lines=True,
         fname=os.path.join(out, "lvk_psd_analysis.png")
     )
-
-    ts = Timeseries(
-        t=lvk_data.time,
-        y=lvk_data.strain
+    # rescale the PSD to a better scale to work with
+    power = lvk_data.psd / np.nanmax(lvk_data.psd) * 1e-3
+    pdgrm = Periodogram(
+        freqs=lvk_data.freqs,
+        power=power,
     )
-    pdgrm =  ts.standardise().to_periodogram()
+    pdgrm = pdgrm.cut(256, 512)
     run_mcmc(
         pdgrm,
-        n_samples=2000,
-        n_warmup=2000,
+        n_samples=200,
+        n_warmup=200,
         outdir=out,
         rng_key=42,
-        knot_kwargs=dict(knots=lvk_data.knots_locations)
+        n_knots=10,
     )

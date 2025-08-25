@@ -26,6 +26,7 @@ def plot_pdgrm(
     model_label="Model",
     data_color=DATA_COL,
     data_label="Data",
+    knot_color=KNOTS_COL,
     show_data=True,
     figsize=(4, 3)
 ):
@@ -84,7 +85,7 @@ def plot_pdgrm(
                 plt_data.model[idx],
                 "o",
                 label="Knots",
-                color=KNOTS_COL,
+                color=knot_color,
                 ms=4.5,
             )
     ax.set_xlim(plt_data.freqs.min(), plt_data.freqs.max())

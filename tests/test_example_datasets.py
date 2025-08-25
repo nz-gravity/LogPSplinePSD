@@ -23,9 +23,9 @@ def test_ar(outdir):
 
 
 def test_lvk_data(outdir):
-    processor = LVKData.download_data(
+    lvk_data = LVKData.download_data(
         detector="L1",
         gps_start=1126259462,
         duration=4,
     )
-    processor.plot_psd_analysis(fname=f"{outdir}/lvk_psd_analysis.png")
+    lvk_data.plot_psd_analysis(fname=f"{outdir}/lvk_psd_analysis.png")

@@ -13,14 +13,15 @@ from log_psplines.arviz_utils import get_periodogram, get_spline_model, get_weig
 
 FMIN, FMAX = 20, 1024
 
-out = os.path.join("out_lvk_mcmc")
+out = os.path.join("out_lvk_mcmc_nuts")
 os.makedirs(out, exist_ok=True)
 lvk_data = LVKData.download_data(
     detector="L1",
     gps_start=1126259462,
     duration=4,
     fmin=FMIN,
-    fmax=FMAX
+    fmax=FMAX,
+    threshold=10,
 )
 lvk_data.plot_psd_analysis(
     fname=os.path.join(out, "lvk_psd_analysis.png")
@@ -53,7 +54,7 @@ else:
 
     idata = run_mcmc(
         pdgrm,
-        sampler='mh',
+        sampler='nuts',
         n_samples=2000,
         n_warmup=2000,
         outdir=out,
@@ -97,3 +98,8 @@ diag = PSDDiagnostics(
 
 )
 diag.plot_diagnostics(f"{out}/psd_diagnostics.png")
+
+fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6), show_knots=True)
+ax.set_xscale('log')
+fig.savefig(os.path.join(out, f"test_mcmc_log_no_knots.png"))
+# plt.show()

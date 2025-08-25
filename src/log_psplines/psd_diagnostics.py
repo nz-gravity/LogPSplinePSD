@@ -224,6 +224,10 @@ class PSDDiagnostics:
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=figsize, sharex=True)
 
         # Panel 1: Periodogram + Estimated PSD
+
+        # plot data periodogram
+        # pdgrm = np.abs(np.fft.rfft(self.ts_data)) **2
+        # ax1.semilogy(self.freqs, pdgrm, color="k", linewidth=2, alpha=0.3, label="Peridogram")
         ax1.semilogy(self.freqs, self.psd, color="C0", linewidth=1, label="Welch PSD")
         if self.reference_psd is not None:
             ax1.semilogy(self.freqs, self.reference_psd, color="C1", linestyle="--", linewidth=2, label="Reference PSD")

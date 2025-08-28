@@ -28,4 +28,4 @@ def test_lvk_data(outdir):
         gps_start=1126259462,
         duration=4,
     )
-    lvk_data.plot_psd_analysis(fname=f"{outdir}/lvk_psd_analysis.png")
+    lvk_data.plot_psd(fname=f"{outdir}/lvk_psd_analysis.png")

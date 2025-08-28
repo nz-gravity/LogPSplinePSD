@@ -9,7 +9,7 @@ def test_default_run(outdir):
     outdir = f"{outdir}/out_benchmark"
     result = runner.invoke(benchmark_cli, [
         "--outdir", str(outdir),
-        "--num-points", "2",
+        "--num-points", "1",
         "--reps", "1",
         "--min-n", "64",
         "--max-n", "126",

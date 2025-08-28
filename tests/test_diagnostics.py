@@ -44,7 +44,7 @@ def test_lvk_psd_diagnostics(outdir):
         fmin=20,
         fmax=2048
     )
-    lvk_data.plot_psd_analysis(fname=os.path.join(outdir, "lvk_psd_analysis.png"))
+    lvk_data.plot_psd(fname=os.path.join(outdir, "lvk_psd_analysis.png"))
     ref_psd = scipy.signal.medfilt(lvk_data.psd, kernel_size=65)
     ref_psd = np.where(np.isnan(ref_psd), 0, ref_psd)
 

@@ -23,7 +23,7 @@ lvk_data = LVKData.download_data(
     fmax=FMAX,
     threshold=10,
 )
-lvk_data.plot_psd_analysis(
+lvk_data.plot_psd(
     fname=os.path.join(out, "lvk_psd_analysis.png")
 )
 # rescale the PSD to a better scale to work with

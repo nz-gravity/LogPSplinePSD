@@ -5,6 +5,19 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.10:
+
+v0.0.10 (2025-08-28)
+====================
+
+Bug Fixes
+---------
+
+* fix: LVK knot allocation fix (`6ffa886`_)
+
+.. _6ffa886: https://github.com/nz-gravity/LogPSplinePSD/commit/6ffa88680cfc2b297a99eaba87c1a471df668af5
+
+
 .. _changelog-v0.0.9:
 
 v0.0.9 (2025-08-25)
@@ -15,8 +28,15 @@ Bug Fixes
 
 * fix: pytests (`435ca66`_)
 
+Chores
+------
+
+* chore(release): 0.0.9 (`a94ef60`_)
+
 Unknown
 -------
+
+* add LVK allocation (`9f93242`_)
 
 * add more tests for PSD diagnostics (`55a94d3`_)
 
@@ -31,6 +51,8 @@ Unknown
 * refactor preprocessing (`01790f9`_)
 
 .. _435ca66: https://github.com/nz-gravity/LogPSplinePSD/commit/435ca666329345feb295eb23a16b962fb57120e0
+.. _a94ef60: https://github.com/nz-gravity/LogPSplinePSD/commit/a94ef60984fe1f441f884563498288d1fbf0669f
+.. _9f93242: https://github.com/nz-gravity/LogPSplinePSD/commit/9f932424ab62aae038cb99ab770e2488596a648a
 .. _55a94d3: https://github.com/nz-gravity/LogPSplinePSD/commit/55a94d39a9c928398ae7c0995ccd54ba7de88838
 .. _dfa0c3d: https://github.com/nz-gravity/LogPSplinePSD/commit/dfa0c3d535b54a752099a35fe21b515422e9d08c
 .. _085bc80: https://github.com/nz-gravity/LogPSplinePSD/commit/085bc80c4718b722b4aa487fa980f586b790db7b

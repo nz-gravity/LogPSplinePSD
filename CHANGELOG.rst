@@ -5,6 +5,40 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.9:
+
+v0.0.9 (2025-08-25)
+===================
+
+Bug Fixes
+---------
+
+* fix: pytests (`435ca66`_)
+
+Unknown
+-------
+
+* add more tests for PSD diagnostics (`55a94d3`_)
+
+* add: add LVK code testing (`dfa0c3d`_)
+
+* add basis comparison (`085bc80`_)
+
+* add cut (`85909ab`_)
+
+* refactor docs to work with new API (`ee05bca`_)
+
+* refactor preprocessing (`01790f9`_)
+
+.. _435ca66: https://github.com/nz-gravity/LogPSplinePSD/commit/435ca666329345feb295eb23a16b962fb57120e0
+.. _55a94d3: https://github.com/nz-gravity/LogPSplinePSD/commit/55a94d39a9c928398ae7c0995ccd54ba7de88838
+.. _dfa0c3d: https://github.com/nz-gravity/LogPSplinePSD/commit/dfa0c3d535b54a752099a35fe21b515422e9d08c
+.. _085bc80: https://github.com/nz-gravity/LogPSplinePSD/commit/085bc80c4718b722b4aa487fa980f586b790db7b
+.. _85909ab: https://github.com/nz-gravity/LogPSplinePSD/commit/85909ab2869e3fe9f62f97776b7089cc6ab1ee66
+.. _ee05bca: https://github.com/nz-gravity/LogPSplinePSD/commit/ee05bca1ecad4755855c16ed345ca9d6f2a010bd
+.. _01790f9: https://github.com/nz-gravity/LogPSplinePSD/commit/01790f98edbe7d4905640efb9b7fb28e55c29f87
+
+
 .. _changelog-v0.0.8:
 
 v0.0.8 (2025-07-24)
@@ -15,6 +49,11 @@ Bug Fixes
 
 * fix: refactoring (`cc87bfd`_)
 
+Chores
+------
+
+* chore(release): 0.0.8 (`f32b903`_)
+
 Unknown
 -------
 
@@ -23,6 +62,7 @@ Unknown
 * Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`26d4210`_)
 
 .. _cc87bfd: https://github.com/nz-gravity/LogPSplinePSD/commit/cc87bfdf4a90e38f190bcf2b5a01a0c04ae53baa
+.. _f32b903: https://github.com/nz-gravity/LogPSplinePSD/commit/f32b90326fb81c231fc48db66b69828707113cd9
 .. _09bc512: https://github.com/nz-gravity/LogPSplinePSD/commit/09bc5126823cbc28b2543c95bb76e01d7ef630b2
 .. _26d4210: https://github.com/nz-gravity/LogPSplinePSD/commit/26d4210495d5ab1b8367dd75d506cb5690ad752f
 

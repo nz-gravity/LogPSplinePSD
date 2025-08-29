@@ -1,7 +1,7 @@
 import numpy as np
 from ...datatypes import Periodogram
 import warnings
-from .line_knot_locator import LvkKnotAllocator
+from .lvk_knot_allocator import LvkKnotAllocator
 
 
 def init_knots(

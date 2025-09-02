@@ -1,14 +1,14 @@
 from dataclasses import dataclass
 from typing import Union
-import matplotlib.pyplot as plt
 
 import jax
+import matplotlib.pyplot as plt
 import numpy as np
 from jax import numpy as jnp
 
 from ..datatypes import Periodogram
 from .initialisation import init_basis_and_penalty, init_knots, init_weights
-from .plot_basis import plot_penalty, plot_basis
+from .plot_basis import plot_basis, plot_penalty
 
 
 @dataclass
@@ -51,7 +51,10 @@ class LogPSplines:
         knot_kwargs: dict = {},
     ):
         knots = init_knots(
-            n_knots, periodogram, parametric_model, **knot_kwargs,
+            n_knots,
+            periodogram,
+            parametric_model,
+            **knot_kwargs,
         )
         # compute degree based on the number of knots
         basis, penalty_matrix = init_basis_and_penalty(
@@ -104,7 +107,7 @@ class LogPSplines:
 
     def plot_basis(self, outdir: str = None):
         """Plot the B-spline basis functions."""
-        fig, axes = plt.subplots(1,3, figsize=(12, 4))
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
         plot_basis(self.basis, axes=axes[:2])
         plot_penalty(self.penalty_matrix, ax=axes[2])
         plt.tight_layout()

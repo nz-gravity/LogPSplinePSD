@@ -8,9 +8,9 @@ import optax
 from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
-from .knots_locator import init_knots
 
 from ..datatypes import Periodogram
+from .knots_locator import init_knots
 
 __all__ = ["init_weights", "init_basis_and_penalty", "init_knots"]
 
@@ -128,5 +128,3 @@ def init_basis_and_penalty(
     penalty_matrix = penalty_matrix + epsilon * np.eye(penalty_matrix.shape[1])
 
     return basis_matrix, jnp.array(penalty_matrix)
-
-

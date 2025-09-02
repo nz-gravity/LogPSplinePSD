@@ -1,16 +1,18 @@
-import numpy as np
-from ...datatypes import Periodogram
 import warnings
+
+import numpy as np
+
+from ...datatypes import Periodogram
 from .lvk_knot_allocator import LvkKnotAllocator
 
 
 def init_knots(
-        n_knots: int,
-        periodogram: Periodogram,
-        parametric_model: np.ndarray = None,
-        method: str = "density",
-        knots: np.ndarray = None,
-        **kwargs,
+    n_knots: int,
+    periodogram: Periodogram,
+    parametric_model: np.ndarray = None,
+    method: str = "density",
+    knots: np.ndarray = None,
+    **kwargs,
 ) -> np.ndarray:
     """
     Select knots using various placement strategies.
@@ -36,7 +38,9 @@ def init_knots(
         Array of knot locations normalized to [0, 1]
     """
 
-    min_freq, max_freq = float(periodogram.freqs[0]), float(periodogram.freqs[-1])
+    min_freq, max_freq = float(periodogram.freqs[0]), float(
+        periodogram.freqs[-1]
+    )
 
     if n_knots == 2:
         return np.array([0.0, 1.0])
@@ -55,7 +59,9 @@ def init_knots(
             )
 
         elif method == "density":
-            knots = _quantile_based_knots(n_knots, periodogram, parametric_model)
+            knots = _quantile_based_knots(
+                n_knots, periodogram, parametric_model
+            )
 
         elif method == "lvk":
             knot_alloc = LvkKnotAllocator(
@@ -63,7 +69,7 @@ def init_knots(
                 psd=periodogram.power,
                 fmin=min_freq,
                 fmax=max_freq,
-                **kwargs
+                **kwargs,
             )
             knots = knot_alloc.knots_hz
 
@@ -93,9 +99,9 @@ def init_knots(
 
 
 def _quantile_based_knots(
-        n_knots: int,
-        periodogram: Periodogram,
-        parametric_model: np.ndarray = None,
+    n_knots: int,
+    periodogram: Periodogram,
+    parametric_model: np.ndarray = None,
 ) -> np.ndarray:
     """
     Implement Patricio's quantile-based knot placement method.

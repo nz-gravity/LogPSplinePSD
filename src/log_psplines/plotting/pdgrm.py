@@ -1,7 +1,6 @@
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from ..arviz_utils import get_periodogram, get_spline_model, get_weights
 from ..datatypes import Periodogram
 from ..psplines import LogPSplines
 from .utils import unpack_data
@@ -28,9 +27,10 @@ def plot_pdgrm(
     data_label="Data",
     knot_color=KNOTS_COL,
     show_data=True,
-    figsize=(4, 3)
+    figsize=(4, 3),
 ):
     if idata:
+        from ..arviz_utils import get_periodogram, get_spline_model, get_weights
         pdgrm = get_periodogram(idata)
         spline_model = get_spline_model(idata)
         weights = get_weights(idata, weights)

@@ -5,6 +5,31 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.11:
+
+v0.0.11 (2025-09-02)
+====================
+
+Bug Fixes
+---------
+
+* fix: refactor line-locator name to lvk-allocator (`35f4c30`_)
+
+Unknown
+-------
+
+* run precommits (`ca62dfb`_)
+
+* hacking on lvk knot loc (`c53b3da`_)
+
+* Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`97bd97b`_)
+
+.. _35f4c30: https://github.com/nz-gravity/LogPSplinePSD/commit/35f4c307d98c2c6406fd155a17655c776ce25a43
+.. _ca62dfb: https://github.com/nz-gravity/LogPSplinePSD/commit/ca62dfb889af5cb20fe938a7046bf4c1c4aa522a
+.. _c53b3da: https://github.com/nz-gravity/LogPSplinePSD/commit/c53b3da594acd8bc8e53a934cbf7ac72effd8a6b
+.. _97bd97b: https://github.com/nz-gravity/LogPSplinePSD/commit/97bd97b55c28a3683e5674c428ea0e26e8e9f74a
+
+
 .. _changelog-v0.0.10:
 
 v0.0.10 (2025-08-28)
@@ -15,7 +40,19 @@ Bug Fixes
 
 * fix: LVK knot allocation fix (`6ffa886`_)
 
+Chores
+------
+
+* chore(release): 0.0.10 (`82bc78c`_)
+
+Unknown
+-------
+
+* pypi onl after pytest passes (`48b923f`_)
+
 .. _6ffa886: https://github.com/nz-gravity/LogPSplinePSD/commit/6ffa88680cfc2b297a99eaba87c1a471df668af5
+.. _82bc78c: https://github.com/nz-gravity/LogPSplinePSD/commit/82bc78c6a4feab3eeb5cc31d44ebb93fcf1e4a13
+.. _48b923f: https://github.com/nz-gravity/LogPSplinePSD/commit/48b923f1ed813cc47b980a8af9a6f6a201c74be4
 
 
 .. _changelog-v0.0.9:

@@ -107,4 +107,3 @@ Eilers, P. H. C., & Marx, B. D. (1996). *Flexible smoothing with B-splines and p
 .. _MaturanaRussel2021:
 
 Maturana-Russel, J., & Meyer, R. (2021). *P-spline spectral density estimation with a discrete penalty*. `arXiv:1905.01832 <https://arxiv.org/abs/1905.01832>`_.
-

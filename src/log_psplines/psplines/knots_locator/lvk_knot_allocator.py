@@ -18,6 +18,8 @@ class LvkKnotAllocator:
                  extra_thresh_multiplier: float = 2.0,
                  max_extra_per_peak: int = 8,
                  degree=3,
+                 min_zero_knots: int = 2,
+                 min_peak_knots: int = 10,
                  knots_plotfn:str=None
                  ):
         self.freqs = np.asarray(freqs)
@@ -29,6 +31,8 @@ class LvkKnotAllocator:
         self.d = int(d)
         self.extra_thresh_multiplier = float(extra_thresh_multiplier)
         self.max_extra_per_peak = int(max_extra_per_peak)
+        self.min_zero_knots = int(min_zero_knots)
+        self.min_peak_knots = int(min_peak_knots)
 
         self.knots_locations: Optional[np.ndarray] = None  # normalized [0,1]
         self.threshold: Optional[float] = None
@@ -37,6 +41,7 @@ class LvkKnotAllocator:
         self.peaks: Optional[np.ndarray] = None
         self.smoothed_peaks: Optional[np.ndarray] = None
         self.bin_regions: Optional[List[Tuple[int, int, str]]] = None
+        self.log_power_ratio: Optional[np.ndarray] = None
 
         self._identify_lines()
         self._process_peaks()
@@ -55,6 +60,8 @@ class LvkKnotAllocator:
         self.running_median = median_filter(self.psd, size=kernel_size, mode='nearest')
 
         power_ratio = self.psd / (self.running_median + np.finfo(float).eps)
+        self.log_power_ratio = np.log(power_ratio + np.finfo(float).eps)
+
         q1, q3 = np.percentile(power_ratio, [25, 75])
         iqr = q3 - q1
         self.threshold = q3 + self.iqr_factor * iqr
@@ -144,46 +151,114 @@ class LvkKnotAllocator:
 
         knots_hz: List[float] = []
         N = len(self.freqs)
-        extra_thresh_bins = max(1, int(round(self.extra_thresh_multiplier * self.d)))
 
         for start_idx, end_idx, region_type in regions:
             s = max(0, min(int(start_idx), N - 1))
             e = max(0, min(int(end_idx), N - 1))
+
             if region_type == 'zero':
-                center_freq = 0.5 * (self.freqs[s] + self.freqs[e])
-                knots_hz.append(center_freq)
-            else:
+                # For zero regions, use minimal knots
                 left_freq = self.freqs[s]
                 right_freq = self.freqs[e]
-                local = self.smoothed_peaks[s:e + 1]
-                if local.size == 0:
-                    center_freq = 0.5 * (left_freq + right_freq)
-                else:
-                    center_idx = s + int(np.nanargmax(local))
-                    center_idx = max(s, min(center_idx, e))
-                    center_freq = self.freqs[center_idx]
-                knots_hz.extend([left_freq, center_freq, right_freq])
+                width = e - s + 1
+
+                # Always include endpoints for consistency
+                knots_hz.append(left_freq)
+                knots_hz.append(right_freq)
+
+                # For wide zero regions, add a center knot and possibly a few more spaced ones
+                if width > 20:  # Only add internal knots for sufficiently wide regions
+                    # Add center knot
+                    center_freq = self.freqs[s + width // 2]
+                    knots_hz.append(center_freq)
+
+                    # For very wide regions, add a few more log-spaced knots, but keep it minimal
+                    if width > 50:
+                        # Calculate a small number of additional knots - logarithmically with region width
+                        # Max out at a reasonable number regardless of width
+                        additional_knots = min(self.min_zero_knots - 1, max(1, int(np.log10(width))))
+
+                        if additional_knots > 0:
+                            # Place them between left and center, and center and right
+                            if left_freq > 0 and center_freq > 0:
+                                left_log_freqs = np.logspace(np.log10(left_freq), np.log10(center_freq), additional_knots + 2)[1:-1]
+                                knots_hz.extend(left_log_freqs)
+
+                            if center_freq > 0 and right_freq > 0:
+                                right_log_freqs = np.logspace(np.log10(center_freq), np.log10(right_freq), additional_knots + 2)[1:-1]
+                                knots_hz.extend(right_log_freqs)
+            else:
+                # For peak regions, use density/quantile approach
+                left_freq = self.freqs[s]
+                right_freq = self.freqs[e]
+
+                # Always include edges of the region
+                knots_hz.extend([left_freq, right_freq])
 
                 width_bins = e - s + 1
-                if width_bins > extra_thresh_bins:
-                    extras = int(np.floor(width_bins / extra_thresh_bins)) - 1
-                    extras = max(0, min(extras, self.max_extra_per_peak))
-                    if extras > 0 and np.sum(np.abs(local)) > 0:
-                        dens = np.abs(local).astype(float)
-                        dens_sum = np.sum(dens)
-                        if dens_sum <= 0:
-                            extra_freqs = np.linspace(self.freqs[s], self.freqs[e], extras + 2)[1:-1]
-                        else:
-                            dens = dens / dens_sum
-                            cum = np.cumsum(dens)
-                            x = np.concatenate([[0.0], cum])
-                            y = np.linspace(self.freqs[s], self.freqs[e], len(local) + 1)
-                            inv = interp1d(x, y, bounds_error=False,
-                                           fill_value=(self.freqs[s], self.freqs[e]))
-                            quantiles = (np.arange(1, extras + 1) / (extras + 1.0))
-                            extra_freqs = inv(quantiles)
-                        knots_hz.extend(np.asarray(extra_freqs).tolist())
+                if width_bins > 1:
+                    # Extract local data for this peak region
+                    local_lpr = self.log_power_ratio[s:e+1]
+                    local_peak = self.smoothed_peaks[s:e+1]
+                    region_freqs = self.freqs[s:e+1]
 
+                    # 1. Find and add the center of the peak
+                    # Use the maximum of smoothed peak as the center
+                    if np.any(local_peak > 0):
+                        center_idx = np.argmax(local_peak)
+                        center_freq = region_freqs[center_idx]
+                        knots_hz.append(center_freq)
+
+                    # 2. Find and add knots at the sides of the peak (shoulders)
+                    # We define shoulders as ~25% and ~75% of the way through the region
+                    if width_bins >= 4:
+                        left_quarter_idx = s + width_bins // 4
+                        right_quarter_idx = e - width_bins // 4
+
+                        if left_quarter_idx > s and left_quarter_idx < e:
+                            knots_hz.append(self.freqs[left_quarter_idx])
+
+                        if right_quarter_idx > s and right_quarter_idx < e:
+                            knots_hz.append(self.freqs[right_quarter_idx])
+
+                    # 3. Continue with density-based allocation for additional knots
+                    # Handle potential infinities or NaNs
+                    x = local_lpr.copy()
+                    x[~np.isfinite(x)] = 0
+
+                    # Standardize
+                    if np.std(x) > 0:
+                        x_mean = np.mean(x)
+                        x_std = np.std(x)
+                        y = (x - x_mean) / x_std
+                    else:
+                        y = np.ones_like(x)
+
+                    # Create PMF using absolute values
+                    z = np.abs(y)
+                    # Add a bias toward the peak
+                    if np.sum(local_peak) > 0:
+                        z = z + 0.5 * local_peak / np.max(local_peak)
+
+                    # Normalize to create proper PMF
+                    if np.sum(z) > 0:
+                        z = z / np.sum(z)
+                    else:
+                        z = np.ones_like(z) / len(z)
+
+                    # Create CDF
+                    cdf_values = np.cumsum(z)
+
+                    # Place remaining knots at equally spaced quantiles
+                    # Adjust the number of internal knots - we've already placed some
+                    n_remaining_knots = min(self.max_extra_per_peak - 3, max(self.min_peak_knots - 3, int(width_bins / 6)))
+
+                    if n_remaining_knots > 0:
+                        quantiles = np.linspace(0, 1, n_remaining_knots)
+                        internal_knots = np.interp(quantiles, cdf_values, region_freqs)
+                        knots_hz.extend(internal_knots.tolist())
+
+        # Add boundary knots if not already included
         knots_hz.extend([self.fmin, self.fmax])
         knots_hz = np.array(knots_hz, dtype=float)
         knots_hz = np.unique(np.clip(knots_hz, self.fmin, self.fmax))

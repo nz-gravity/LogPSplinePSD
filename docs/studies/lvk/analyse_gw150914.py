@@ -1,33 +1,37 @@
 """
 Gravitational Wave Event Data Analysis with P-Splines PSD Estimation
 
-This module provides functionality for loading, processing, and analyzing 
-gravitational wave event data, with particular focus on Power Spectral Density 
+This module provides functionality for loading, processing, and analyzing
+gravitational wave event data, with particular focus on Power Spectral Density
 (PSD) estimation using P-splines methods and comparison with catalog PSDs.
 """
 
-import os
-from typing import Dict, Tuple
 import argparse
 import glob
+import os
+from typing import Dict, Tuple
 
-import h5py
-import numpy as np
-import matplotlib.pyplot as plt
 import arviz as az
-from scipy.stats import kstest, norm
+import h5py
+import matplotlib.pyplot as plt
+import numpy as np
 from gwpy.timeseries import TimeSeries as GwpyTimeSeries
+from scipy.stats import kstest, norm
 
+from log_psplines.arviz_utils import (
+    get_periodogram,
+    get_spline_model,
+    get_weights,
+)
 from log_psplines.datatypes import Periodogram
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
-from log_psplines.arviz_utils import get_periodogram, get_spline_model, get_weights
 
 # Configuration constants
 DEFAULT_FFT_LENGTH = 4
 DEFAULT_OVERLAP = 0.5
-DEFAULT_WINDOW = 'hann'
+DEFAULT_WINDOW = "hann"
 DEFAULT_N_KNOTS = 100
 DEFAULT_SPLINE_DEGREE = 3
 DEFAULT_DIFF_ORDER = 2
@@ -35,11 +39,15 @@ DEFAULT_N_SAMPLES = 2000
 DEFAULT_N_WARMUP = 2000
 
 # Detector color mapping for consistent plotting
-DETECTOR_COLORS = {'H1': 'red', 'L1': 'blue', 'V1': 'green'}
+DETECTOR_COLORS = {"H1": "red", "L1": "blue", "V1": "green"}
 
 
-def compute_normality_pvalue(data_fd: np.ndarray, psd_values: np.ndarray,
-                             frequencies_data: np.ndarray, frequencies_psd: np.ndarray) -> float:
+def compute_normality_pvalue(
+    data_fd: np.ndarray,
+    psd_values: np.ndarray,
+    frequencies_data: np.ndarray,
+    frequencies_psd: np.ndarray,
+) -> float:
     """Compute p-value for normality test of whitened data."""
     # Find matching frequencies
     freq_mask = np.isin(frequencies_data, frequencies_psd)
@@ -50,10 +58,9 @@ def compute_normality_pvalue(data_fd: np.ndarray, psd_values: np.ndarray,
     whitened_data = data_fd[freq_mask] / np.sqrt(psd_matched)
 
     # Combine real and imaginary parts for normality test
-    ratio_combined = np.concatenate([
-        np.real(whitened_data),
-        np.imag(whitened_data)
-    ])
+    ratio_combined = np.concatenate(
+        [np.real(whitened_data), np.imag(whitened_data)]
+    )
 
     # Kolmogorov-Smirnov test against standard normal
     _, pvalue = kstest(ratio_combined, norm.cdf)
@@ -76,14 +83,14 @@ class GWEventData:
         self.postevent_fd = {}
 
     @classmethod
-    def from_hdf5(cls, filepath: str) -> 'GWEventData':
+    def from_hdf5(cls, filepath: str) -> "GWEventData":
         """Load event data from HDF5 file."""
         with h5py.File(filepath, "r") as f:
             # Load event metadata
-            event_name = cls._decode_if_bytes(f.attrs['event_name'])
+            event_name = cls._decode_if_bytes(f.attrs["event_name"])
             instance = cls(event_name)
             instance.analysis_group = cls._decode_if_bytes(
-                f.attrs.get('analysis_group', 'unknown')
+                f.attrs.get("analysis_group", "unknown")
             )
 
             # Load each data section
@@ -98,14 +105,16 @@ class GWEventData:
     @staticmethod
     def _decode_if_bytes(data) -> str:
         """Decode bytes to string if necessary."""
-        return data.decode('utf-8') if isinstance(data, bytes) else data
+        return data.decode("utf-8") if isinstance(data, bytes) else data
 
     def _load_configs(self, h5_file):
         """Load configuration data from HDF5 file."""
         if "configs" in h5_file:
             config_group = h5_file["configs"]
             for key in config_group.keys():
-                self.configs[key] = self._decode_if_bytes(config_group[key][()])
+                self.configs[key] = self._decode_if_bytes(
+                    config_group[key][()]
+                )
 
     def _load_psds(self, h5_file):
         """Load PSD data from HDF5 file."""
@@ -114,8 +123,8 @@ class GWEventData:
             for detector in psd_group.keys():
                 det_group = psd_group[detector]
                 self.psds[detector] = {
-                    'freqs': det_group["freqs"][:],
-                    'psd': det_group["psd"][:]
+                    "freqs": det_group["freqs"][:],
+                    "psd": det_group["psd"][:],
                 }
 
     def _load_welch_psds(self, h5_file):
@@ -125,8 +134,8 @@ class GWEventData:
             for detector in welch_group.keys():
                 det_group = welch_group[detector]
                 self.welch_psds[detector] = {
-                    'freqs': det_group["freqs"][:],
-                    'psd': det_group["psd"][:]
+                    "freqs": det_group["freqs"][:],
+                    "psd": det_group["psd"][:],
                 }
 
     def _load_postevent_fd(self, h5_file):
@@ -136,8 +145,8 @@ class GWEventData:
             for detector in fd_group.keys():
                 det_group = fd_group[detector]
                 self.postevent_fd[detector] = {
-                    'freqs': det_group["freqs"][:],
-                    'datafd': det_group["datafd"][:]
+                    "freqs": det_group["freqs"][:],
+                    "datafd": det_group["datafd"][:],
                 }
 
     def _load_strain_data(self, h5_file):
@@ -162,16 +171,23 @@ class GWEventData:
         return f"<GWEventData.{self.event_name}>"
 
 
-def create_psd_comparison_plot(event_data: GWEventData,
-                               posterior_quantiles: Dict[str, np.ndarray],
-                               output_dir: str = "plots") -> str:
+def create_psd_comparison_plot(
+    event_data: GWEventData,
+    posterior_quantiles: Dict[str, np.ndarray],
+    output_dir: str = "plots",
+) -> str:
     """Create comparison plots of different PSD estimates."""
     detectors = event_data.get_detectors()
     n_detectors = len(detectors)
 
     # Create subplot layout
-    fig, axes = plt.subplots(n_detectors, 1, figsize=(10, 4 * n_detectors),
-                             sharex=True, squeeze=False)
+    fig, axes = plt.subplots(
+        n_detectors,
+        1,
+        figsize=(10, 4 * n_detectors),
+        sharex=True,
+        squeeze=False,
+    )
     axes = axes.flatten()
 
     for i, detector in enumerate(detectors):
@@ -185,38 +201,67 @@ def create_psd_comparison_plot(event_data: GWEventData,
 
         # Calculate p-values for different PSD estimates
         pval_gwtc = compute_normality_pvalue(
-            fd_data['datafd'], psd_data['psd'],
-            fd_data['freqs'], psd_data['freqs']
+            fd_data["datafd"],
+            psd_data["psd"],
+            fd_data["freqs"],
+            psd_data["freqs"],
         )
         pval_welch = compute_normality_pvalue(
-            fd_data['datafd'], welch_data['psd'],
-            fd_data['freqs'], welch_data['freqs']
+            fd_data["datafd"],
+            welch_data["psd"],
+            fd_data["freqs"],
+            welch_data["freqs"],
         )
         pval_pspline = compute_normality_pvalue(
-            fd_data['datafd'], pspline_data['quantiles'][1],
-            fd_data['freqs'], pspline_data['freqs']
+            fd_data["datafd"],
+            pspline_data["quantiles"][1],
+            fd_data["freqs"],
+            pspline_data["freqs"],
         )
 
-        color = DETECTOR_COLORS.get(detector, 'black')
+        color = DETECTOR_COLORS.get(detector, "black")
 
         # Plot data and PSDs
-        ax.loglog(fd_data['freqs'], np.abs(fd_data['datafd']) ** 2,
-                  color='lightgray', alpha=0.4, label='Post-event Data')
+        ax.loglog(
+            fd_data["freqs"],
+            np.abs(fd_data["datafd"]) ** 2,
+            color="lightgray",
+            alpha=0.4,
+            label="Post-event Data",
+        )
 
-        ax.loglog(psd_data['freqs'], psd_data['psd'], color=color,
-                  linewidth=1.5, label=f'GWTC PSD (p={pval_gwtc:.3f})')
+        ax.loglog(
+            psd_data["freqs"],
+            psd_data["psd"],
+            color=color,
+            linewidth=1.5,
+            label=f"GWTC PSD (p={pval_gwtc:.3f})",
+        )
 
-        ax.loglog(welch_data['freqs'], welch_data['psd'], color=color,
-                  linewidth=2, linestyle='--', alpha=0.3,
-                  label=f'Welch PSD (p={pval_welch:.3f})')
+        ax.loglog(
+            welch_data["freqs"],
+            welch_data["psd"],
+            color=color,
+            linewidth=2,
+            linestyle="--",
+            alpha=0.3,
+            label=f"Welch PSD (p={pval_welch:.3f})",
+        )
 
-        ax.loglog(pspline_data['freqs'], pspline_data['quantiles'][1],
-                  color='tab:green', linewidth=2)
-        ax.fill_between(pspline_data['freqs'],
-                        pspline_data['quantiles'][0],
-                        pspline_data['quantiles'][2],
-                        color='tab:green', alpha=0.3,
-                        label=f'P-splines 90% CI (p={pval_pspline:.3f})')
+        ax.loglog(
+            pspline_data["freqs"],
+            pspline_data["quantiles"][1],
+            color="tab:green",
+            linewidth=2,
+        )
+        ax.fill_between(
+            pspline_data["freqs"],
+            pspline_data["quantiles"][0],
+            pspline_data["quantiles"][2],
+            color="tab:green",
+            alpha=0.3,
+            label=f"P-splines 90% CI (p={pval_pspline:.3f})",
+        )
 
         # Formatting
         ax.set_ylabel("PSD [strain²/Hz]", fontsize=12)
@@ -225,29 +270,37 @@ def create_psd_comparison_plot(event_data: GWEventData,
         ax.grid(True, alpha=0.3)
 
         # Set reasonable axis limits
-        if len(psd_data['psd']) > 0:
-            ymin = np.min(psd_data['psd']) * 0.1
-            ymax = np.max(psd_data['psd']) * 10
+        if len(psd_data["psd"]) > 0:
+            ymin = np.min(psd_data["psd"]) * 0.1
+            ymax = np.max(psd_data["psd"]) * 10
             ax.set_ylim(ymin, ymax)
 
     # Final formatting
     axes[-1].set_xlabel("Frequency [Hz]", fontsize=12)
-    fig.suptitle(f"{event_data.event_name} Power Spectral Densities",
-                 fontsize=14, y=0.98)
+    fig.suptitle(
+        f"{event_data.event_name} Power Spectral Densities",
+        fontsize=14,
+        y=0.98,
+    )
     plt.tight_layout()
 
     # Save plot
     os.makedirs(output_dir, exist_ok=True)
     plot_path = os.path.join(output_dir, f"{event_data.event_name}_psd.png")
-    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
     plt.close()
 
     print(f"PSD comparison plot saved to: {plot_path}")
     return plot_path
 
 
-def process_detector_data(event_data: GWEventData, detector: str,
-                          fmin: float, fmax: float, output_dir: str) -> Dict[str, np.ndarray]:
+def process_detector_data(
+    event_data: GWEventData,
+    detector: str,
+    fmin: float,
+    fmax: float,
+    output_dir: str,
+) -> Dict[str, np.ndarray]:
     """Process strain data for a single detector using P-splines."""
     print(f"Processing {detector} detector data...")
 
@@ -256,19 +309,22 @@ def process_detector_data(event_data: GWEventData, detector: str,
     os.makedirs(det_output_dir, exist_ok=True)
 
     # Extract and standardize strain data
-    times, strain = event_data.strain_data[detector]['analysis']
+    times, strain = event_data.strain_data[detector]["analysis"]
     strain_std = np.std(strain)
     strain_normalized = (strain - np.mean(strain)) / strain_std
 
     # Create GWpy TimeSeries and compute PSD
     ts = GwpyTimeSeries(strain_normalized, t0=times[0], dt=times[1] - times[0])
-    avg_pdgrm = ts.psd(fftlength=DEFAULT_FFT_LENGTH, overlap=DEFAULT_OVERLAP,
-                       window=DEFAULT_WINDOW, method='welch')
+    avg_pdgrm = ts.psd(
+        fftlength=DEFAULT_FFT_LENGTH,
+        overlap=DEFAULT_OVERLAP,
+        window=DEFAULT_WINDOW,
+        method="welch",
+    )
 
     # Convert to Periodogram object and apply frequency cuts
     pdgrm = Periodogram(
-        freqs=avg_pdgrm.frequencies.value,
-        power=avg_pdgrm.value
+        freqs=avg_pdgrm.frequencies.value, power=avg_pdgrm.value
     )
     pdgrm = pdgrm.cut(fmin, fmax)
 
@@ -285,16 +341,19 @@ def process_detector_data(event_data: GWEventData, detector: str,
 
         # Run MCMC sampling
         idata = run_mcmc(
-            pdgrm, sampler='mh',
-            n_samples=DEFAULT_N_SAMPLES, n_warmup=DEFAULT_N_WARMUP,
-            outdir=det_output_dir, rng_key=42,
+            pdgrm,
+            sampler="mh",
+            n_samples=DEFAULT_N_SAMPLES,
+            n_warmup=DEFAULT_N_WARMUP,
+            outdir=det_output_dir,
+            rng_key=42,
             knot_kwargs=dict(
-                method='lvk',
+                method="lvk",
                 knots_plotfn=os.path.join(det_output_dir, "knots.png"),
                 extra_thresh_multiplier=4.0,
                 max_extra_per_peak=10,
                 d=15,
-            )
+            ),
         )
 
     # Extract posterior samples and compute quantiles
@@ -306,15 +365,14 @@ def process_detector_data(event_data: GWEventData, detector: str,
     ln_splines = np.array([spline_model(w) for w in weights], dtype=np.float64)
 
     # Get quantiles and transform back to linear scale
-    posterior_quantiles = np.exp(np.quantile(ln_splines, [0.05, 0.5, 0.95], axis=0))
+    posterior_quantiles = np.exp(
+        np.quantile(ln_splines, [0.05, 0.5, 0.95], axis=0)
+    )
 
     # Apply scaling correction
-    posterior_quantiles *= strain_std ** 2
+    posterior_quantiles *= strain_std**2
 
-    return {
-        'quantiles': posterior_quantiles,
-        'freqs': periodogram.freqs
-    }
+    return {"quantiles": posterior_quantiles, "freqs": periodogram.freqs}
 
 
 def analyze_event(data_file: str, output_dir: str = None):
@@ -322,7 +380,9 @@ def analyze_event(data_file: str, output_dir: str = None):
     # Set default output directory based on event name
     if output_dir is None:
         event_name = os.path.splitext(os.path.basename(data_file))[0]
-        output_dir = f"out_lvk_{event_name.split('_')[0]}"  # e.g., "out_lvk_GW150914"
+        output_dir = (
+            f"out_lvk_{event_name.split('_')[0]}"  # e.g., "out_lvk_GW150914"
+        )
 
     # Load event data
     print(f"Loading event data from {data_file}")
@@ -330,15 +390,21 @@ def analyze_event(data_file: str, output_dir: str = None):
     print(f"Loaded data for event: {event_data.event_name}")
 
     # Set frequency bounds (using L1 as reference, fallback to first available detector)
-    ref_detector = 'L1' if 'L1' in event_data.psds else list(event_data.psds.keys())[0]
-    fmin = event_data.psds[ref_detector]['freqs'][0]
-    fmax = event_data.psds[ref_detector]['freqs'][-1]
-    print(f"Frequency range: {fmin:.1f} - {fmax:.1f} Hz (using {ref_detector} as reference)")
+    ref_detector = (
+        "L1" if "L1" in event_data.psds else list(event_data.psds.keys())[0]
+    )
+    fmin = event_data.psds[ref_detector]["freqs"][0]
+    fmax = event_data.psds[ref_detector]["freqs"][-1]
+    print(
+        f"Frequency range: {fmin:.1f} - {fmax:.1f} Hz (using {ref_detector} as reference)"
+    )
 
     # Process each detector
     quantiles = {}
     for detector in event_data.get_detectors():
-        print(f"\nDetector: {detector}, PSD points: {len(event_data.psds[detector]['freqs'])}")
+        print(
+            f"\nDetector: {detector}, PSD points: {len(event_data.psds[detector]['freqs'])}"
+        )
 
         quantiles[detector] = process_detector_data(
             event_data, detector, fmin, fmax, output_dir
@@ -352,9 +418,17 @@ def analyze_event(data_file: str, output_dir: str = None):
 
 def main():
     """Main analysis pipeline with command line interface."""
-    parser = argparse.ArgumentParser(description='Analyze GW event data with P-splines PSD estimation')
-    parser.add_argument('-d', '--data-file', help='Path to HDF5 data file', default=None)
-    parser.add_argument('-o', '--output', help='Output directory (default: auto-generated from event name)')
+    parser = argparse.ArgumentParser(
+        description="Analyze GW event data with P-splines PSD estimation"
+    )
+    parser.add_argument(
+        "-d", "--data-file", help="Path to HDF5 data file", default=None
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        help="Output directory (default: auto-generated from event name)",
+    )
 
     args = parser.parse_args()
     data_file = args.data_file

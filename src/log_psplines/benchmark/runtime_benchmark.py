@@ -1,7 +1,7 @@
 import glob
+import json
 import os
 from typing import List
-import json
 
 import jax
 import matplotlib.pyplot as plt
@@ -10,6 +10,7 @@ from tqdm.auto import tqdm
 
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.mcmc import run_mcmc
+
 from .plotting import plot_data_size_results, plot_knots_results
 
 # Get device information
@@ -30,28 +31,31 @@ MCMC_DEFAULTS = dict(
     verbose=False,
     n_knots=10,
     knot_kwargs=dict(frac_uniform=1.0),
-
 )
 
 
 class RuntimeBenchmark:
     """Benchmark runtime performance of MCMC sampling for different configurations."""
 
-    def __init__(self, outdir: str = "plots", verbose: bool = False, n_mcmc: int = 2000, ):
+    def __init__(
+        self,
+        outdir: str = "plots",
+        verbose: bool = False,
+        n_mcmc: int = 2000,
+    ):
         self.outdir = outdir
         os.makedirs(outdir, exist_ok=True)
         self.verbose = verbose
         self.n_mcmc = n_mcmc // 2
         self.n_warmup = n_mcmc // 2
 
-
     def _run_data_size_analysis(
-            self,
-            sampler: str = "nuts",
-            min_n: float = 128.0,
-            max_n: float = 1024.0,
-            num_points: int = 10,
-            reps: int = 3,
+        self,
+        sampler: str = "nuts",
+        min_n: float = 128.0,
+        max_n: float = 1024.0,
+        num_points: int = 10,
+        reps: int = 3,
     ) -> None:
         """Analyze runtime vs data size (duration)."""
 
@@ -68,7 +72,9 @@ class RuntimeBenchmark:
         ns = []
         ess = []
 
-        for duration in tqdm(durations, desc=f"Varying data sizes [{sampler}, {DEVICE}]"):
+        for duration in tqdm(
+            durations, desc=f"Varying data sizes [{sampler}, {DEVICE}]"
+        ):
             # Generate AR data with specified duration
             pdgrm_kwgs = AR_DEFAULTS.copy()
             pdgrm_kwgs["duration"] = duration
@@ -110,12 +116,12 @@ class RuntimeBenchmark:
             )
 
     def _run_knots_analysis(
-            self,
-            sampler: str = "nuts",
-            min_knots: int = 5,
-            max_knots: int = 30,
-            num_points: int = 10,
-            reps: int = 3,
+        self,
+        sampler: str = "nuts",
+        min_knots: int = 5,
+        max_knots: int = 30,
+        num_points: int = 10,
+        reps: int = 3,
     ) -> None:
         """Analyze runtime vs number of knots."""
         # Fixed AR data
@@ -165,19 +171,21 @@ class RuntimeBenchmark:
             )
 
     def run_analysis(
-            self,
-            n_points: int = 10,
-            n_reps: int = 3,
-            min_n: float = 128.0,
-            max_n: float = 1024.0,
-            min_knots: int = 5,
-            max_knots: int = 30,
-            sampler: str = "all",
+        self,
+        n_points: int = 10,
+        n_reps: int = 3,
+        min_n: float = 128.0,
+        max_n: float = 1024.0,
+        min_knots: int = 5,
+        max_knots: int = 30,
+        sampler: str = "all",
     ):
         """run analyses for both MH and NUTS samplers."""
 
         if sampler not in ["nuts", "mh", "all"]:
-            raise ValueError(f"Invalid sampler: {sampler}. Choose from 'nuts', 'mh', or 'all'.")
+            raise ValueError(
+                f"Invalid sampler: {sampler}. Choose from 'nuts', 'mh', or 'all'."
+            )
 
         samplers = []
         if sampler == "all":

@@ -46,14 +46,14 @@ from .runtime_benchmark import RuntimeBenchmark
     help="Maximum data size (in samples) for analysis",
 )
 @click.option(
-    '--min-knots',
+    "--min-knots",
     type=int,
     default=5,
     show_default=True,
     help="Minimum number of knots for analysis",
 )
 @click.option(
-    '--max-knots',
+    "--max-knots",
     type=int,
     default=30,
     show_default=True,
@@ -74,12 +74,24 @@ from .runtime_benchmark import RuntimeBenchmark
 )
 @click.option(
     "--sampler",
-    type=click.Choice(['nuts', 'mh', 'all'], case_sensitive=False),
-    default='all',
+    type=click.Choice(["nuts", "mh", "all"], case_sensitive=False),
+    default="all",
     show_default=True,
     help="Which samplers to benchmark: 'nuts', 'mh', or 'all'",
 )
-def main(outdir, num_points, reps, plot_only, min_n, max_n, min_knots, max_knots, verbose, n_mcmc, sampler):
+def main(
+    outdir,
+    num_points,
+    reps,
+    plot_only,
+    min_n,
+    max_n,
+    min_knots,
+    max_knots,
+    verbose,
+    n_mcmc,
+    sampler,
+):
     """Benchmark MCMC runtime performance."""
     benchmark = RuntimeBenchmark(outdir, verbose=verbose, n_mcmc=n_mcmc)
 

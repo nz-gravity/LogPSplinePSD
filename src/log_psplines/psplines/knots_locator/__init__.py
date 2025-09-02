@@ -1,1 +1,1 @@
-from .knot_locator import  init_knots
+from .knot_locator import init_knots

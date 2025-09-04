@@ -29,7 +29,7 @@ class LogPSplines:
             raise ValueError("Degree must be larger than diffMatrixOrder.")
         if self.degree not in [0, 1, 2, 3, 4, 5]:
             raise ValueError("Degree must be between 0 and 5.")
-        if self.diffMatrixOrder not in [0, 1, 2]:
+        if self.diffMatrixOrder not in [0, 1, 2, 3, 4]:
             raise ValueError("diffMatrixOrder must be 0, 1, or 2.")
         if self.n_knots < self.degree:
             raise ValueError(f"#knots: {self.n_knots}, degree: {self.degree}")
@@ -46,7 +46,7 @@ class LogPSplines:
         periodogram: Periodogram,
         n_knots: int,
         degree: int,
-        diffMatrixOrder: int = 2,
+        diffMatrixOrder: int = 3,
         parametric_model: jnp.ndarray = None,
         knot_kwargs: dict = {},
     ):

@@ -69,3 +69,11 @@ def get_periodogram(idata: az.InferenceData) -> Periodogram:
             idata["observed_data"]["periodogram"].coords["freq"].values
         ),
     )
+
+
+def get_posterior_psd(idata: az.InferenceData, thin: int = 1) -> jnp.ndarray:
+    spline_model = get_spline_model(idata)
+    weights = get_weights(idata, thin=thin)
+    splines = np.exp(np.array([spline_model(w) for w in weights], dtype=np.float64))
+    quantiles = np.quantile(splines, [0.05, 0.5, 0.95], axis=0)
+    return quantiles  # shape (3, n_freqs)

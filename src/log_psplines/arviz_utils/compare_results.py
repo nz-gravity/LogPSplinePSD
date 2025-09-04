@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Union
 
 import arviz as az
 import matplotlib.pyplot as plt
@@ -9,13 +9,18 @@ from ..plotting.plot_ess_evolution import plot_ess_evolution
 
 
 def compare_results(
-    run1: az.InferenceData,
-    run2: az.InferenceData,
+    run1: Union[az.InferenceData, str],
+    run2: Union[az.InferenceData, str],
     labels: List[str],
     outdir: str,
     colors: List[str] = ["tab:blue", "tab:orange"],
 ):
     os.makedirs(outdir, exist_ok=True)
+
+    if isinstance(run1, str):
+        run1 = az.from_netcdf(run1)
+    if isinstance(run2, str):
+        run2 = az.from_netcdf(run2)
 
     # Ensure both runs have the same variables
     common_vars = set(run1["posterior"].data_vars) & set(

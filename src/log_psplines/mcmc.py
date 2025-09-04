@@ -135,6 +135,9 @@ def run_mcmc(
         knot_kwargs=spline_kwargs.pop("knot_kwargs", {}),
     )
 
+    print("Spline model:", spline_model)
+    print("Sampler config:", config)
+
     # Initialize sampler + run
     sampler_obj = sampler_class(
         periodogram=pdgrm, spline_model=spline_model, config=config

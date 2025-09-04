@@ -90,7 +90,7 @@ def plot_pdgrm(
             )
     ax.set_xlim(plt_data.freqs.min(), plt_data.freqs.max())
     fig.legend(bbox_to_anchor=(1.05, 1.0), loc="upper left", frameon=False)
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Power")
+    ax.set_xlabel("Frequency [Hz]")
+    ax.set_ylabel("PSD [1/Hz]")
     plt.tight_layout()
     return fig, ax

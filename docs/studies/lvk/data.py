@@ -54,5 +54,3 @@ def get_lvk_noise_realisation(sampling_frequency=4096.0, duration=4.0):
         )
 
     return Periodogram(frequencies, np.abs(colored_noise) ** 2)
-
-

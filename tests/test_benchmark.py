@@ -7,17 +7,28 @@ from log_psplines.benchmark.cli import main as benchmark_cli
 def test_default_run(outdir):
     runner = CliRunner()
     outdir = f"{outdir}/out_benchmark"
-    result = runner.invoke(benchmark_cli, [
-        "--outdir", str(outdir),
-        "--num-points", "2",
-        "--reps", "1",
-        "--min-n", "64",
-        "--max-n", "126",
-        "--min-knots", "4",
-        "--max-knots", "5",
-        "--verbose",
-        "--n-mcmc", "50",
-    ])
+    result = runner.invoke(
+        benchmark_cli,
+        [
+            "--outdir",
+            str(outdir),
+            "--num-points",
+            "1",
+            "--reps",
+            "1",
+            "--min-n",
+            "64",
+            "--max-n",
+            "126",
+            "--min-knots",
+            "4",
+            "--max-knots",
+            "5",
+            "--verbose",
+            "--n-mcmc",
+            "50",
+        ],
+    )
 
     if result.exit_code != 0 or "Benchmark complete." not in result.output:
         print("CLI Output:\n", result.output)

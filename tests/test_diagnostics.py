@@ -1,4 +1,5 @@
 import os
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -6,7 +7,6 @@ import scipy
 
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.psd_diagnostics import PSDDiagnostics
-from typing import Tuple
 
 
 def test_plot_whitening_ar2(outdir):
@@ -17,8 +17,15 @@ def test_plot_whitening_ar2(outdir):
 
     # add 0 element to freq, psd, and reference_psd
     freqs = np.concatenate(([0], ar_data.periodogram.freqs))
-    psd = np.concatenate(([ar_data.periodogram.power[0]], np.atleast_1d(ar_data.periodogram.power)))
-    reference_psd = np.concatenate(([ar_data.psd_theoretical[0]], ar_data.psd_theoretical))
+    psd = np.concatenate(
+        (
+            [ar_data.periodogram.power[0]],
+            np.atleast_1d(ar_data.periodogram.power),
+        )
+    )
+    reference_psd = np.concatenate(
+        ([ar_data.psd_theoretical[0]], ar_data.psd_theoretical)
+    )
 
     psd_diag = PSDDiagnostics(
         ts_data=ar_data.ts.y,
@@ -34,17 +41,14 @@ def test_plot_whitening_ar2(outdir):
 
 def test_lvk_psd_diagnostics(outdir):
     from log_psplines.example_datasets.lvk_data import LVKData
+
     outdir = os.path.join(outdir, "out_psd_diagnostics")
     os.makedirs(outdir, exist_ok=True)
 
     lvk_data = LVKData.download_data(
-        detector="L1",
-        gps_start=1126259462,
-        duration=4,
-        fmin=20,
-        fmax=2048
+        detector="L1", gps_start=1126259462, duration=4, fmin=20, fmax=2048
     )
-    lvk_data.plot_psd_analysis(fname=os.path.join(outdir, "lvk_psd_analysis.png"))
+    lvk_data.plot_psd(fname=os.path.join(outdir, "lvk_psd_analysis.png"))
     ref_psd = scipy.signal.medfilt(lvk_data.psd, kernel_size=65)
     ref_psd = np.where(np.isnan(ref_psd), 0, ref_psd)
 
@@ -52,7 +56,6 @@ def test_lvk_psd_diagnostics(outdir):
     freqs = lvk_data.freqs[fmask]
     psd = lvk_data.psd[fmask]
     ref_psd = ref_psd[fmask]
-
 
     psd_diag = PSDDiagnostics(
         ts_data=lvk_data.strain,
@@ -64,4 +67,3 @@ def test_lvk_psd_diagnostics(outdir):
         overlap=0,
     )
     psd_diag.plot_diagnostics(f"{outdir}/lvk_psd_diagostics.png")
-

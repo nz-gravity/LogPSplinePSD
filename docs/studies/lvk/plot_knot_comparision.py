@@ -1,9 +1,9 @@
 import arviz as az
-import numpy as np
-from log_psplines.arviz_utils import compare_results
-from log_psplines.plotting import  plot_pdgrm
 import matplotlib.pyplot as plt
+import numpy as np
 
+from log_psplines.arviz_utils import compare_results
+from log_psplines.plotting import plot_pdgrm
 
 f1 = "out_lvk_mcmc/inference_data.nc"
 f2 = "out_lvk_mcmc_more_knots/inference_data.nc"
@@ -40,9 +40,10 @@ plot_pdgrm(
 ax.set_xscale("linear")
 ax.legend()
 plt.tight_layout()
-fig.savefig("compare_knots.png", transparent=False, bbox_inches="tight", dpi=300)
+fig.savefig(
+    "compare_knots.png", transparent=False, bbox_inches="tight", dpi=300
+)
 # plt.show()
-
 
 
 f3 = "out_lvk_mcmc_nuts/inference_data.nc"
@@ -68,4 +69,6 @@ plot_pdgrm(
 ax.set_xscale("linear")
 # ax.legend()
 plt.tight_layout()
-plt.savefig("compare_nuts_mcmc.png", transparent=False, bbox_inches="tight", dpi=300)
+plt.savefig(
+    "compare_nuts_mcmc.png", transparent=False, bbox_inches="tight", dpi=300
+)

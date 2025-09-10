@@ -291,3 +291,5 @@ cython_debug/
 /docs/comparison_results/
 /docs/nuts_out/
 /docs/mh_out/
+.vscode/
+*venv

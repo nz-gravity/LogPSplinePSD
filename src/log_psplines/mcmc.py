@@ -1,7 +1,7 @@
 import arviz as az
 import jax.numpy as jnp
 
-from .datatypes import Periodogram
+from .datatypes import Periodogram, Timeseries
 from .psplines import LogPSplines
 from .samplers import (
     MetropolisHastingsConfig,

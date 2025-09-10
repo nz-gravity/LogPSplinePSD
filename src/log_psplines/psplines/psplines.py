@@ -38,7 +38,7 @@ class LogPSplines:
         ), "parametric_model must be provided or initialized."
 
     def __repr__(self):
-        return f"LogPSplines(knots={self.n_knots}, degree={self.degree}, n={self.n})"  # , sparsity={self.basis_sparsity:.2f}, penalty_sparsity={self.penalty_sparsity:.2f})"
+        return f"LogPSplines(knots={self.n_knots}, degree={self.degree}, penaltyOrder={self.diffMatrixOrder}, n={self.n})"  # , sparsity={self.basis_sparsity:.2f}, penalty_sparsity={self.penalty_sparsity:.2f})"
 
     @classmethod
     def from_periodogram(

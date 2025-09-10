@@ -3,4 +3,4 @@ root: README.rst
 chapters:
   - file: studies/runtime/runtime.rst
   - file: studies/lvk/lvk.rst
-  - file: studies/lisa/lisa.rst
+  - file: studies/lisa/lisa_demo.ipynb

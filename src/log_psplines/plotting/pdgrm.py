@@ -28,7 +28,7 @@ def plot_pdgrm(
     data_label="Data",
     knot_color=KNOTS_COL,
     show_data=True,
-    figsize=(4, 3)
+    figsize=(4, 3),
 ):
     if idata:
         pdgrm = get_periodogram(idata)
@@ -88,9 +88,13 @@ def plot_pdgrm(
                 color=knot_color,
                 ms=4.5,
             )
+
+    # ensure that left most and right most freqs are shown
+    ax
+
     ax.set_xlim(plt_data.freqs.min(), plt_data.freqs.max())
     fig.legend(bbox_to_anchor=(1.05, 1.0), loc="upper left", frameon=False)
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Power")
+    ax.set_xlabel("Frequency [Hz]")
+    ax.set_ylabel("PSD [1/Hz]")
     plt.tight_layout()
     return fig, ax

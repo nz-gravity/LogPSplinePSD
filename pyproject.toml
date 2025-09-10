@@ -31,7 +31,8 @@ dependencies = [
     "tqdm",
     "numpyro",
     "arviz",
-    "click"
+    "click",
+    "ipywidgets"
 ]
 
 [project.optional-dependencies]

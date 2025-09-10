@@ -168,13 +168,14 @@ def init_knots(
         Array of knot locations normalized to [0, 1]
     """
 
-
     if n_knots < 2:
         raise ValueError(
             "At least two knots are required (min and max frequencies)."
         )
 
-    min_freq, max_freq = float(periodogram.freqs[0]), float(periodogram.freqs[-1])
+    min_freq, max_freq = float(periodogram.freqs[0]), float(
+        periodogram.freqs[-1]
+    )
 
     if n_knots == 2:
         return np.array([0.0, 1.0])
@@ -195,7 +196,9 @@ def init_knots(
 
         elif method == "density":
             # Implement Patricio's quantile-based knot placement method
-            knots = _quantile_based_knots(n_knots, periodogram, parametric_model)
+            knots = _quantile_based_knots(
+                n_knots, periodogram, parametric_model
+            )
 
         elif method == "mixed":
             knots = _mixed_knot_placement(
@@ -225,12 +228,12 @@ def init_knots(
     unique_knots, counts = np.unique(knots, return_counts=True)
     # non_unique_knots = knots[np.isin(knots, knots[counts > 1])]
 
-    if len(unique_knots) < len(knots):
-        # get idx of non-unique knots
-        warnings.warn(
-            f"Some knots were dropped due to duplication. [{len(knots)}->{len(unique_knots)}]. "
-            # f"Non-unique knots: {non_unique_knots}"
-        )
+    # if len(unique_knots) < len(knots):
+    #     # get idx of non-unique knots
+    #     warnings.warn(
+    #         f"Some knots were dropped due to duplication. [{len(knots)}->{len(unique_knots)}]. "
+    #         # f"Non-unique knots: {non_unique_knots}"
+    #     )
 
     return unique_knots
 

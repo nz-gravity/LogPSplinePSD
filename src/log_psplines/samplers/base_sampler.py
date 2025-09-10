@@ -96,8 +96,11 @@ class BaseSampler(ABC):
 
         # Summary statistics
         if self.config.verbose:
-            print("Summary Statistics:")
-            print(az.summary(idata))
+            ess = az.ess(idata)
+            ess_min = ess.to_array().min().values
+            ess_max = ess.to_array().max().values
+            print(f"  ESS min: {ess_min:.1f}, max: {ess_max:.1f}")
+            print(f"  Runtime: {self.runtime:.2f} sec")
 
         if self.config.outdir is not None:
             az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")

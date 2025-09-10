@@ -42,6 +42,7 @@ gw = [
 dev = [
     "pytest",
     "pytest-cov",
+    "pytest-durations",
     "flake8>=5.0.4",
     "black>=22.12.0",
     "black[jupyter]>=22.12.0",

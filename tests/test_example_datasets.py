@@ -4,7 +4,6 @@ from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.lvk_data import LVKData
 
 
-
 def test_ar(outdir):
     fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
     for i, ax in enumerate(axes.flat):
@@ -28,4 +27,4 @@ def test_lvk_data(outdir):
         gps_start=1126259462,
         duration=4,
     )
-    lvk_data.plot_psd_analysis(fname=f"{outdir}/lvk_psd_analysis.png")
+    lvk_data.plot_psd(fname=f"{outdir}/lvk_psd_analysis.png")

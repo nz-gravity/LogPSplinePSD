@@ -1,14 +1,16 @@
 name: Release
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Tests and Coverage"]  # must match the `name:` in ci.yml
+    types:
+      - completed
     branches:
       - main
 
-
 jobs:
-
   release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     concurrency: release
     permissions:
@@ -19,30 +21,42 @@ jobs:
       - uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
-          ref: main       # Replace with your branch
-
+          ref: main
+          
+      - name: Check semantic commit message
+        run: |
+          # Get the commit message from the triggering workflow
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+          COMMIT_MSG=$(git log --format=%s -n 1 $COMMIT_SHA)
+          echo "Commit message: $COMMIT_MSG"
+          
+          # Check if commit message starts with release-worthy semantic prefixes
+          if ! echo "$COMMIT_MSG" | grep -qE "^(feat|fix|perf)(\(.+\))?!?:"; then
+            echo "❌ Non-semantic commit detected: $COMMIT_MSG"
+            echo "Skipping release - commit must start with feat:, fix:, or perf: for release"
+            exit 1
+          fi
+          echo "✅ Semantic commit detected - proceeding with release"
+          
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip' # Enable caching for pip dependencies
-
-
+          cache: 'pip'
+          
       - name: Semantic Version Release
         id: release
-        # Adjust tag with desired version if applicable.
         uses: python-semantic-release/python-semantic-release@v9.12.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           git_committer_name: "github-actions"
           git_committer_email: "actions@users.noreply.github.com"
-
-
+          
       - name: build dist for pypi
         if: steps.release.outputs.released == 'true'
         run: |
           python -m pip install --upgrade build
           python -m build --sdist --wheel --outdir dist/
-
+          
       - name: pypi-publish
         if: steps.release.outputs.released == 'true'
         uses: pypa/gh-action-pypi-publish@v1.12.3

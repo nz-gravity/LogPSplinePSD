@@ -402,13 +402,21 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="lisa-demo">
+  <a target="_blank" href="https://colab.research.google.com/github/nz-gravity/LogPSplinePSD/blob/main/docs/studies/lisa/lisa_demo.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+<section class="tex2jax_ignore mathjax_ignore" id="lisa-demo">
 <h1>LISA demo<a class="headerlink" href="#lisa-demo" title="Link to this heading">#</a></h1>
 <p>In this demo, we grab some simulated data from zenodo and run a simple PSD estimation with P-splines.</p>
 <p><a class="reference external" href="https://zenodo.org/doi/10.5281/zenodo.15698080">https://zenodo.org/doi/10.5281/zenodo.15698080</a> (1 year)</p>
 <p>For faster testing – we use a 10 day version of the file. (downloading the 1 year file may take a while)
 <a class="github reference external" href="https://github.com/nz-gravity/test_data/blob/main/lisa_noise/noise_4a_truncated/data/tdi.h5">nz-gravity/test_data</a></p>
-<div class="cell docutils container">
+<div class="cell tag_hide-input docutils container">
+<details class="admonition hide above-input">
+<summary aria-label="Toggle hidden content">
+<p class="collapsed admonition-title">Show code cell source</p>
+<p class="expanded admonition-title">Hide code cell source</p>
+</summary>
 <div class="cell_input docutils container">
 <div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>%load_ext autoreload
 %autoreload 2
@@ -416,8 +424,14 @@ document.write(`
 </pre></div>
 </div>
 </div>
+</details>
 </div>
-<div class="cell docutils container">
+<div class="cell tag_hide-input docutils container">
+<details class="admonition hide above-input">
+<summary aria-label="Toggle hidden content">
+<p class="collapsed admonition-title">Show code cell source</p>
+<p class="expanded admonition-title">Hide code cell source</p>
+</summary>
 <div class="cell_input docutils container">
 <div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>import os
 import requests
@@ -454,13 +468,19 @@ download(TEN_DAYS, dest_folder=&quot;data&quot;)
 </pre></div>
 </div>
 </div>
+</details>
 <div class="cell_output docutils container">
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>saving to data/tdi.h5
 </pre></div>
 </div>
 </div>
 </div>
-<div class="cell docutils container">
+<div class="cell tag_hide-input docutils container">
+<details class="admonition hide above-input">
+<summary aria-label="Toggle hidden content">
+<p class="collapsed admonition-title">Show code cell source</p>
+<p class="expanded admonition-title">Hide code cell source</p>
+</summary>
 <div class="cell_input docutils container">
 <div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>import dataclasses
 import os
@@ -854,12 +874,13 @@ axes[0].set_title(f&quot;{lisa_data}&quot;);
 </pre></div>
 </div>
 </div>
+</details>
 <div class="cell_output docutils container">
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/tmp/ipykernel_47976/1425886096.py:66: RuntimeWarning: divide by zero encountered in divide
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/tmp/ipykernel_100478/149586724.py:66: RuntimeWarning: divide by zero encountered in divide
   * np.abs(1 / (1 - np.exp(-2j * np.pi * freq / fs))) ** 2
-/tmp/ipykernel_47976/1425886096.py:66: RuntimeWarning: invalid value encountered in divide
+/tmp/ipykernel_100478/149586724.py:66: RuntimeWarning: invalid value encountered in divide
   * np.abs(1 / (1 - np.exp(-2j * np.pi * freq / fs))) ** 2
-/tmp/ipykernel_47976/1425886096.py:180: RuntimeWarning: invalid value encountered in multiply
+/tmp/ipykernel_100478/149586724.py:180: RuntimeWarning: invalid value encountered in multiply
   return tf_testmass * noise_asd
 </pre></div>
 </div>
@@ -910,24 +931,29 @@ results_with_parametric = run_mcmc(
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Metropolis-Hastings with adaptive step sizes [cpu] [1536900715  689864229]
 </pre></div>
 </div>
-<script type="application/vnd.jupyter.widget-view+json">{"version_major": 2, "version_minor": 0, "model_id": "3c3a0587a7c64f71a88f285295629a2b"}</script><div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Sampling completed in 7.39 seconds
+<script type="application/vnd.jupyter.widget-view+json">{"version_major": 2, "version_minor": 0, "model_id": "b92f61c7b09341439e20b33117b32837"}</script><div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Sampling completed in 8.13 seconds
 Final acceptance rate: 0.389 (target: 0.44)
   ESS min: 1.3, max: 1598.1
-  Runtime: 7.39 sec
+  Runtime: 8.13 sec
 Metropolis-Hastings with adaptive step sizes [cpu] [1536900715  689864229]
 </pre></div>
 </div>
-<script type="application/vnd.jupyter.widget-view+json">{"version_major": 2, "version_minor": 0, "model_id": "fe1e3aa2b101402988825ee39c0f5093"}</script><div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Sampling completed in 11.68 seconds
+<script type="application/vnd.jupyter.widget-view+json">{"version_major": 2, "version_minor": 0, "model_id": "7ff83f6db3304631b16b0f04db01708d"}</script><div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Sampling completed in 11.27 seconds
 Final acceptance rate: 0.449 (target: 0.44)
   ESS min: 1.3, max: 1380.1
-  Runtime: 11.68 sec
+  Runtime: 11.27 sec
 </pre></div>
 </div>
 </div>
 </div>
-<div class="cell docutils container">
+<div class="cell tag_hide-input docutils container">
+<details class="admonition hide above-input">
+<summary aria-label="Toggle hidden content">
+<p class="collapsed admonition-title">Show code cell source</p>
+<p class="expanded admonition-title">Hide code cell source</p>
+</summary>
 <div class="cell_input docutils container">
-<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>from log_psplines.arviz_utils.from_arviz import az, get_posterior_ci
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>from log_psplines.arviz_utils.from_arviz import get_posterior_ci
 
 
 def plot_result(idata, show_para: bool = False):
@@ -963,16 +989,31 @@ def plot_result(idata, show_para: bool = False):
     axes[1].set_yscale(&quot;linear&quot;)
     axes[1].set_xlim(left=10**-3)
     axes[1].set_ylim(-1, 1)
-
-
-plot_result(results_no_parametric, show_para=False)
-plot_result(results_with_parametric, show_para=True)
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<p>No parametric model (only splines)</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>plot_result(results_no_parametric, show_para=False)
 </pre></div>
 </div>
 </div>
 <div class="cell_output docutils container">
-<img alt="../../_images/4800d47189003f475840a54665eb1a634bca52c42d9a102da3fc0728c0b17fca.png" src="../../_images/4800d47189003f475840a54665eb1a634bca52c42d9a102da3fc0728c0b17fca.png" />
-<img alt="../../_images/967d114e5007d2f26f930c98da2ab4478d9d6838c0a0fde44b41d97e8e301709.png" src="../../_images/967d114e5007d2f26f930c98da2ab4478d9d6838c0a0fde44b41d97e8e301709.png" />
+<img alt="../../_images/f4e51ea368c5be4c71a4633394225a57f574e73d391fd74d06b03033e349011b.png" src="../../_images/f4e51ea368c5be4c71a4633394225a57f574e73d391fd74d06b03033e349011b.png" />
+</div>
+</div>
+<p>With parametric model (OMS) + spline correction</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>plot_result(results_with_parametric, show_para=True)
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../../_images/839d99fe7e297a88ef6b6be09598308190512f4bb15d6ab40301afe125fdf8c0.png" src="../../_images/839d99fe7e297a88ef6b6be09598308190512f4bb15d6ab40301afe125fdf8c0.png" />
 </div>
 </div>
 </section>

@@ -55,7 +55,17 @@ def unpack_data(
 
         else:  # weights.ndim == 2
             # multiple sets of weights -- CI possible
-            ln_splines = jnp.array([spline_model(w, use_parametric_model) for w in weights])
+
+            if weights.shape[0] > 500:
+                # subsample to speed up
+                idx = np.random.choice(
+                    weights.shape[0], size=500, replace=False
+                )
+                weights = weights[idx]
+
+            ln_splines = jnp.array(
+                [spline_model(w, use_parametric_model) for w in weights]
+            )
 
             if use_uniform_ci:
                 ln_ci = _get_uni_ci(ln_splines)

@@ -18,6 +18,7 @@ def plot_pdgrm(
     show_knots=True,
     use_uniform_ci=True,
     use_parametric_model=True,
+    show_parametric=False,
     freqs=None,
     yscalar=1.0,
     ax=None,
@@ -89,8 +90,14 @@ def plot_pdgrm(
                 ms=4.5,
             )
 
-    # ensure that left most and right most freqs are shown
-    ax
+    if show_parametric:
+        ax.loglog(
+            plt_data.freqs,
+            spline_model.parametric_model * yscalar,
+            label="Parametric",
+            color=model_color,
+            ls="--",
+        )
 
     ax.set_xlim(plt_data.freqs.min(), plt_data.freqs.max())
     fig.legend(bbox_to_anchor=(1.05, 1.0), loc="upper left", frameon=False)

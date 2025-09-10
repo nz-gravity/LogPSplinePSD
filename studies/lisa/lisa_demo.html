@@ -440,8 +440,15 @@ document.write(`
 <p class="expanded admonition-title">Hide code cell source</p>
 </summary>
 <div class="cell_input docutils container">
-<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>import os
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>import dataclasses
+import h5py
+import matplotlib.pyplot as plt
+import numpy as np
+import os
 import requests
+import warnings
+
+warnings.filterwarnings(&quot;ignore&quot;, category=RuntimeWarning)
 
 
 def download(url: str, dest_folder: str):
@@ -466,37 +473,6 @@ def download(url: str, dest_folder: str):
         print(
             &quot;Download failed: status code {}\n{}&quot;.format(r.status_code, r.text)
         )
-
-
-ONE_YEAR = &quot;https://zenodo.org/record/15698080/files/tdi.h5?download=1&quot;
-TEN_DAYS = &quot;https://raw.githubusercontent.com/nz-gravity/test_data/main/lisa_noise/noise_4a_truncated/data/tdi.h5&quot;
-
-download(TEN_DAYS, dest_folder=&quot;data&quot;)
-</pre></div>
-</div>
-</div>
-</details>
-<div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>saving to data/tdi.h5
-</pre></div>
-</div>
-</div>
-</div>
-<div class="cell tag_hide-input docutils container">
-<details class="admonition hide above-input">
-<summary aria-label="Toggle hidden content">
-<p class="collapsed admonition-title">Show code cell source</p>
-<p class="expanded admonition-title">Hide code cell source</p>
-</summary>
-<div class="cell_input docutils container">
-<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>import dataclasses
-import os
-
-import h5py
-import matplotlib.pyplot as plt
-import numpy as np
-
-import numpy as np
 
 
 def testmass_noise_asd(
@@ -749,6 +725,7 @@ class LISAData:
     size: int = dataclasses.field(init=False)
     dt: float = dataclasses.field(init=False)
     fs: float = dataclasses.field(init=False)
+    data: np.ndarray = dataclasses.field(init=False)
     duration: float = dataclasses.field(init=False)
     oms_model: np.ndarray = None
     tm_model: np.ndarray = None
@@ -773,6 +750,7 @@ class LISAData:
         self.total_model = Total_model(
             freq, duration=self.duration, fs=self.fs, **kwargs
         )
+        self.data = np.vstack([self.x2, self.y2, self.z2]).T
 
     @classmethod
     def from_hdf5(cls, filename: str):
@@ -791,9 +769,7 @@ class LISAData:
             stop = key.stop or self.size
             step = key.step or 1
             if start &lt; 0 or stop &gt; self.size or step &lt;= 0:
-                raise ValueError(
-                    f&quot;Cannot truncate to {n}, size is {self.size}.&quot;
-                )
+                raise ValueError(f&quot;Cannot truncate.. size is {self.size}.&quot;)
 
             return LISAData(
                 t=self.t[key],
@@ -812,10 +788,11 @@ class LISAData:
         ):
             freqs = np.fft.rfftfreq(self.size, self.dt)
             psd = (np.abs(np.fft.rfft(data)) ** 2) * self.dt / self.size
-            ax.loglog(freqs[1:], psd[1:], color=&quot;gray&quot;, alpha=0.5, lw=2)
+            ax.loglog(
+                freqs[1:], psd[1:], color=&quot;gray&quot;, alpha=0.5, lw=2, label=label
+            )
             ax.set_ylabel(&quot;PSD [1/Hz]&quot;)
-            # add a text label in the top left corner
-            ax.text(0.05, 0.95, label, transform=ax.transAxes, va=&quot;top&quot;)
+            ax.set_ylim(bottom=10**-21)
 
             if include_model:
                 ax.loglog(
@@ -848,13 +825,13 @@ class LISAData:
         seconds = int(self.duration % 60)
         # only return a sensible unit
         if days &gt; 0:
-            return f&quot;{days}days&quot;
+            return f&quot;{days} days&quot;
         elif hours &gt; 0:
-            return f&quot;{hours}hrs&quot;
+            return f&quot;{hours} hrs&quot;
         elif minutes &gt; 0:
-            return f&quot;{minutes}min&quot;
+            return f&quot;{minutes} min&quot;
         else:
-            return f&quot;{seconds}s&quot;
+            return f&quot;{seconds} s&quot;
 
     def __repr__(self):
         return (
@@ -875,23 +852,22 @@ class LISAData:
             )
 
 
+ONE_YEAR = &quot;https://zenodo.org/record/15698080/files/tdi.h5?download=1&quot;
+TEN_DAYS = &quot;https://raw.githubusercontent.com/nz-gravity/test_data/main/lisa_noise/noise_4a_truncated/data/tdi.h5&quot;
+
+download(TEN_DAYS, dest_folder=&quot;data&quot;)
 lisa_data = LISAData.from_hdf5(&quot;data/tdi.h5&quot;)
 axes = lisa_data.plot_periodograms()
-axes[0].set_title(f&quot;{lisa_data}&quot;);
+axes[0].set_title(f&quot;{lisa_data}&quot;, fontsize=15);
 </pre></div>
 </div>
 </div>
 </details>
 <div class="cell_output docutils container">
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/tmp/ipykernel_100478/149586724.py:66: RuntimeWarning: divide by zero encountered in divide
-  * np.abs(1 / (1 - np.exp(-2j * np.pi * freq / fs))) ** 2
-/tmp/ipykernel_100478/149586724.py:66: RuntimeWarning: invalid value encountered in divide
-  * np.abs(1 / (1 - np.exp(-2j * np.pi * freq / fs))) ** 2
-/tmp/ipykernel_100478/149586724.py:180: RuntimeWarning: invalid value encountered in multiply
-  return tf_testmass * noise_asd
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>saving to data/tdi.h5
 </pre></div>
 </div>
-<img alt="../../_images/c07f7194a4d64314c07355681ec858b4f6768d1160cd546d2487a814be7d6430.png" src="../../_images/c07f7194a4d64314c07355681ec858b4f6768d1160cd546d2487a814be7d6430.png" />
+<img alt="../../_images/c881eaf315060c211813d3b8e01e9fe6a5807049d33243697aa8da2215c677a6.png" src="../../_images/c881eaf315060c211813d3b8e01e9fe6a5807049d33243697aa8da2215c677a6.png" />
 </div>
 </div>
 <div class="cell docutils container">

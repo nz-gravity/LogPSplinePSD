@@ -6,6 +6,9 @@ gravitational wave event data, with particular focus on Power Spectral Density
 (PSD) estimation using P-splines methods and comparison with catalog PSDs.
 """
 
+import jax
+jax.config.update("jax_enable_x64", True)
+
 import argparse
 import glob
 import os
@@ -25,8 +28,7 @@ from log_psplines.arviz_utils import (
 )
 from log_psplines.datatypes import Periodogram
 from log_psplines.mcmc import run_mcmc
-from log_psplines.plotting import plot_pdgrm
-from log_psplines.psplines import LogPSplines
+
 
 # Configuration constants
 DEFAULT_FFT_LENGTH = 4
@@ -354,6 +356,8 @@ def process_detector_data(
                 max_extra_per_peak=10,
                 d=15,
             ),
+            diffMatrixOrder=4,
+            degree=5
         )
 
     # Extract posterior samples and compute quantiles

@@ -9,6 +9,7 @@ from log_psplines.plotting import plot_pdgrm
 
 
 def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
+    idata = None
     for sampler in ["mh", "nuts"]:
         idata = run_mcmc(
             mock_pdgrm,
@@ -42,3 +43,6 @@ def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
         labels=["NUTS", "MH"],
         outdir=f"{outdir}/out_comparison",
     )
+
+    fig = plot_pdgrm(idata=idata, interactive=True)  # test interactive mode
+    fig.write_html(os.path.join(outdir, "test_mcmc_interactive.html"))

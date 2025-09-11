@@ -2,5 +2,5 @@ format: jb-book
 root: README.rst
 chapters:
   - file: studies/runtime/runtime.rst
-  - file: studies/lvk/lvk.rst
+  - file: studies/lvk/lvk_demo.ipynb
   - file: studies/lisa/lisa_demo.ipynb

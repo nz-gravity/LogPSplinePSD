@@ -32,7 +32,8 @@ dependencies = [
     "numpyro",
     "arviz",
     "click",
-    "ipywidgets"
+    "ipywidgets",
+    "plotly"
 ]
 
 [project.optional-dependencies]

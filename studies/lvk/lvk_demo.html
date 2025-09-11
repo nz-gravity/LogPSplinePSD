@@ -1,0 +1,1024 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>LVK Demo &#8212; LogPSplinePSD</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=13237357" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=4a39c7ea"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="../../_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'studies/lvk/lvk_demo';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="LISA demo" href="../lisa/lisa_demo.html" />
+    <link rel="prev" title="Runtime" href="../runtime/runtime.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../README.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/logo.png" class="logo__image only-light" alt="LogPSplinePSD - Home"/>
+    <script>document.write(`<img src="../../_static/logo.png" class="logo__image only-dark" alt="LogPSplinePSD - Home"/>`);</script>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../runtime/runtime.html">Runtime</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">LVK Demo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../lisa/lisa_demo.html">LISA demo</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-launch-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
+    <i class="fas fa-rocket"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://colab.research.google.com/github/nz-gravity/LogPsplinePSD/blob/main/docs/studies/lvk/lvk_demo.ipynb" target="_blank"
+   class="btn btn-sm dropdown-item"
+   title="Launch on Colab"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  
+    <img alt="Colab logo" src="../../_static/images/logo_colab.png">
+  </span>
+<span class="btn__text-container">Colab</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/nz-gravity/LogPsplinePSD" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fstudies/lvk/lvk_demo.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../_sources/studies/lvk/lvk_demo.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>LVK Demo</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulated-lvk-data">Simulated LVK data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-allocation">Knot allocation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gw1500914">GW1500914</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <p>! <a target="_blank" href="https://colab.research.google.com/github/nz-gravity/LogPSplinePSD/tree/main/docs/studies/lvk/lvk_demo.ipynb">
+<img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a></p>
+<section class="tex2jax_ignore mathjax_ignore" id="lvk-demo">
+<h1>LVK Demo<a class="headerlink" href="#lvk-demo" title="Link to this heading">#</a></h1>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>from scipy.signal import freqs
+
+! pip install logPsplinePSD -q
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell tag_hide-input docutils container">
+<details class="admonition hide above-input">
+<summary aria-label="Toggle hidden content">
+<p class="collapsed admonition-title">Show code cell source</p>
+<p class="expanded admonition-title">Hide code cell source</p>
+</summary>
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>%load_ext autoreload
+%autoreload 2
+%matplotlib inline
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<section id="simulated-lvk-data">
+<h2>Simulated LVK data<a class="headerlink" href="#simulated-lvk-data" title="Link to this heading">#</a></h2>
+<div class="cell tag_hide-input docutils container">
+<details class="admonition hide above-input">
+<summary aria-label="Toggle hidden content">
+<p class="collapsed admonition-title">Show code cell source</p>
+<p class="expanded admonition-title">Hide code cell source</p>
+</summary>
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from log_psplines.datatypes import Periodogram, Timeseries
+
+FMIN, FMAX = 15, 1024
+
+
+URL = &quot;https://raw.githubusercontent.com/bilby-dev/bilby/main/bilby/gw/detector/noise_curves/aLIGO_O4_high_asd.txt&quot;
+
+
+def load_lvk_psd() -&gt; Periodogram:
+    df = pd.read_csv(URL, comment=&quot;#&quot;, sep=&quot;\s+&quot;, header=None)
+    freq, asd = df[0].values, df[1].values
+    return Periodogram(freq, asd**2)
+
+
+def create_white_noise(sampling_frequency: float, duration: float):
+    number_of_samples = duration * sampling_frequency
+    number_of_samples = int(np.round(number_of_samples))
+
+    number_of_samples = int(np.round(duration * sampling_frequency))
+    number_of_frequencies = int(np.round(number_of_samples / 2) + 1)
+
+    frequencies = np.linspace(
+        start=0, stop=sampling_frequency / 2, num=number_of_frequencies
+    )
+    norm1 = 0.5 * duration**0.5
+    re1, im1 = np.random.normal(0, norm1, (2, len(frequencies)))
+    white_noise = re1 + 1j * im1
+
+    # set DC and Nyquist = 0
+    white_noise[0] = 0
+    # no Nyquist frequency when N=odd
+    if np.mod(number_of_samples, 2) == 0:
+        white_noise[-1] = 0
+
+    # python: transpose for use with infft
+    white_noise = np.transpose(white_noise)
+    frequencies = np.transpose(frequencies)
+    return white_noise, frequencies
+
+
+def get_lvk_noise_realisation(sampling_frequency=4096.0, duration=32.0):
+    psd = load_lvk_psd()
+    white_noise, frequencies = create_white_noise(sampling_frequency, duration)
+
+    with np.errstate(invalid=&quot;ignore&quot;):
+        colored_noise = (
+            np.interp(frequencies, psd.freqs, psd.power) ** 0.5 * white_noise
+        )
+
+    n_samples = int(sampling_frequency * duration)
+    colored_noise_time = np.fft.irfft(colored_noise, n=n_samples)
+    times = np.arange(n_samples) / sampling_frequency
+    ts = Timeseries(times, colored_noise_time)
+
+    # Compute periodogram from the time series
+    freqs = np.fft.rfftfreq(n_samples, 1 / sampling_frequency)
+    fft_data = np.fft.rfft(colored_noise_time)
+    pdgrm_power = np.abs(fft_data) ** 2
+    pdgrm = Periodogram(freqs[1:-1], pdgrm_power[1:-1])
+    return ts, pdgrm
+
+
+lvk_psd = load_lvk_psd()
+lvk_noise, lvk_pdgrm = get_lvk_noise_realisation()
+
+
+plt.plot(
+    lvk_pdgrm.freqs,
+    (lvk_pdgrm.power),
+    label=&quot;LVK noise realisation&quot;,
+    color=&quot;gray&quot;,
+    alpha=0.5,
+    lw=2,
+)
+plt.loglog(lvk_psd.freqs, lvk_psd.power, &quot;k-&quot;, label=&quot;aLIGO O4 design&quot;, lw=1)
+plt.xlim(FMIN, FMAX)
+plt.xlabel(&quot;Frequency [Hz]&quot;)
+plt.ylabel(&quot;PSD [1/Hz]&quot;);
+</pre></div>
+</div>
+</div>
+</details>
+<div class="cell_output docutils container">
+<img alt="../../_images/560ed2837c52c9542613b9b97af4105accbf05c15544a23f6c9a890df4bd1882.png" src="../../_images/560ed2837c52c9542613b9b97af4105accbf05c15544a23f6c9a890df4bd1882.png" />
+</div>
+</div>
+</section>
+<section id="knot-allocation">
+<h2>Knot allocation<a class="headerlink" href="#knot-allocation" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span># knot allocation
+
+import numpy as np
+import pandas as pd
+from scipy.interpolate import interp1d
+
+
+def extract_peaks(vec, window=9, threshold_factor=1.0):
+    &quot;&quot;&quot;
+    vec: array-like, the periodogram in original scale
+    returns: array with log-peaks, otherwise 0
+    &quot;&quot;&quot;
+    vec = np.asarray(vec)
+    n = len(vec)
+
+    # Rolling median (window size 9, centered)
+    med_psd = (
+        pd.Series(vec)
+        .rolling(window=window, center=True, min_periods=1)
+        .median()
+        .to_numpy()
+    )
+
+    # Power ratio
+    ratio_med = vec / (med_psd + np.finfo(float).eps)
+    log_ratio_med = np.log(ratio_med)
+
+    # Replace NaNs with mean
+    mean_lr = np.nanmean(log_ratio_med)
+    log_ratio_med = np.where(np.isnan(log_ratio_med), mean_lr, log_ratio_med)
+
+    # Threshold = Q3 + 1.5 * (Q3 - Q1)
+    Q1 = np.nanquantile(log_ratio_med, 0.25)
+    Q3 = np.nanquantile(log_ratio_med, 0.75)
+    threshold = (Q3 + 1.5 * (Q3 - Q1)) * threshold_factor
+
+    # Find values greater than threshold
+    out = np.zeros(n)
+    out[log_ratio_med &gt; threshold] = log_ratio_med[log_ratio_med &gt; threshold]
+
+    return out
+
+
+from scipy.signal.windows import gaussian
+
+
+def smooth_peaks(vec, d):
+    &quot;&quot;&quot;
+    Returns the smoothed vector with peaks.
+
+    Parameters
+    ----------
+    vec : array-like, Vector with peaks.
+    d : int, Propagation distance to the left and right.
+    &quot;&quot;&quot;
+    vec = np.asarray(vec)
+    out = vec.copy()
+    n = len(vec)
+
+    # Gaussian decay (like gsignal::gausswin in R)
+    gauss_win = gaussian(2 * d, std=2.5)
+    dec = gauss_win[:d][::-1]  # take first d and reverse
+
+    for i in range(1, d + 1):
+        # propagate to the left
+        aux1 = np.concatenate([vec[i:], np.zeros(i)])
+        # propagate to the right
+        aux2 = np.concatenate([np.zeros(i), vec[: n - i]])
+
+        # apply Gaussian decay
+        aux1 = aux1 * dec[i - 1]
+        aux2 = aux2 * dec[i - 1]
+
+        # update with maximum
+        out = np.maximum(out, aux1)
+        out = np.maximum(out, aux2)
+
+    # Areas between peaks: aassign
+    m0 = np.sum(out) * 0.05  # 5 percent of total peaks
+    n0 = np.count_nonzero(out)  # number of non-zeros
+    if n0 &gt; 0:
+        min_value = m0 / n0
+        out[out &lt;= min_value] = min_value
+
+    return out
+
+
+def knotLoc(vec, k, degree, eqSpaced=False):
+    &quot;&quot;&quot;
+    Compute knot locations for B-spline densities.
+
+    Parameters
+    ----------
+    vec : array-like, Numeric vector containing the smoothed peaks.
+    k : int,  Number of B-spline densities.
+    degree : int
+        Degree of the B-spline densities.
+    eqSpaced : bool, optional (default=False)
+        If True, returns equidistant knots in [0,1].
+
+    Returns
+    -------
+    knots : ndarray
+        Knot positions in [0,1].
+    &quot;&quot;&quot;
+    K = k - degree + 1  # number of internal knots in [0,1]
+    vec = np.asarray(vec)
+
+    if eqSpaced:
+        knots = np.linspace(0, 1, K)
+        return knots
+
+    N = len(vec)
+
+    # Normalized density
+    dens = vec / np.sum(vec)
+    cumf = np.cumsum(dens)
+
+    # Distribution function (maps [0,1] -&gt; [0,1])
+    df = interp1d(
+        np.linspace(0, 1, N),
+        cumf,
+        kind=&quot;linear&quot;,
+        bounds_error=False,
+        fill_value=(0, 1),
+    )
+
+    # Inverse distribution function
+    grid = np.linspace(0, 1, N)
+    dfvec = df(grid)
+    invDf = interp1d(
+        dfvec, grid, kind=&quot;linear&quot;, bounds_error=False, fill_value=np.nan
+    )
+
+    # Internal points (exclude 0 and 1)
+    v = np.linspace(0, 1, K)
+    v = v[1:-1]
+
+    knots = np.concatenate(([0], invDf(v), [1]))
+
+    return knots
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>lvk_std = np.std(lvk_noise.y)
+noise_standardised = (lvk_noise.y - np.mean(lvk_noise.y)) / lvk_std
+freqs = np.fft.rfftfreq(lvk_noise.n, 1 / lvk_noise.fs)
+pdgrm = Periodogram(
+    freqs=freqs, power=np.abs(np.fft.rfft(noise_standardised)) ** 2
+)
+pdgrm = pdgrm.cut(FMIN, FMAX)
+plt.loglog(pdgrm.freqs, pdgrm.power, color=&quot;gray&quot;, alpha=0.5)
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7fa503910f40&gt;]
+</pre></div>
+</div>
+<img alt="../../_images/4dca6382051edc71b43c110341a77c31c49868ce0c064ba05dfa68eff4c1272e.png" src="../../_images/4dca6382051edc71b43c110341a77c31c49868ce0c064ba05dfa68eff4c1272e.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
+
+# 1. Identifying peaks
+aux = extract_peaks(pdgrm.power, window=9, threshold_factor=1.0)
+
+# 2. Smoothed peaks
+r = smooth_peaks(aux, 40)
+
+# 3. Plot identified peaks
+plt.figure(figsize=(8, 4))
+plt.plot(pdgrm.freqs, aux, linestyle=&quot;-&quot;, color=&quot;blue&quot;)
+plt.title(&quot;Identified Peaks&quot;)
+plt.xlabel(&quot;Frequency&quot;)
+plt.ylabel(&quot;log Peaks&quot;)
+plt.show()
+
+# 4. Plot areas to allocate knots (smoothed peaks)
+plt.figure(figsize=(8, 4))
+plt.plot(pdgrm.freqs, r, linestyle=&quot;-&quot;, color=&quot;red&quot;)
+plt.title(&quot;Smoothed peaks&quot;)
+plt.xlabel(&quot;Frequency&quot;)
+plt.ylabel(&quot;Smoothed Peaks&quot;)
+plt.show()
+
+#####################
+### Ploting Knots ###
+#####################
+
+# 1. Compute knots
+k = knotLoc(vec=r, k=100, degree=3)
+maxFreq = np.max(pdgrm.freqs)  # Maximum frequency
+
+# 2. Plot LVK periodogram
+plt.figure(figsize=(10, 4))
+plt.plot(pdgrm.freqs, np.log(pdgrm.power), linestyle=&quot;-&quot;, color=&quot;lightgray&quot;)
+plt.title(&quot;LVK Periodogram&quot;)
+plt.xlabel(&quot;Frequency&quot;)
+plt.ylabel(&quot;Log-periodogram&quot;)
+
+# Red points: knot locations
+plt.scatter(k * maxFreq, np.full_like(k, -35), color=&quot;red&quot;, label=&quot;Knots&quot;)
+
+# 3. Distribution function from smoothed peaks
+N = len(r)
+dens = r / np.sum(r)
+cumf = np.cumsum(dens)
+
+# Interpolation function (distribution function)
+df = interp1d(
+    np.linspace(0, 1, N),
+    cumf,
+    kind=&quot;linear&quot;,
+    bounds_error=False,
+    fill_value=(0, 1),
+)
+
+# 4. Plot areas to allocate knots
+plt.figure(figsize=(10, 4))
+plt.plot(
+    pdgrm.freqs,
+    r / np.max(r),
+    linestyle=&quot;-&quot;,
+    color=&quot;lightgray&quot;,
+    label=&quot;Normalized Smoothed Peaks&quot;,
+)
+
+# Add cumulative distribution (red line)
+plt.plot(
+    pdgrm.freqs,
+    df(np.array(pdgrm.freqs) / 2048),
+    color=&quot;red&quot;,
+    label=&quot;CDF&quot;,
+)
+
+plt.title(&quot;Smoothed peaks &amp; CDF&quot;)
+plt.xlabel(&quot;Frequency&quot;)
+plt.ylabel(&quot;Normalized Peaks / CDF&quot;)
+plt.legend()
+plt.show()
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../../_images/61f159814153bd1ea4eac13ec7d36ee8c4c609c7b14e9e9af132f9f88ca125ac.png" src="../../_images/61f159814153bd1ea4eac13ec7d36ee8c4c609c7b14e9e9af132f9f88ca125ac.png" />
+<img alt="../../_images/65999fbf4fedd018f03d83bb2ada0b1559a85f24398971dfdaa71bcb797f7203.png" src="../../_images/65999fbf4fedd018f03d83bb2ada0b1559a85f24398971dfdaa71bcb797f7203.png" />
+<img alt="../../_images/0406c8b66db640918d041c5f2c556b50c340d5fa3b11520167798e1d7801f1b4.png" src="../../_images/0406c8b66db640918d041c5f2c556b50c340d5fa3b11520167798e1d7801f1b4.png" />
+<img alt="../../_images/1edca4bc4161c62c5342c2a039c822334e1ced2485409608eddcccfc86686852.png" src="../../_images/1edca4bc4161c62c5342c2a039c822334e1ced2485409608eddcccfc86686852.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>from log_psplines.mcmc import run_mcmc
+
+# Run MCMC
+mcmc_results = run_mcmc(
+    pdgrm,
+    n_warmup=1000,
+    n_samples=2000,
+    knot_kwargs=dict(knots=k * maxFreq, degree=3),
+    verbose=True,
+)
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>NUTS sampler [cpu] [ 0 42]
+</pre></div>
+</div>
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>sample: 100%|██████████| 3000/3000 [00:56&lt;00:00, 52.80it/s, 15 steps of size 3.58e-01. acc. prob=0.90] 
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Sampling completed in 58.09 seconds
+  ESS min: 2008.0, max: 4957.8
+  Runtime: 58.09 sec
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span># Plot results
+from log_psplines.plotting import plot_pdgrm
+
+plot_pdgrm(idata=mcmc_results, interactive=True)
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span># This is the current saved LVK knot allocation method in logPsplinePSD
+mcmc_results_v2 = run_mcmc(
+    pdgrm,
+    n_warmup=1000,
+    n_samples=2000,
+    knot_kwargs=dict(degree=3, method=&quot;lvk&quot;),
+    verbose=True,
+)
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Found 220 spectral line regions using threshold = 8.36
+Adaptive binning (d=25): 9 peak regions, 10 zero regions
+Generated 119 adaptive knots (15.0-1024.0 Hz)
+NUTS sampler [cpu] [ 0 42]
+</pre></div>
+</div>
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>sample: 100%|██████████| 3000/3000 [02:01&lt;00:00, 24.62it/s, 15 steps of size 3.44e-01. acc. prob=0.88] 
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Sampling completed in 122.49 seconds
+  ESS min: 1285.8, max: 4302.8
+  Runtime: 122.49 sec
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>from log_psplines.plotting import plot_pdgrm
+
+plot_pdgrm(idata=mcmc_results_v2, interactive=True)
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+</div>
+</div>
+</section>
+<section id="gw1500914">
+<h2>GW1500914<a class="headerlink" href="#gw1500914" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span># TODO
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./studies/lvk"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../runtime/runtime.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Runtime</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../lisa/lisa_demo.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">LISA demo</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulated-lvk-data">Simulated LVK data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-allocation">Knot allocation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gw1500914">GW1500914</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By NZ Gravity
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2025.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

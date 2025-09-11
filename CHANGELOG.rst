@@ -5,6 +5,38 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.13:
+
+v0.0.13 (2025-09-11)
+====================
+
+Bug Fixes
+---------
+
+* fix: plotly plotting (`dca5de4`_)
+
+Unknown
+-------
+
+* Add patricio's knot allocation
+
+Co-authored-by: Patricio Maturana-Russel <pmat747@users.noreply.github.com> (`7022e96`_)
+
+* Improve type hints (`e6b7025`_)
+
+* Add patricio's knot allocation
+
+Co-authored-by: Patricio Maturana-Russel <pmat747@users.noreply.github.com> (`9341b76`_)
+
+* Merge branch 'main' of github.com:avivajpeyi/LogPSplinePSD into main (`0700b40`_)
+
+.. _dca5de4: https://github.com/nz-gravity/LogPSplinePSD/commit/dca5de44934547331f0b20bb9ad2101b2a180d96
+.. _7022e96: https://github.com/nz-gravity/LogPSplinePSD/commit/7022e9642e89c8c73d1bc1f78d9adafece5ebee4
+.. _e6b7025: https://github.com/nz-gravity/LogPSplinePSD/commit/e6b7025f55d00a2eb4d3cbeed8e559ae7448b1fc
+.. _9341b76: https://github.com/nz-gravity/LogPSplinePSD/commit/9341b7654c37fd682dbc0be296af5562e4c06852
+.. _0700b40: https://github.com/nz-gravity/LogPSplinePSD/commit/0700b4089b7e472bc9be8ac88f1fe1c47a90f095
+
+
 .. _changelog-v0.0.12:
 
 v0.0.12 (2025-09-10)
@@ -15,8 +47,15 @@ Bug Fixes
 
 * fix: adjust default settings (`9123429`_)
 
+Chores
+------
+
+* chore(release): 0.0.12 (`de17f2b`_)
+
 Documentation
 -------------
+
+* docs: add plots (`d91ff0a`_)
 
 * docs: add colab button (`786a454`_)
 
@@ -30,6 +69,8 @@ Unknown
 * Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`6f87c63`_)
 
 .. _9123429: https://github.com/nz-gravity/LogPSplinePSD/commit/9123429b2eeb98d3338b6cfbe210e25114ce0e52
+.. _de17f2b: https://github.com/nz-gravity/LogPSplinePSD/commit/de17f2bd5f6e6d577e3b5517a3dbf07a16703bfe
+.. _d91ff0a: https://github.com/nz-gravity/LogPSplinePSD/commit/d91ff0aebc229c214df373d14ce31e21d38fb70f
 .. _786a454: https://github.com/nz-gravity/LogPSplinePSD/commit/786a454a6fa652f7565b1afe65b7d21c43b2c773
 .. _d0f834f: https://github.com/nz-gravity/LogPSplinePSD/commit/d0f834f046821813c7ca62a88ec2c8038ebb167e
 .. _6eb09f0: https://github.com/nz-gravity/LogPSplinePSD/commit/6eb09f06bb28e4c74a4f9c5b694afc93093599f2

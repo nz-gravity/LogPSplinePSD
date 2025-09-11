@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from gwosc import datasets as gwosc_datasets
 from gwpy.frequencyseries import FrequencySeries
 from gwpy.timeseries import TimeSeries
 
@@ -27,6 +28,33 @@ class LVKData:
         psd = psd.crop(fmin, fmax)
         return cls(
             strain=strain.value, psd=psd.value, freqs=psd.frequencies.value
+        )
+
+    @classmethod
+    def from_event(
+        cls,
+        event_name: str,
+        detector: str = "H1",
+        event_duration: int = 4,
+        psd_duration: int = 4,
+        fmin: float = 20,
+        fmax: float = 2048,
+    ) -> "LVKData":
+        try:
+            event_gps = gwosc_datasets.event_gps(event_name)
+        except ValueError:
+            avail_events = gwosc_datasets.find_datasets()
+            raise ValueError(
+                f"Event {event_name} not found in GWOSC datasets. Avail datasets: {avail_events}"
+            )
+
+        gps_start = event_gps - event_duration - psd_duration
+        return cls.download_data(
+            detector=detector,
+            gps_start=gps_start,
+            duration=psd_duration,
+            fmin=fmin,
+            fmax=fmax,
         )
 
     def plot_psd(self, fname: str = None) -> None:

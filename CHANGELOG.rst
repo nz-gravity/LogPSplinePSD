@@ -5,6 +5,78 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.0.13:
+
+v0.0.13 (2025-09-11)
+====================
+
+Bug Fixes
+---------
+
+* fix: plotly plotting (`dca5de4`_)
+
+Unknown
+-------
+
+* Add patricio's knot allocation
+
+Co-authored-by: Patricio Maturana-Russel <pmat747@users.noreply.github.com> (`7022e96`_)
+
+* Improve type hints (`e6b7025`_)
+
+* Add patricio's knot allocation
+
+Co-authored-by: Patricio Maturana-Russel <pmat747@users.noreply.github.com> (`9341b76`_)
+
+* Merge branch 'main' of github.com:avivajpeyi/LogPSplinePSD into main (`0700b40`_)
+
+.. _dca5de4: https://github.com/nz-gravity/LogPSplinePSD/commit/dca5de44934547331f0b20bb9ad2101b2a180d96
+.. _7022e96: https://github.com/nz-gravity/LogPSplinePSD/commit/7022e9642e89c8c73d1bc1f78d9adafece5ebee4
+.. _e6b7025: https://github.com/nz-gravity/LogPSplinePSD/commit/e6b7025f55d00a2eb4d3cbeed8e559ae7448b1fc
+.. _9341b76: https://github.com/nz-gravity/LogPSplinePSD/commit/9341b7654c37fd682dbc0be296af5562e4c06852
+.. _0700b40: https://github.com/nz-gravity/LogPSplinePSD/commit/0700b4089b7e472bc9be8ac88f1fe1c47a90f095
+
+
+.. _changelog-v0.0.12:
+
+v0.0.12 (2025-09-10)
+====================
+
+Bug Fixes
+---------
+
+* fix: adjust default settings (`9123429`_)
+
+Chores
+------
+
+* chore(release): 0.0.12 (`de17f2b`_)
+
+Documentation
+-------------
+
+* docs: add plots (`d91ff0a`_)
+
+* docs: add colab button (`786a454`_)
+
+* docs: add some notes for commits (`d0f834f`_)
+
+Unknown
+-------
+
+* fix conflicts (`6eb09f0`_)
+
+* Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`6f87c63`_)
+
+.. _9123429: https://github.com/nz-gravity/LogPSplinePSD/commit/9123429b2eeb98d3338b6cfbe210e25114ce0e52
+.. _de17f2b: https://github.com/nz-gravity/LogPSplinePSD/commit/de17f2bd5f6e6d577e3b5517a3dbf07a16703bfe
+.. _d91ff0a: https://github.com/nz-gravity/LogPSplinePSD/commit/d91ff0aebc229c214df373d14ce31e21d38fb70f
+.. _786a454: https://github.com/nz-gravity/LogPSplinePSD/commit/786a454a6fa652f7565b1afe65b7d21c43b2c773
+.. _d0f834f: https://github.com/nz-gravity/LogPSplinePSD/commit/d0f834f046821813c7ca62a88ec2c8038ebb167e
+.. _6eb09f0: https://github.com/nz-gravity/LogPSplinePSD/commit/6eb09f06bb28e4c74a4f9c5b694afc93093599f2
+.. _6f87c63: https://github.com/nz-gravity/LogPSplinePSD/commit/6f87c638c0d5d5c4e20369c8354bf359796c7489
+
+
 .. _changelog-v0.0.11:
 
 v0.0.11 (2025-09-02)
@@ -14,6 +86,16 @@ Bug Fixes
 ---------
 
 * fix: refactor line-locator name to lvk-allocator (`35f4c30`_)
+
+Chores
+------
+
+* chore(release): 0.0.11 (`156d8ff`_)
+
+Continuous Integration
+----------------------
+
+* ci: update pypi to only release for specific tags (`21cf551`_)
 
 Unknown
 -------
@@ -25,6 +107,8 @@ Unknown
 * Merge branch 'main' of github.com:nz-gravity/LogPSplinePSD (`97bd97b`_)
 
 .. _35f4c30: https://github.com/nz-gravity/LogPSplinePSD/commit/35f4c307d98c2c6406fd155a17655c776ce25a43
+.. _156d8ff: https://github.com/nz-gravity/LogPSplinePSD/commit/156d8ff8bf6567829760c1e55ddd8ff13eaaff76
+.. _21cf551: https://github.com/nz-gravity/LogPSplinePSD/commit/21cf551f7c2a986932eaa3081114b39e5a438776
 .. _ca62dfb: https://github.com/nz-gravity/LogPSplinePSD/commit/ca62dfb889af5cb20fe938a7046bf4c1c4aa522a
 .. _c53b3da: https://github.com/nz-gravity/LogPSplinePSD/commit/c53b3da594acd8bc8e53a934cbf7ac72effd8a6b
 .. _97bd97b: https://github.com/nz-gravity/LogPSplinePSD/commit/97bd97b55c28a3683e5674c428ea0e26e8e9f74a
@@ -40,6 +124,8 @@ Bug Fixes
 
 * fix: LVK knot allocation fix (`6ffa886`_)
 
+* fix: made plotting changes (`4e110d0`_)
+
 Chores
 ------
 
@@ -50,9 +136,16 @@ Unknown
 
 * pypi onl after pytest passes (`48b923f`_)
 
+* add LVK allocation (`9f93242`_)
+
+* qol changes (`83cdaa4`_)
+
 .. _6ffa886: https://github.com/nz-gravity/LogPSplinePSD/commit/6ffa88680cfc2b297a99eaba87c1a471df668af5
+.. _4e110d0: https://github.com/nz-gravity/LogPSplinePSD/commit/4e110d06660a8624f7da3304e09045536c341eb1
 .. _82bc78c: https://github.com/nz-gravity/LogPSplinePSD/commit/82bc78c6a4feab3eeb5cc31d44ebb93fcf1e4a13
 .. _48b923f: https://github.com/nz-gravity/LogPSplinePSD/commit/48b923f1ed813cc47b980a8af9a6f6a201c74be4
+.. _9f93242: https://github.com/nz-gravity/LogPSplinePSD/commit/9f932424ab62aae038cb99ab770e2488596a648a
+.. _83cdaa4: https://github.com/nz-gravity/LogPSplinePSD/commit/83cdaa44696d18430d7f7e2371f302c32ca18b66
 
 
 .. _changelog-v0.0.9:
@@ -73,8 +166,6 @@ Chores
 Unknown
 -------
 
-* add LVK allocation (`9f93242`_)
-
 * add more tests for PSD diagnostics (`55a94d3`_)
 
 * add: add LVK code testing (`dfa0c3d`_)
@@ -89,7 +180,6 @@ Unknown
 
 .. _435ca66: https://github.com/nz-gravity/LogPSplinePSD/commit/435ca666329345feb295eb23a16b962fb57120e0
 .. _a94ef60: https://github.com/nz-gravity/LogPSplinePSD/commit/a94ef60984fe1f441f884563498288d1fbf0669f
-.. _9f93242: https://github.com/nz-gravity/LogPSplinePSD/commit/9f932424ab62aae038cb99ab770e2488596a648a
 .. _55a94d3: https://github.com/nz-gravity/LogPSplinePSD/commit/55a94d39a9c928398ae7c0995ccd54ba7de88838
 .. _dfa0c3d: https://github.com/nz-gravity/LogPSplinePSD/commit/dfa0c3d535b54a752099a35fe21b515422e9d08c
 .. _085bc80: https://github.com/nz-gravity/LogPSplinePSD/commit/085bc80c4718b722b4aa487fa980f586b790db7b

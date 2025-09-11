@@ -31,12 +31,15 @@ dependencies = [
     "tqdm",
     "numpyro",
     "arviz",
-    "click"
+    "click",
+    "ipywidgets",
+    "plotly",
 ]
 
 [project.optional-dependencies]
 gw = [
     "gwpy>=1.3.0",
+    "gwosc",
 ]
 dev = [
     "pytest",

@@ -1,11 +1,14 @@
 """Convert inference results to ArviZ InferenceData format."""
 
+import warnings
 from dataclasses import asdict
 from typing import Any, Dict
 
 import arviz as az
 import numpy as np
 from xarray import DataArray, Dataset
+
+warnings.filterwarnings("ignore", module="arviz")
 
 
 def results_to_arviz(

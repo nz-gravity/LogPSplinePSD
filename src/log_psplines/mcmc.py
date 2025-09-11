@@ -1,5 +1,8 @@
+from typing import Literal
+
 import arviz as az
 import jax.numpy as jnp
+from typing_extensions import Unpack
 
 from .datatypes import Periodogram, Timeseries
 from .psplines import LogPSplines
@@ -9,6 +12,7 @@ from .samplers import (
     NUTSConfig,
     NUTSSampler,
 )
+from .types import MHKwargs, NUTSKwargs, SamplerKwargs, SplineKwargs
 
 
 def run_mcmc(
@@ -17,7 +21,12 @@ def run_mcmc(
     sampler: str = "nuts",
     n_samples: int = 1000,
     n_warmup: int = 500,
-    **kwgs,
+    **kwgs: (
+        Unpack[NUTSKwargs]
+        | Unpack[MHKwargs]
+        | Unpack[SplineKwargs]
+        | Unpack[SamplerKwargs]
+    ),
 ) -> az.InferenceData:
     """
     MCMC sampling with log P-splines.

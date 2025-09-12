@@ -17,7 +17,7 @@ def get_spline_model(idata: az.InferenceData) -> LogPSplines:
     basis = jnp.array(dataset["basis"].values)
     penalty_matrix = jnp.array(dataset["penalty_matrix"].values)
     parametric_model = jnp.array(
-        dataset.get("parametric_model", jnp.ones(n)).values
+        dataset.get("parametric_model", jnp.ones(n)).values # type: ignore
     )
 
     return LogPSplines(

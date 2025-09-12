@@ -9,6 +9,7 @@ import numpy as np
 from spectrum import pyule
 from log_psplines.arviz_utils.compare_results import compare_results
 import jax
+import morphz
 jax.config.update("jax_enable_x64", True)
 
 

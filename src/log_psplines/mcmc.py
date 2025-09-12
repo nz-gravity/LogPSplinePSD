@@ -1,4 +1,6 @@
 from typing import Literal
+from typing import get_type_hints
+from typing_extensions import get_args
 
 import arviz as az
 import jax.numpy as jnp
@@ -29,61 +31,110 @@ def run_mcmc(
     ),
 ) -> az.InferenceData:
     """
-    MCMC sampling with log P-splines.
+    Bayesian spectral estimation using MCMC sampling with log P-splines.
+
+    Performs non-parametric Bayesian inference of power spectral densities using 
+    penalized B-spline models. Particularly useful for gravitational wave data 
+    analysis where smooth spectral estimates are needed while preserving sharp 
+    spectral features.
 
     Parameters
     ----------
     pdgrm : Periodogram
-        Input periodogram data
-    parametric_model : jnp.ndarray, optional
-        Parametric model component
-    n_samples : int
-        Number of samples to collect
-    n_warmup : int
-        Number of warmup iterations
-    sampler : str
-        Sampler type: 'nuts' or 'metropolis' (or 'mh')
-    **kwgs
-        Additional arguments passed to sampler:
-
-        For NUTS:
-        - chains: int = 1
-        - target_accept_prob: float = 0.8
-        - max_tree_depth: int = 10
-        - alpha_phi, beta_phi, alpha_delta, beta_delta: float
-        - rng_key: int = 42
-        - verbose: bool = True
-
-        For Metropolis-Hastings:
-        - target_accept_rate: float = 0.44
-        - adaptation_window: int = 50
-        - adaptation_start: int = 100
-        - step_size_factor: float = 1.1
-        - min_step_size, max_step_size: float
-        - alpha_phi, beta_phi, alpha_delta, beta_delta: float
-        - rng_key: int = 42
-        - verbose: bool = True
-
-        For spline model:
-        - n_knots: int = 10
-        - degree: int = 3
-        - diffMatrixOrder: int = 2
+        Input periodogram data, typically from gravitational wave strain 
+        measurements or detector noise characterization
+    parametric_model : jnp.ndarray, optional, default=None
+        Known parametric component to subtract (e.g., instrumental lines,
+        astrophysical templates). Must match periodogram frequency grid
+    sampler : {'nuts', 'mh'}, default='nuts'
+        MCMC sampler algorithm:
+        
+        - 'nuts': No-U-Turn Sampler (efficient for smooth posteriors)
+        - 'mh': Metropolis-Hastings (robust for complex/multimodal posteriors)
+        
+    n_samples : int, default=1000
+        Number of posterior samples to collect after warmup phase
+    n_warmup : int, default=500
+        Number of warmup iterations for sampler adaptation and burn-in
+    **kwgs : TypedDict parameters
+        Configuration parameters from :class:`NUTSKwargs`, :class:`MHKwargs`, 
+        :class:`SplineKwargs`, and :class:`SamplerKwargs`. Key parameters include:
+        
+        **Spline model**: ``n_knots`` (default=10), ``degree`` (default=3)
+        **NUTS**: ``target_accept_prob`` (default=0.8), ``max_tree_depth`` (default=10)  
+        **MH**: ``target_accept_rate`` (default=0.44), ``adaptation_window`` (default=50)
+        **Priors**: ``alpha_phi``, ``beta_phi`` (default=1.0), ``alpha_delta``, ``beta_delta`` (default=1e-4)
 
     Returns
     -------
     az.InferenceData
-        ArviZ inference data object containing samples and diagnostics
+        ArviZ InferenceData object containing:
+        
+        - Posterior samples for spline coefficients and smoothing parameters
+        - MCMC diagnostics (R-hat, ESS, divergences, energy statistics)
+        - Log-likelihood traces and model comparison metrics
+        - Reconstructed power spectral density samples
+
+    Notes
+    -----
+    The log P-spline approach models the log power spectral density as a smooth
+    function using B-spline basis functions with a roughness penalty. This provides
+    flexible spectral estimation while avoiding overfitting through automatic
+    smoothness selection via the hierarchical Bayesian framework.
+
+    For gravitational wave applications, this method excels at:
+    - Noise power spectral density estimation for detector characterization
+    - Non-parametric background estimation for transient searches  
+    - Spectral line identification and characterization
+    - Model-independent spectral reconstruction
 
     Examples
     --------
-    # NUTS sampling (default)
-    idata = run_mcmc(pdgrm, n_samples=1000, n_warmup=500)
+    Basic spectral estimation with default NUTS sampler:
 
-    # Metropolis-Hastings sampling
-    idata = run_mcmc(pdgrm, sampler='metropolis', target_accept_rate=0.5)
+    >>> idata = run_mcmc(pdgrm, n_samples=2000, n_warmup=1000)
 
-    # With custom spline configuration
-    idata = run_mcmc(pdgrm, sampler='nuts', n_knots=15, degree=3, chains=2)
+    High-resolution analysis for detecting narrow spectral features:
+
+    >>> idata = run_mcmc(
+    ...     pdgrm, 
+    ...     n_knots=20, 
+    ...     degree=3,
+    ...     target_accept_prob=0.9,
+    ...     n_samples=3000
+    ... )
+
+    Robust sampling with Metropolis-Hastings for difficult posteriors:
+
+    >>> idata = run_mcmc(
+    ...     pdgrm, 
+    ...     sampler='mh',
+    ...     target_accept_rate=0.44,
+    ...     adaptation_window=100,
+    ...     n_samples=5000
+    ... )
+
+    Analysis with known parametric component removal:
+
+    >>> # Subtract known 60 Hz line and harmonics
+    >>> template = create_line_template(frequencies, [60, 120, 180])
+    >>> idata = run_mcmc(pdgrm, parametric_model=template)
+
+    Custom prior specification for strong smoothing:
+
+    >>> idata = run_mcmc(
+    ...     pdgrm,
+    ...     alpha_delta=1e-2,  # Stronger smoothing prior
+    ...     beta_delta=1e-2,
+    ...     n_knots=15
+    ... )
+
+    See Also
+    --------
+    NUTSKwargs : NUTS sampler configuration parameters
+    MHKwargs : Metropolis-Hastings sampler configuration  
+    SplineKwargs : P-spline model configuration
+    SamplerKwargs : Common sampler parameters
     """
 
     # Extract spline model kwargs

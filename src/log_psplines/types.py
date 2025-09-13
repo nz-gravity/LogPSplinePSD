@@ -10,6 +10,7 @@ class SamplerKwargs(TypedDict, total=False):
     rng_key: int
     verbose: bool
     outdir: Optional[str]
+    compute_lnz: bool
 
 
 class NUTSKwargs(SamplerKwargs, total=False):

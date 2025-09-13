@@ -1,12 +1,16 @@
 import time
 from dataclasses import dataclass
+from typing import Callable, Tuple, Optional
+import tempfile
 
 import arviz as az
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
-from numpyro.infer.util import init_to_value
+from numpyro.infer.util import init_to_value, log_density
+import morphZ
+import numpy as np
 
 from ..datatypes import Periodogram
 from ..psplines import LogPSplines
@@ -21,14 +25,14 @@ class NUTSConfig(SamplerConfig):
 
 
 def bayesian_model(
-    log_pdgrm: jnp.ndarray,
-    lnspline_basis: jnp.ndarray,
-    penalty_matrix: jnp.ndarray,
-    ln_parametric: jnp.ndarray,
-    alpha_phi,
-    beta_phi,
-    alpha_delta,
-    beta_delta,
+        log_pdgrm: jnp.ndarray,
+        lnspline_basis: jnp.ndarray,
+        penalty_matrix: jnp.ndarray,
+        ln_parametric: jnp.ndarray,
+        alpha_phi,
+        beta_phi,
+        alpha_delta,
+        beta_delta,
 ):
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
     delta = numpyro.sample("delta", delta_dist)
@@ -43,20 +47,21 @@ def bayesian_model(
     # Add a custom factor for the prior p(v | phi, delta) ~ MVN(0, (phi*P)^-1)
     wPw = jnp.dot(w, jnp.dot(penalty_matrix, w))
     log_prior_v = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
+    lnl = log_likelihood(w, log_pdgrm, lnspline_basis, ln_parametric)
+
     numpyro.factor("ln_prior", log_prior_v)
-    numpyro.factor(
-        "ln_likelihood",
-        log_likelihood(w, log_pdgrm, lnspline_basis, ln_parametric),
-    )
+    numpyro.factor("ln_likelihood", lnl)
+    # save log posterior for diagnostics
+    numpyro.deterministic("lp", log_prior_v + lnl)
 
 
 class NUTSSampler(BaseSampler):
 
     def __init__(
-        self,
-        periodogram: Periodogram,
-        spline_model: LogPSplines,
-        config: NUTSConfig = None,
+            self,
+            periodogram: Periodogram,
+            spline_model: LogPSplines,
+            config: NUTSConfig = None,
     ):
         if config is None:
             config = NUTSConfig()
@@ -64,10 +69,10 @@ class NUTSSampler(BaseSampler):
         self.config = config  # type: NUTSConfig
 
     def sample(
-        self,
-        n_samples: int,
-        n_warmup: int = 500,
-        **kwargs,
+            self,
+            n_samples: int,
+            n_warmup: int = 500,
+            **kwargs,
     ) -> az.InferenceData:
         # Initialize starting values
         delta_0 = self.config.alpha_delta / self.config.beta_delta
@@ -118,4 +123,53 @@ class NUTSSampler(BaseSampler):
 
         samples = mcmc.get_samples()
         stats = mcmc.get_extra_fields()
+        stats['lp'] = samples.pop('lp')
         return self.to_arviz(samples, stats)
+
+    @property
+    def _logp_kwargs(self):
+        return dict(
+            log_pdgrm=self.log_pdgrm,
+            lnspline_basis=self.basis_matrix,
+            penalty_matrix=self.penalty_matrix,
+            ln_parametric=self.log_parametric,
+            alpha_phi=self.config.alpha_phi,
+            beta_phi=self.config.beta_phi,
+            alpha_delta=self.config.alpha_delta,
+            beta_delta=self.config.beta_delta,
+        )
+
+    def _get_lnz(self, samples, sample_stats) -> Tuple[float, float]:
+        if not self.config.compute_lnz:
+            return np.nan, np.nan
+        # Prepare posterior samples and log-posterior for evidence calculation
+        posterior_samples = jnp.concatenate([
+            samples["weights"],
+            samples["phi"][:, None],
+            samples["delta"][:, None]
+        ], axis=1)
+        lposterior = sample_stats["lp"]
+
+        def log_posterior_fn(params):
+            weights = params[:self.n_weights]
+            phi = params[self.n_weights]
+            delta = params[self.n_weights + 1]
+            param_dict = {
+                "weights": weights,
+                "phi": phi,
+                "delta": delta,
+            }
+            log_prob, _ = numpyro.infer.util.log_density(
+                bayesian_model, (), self._logp_kwargs, param_dict
+            )
+            return log_prob
+
+        lnz_res = morphZ.evidence(
+            posterior_samples,
+            lposterior,
+            log_posterior_fn,
+            morph_type='pair',
+            kde_bw="cv_iso",
+            output_path=tempfile.gettempdir()
+        )[0]
+        return float(lnz_res.lnz), float(lnz_res.uncertainty)

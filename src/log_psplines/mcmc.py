@@ -153,6 +153,7 @@ def run_mcmc(
         rng_key=kwgs.pop("rng_key", 42),
         verbose=kwgs.pop("verbose", True),
         outdir=kwgs.pop("outdir", None),
+        compute_lnz=kwgs.pop("compute_lnz", False),
     )
 
     if sampler == "nuts":

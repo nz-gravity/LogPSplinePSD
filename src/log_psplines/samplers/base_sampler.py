@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import arviz as az
 import jax
@@ -37,6 +37,7 @@ class SamplerConfig:
     rng_key: int = 42
     verbose: bool = True
     outdir: str = None
+    compute_lnz: bool = False  # Optional Lnz computation
 
     def __post_init__(self):
         if self.outdir is not None:
@@ -79,9 +80,21 @@ class BaseSampler(ABC):
     ) -> az.InferenceData:
         pass
 
+    @property
+    @abstractmethod
+    def _logp_kwargs(self) -> Dict[str, Any]:
+        """Return a dictionary of keyword arguments required for log probability computation."""
+        pass
+
+    @abstractmethod
+    def _get_lnz(self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]) -> Tuple[float, float]:
+        """Extract the log normalizing constant (lnz) from the samples and sample statistics."""
+        pass
+
     def to_arviz(
         self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
     ) -> az.InferenceData:
+        lnz, lnz_err = self._get_lnz(samples, sample_stats)
         idata = results_to_arviz(
             samples=samples,
             sample_stats=sample_stats,
@@ -91,6 +104,8 @@ class BaseSampler(ABC):
             attributes=dict(
                 device=str(self.device),
                 runtime=self.runtime,
+                lnz=lnz,
+                lnz_err=lnz_err,
             ),
         )
 
@@ -100,7 +115,8 @@ class BaseSampler(ABC):
             ess_min = ess.to_array().min().values
             ess_max = ess.to_array().max().values
             print(f"  ESS min: {ess_min:.1f}, max: {ess_max:.1f}")
-            print(f"  Runtime: {self.runtime:.2f} sec")
+            if not (np.isnan(lnz) or np.isnan(lnz_err)):
+                print(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
 
         if self.config.outdir is not None:
             az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")

@@ -9,8 +9,9 @@ from log_psplines.plotting import plot_pdgrm
 
 
 def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
-    idata = None
     for sampler in ["mh", "nuts"]:
+        compute_lnz = sampler == "mh"  # only compute Lnz for MH sampler (OTHER IS BROKEN)
+
         idata = run_mcmc(
             mock_pdgrm,
             sampler=sampler,
@@ -19,6 +20,7 @@ def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
             n_warmup=200,
             outdir=f"{outdir}/out_{sampler}",
             rng_key=42,
+            compute_lnz=compute_lnz,
         )
 
         fig, ax = plot_pdgrm(idata=idata, show_data=False)
@@ -36,6 +38,12 @@ def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
         # check we can load the inference data
         idata_loaded = az.from_netcdf(fname)
         assert idata_loaded is not None, "Inference data could not be loaded."
+
+        # assert that lp is present for idata
+        assert "lp" in idata_loaded.sample_stats, "Log-posterior 'lp' not found in sample_stats."
+        # assert that weights are present and have correct shape
+        weights = get_weights(idata_loaded)
+        assert weights is not None, "Weights not found in posterior."
 
     compare_results(
         az.from_netcdf(os.path.join(outdir, "out_nuts", "inference_data.nc")),

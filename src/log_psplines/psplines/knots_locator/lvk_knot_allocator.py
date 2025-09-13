@@ -2,7 +2,6 @@ from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal.windows import gaussian
 
@@ -175,11 +174,21 @@ class LvkKnotAllocator:
             raise RuntimeError("Allocator not initialized")
         regions = list(self.bin_regions)
         if len(regions) == 0:
-            self.knots_locations = np.array([0.0, 1.0])
+            # Only endpoints, snap to closest grid values
+            left = float(self.freqs[0])
+            right = float(self.freqs[-1])
+            knots_hz = [left, right]
+            norm = (np.array(knots_hz) - self.fmin) / (self.fmax - self.fmin)
+            self.knots_locations = np.sort(norm)
             return self.knots_locations
 
         knots_hz: List[float] = []
         N = len(self.freqs)
+
+        def snap_to_grid(val: float) -> float:
+            # Snap a value to the closest value in self.freqs
+            idx = np.argmin(np.abs(self.freqs - val))
+            return float(self.freqs[idx])
 
         for start_idx, end_idx, region_type in regions:
             s = max(0, min(int(start_idx), N - 1))
@@ -187,8 +196,8 @@ class LvkKnotAllocator:
 
             if region_type == "zero":
                 # For zero regions, use minimal knots
-                left_freq = self.freqs[s]
-                right_freq = self.freqs[e]
+                left_freq = snap_to_grid(float(self.freqs[s]))
+                right_freq = snap_to_grid(float(self.freqs[e]))
                 width = e - s + 1
 
                 # Always include endpoints for consistency
@@ -196,22 +205,16 @@ class LvkKnotAllocator:
                 knots_hz.append(right_freq)
 
                 # For wide zero regions, add a center knot and possibly a few more spaced ones
-                if (
-                    width > 20
-                ):  # Only add internal knots for sufficiently wide regions
+                if width > 20:
                     # Add center knot
-                    center_freq = self.freqs[s + width // 2]
+                    center_freq = snap_to_grid(float(self.freqs[s + width // 2]))
                     knots_hz.append(center_freq)
 
-                    # For very wide regions, add a few more log-spaced knots, but keep it minimal
                     if width > 50:
-                        # Calculate a small number of additional knots - logarithmically with region width
-                        # Max out at a reasonable number regardless of width
                         additional_knots = min(
                             self.min_zero_knots - 1,
                             max(1, int(np.log10(width))),
                         )
-
                         if additional_knots > 0:
                             # Place them between left and center, and center and right
                             if left_freq > 0 and center_freq > 0:
@@ -220,95 +223,80 @@ class LvkKnotAllocator:
                                     np.log10(center_freq),
                                     additional_knots + 2,
                                 )[1:-1]
-                                knots_hz.extend(left_log_freqs)
-
+                                for lf in left_log_freqs:
+                                    knots_hz.append(snap_to_grid(float(lf)))
                             if center_freq > 0 and right_freq > 0:
                                 right_log_freqs = np.logspace(
                                     np.log10(center_freq),
                                     np.log10(right_freq),
                                     additional_knots + 2,
                                 )[1:-1]
-                                knots_hz.extend(right_log_freqs)
+                                for rf in right_log_freqs:
+                                    knots_hz.append(snap_to_grid(float(rf)))
             else:
                 # For peak regions, use density/quantile approach
-                left_freq = self.freqs[s]
-                right_freq = self.freqs[e]
+                left_freq = snap_to_grid(float(self.freqs[s]))
+                right_freq = snap_to_grid(float(self.freqs[e]))
 
                 # Always include edges of the region
                 knots_hz.extend([left_freq, right_freq])
 
                 width_bins = e - s + 1
                 if width_bins > 1:
-                    # Extract local data for this peak region
                     local_lpr = self.log_power_ratio[s : e + 1]
                     local_peak = self.smoothed_peaks[s : e + 1]
                     region_freqs = self.freqs[s : e + 1]
 
                     # 1. Find and add the center of the peak
-                    # Use the maximum of smoothed peak as the center
                     if np.any(local_peak > 0):
-                        center_idx = np.argmax(local_peak)
-                        center_freq = region_freqs[center_idx]
+                        center_idx = int(np.argmax(local_peak))
+                        center_freq = snap_to_grid(float(region_freqs[center_idx]))
                         knots_hz.append(center_freq)
 
                     # 2. Find and add knots at the sides of the peak (shoulders)
-                    # We define shoulders as ~25% and ~75% of the way through the region
                     if width_bins >= 4:
                         left_quarter_idx = s + width_bins // 4
                         right_quarter_idx = e - width_bins // 4
-
                         if left_quarter_idx > s and left_quarter_idx < e:
-                            knots_hz.append(self.freqs[left_quarter_idx])
-
+                            knots_hz.append(snap_to_grid(float(self.freqs[left_quarter_idx])))
                         if right_quarter_idx > s and right_quarter_idx < e:
-                            knots_hz.append(self.freqs[right_quarter_idx])
+                            knots_hz.append(snap_to_grid(float(self.freqs[right_quarter_idx])))
 
                     # 3. Continue with density-based allocation for additional knots
-                    # Handle potential infinities or NaNs
                     x = local_lpr.copy()
                     x[~np.isfinite(x)] = 0
-
-                    # Standardize
                     if np.std(x) > 0:
                         x_mean = np.mean(x)
                         x_std = np.std(x)
                         y = (x - x_mean) / x_std
                     else:
                         y = np.ones_like(x)
-
-                    # Create PMF using absolute values
                     z = np.abs(y)
-                    # Add a bias toward the peak
                     if np.sum(local_peak) > 0:
                         z = z + 0.5 * local_peak / np.max(local_peak)
-
-                    # Normalize to create proper PMF
                     if np.sum(z) > 0:
                         z = z / np.sum(z)
                     else:
                         z = np.ones_like(z) / len(z)
-
-                    # Create CDF
                     cdf_values = np.cumsum(z)
-
-                    # Place remaining knots at equally spaced quantiles
-                    # Adjust the number of internal knots - we've already placed some
                     n_remaining_knots = min(
                         self.max_extra_per_peak - 3,
                         max(self.min_peak_knots - 3, int(width_bins / 6)),
                     )
-
                     if n_remaining_knots > 0:
                         quantiles = np.linspace(0, 1, n_remaining_knots)
                         internal_knots = np.interp(
                             quantiles, cdf_values, region_freqs
                         )
-                        knots_hz.extend(internal_knots.tolist())
+                        for kf in internal_knots.tolist():
+                            knots_hz.append(snap_to_grid(float(kf)))
 
         # Add boundary knots if not already included
-        knots_hz.extend([self.fmin, self.fmax])
+        knots_hz.append(snap_to_grid(float(self.fmin)))
+        knots_hz.append(snap_to_grid(float(self.fmax)))
         knots_hz = np.array(knots_hz, dtype=float)
-        knots_hz = np.unique(np.clip(knots_hz, self.fmin, self.fmax))
+        # Remove knots outside the grid and duplicates
+        knots_hz = np.unique(knots_hz[(knots_hz >= self.freqs[0]) & (knots_hz <= self.freqs[-1])])
         norm = (knots_hz - self.fmin) / (self.fmax - self.fmin)
         self.knots_locations = np.sort(norm)
         return self.knots_locations
@@ -316,7 +304,7 @@ class LvkKnotAllocator:
     # --- plotting ---
     def plot_analysis(
         self,
-        figsize: Tuple[float, float] = (12, 8),
+        figsize: Tuple[float, float] = (12.0, 8.0),
         fname: str = "psd_analysis.png",
         xscale: str = "linear",
     ) -> Tuple[plt.Figure, Tuple[plt.Axes, plt.Axes]]:

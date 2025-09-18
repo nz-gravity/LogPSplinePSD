@@ -220,9 +220,10 @@ def reconstruct_psd_from_cholesky(log_delta_sq_samples, theta_re_samples, theta_
     n_samples, n_freq, n_dim = log_delta_sq_samples.shape
     n_theta = theta_re_samples.shape[2] if theta_re_samples.ndim > 2 else 0
 
-    psd_samples = np.zeros((n_samples, n_freq, n_dim, n_dim), dtype=complex)
+    n_samps = min(50, n_samples)
+    psd_samples = np.zeros((n_samps, n_freq, n_dim, n_dim), dtype=complex)
 
-    for i in trange(min(50, n_samples)):
+    for i in trange(n_samps):
         for k in range(n_freq):
             # Build D matrix (diagonal with delta^2 values)
             D = np.diag(np.exp(log_delta_sq_samples[i, k, :]))

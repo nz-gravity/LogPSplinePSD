@@ -25,7 +25,7 @@ class DiscreteFFT:
     def compute_discrete_fft(cls, x: np.ndarray, fs: float = 1.0) -> 'DiscreteFFT':
         n_time, n_dim = x.shape
         # Standard FFT without normalization (SGVB style)
-        x_fft = np.fft.fft(x, axis=0)
+        x_fft = np.fft.fft(x, axis=0) / np.sqrt(n_time)
         freqs = np.fft.fftfreq(n_time, 1 / fs)
         pos_freq_idx = freqs > 0
         freqs = freqs[pos_freq_idx]
@@ -242,10 +242,10 @@ def reconstruct_psd_from_cholesky(log_delta_sq_samples, theta_re_samples, theta_
                             T[row, col] = -theta_val  # Note the negative sign
                             theta_idx += 1
 
-            # Reconstruct PSD: S = T^{-H} D T^{-1}
+            # Reconstruct PSD: S = T^{-1} D T^{-H}
             try:
                 T_inv = np.linalg.inv(T)
-                S = T_inv.conj().T @ D @ T_inv
+                S = T_inv @ D @ T_inv.conj().T
                 psd_samples[i, k] = S
             except np.linalg.LinAlgError:
                 # Fallback to diagonal if singular
@@ -318,13 +318,13 @@ if __name__ == "__main__":
     fft_complex = data.y_re + 1j * data.y_im
     n_time = len(x)
 
-    # Compute empirical cross-spectral matrix
+    # Since we normalized FFT by sqrt(n_time), periodogram = |FFT|^2 * 2 (factor 2 for one-sided)
     empirical_psd_matrix = np.zeros((data.n_freq, n_dim, n_dim), dtype=complex)
     for i in range(n_dim):
         for j in range(n_dim):
-            # Cross-spectrum: FFT_i * conj(FFT_j) / n
-            empirical_psd_matrix[:, i, j] = (fft_complex[:, i] *
-                                             np.conj(fft_complex[:, j])) / n_time
+            # Cross-spectrum with factor of 2 for one-sided spectrum
+            empirical_psd_matrix[:, i, j] = 2 * (fft_complex[:, i] *
+                                                 np.conj(fft_complex[:, j]))
 
     # Compare scales
     emp_diag_range = ([empirical_psd_matrix[:, i, i].real.min() for i in range(n_dim)],
@@ -357,7 +357,7 @@ if __name__ == "__main__":
                 ax.fill_between(data.freq, q05, q95, alpha=0.3, color='blue', label='Model 90% CI')
                 ax.plot(data.freq, q50, color='blue', label='Model Median')
                 ax.plot(data.freq, empirical_psd_matrix[:, i, i].real, 'k--',
-                        alpha=0.7, label='Empirical')
+                        alpha=0.2, zorder=-10,  label='Empirical')
                 ax.set_title(f'PSD Component {i}')
                 ax.set_yscale('log')
 
@@ -369,7 +369,7 @@ if __name__ == "__main__":
                 ax.fill_between(data.freq, q05, q95, alpha=0.3, color='green', label='Model 90% CI')
                 ax.plot(data.freq, q50, color='green', label='Model Median')
                 ax.plot(data.freq, empirical_psd_matrix[:, i, j].real, 'k--',
-                        alpha=0.7, label='Empirical')
+                        alpha=0.2, zorder=-10,  label='Empirical')
                 ax.set_title(f'CSD Real ({i},{j})')
 
             else:  # Upper triangle: Imaginary part of CSD
@@ -380,7 +380,7 @@ if __name__ == "__main__":
                 ax.fill_between(data.freq, q05, q95, alpha=0.3, color='red', label='Model 90% CI')
                 ax.plot(data.freq, q50, color='red', label='Model Median')
                 ax.plot(data.freq, empirical_psd_matrix[:, i, j].imag, 'k--',
-                        alpha=0.7, label='Empirical')
+                        alpha=0.2, zorder=-10,  label='Empirical')
                 ax.set_title(f'CSD Imag ({i},{j})')
 
             ax.set_xlabel('Frequency')
@@ -388,7 +388,6 @@ if __name__ == "__main__":
 
     plt.tight_layout()
     plt.savefig('properly_reconstructed_psd.png', dpi=150)
-    plt.show()
 
     print("Now the PSD should match the empirical scale!")
 

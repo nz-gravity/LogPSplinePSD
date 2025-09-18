@@ -127,4 +127,4 @@ def init_basis_and_penalty(
     penalty_matrix = penalty_matrix / np.max(penalty_matrix)
     penalty_matrix = penalty_matrix + epsilon * np.eye(penalty_matrix.shape[1])
 
-    return basis_matrix, jnp.array(penalty_matrix, dtype=jnp.float64)
+    return basis_matrix, jnp.array(penalty_matrix)

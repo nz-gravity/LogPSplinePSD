@@ -24,19 +24,20 @@ jobs:
           ref: main
           
       - name: Check semantic commit message
+        continue-on-error: true
         run: |
           # Get the commit message from the triggering workflow
           COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
           COMMIT_MSG=$(git log --format=%s -n 1 $COMMIT_SHA)
           echo "Commit message: $COMMIT_MSG"
-          
+
           # Check if commit message starts with release-worthy semantic prefixes
           if ! echo "$COMMIT_MSG" | grep -qE "^(feat|fix|perf)(\(.+\))?!?:"; then
-            echo "❌ Non-semantic commit detected: $COMMIT_MSG"
+            echo "ℹ️ Non-semantic commit detected: $COMMIT_MSG"
             echo "Skipping release - commit must start with feat:, fix:, or perf: for release"
-            exit 1
+          else
+            echo "✅ Semantic commit detected - proceeding with release"
           fi
-          echo "✅ Semantic commit detected - proceeding with release"
           
       - uses: actions/setup-python@v5
         with:

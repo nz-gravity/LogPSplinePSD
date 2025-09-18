@@ -13,14 +13,16 @@ from numpyro.infer import MCMC, NUTS
 class DiscreteFFT:
     """Discrete FFTs for each timeseries, with real and imaginary parts separated.
     fft: shape (n_freq, n_dim, 2), where [:,:,0] is real and [:,:,1] is imaginary.
+    Z_matrix: shape (n_freq, n_dim, n_theta_total) - design matrix for multivariate components.
     """
     fft: jnp.ndarray  # Shape: (n_freq, n_dim, 2) - real and imag parts for each timeseries
     freq: jnp.ndarray  # Shape: (n_freq,) - frequency grid
     n_freq: int  # Number of frequencies
     n_dim: int  # Number of timeseries
+    Z_matrix: jnp.ndarray  # Shape: (n_freq, n_dim, n_theta) - design matrix for theta parameters
 
 
-def compute_discrete_fft(x: np.ndarray, fs: float = 1.0) -> DiscreteFFT:
+def compute_discrete_fft(x: np.ndarray, fs: float = 1.0, compute_z_matrix: bool = True) -> DiscreteFFT:
     """
     Compute discrete FFTs for each timeseries, storing real and imaginary parts separately.
 
@@ -30,6 +32,8 @@ def compute_discrete_fft(x: np.ndarray, fs: float = 1.0) -> DiscreteFFT:
         Multivariate time series
     fs : float
         Sampling frequency
+    compute_z_matrix : bool, optional
+        Whether to compute the Z matrix (design matrix for multivariate components)
 
     Returns
     -------
@@ -48,15 +52,59 @@ def compute_discrete_fft(x: np.ndarray, fs: float = 1.0) -> DiscreteFFT:
     x_fft_real = np.real(x_fft)
     x_fft_imag = np.imag(x_fft)
     x_fft_split = np.stack([x_fft_real, x_fft_imag], axis=-1)  # shape: (n_freq, n_dim, 2)
+
+    # Compute Z matrix if requested
+    if compute_z_matrix:
+        Z_matrix = compute_Zmatrix(x_fft)
+    else:
+        Z_matrix = jnp.zeros((n_freq, n_dim, 0), dtype=jnp.complex64)
+
     return DiscreteFFT(
         fft=jnp.array(x_fft_split),
         freq=jnp.array(freqs),
         n_freq=n_freq,
-        n_dim=n_dim
+        n_dim=n_dim,
+        Z_matrix=jnp.array(Z_matrix)
     )
 
 
-def setup_psplines_for_sequential_multivariate(
+def compute_Zmatrix(y_k: np.ndarray) -> np.ndarray:
+    """
+    Compute the design matrix Z_k for each frequency k.
+    Parameters:
+    y_k (np.ndarray): Fourier transformed time series data of shape (n_freq, p).
+    Returns:
+    np.ndarray: Design matrix Z_k of shape (n_freq, p, p*(p-1)/2).
+    """
+    n, p = y_k.shape
+    if p == 1:
+        return np.zeros((n, p, 0), dtype=np.complex64)
+
+    Z_k = np.zeros((n, p, int(p * (p - 1) / 2)), dtype=np.complex64)
+    for j in range(n):  # for each frequency
+        count = 0
+        for i in range(1, p):  # for each component starting from 1
+            Z_k[j, i, count: count + i] = y_k[j, :i]  # fill with previous components
+            count += i
+    return Z_k
+
+
+def compute_discrete_fft_with_Z(x: np.ndarray, fs: float = 1.0) -> Tuple[DiscreteFFT, jnp.ndarray]:
+    """
+    Compute discrete FFTs and Z matrix.
+    """
+    fft_data = compute_discrete_fft(x, fs)
+
+    # Reconstruct complex FFT for Z matrix computation
+    fft_complex = fft_data.fft[:, :, 0] + 1j * fft_data.fft[:, :, 1]
+
+    # Compute Z matrix
+    Z = compute_Zmatrix(fft_complex)
+
+    return fft_data, jnp.array(Z)
+
+
+def setup_psplines_for_sequential_multivariate_fixed(
         freq: jnp.ndarray,
         n_dim: int,
         n_knots: int = 10,
@@ -65,10 +113,6 @@ def setup_psplines_for_sequential_multivariate(
 ) -> Tuple[List[jnp.ndarray], List[jnp.ndarray]]:
     """
     Set up P-splines for sequential multivariate model.
-
-    Total components needed:
-    - n_dim diagonal components (log delta^2)
-    - Sum_{j=1}^{n_dim-1} 2*j off-diagonal components (real/imag theta)
     """
     freq_norm = (freq - freq.min()) / (freq.max() - freq.min())
     n_freq = len(freq_norm)
@@ -78,77 +122,73 @@ def setup_psplines_for_sequential_multivariate(
         knots, degree, n_freq, diff_order
     )
 
-    # Calculate total number of components
-    n_diagonal = n_dim
-    n_theta_pairs = sum(j for j in range(n_dim))  # 0 + 1 + 2 + ... + (n_dim-1)
-    n_theta_components = 2 * n_theta_pairs  # real + imaginary
-    total_components = n_diagonal + n_theta_components
+    # Components: n_dim diagonal + 2 off-diagonal (real/imag theta)
+    total_components = n_dim + 2
 
     print(f"Total components needed: {total_components}")
-    print(f"  - Diagonal (delta): {n_diagonal}")
-    print(f"  - Off-diagonal (theta): {n_theta_components}")
+    print(f"  - Diagonal (delta): {n_dim}")
+    print(f"  - Off-diagonal (theta): 2 (real + imag)")
 
-    # For now, we have the same basis for each component 
     all_bases = [basis for _ in range(total_components)]
     all_penalties = [penalty for _ in range(total_components)]
 
     return all_bases, all_penalties
 
 
-def multivariate_whittle_likelihood_sequential(
+def multivariate_whittle_likelihood_Z_matrix(
         fft: jnp.ndarray,  # shape (n_freq, n_dim, 2)
+        Z_matrix: jnp.ndarray,  # shape (n_freq, n_dim, n_theta_total)
         log_deltas: List[jnp.ndarray],  # List of n_dim arrays, each shape (n_freq,)
-        theta_res: List[jnp.ndarray],  # List of n_dim arrays, each shape (n_freq, j)
-        theta_ims: List[jnp.ndarray],  # List of n_dim arrays, each shape (n_freq, j)
+        theta_re_all: jnp.ndarray,  # shape (n_freq, n_theta_total)
+        theta_im_all: jnp.ndarray,  # shape (n_freq, n_theta_total)
 ) -> jnp.ndarray:
     """
-    Sequential multivariate Whittle likelihood following the Cholesky decomposition.
-
-    For each component j, compute:
-    L_j ∝ ∏_k δ_{jk}^{-2} exp(-|d_j(f_k) - ∑_{l=1}^{j-1} θ_{jl}^{(k)} d_l(f_k)|^2 / δ_{jk}^2)
+    Sequential multivariate Whittle likelihood using Z matrix approach (like SGVB).
     """
     n_freq, n_dim, _ = fft.shape
     y_re = fft[:, :, 0]  # (n_freq, n_dim)
     y_im = fft[:, :, 1]  # (n_freq, n_dim)
 
+    # Extract real and imaginary parts of Z matrix
+    Z_re = Z_matrix.real  # (n_freq, n_dim, n_theta_total)
+    Z_im = Z_matrix.imag  # (n_freq, n_dim, n_theta_total)
+
+    # Compute exp(-log_deltas) for all components
+    exp_neg_log_deltas = [jnp.exp(-log_deltas[j]) for j in range(n_dim)]
+
+    # Compute residuals for all components
+    if Z_matrix.shape[2] > 0:  # If we have theta parameters
+        # Vectorized computation like in SGVB
+        # Z_theta_re = Z_re @ theta_re - Z_im @ theta_im
+        # Z_theta_im = Z_re @ theta_im + Z_im @ theta_re
+        Z_theta_re = jnp.einsum('fij,fj->fi', Z_re, theta_re_all) - jnp.einsum('fij,fj->fi', Z_im, theta_im_all)
+        Z_theta_im = jnp.einsum('fij,fj->fi', Z_re, theta_im_all) + jnp.einsum('fij,fj->fi', Z_im, theta_re_all)
+
+        u_re = y_re - Z_theta_re
+        u_im = y_im - Z_theta_im
+    else:
+        u_re = y_re
+        u_im = y_im
+
+    # Compute likelihood
+    numerator = u_re ** 2 + u_im ** 2  # (n_freq, n_dim)
+
     total_log_lik = 0.0
-
-    # For each component j = 0, 1, 2, ... (0-indexed)
     for j in range(n_dim):
+        # Sum of log(deltas) for this component
+        sum_log_delta = jnp.sum(log_deltas[j])
 
-        # Get log(delta_j^2) for this component
-        log_delta_j_sq = log_deltas[j]  # shape (n_freq,)
+        # Weighted residuals for this component
+        internal_j = numerator[:, j] * exp_neg_log_deltas[j]
+        tmp2_j = -jnp.sum(internal_j)
 
-        # Start with the raw data for component j
-        residual_re = y_re[:, j]  # shape (n_freq,)
-        residual_im = y_im[:, j]  # shape (n_freq,)
-
-        # Subtract contributions from previous components l = 0, 1, ..., j-1
-        for l in range(j):
-            # theta_{jl} for this component pair (j,l)
-            theta_jl_re = theta_res[j][:, l]  # shape (n_freq,)
-            theta_jl_im = theta_ims[j][:, l]  # shape (n_freq,)
-
-            # Subtract θ_{jl}^{(k)} * d_l(f_k) from residual
-            # Complex multiplication: (a + bi) * (c + di) = (ac - bd) + (ad + bc)i
-            residual_re = residual_re - (theta_jl_re * y_re[:, l] - theta_jl_im * y_im[:, l])
-            residual_im = residual_im - (theta_jl_re * y_im[:, l] + theta_jl_im * y_re[:, l])
-
-        # Compute likelihood for component j
-        # |residual|^2 = residual_re^2 + residual_im^2
-        residual_sq = residual_re ** 2 + residual_im ** 2
-
-        # δ_{jk}^2 = exp(log_delta_j_sq)
-        delta_j_sq = jnp.exp(log_delta_j_sq)
-
-        # Log-likelihood: ∑_k [-log(δ_{jk}^2) - |residual|^2 / δ_{jk}^2]
-        component_log_lik = jnp.sum(-log_delta_j_sq - residual_sq / delta_j_sq)
+        component_log_lik = sum_log_delta + tmp2_j
         total_log_lik += component_log_lik
 
     return total_log_lik
 
 
-def multivariate_psplines_model_sequential(
+def multivariate_psplines_model_sequential_fixed(
         fft_data: DiscreteFFT,
         all_bases: List[jnp.ndarray],
         all_penalties: List[jnp.ndarray],
@@ -158,157 +198,170 @@ def multivariate_psplines_model_sequential(
         beta_delta: float = 1e-4,
 ):
     """
-    NumPyro model using sequential Whittle likelihood structure.
+    NumPyro model using sequential Whittle likelihood with Z matrix approach.
     """
     n_dim = fft_data.n_dim
     n_freq = fft_data.n_freq
+    Z_matrix = fft_data.Z_matrix
+    n_theta_total = Z_matrix.shape[2]  # Total number of theta parameters
 
     # Sample P-spline components for each diagonal element (log delta^2)
     log_deltas = []
     component_idx = 0
 
     for j in range(n_dim):
-        with numpyro.plate(f"delta_component_{j}", 1):
-            delta = numpyro.sample(f"delta_{j}", dist.Gamma(alpha_delta, beta_delta))
-            phi = numpyro.sample(f"phi_delta_{j}", dist.Gamma(alpha_phi, delta * beta_phi))
+        delta = numpyro.sample(f"delta_{j}", dist.Gamma(alpha_delta, beta_delta))
+        phi = numpyro.sample(f"phi_delta_{j}", dist.Gamma(alpha_phi, delta * beta_phi))
 
-            k = all_penalties[component_idx].shape[0]
-            weights = numpyro.sample(f"weights_delta_{j}",
-                                     dist.Normal(0, 1).expand([k]).to_event(1))
-            weights = weights.reshape(-1)  # Ensure 1D shape
+        k = all_penalties[component_idx].shape[0]
+        weights = numpyro.sample(f"weights_delta_{j}",
+                                 dist.Normal(0, 1).expand([k]).to_event(1))
 
-            # Prior on weights
-            wPw = jnp.dot(weights, jnp.dot(all_penalties[component_idx], weights))
-            log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-            numpyro.factor(f"weights_prior_delta_{j}", log_prior_w)
+        # Prior on weights
+        wPw = jnp.dot(weights, jnp.dot(all_penalties[component_idx], weights))
+        log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
+        numpyro.factor(f"weights_prior_delta_{j}", log_prior_w)
 
-            # Compute log(delta^2) for this component
-            log_delta_sq = all_bases[component_idx] @ weights
-            log_deltas.append(log_delta_sq)
-            component_idx += 1
+        # Compute log(delta^2) for this component
+        log_delta_sq = all_bases[component_idx] @ weights
+        log_deltas.append(log_delta_sq)
+        component_idx += 1
 
-    # Sample P-spline components for theta parameters (off-diagonal)
-    theta_res = []  # Real parts
-    theta_ims = []  # Imaginary parts
+    # Sample theta parameters (vectorized like in SGVB)
+    theta_re_all = jnp.zeros((n_freq, n_theta_total))
+    theta_im_all = jnp.zeros((n_freq, n_theta_total))
 
-    for j in range(n_dim):
-        # Component j has theta parameters for l = 0, 1, ..., j-1
-        theta_re_j = jnp.zeros((n_freq, j))
-        theta_im_j = jnp.zeros((n_freq, j))
+    if n_theta_total > 0:
+        # Real parts of theta
+        delta = numpyro.sample("delta_theta_re", dist.Gamma(alpha_delta, beta_delta))
+        phi = numpyro.sample("phi_theta_re", dist.Gamma(alpha_phi, delta * beta_phi))
 
-        for l in range(j):
-            # Real part of theta_{jl}
-            with numpyro.plate(f"theta_re_component_{j}_{l}", 1):
-                delta = numpyro.sample(f"delta_theta_re_{j}_{l}",
-                                       dist.Gamma(alpha_delta, beta_delta))
-                phi = numpyro.sample(f"phi_theta_re_{j}_{l}",
-                                     dist.Gamma(alpha_phi, delta * beta_phi))
+        k = all_penalties[component_idx].shape[0]
+        weights = numpyro.sample("weights_theta_re",
+                                 dist.Normal(0, 1).expand([k]).to_event(1))
 
-                k = all_penalties[component_idx].shape[0]
-                weights = numpyro.sample(f"weights_theta_re_{j}_{l}",
-                                         dist.Normal(0, 1).expand([k]).to_event(1))
+        wPw = jnp.dot(weights, jnp.dot(all_penalties[component_idx], weights))
+        log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
+        numpyro.factor("weights_prior_theta_re", log_prior_w)
 
-                weights = weights.reshape(-1)  # Ensure 1D shape
-                wPw = jnp.dot(weights, jnp.dot(all_penalties[component_idx], weights))
-                log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-                numpyro.factor(f"weights_prior_theta_re_{j}_{l}", log_prior_w)
+        theta_re_values = all_bases[component_idx] @ weights
+        if n_theta_total == 1:
+            theta_re_all = theta_re_values[:, None]
+        else:
+            # Broadcast or tile to match n_theta_total
+            theta_re_all = jnp.tile(theta_re_values[:, None], (1, n_theta_total))
+        component_idx += 1
 
-                theta_re_jl = all_bases[component_idx] @ weights
-                theta_re_j = theta_re_j.at[:, l].set(theta_re_jl)
-                component_idx += 1
+        # Imaginary parts of theta
+        delta = numpyro.sample("delta_theta_im", dist.Gamma(alpha_delta, beta_delta))
+        phi = numpyro.sample("phi_theta_im", dist.Gamma(alpha_phi, delta * beta_phi))
 
-            # Imaginary part of theta_{jl}
-            with numpyro.plate(f"theta_im_component_{j}_{l}", 1):
-                delta = numpyro.sample(f"delta_theta_im_{j}_{l}",
-                                       dist.Gamma(alpha_delta, beta_delta))
-                phi = numpyro.sample(f"phi_theta_im_{j}_{l}",
-                                     dist.Gamma(alpha_phi, delta * beta_phi))
+        k = all_penalties[component_idx].shape[0]
+        weights = numpyro.sample("weights_theta_im",
+                                 dist.Normal(0, 1).expand([k]).to_event(1))
 
-                k = all_penalties[component_idx].shape[0]
-                weights = numpyro.sample(f"weights_theta_im_{j}_{l}",
-                                         dist.Normal(0, 1).expand([k]).to_event(1))
-                weights = weights.reshape(-1)  # Ensure 1D shape
-                wPw = jnp.dot(weights, jnp.dot(all_penalties[component_idx], weights))
-                log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-                numpyro.factor(f"weights_prior_theta_im_{j}_{l}", log_prior_w)
+        wPw = jnp.dot(weights, jnp.dot(all_penalties[component_idx], weights))
+        log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
+        numpyro.factor("weights_prior_theta_im", log_prior_w)
 
-                theta_im_jl = all_bases[component_idx] @ weights
-                theta_im_j = theta_im_j.at[:, l].set(theta_im_jl)
-                component_idx += 1
+        theta_im_values = all_bases[component_idx] @ weights
+        if n_theta_total == 1:
+            theta_im_all = theta_im_values[:, None]
+        else:
+            # Broadcast or tile to match n_theta_total
+            theta_im_all = jnp.tile(theta_im_values[:, None], (1, n_theta_total))
 
-        theta_res.append(theta_re_j)
-        theta_ims.append(theta_im_j)
-
-    # Sequential Whittle likelihood
-    log_likelihood = multivariate_whittle_likelihood_sequential(
-        fft_data.fft, log_deltas, theta_res, theta_ims
+    # Sequential Whittle likelihood using Z matrix
+    log_likelihood = multivariate_whittle_likelihood_Z_matrix(
+        fft_data.fft, Z_matrix, log_deltas, theta_re_all, theta_im_all
     )
     numpyro.factor("likelihood", log_likelihood)
 
     # Store for diagnostics
     numpyro.deterministic("log_deltas", log_deltas)
-    numpyro.deterministic("theta_res", theta_res)
-    numpyro.deterministic("theta_ims", theta_ims)
+    numpyro.deterministic("theta_re_all", theta_re_all)
+    numpyro.deterministic("theta_im_all", theta_im_all)
     numpyro.deterministic("log_likelihood", log_likelihood)
 
 
-def reconstruct_psd_matrices(log_deltas, theta_res, theta_ims):
+def reconstruct_psd_matrices_from_samples(log_deltas_samples, theta_re_samples, theta_im_samples, Z_matrix):
     """
-    Reconstruct the spectral density matrices from the Cholesky components.
-    S = T^{-H} D T^{-1} where T is lower triangular and D is diagonal.
+    Robust numpy version: reconstruct PSD matrices from posterior samples using Cholesky parameterization.
+    Follows TensorFlow logic: PSD = inv(T^H D^{-1} T)
+    All inputs should be numpy arrays.
     """
-    n_dim = len(log_deltas)
-    n_freq = log_deltas[0].shape[0]
+    log_deltas_samples = np.array(log_deltas_samples)
+    theta_re_samples = np.array(theta_re_samples)
+    theta_im_samples = np.array(theta_im_samples)
+    Z_matrix = np.array(Z_matrix)
 
-    psd_matrices = jnp.zeros((n_freq, n_dim, n_dim), dtype=complex)
+    n_samples = log_deltas_samples.shape[0]
+    n_dim = log_deltas_samples.shape[1]
+    n_freq = log_deltas_samples.shape[2]
+    n_theta = theta_re_samples.shape[2] if theta_re_samples.ndim == 3 else 0
 
-    for k in range(n_freq):
-        # Build T matrix (lower triangular)
-        T = jnp.eye(n_dim, dtype=complex)
-        for j in range(1, n_dim):
-            # Use the actual number of columns in theta_res[j] (should be j)
-            n_theta = theta_res[j].shape[1]
-            for l in range(n_theta):
-                theta_jl = theta_res[j][k, l] + 1j * theta_ims[j][k, l]
-                T = T.at[j, l].set(-theta_jl)
+    psd_samples = np.zeros((n_samples, n_freq, n_dim, n_dim), dtype=np.complex64)
 
-        # Build D matrix (diagonal)
-        D = jnp.diag(jnp.array([jnp.exp(log_deltas[j][k]) for j in range(n_dim)]))
+    # Get lower triangle indices for theta placement
+    row_indices, col_indices = np.tril_indices(n_dim, k=-1)
 
-        # S = T^{-H} D T^{-1}
-        T_inv = jnp.linalg.inv(T)
-        S = T_inv.conj().T @ D @ T_inv
-        psd_matrices = psd_matrices.at[k].set(S)
+    for i in range(min(100, n_samples)):
+        for k in range(n_freq):
+            # D: diagonal matrix of exp(log_delta)
+            delta_vec = np.exp(log_deltas_samples[i, :, k])
+            D = np.diag(delta_vec)
+            D_inv = np.linalg.inv(D + 1e-8 * np.eye(n_dim))  # regularize for safety
 
-    return psd_matrices
+            # T: lower-triangular matrix, fill lower triangle with -theta
+            T = np.eye(n_dim, dtype=np.complex64)
+            if n_theta > 0:
+                theta_vec = - (theta_re_samples[i, k, :] + 1j * theta_im_samples[i, k, :])
+                T[row_indices, col_indices] = theta_vec
 
-
+            # S_inv = T^H D^{-1} T
+            T_conj_trans = np.conj(T.T)
+            S_inv = T_conj_trans @ D_inv @ T
+            # PSD = inv(S_inv)
+            PSD = np.linalg.inv(S_inv + 1e-8 * np.eye(n_dim))  # regularize for safety
+            psd_samples[i, k] = PSD
+    return psd_samples
 
 
 if __name__ == "__main__":
-    # Generate or load your 3D time series data
+    # Import the simulation
+    from sgvb_psd.utils.sim_varma import SimVARMA
+
+    # Generate VARMA data
     np.random.seed(42)
-    n_time, n_dim = 1000, 3
-    x = np.random.randn(n_time, n_dim)
 
-    # Add some correlation structure
-    x[:, 1] = 0.7 * x[:, 0] + 0.3 * x[:, 1]
-    x[:, 2] = 0.5 * x[:, 0] + 0.4 * x[:, 1] + 0.3 * x[:, 2]
+    SIM_KWGS = dict(
+        sigma=np.array([[1.0, 0.9], [0.9, 1.0]]),
+        var_coeffs=np.array([[[0.5, 0.0], [0.0, -0.3]], [[0.0, 0.0], [0.0, -0.5]]]),
+        vma_coeffs=np.array([[[1.0, 0.0], [0.0, 1.0]]]),
+        n_samples=1024,
+    )
+    varma = SimVARMA(**SIM_KWGS)
+    x = varma.data
+    n_dim = varma.dim
 
-    # Compute discrete FFTs for each timeseries
-    fft_data = compute_discrete_fft(x, fs=1.0)
+    print(f"Simulated VARMA data shape: {x.shape}, dim={n_dim}")
+
+    # Compute FFT and Z matrix
+    fft_data, Z_matrix = compute_discrete_fft_with_Z(x, fs=1.0)
     print(f"FFT data shape: {fft_data.fft.shape}")
+    print(f"Z matrix shape: {Z_matrix.shape}")
     print(f"Frequency range: {fft_data.freq.min():.3f} to {fft_data.freq.max():.3f}")
 
-    # Set up P-splines for sequential model
-    all_bases, all_penalties = setup_psplines_for_sequential_multivariate(
-        fft_data.freq, n_dim=3, n_knots=15
+    # Set up P-splines
+    all_bases, all_penalties = setup_psplines_for_sequential_multivariate_fixed(
+        fft_data.freq, n_dim=n_dim, n_knots=15
     )
 
-    # Run MCMC
-    nuts_kernel = NUTS(multivariate_psplines_model_sequential)
-    mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=2)
+    # Run MCMC with the fixed model
+    nuts_kernel = NUTS(multivariate_psplines_model_sequential_fixed)
+    mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=500, num_chains=1)
 
+    # Now just use fft_data directly, which contains the Z matrix
     print("Starting MCMC sampling...")
     mcmc.run(
         jax.random.PRNGKey(0),
@@ -327,22 +380,13 @@ if __name__ == "__main__":
     # Reconstruct PSD matrices from samples
     print("\nReconstructing PSD matrices...")
     log_deltas_samples = samples['log_deltas']
-    theta_res_samples = samples['theta_res']
-    theta_ims_samples = samples['theta_ims']
+    theta_re_samples = samples['theta_re_all']
+    theta_im_samples = samples['theta_im_all']
 
-    # Reconstruct for a few samples
-    n_samples_to_reconstruct = min(100, len(log_deltas_samples))
-    psd_samples = []
-
-    for i in range(n_samples_to_reconstruct):
-        log_deltas_i = [log_deltas_samples[i][j] for j in range(n_dim)]
-        theta_res_i = [theta_res_samples[i][j] for j in range(n_dim)]
-        theta_ims_i = [theta_ims_samples[i][j] for j in range(n_dim)]
-
-        psd_i = reconstruct_psd_matrices(log_deltas_i, theta_res_i, theta_ims_i)
-        psd_samples.append(psd_i)
-
-    psd_samples = jnp.array(psd_samples)
+    # Now use Z matrix from fft_data object
+    psd_samples = reconstruct_psd_matrices_from_samples(
+        log_deltas_samples, theta_re_samples, theta_im_samples, fft_data.Z_matrix
+    )
     print(f"Reconstructed PSD samples shape: {psd_samples.shape}")
 
     # Compute posterior statistics
@@ -364,9 +408,9 @@ if __name__ == "__main__":
             std = psd_std[0, i, j]
             print(f"  ({i},{j}): {val.real:.6f}+{val.imag:.6f}i ± {std.real:.6f}+{std.imag:.6f}i")
 
-    # --- Plot matrix of PSD and CSD with posterior quantiles and data ---
+    # Plotting code
     import matplotlib.pyplot as plt
-    import numpy as np
+
     freq = np.array(fft_data.freq)
     n_freq = len(freq)
 
@@ -381,6 +425,7 @@ if __name__ == "__main__":
             csd_real[:, i, j] = csd.real
             csd_imag[:, i, j] = csd.imag
 
+
     # Compute posterior quantiles
     def get_quantiles(arr, axis=0):
         q05 = np.percentile(arr, 5, axis=axis)
@@ -388,10 +433,16 @@ if __name__ == "__main__":
         q95 = np.percentile(arr, 95, axis=axis)
         return q05, q50, q95
 
-    fig, axes = plt.subplots(n_dim, n_dim, figsize=(3*n_dim, 3*n_dim), sharex=True)
+
+    fig, axes = plt.subplots(n_dim, n_dim, figsize=(3 * n_dim, 3 * n_dim), sharex=True)
+    if n_dim == 1:
+        axes = [[axes]]
+    elif n_dim == 2:
+        axes = axes.reshape(n_dim, n_dim)
+
     for i in range(n_dim):
         for j in range(n_dim):
-            ax = axes[i, j]
+            ax = axes[i][j]
             # Diagonal: PSD
             if i == j:
                 # Posterior quantiles
@@ -401,6 +452,7 @@ if __name__ == "__main__":
                 # Empirical periodogram
                 ax.plot(freq, periodogram[:, i], color='black', alpha=0.3, lw=1, label='Empirical', zorder=-1)
                 ax.set_title(f"PSD {i}")
+                ax.set_yscale('log')
             # Below diagonal: real part of CSD
             elif i > j:
                 q05, q50, q95 = get_quantiles(psd_samples[:, :, i, j].real, axis=0)
@@ -421,5 +473,5 @@ if __name__ == "__main__":
             if i == 0:
                 ax.legend(fontsize=8)
     plt.tight_layout()
-    plt.savefig('multivar_psd_csd_matrix_with_quantiles.png')
+    plt.savefig('multivar_psd_csd_matrix_fixed.png')
     plt.show()

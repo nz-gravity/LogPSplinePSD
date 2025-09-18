@@ -8,6 +8,7 @@ from typing import Tuple, List
 from log_psplines.psplines.initialisation import init_basis_and_penalty
 from numpyro.infer import MCMC, NUTS
 import matplotlib.pyplot as plt
+from tqdm.auto import trange
 
 
 @dataclass
@@ -193,7 +194,7 @@ def reconstruct_psd_from_cholesky(log_delta_sq_samples, theta_re_samples, theta_
     n_theta = theta_re_samples.shape[2] if theta_re_samples.ndim > 2 else 0
     n_samps = min(50, n_samples)
     psd_samples = np.zeros((n_samps, n_freq, n_dim, n_dim), dtype=complex)
-    for i in range(n_samps):
+    for i in trange(n_samps):
         for k in range(n_freq):
             D = np.diag(np.exp(log_delta_sq_samples[i, k, :]))
             T = np.eye(n_dim, dtype=complex)

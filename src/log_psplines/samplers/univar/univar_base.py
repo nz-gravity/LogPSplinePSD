@@ -1,17 +1,20 @@
-import os
-from abc import ABC, abstractmethod
-from dataclasses import asdict, dataclass
+"""
+Base class for univariate PSD samplers.
+"""
+
+import tempfile
 from typing import Any, Dict, Tuple
 
 import arviz as az
-import jax
 import jax.numpy as jnp
+import morphZ
 import numpy as np
 
 from ...arviz_utils.to_arviz import results_to_arviz
 from ...datatypes import Periodogram
-from ...plotting import plot_diagnostics, plot_pdgrm
+from ...plotting import plot_pdgrm
 from ...psplines import LogPSplines, build_spline
+from ..base_sampler import BaseSampler, SamplerConfig
 
 
 @jax.jit
@@ -21,81 +24,52 @@ def log_likelihood(
     basis_matrix: jnp.ndarray,
     log_parametric: jnp.ndarray,
 ) -> jnp.ndarray:
+    """Univariate log-likelihood function."""
     ln_model = build_spline(basis_matrix, weights, log_parametric)
     integrand = ln_model + jnp.exp(log_pdgrm - ln_model)
     return -0.5 * jnp.sum(integrand)
 
 
-@dataclass
-class SamplerConfig:
-    """Base configuration for all samplers."""
+class UnivarBaseSampler(BaseSampler):
+    """
+    Base class for univariate PSD samplers.
 
-    alpha_phi: float = 1.0
-    beta_phi: float = 1.0
-    alpha_delta: float = 1e-4
-    beta_delta: float = 1e-4
-    rng_key: int = 42
-    verbose: bool = True
-    outdir: str = None
-    compute_lnz: bool = False  # Optional Lnz computation
-
-    def __post_init__(self):
-        if self.outdir is not None:
-            os.makedirs(self.outdir, exist_ok=True)
-
-
-class UnivarBaseSampler(ABC):
+    Handles single-channel periodogram data with LogPSplines models.
+    """
 
     def __init__(
         self,
         periodogram: Periodogram,
         spline_model: LogPSplines,
-        config: SamplerConfig = None,
+        config: SamplerConfig
     ):
-        self.periodogram = periodogram
-        self.spline_model = spline_model
-        self.config = config
+        # Type hints for clarity
+        self.periodogram: Periodogram = periodogram
+        self.spline_model: LogPSplines = spline_model
 
-        # Common attributes
-        self.n_weights = len(spline_model.weights)
+        super().__init__(periodogram, spline_model, config)
 
-        # JAX arrays for mathematical operations
-        self.log_pdgrm = jnp.log(periodogram.power)
-        self.penalty_matrix = jnp.array(spline_model.penalty_matrix)
-        self.basis_matrix = jnp.array(spline_model.basis)
-        self.log_parametric = jnp.array(spline_model.log_parametric_model)
-
-        # Random state
-        self.rng_key = jax.random.PRNGKey(config.rng_key)
-
-        # Runtime tracking
-        self.runtime = np.nan
-
-        # GPU/CPU device
-        self.device = jax.devices()[0].platform
-
-    @abstractmethod
-    def sample(
-        self, n_samples: int, n_warmup: int = 1000, **kwargs
-    ) -> az.InferenceData:
-        pass
+    def _setup_data(self) -> None:
+        """Setup univariate-specific data attributes."""
+        self.n_weights = len(self.spline_model.weights)
+        self.log_pdgrm = jnp.log(self.periodogram.power)
+        self.penalty_matrix = jnp.array(self.spline_model.penalty_matrix)
+        self.basis_matrix = jnp.array(self.spline_model.basis)
+        self.log_parametric = jnp.array(self.spline_model.log_parametric_model)
 
     @property
-    @abstractmethod
-    def _logp_kwargs(self) -> Dict[str, Any]:
-        """Return a dictionary of keyword arguments required for log probability computation."""
-        pass
+    def data_type(self) -> str:
+        return "univariate"
 
-    @abstractmethod
-    def _get_lnz(self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]) -> Tuple[float, float]:
-        """Extract the log normalizing constant (lnz) from the samples and sample statistics."""
-        pass
-
-    def to_arviz(
-        self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
+    def _create_inference_data(
+        self,
+        samples: Dict[str, jnp.ndarray],
+        sample_stats: Dict[str, Any],
+        lnz: float,
+        lnz_err: float
     ) -> az.InferenceData:
-        lnz, lnz_err = self._get_lnz(samples, sample_stats)
-        idata = results_to_arviz(
+        """Create InferenceData for univariate case."""
+        return results_to_arviz(
             samples=samples,
             sample_stats=sample_stats,
             periodogram=self.periodogram,
@@ -106,25 +80,58 @@ class UnivarBaseSampler(ABC):
                 runtime=self.runtime,
                 lnz=lnz,
                 lnz_err=lnz_err,
+                sampler_type=self.sampler_type,
+                data_type=self.data_type,
             ),
         )
 
-        # Summary statistics
-        if self.config.verbose:
-            ess = az.ess(idata)
-            ess_min = ess.to_array().min().values
-            ess_max = ess.to_array().max().values
-            print(f"  ESS min: {ess_min:.1f}, max: {ess_max:.1f}")
-            if not (np.isnan(lnz) or np.isnan(lnz_err)):
-                print(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
+    def _save_plots(self, idata: az.InferenceData) -> None:
+        """Save univariate-specific plots."""
+        fig, _ = plot_pdgrm(idata=idata)
+        fig.savefig(f"{self.config.outdir}/posterior_predictive.png")
 
-        if self.config.outdir is not None:
-            az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")
-            plot_diagnostics(idata, self.config.outdir)
-            fig, _ = plot_pdgrm(idata=idata)
-            fig.savefig(f"{self.config.outdir}/posterior_predictive.png")
-            az.summary(idata).to_csv(
-                f"{self.config.outdir}/summary_statistics.csv"
-            )
+    def _get_lnz(
+        self,
+        samples: Dict[str, np.ndarray],
+        sample_stats: Dict[str, Any]
+    ) -> Tuple[float, float]:
+        """Default implementation for univariate LnZ computation."""
+        if not self.config.compute_lnz:
+            return np.nan, np.nan
 
-        return idata
+        # Combine all parameters into single posterior sample array
+        post_smp = np.concatenate([
+            samples['weights'],
+            samples['phi'][:, None],
+            samples['delta'][:, None]
+        ], axis=1)
+        lp = sample_stats['lp']
+
+        def lp_fn(sample):
+            weights = sample[:self.n_weights]
+            phi = sample[self.n_weights]
+            delta = sample[self.n_weights + 1]
+            return self._compute_log_posterior(weights, phi, delta)
+
+        lnz_res = morphZ.evidence(
+            post_smp, lp, lp_fn, output_path=tempfile.gettempdir()
+        )[0]
+        return float(lnz_res[0]), float(lnz_res[1])
+
+    @property
+    def _logp_kwargs(self) -> Dict[str, Any]:
+        """Common log posterior kwargs for univariate case."""
+        return dict(
+            log_pdgrm=self.log_pdgrm,
+            basis_matrix=self.basis_matrix,
+            log_parametric=self.log_parametric,
+            penalty_matrix=self.penalty_matrix,
+            alpha_phi=self.config.alpha_phi,
+            beta_phi=self.config.beta_phi,
+            alpha_delta=self.config.alpha_delta,
+            beta_delta=self.config.beta_delta,
+        )
+
+    def _compute_log_posterior(self, weights: jnp.ndarray, phi: float, delta: float) -> float:
+        """Compute log posterior for LnZ calculation. To be implemented by concrete samplers."""
+        raise NotImplementedError("Concrete sampler must implement _compute_log_posterior")

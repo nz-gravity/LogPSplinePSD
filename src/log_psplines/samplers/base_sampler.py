@@ -1,4 +1,136 @@
-from dataclasses import dataclass
+"""
+Abstract base classes for MCMC samplers.
+
+Provides foundation for both univariate and multivariate PSD estimation samplers.
+"""
+
+import os
+import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Tuple, Union
+
+import arviz as az
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+from ..arviz_utils.to_arviz import results_to_arviz
+from ..plotting import plot_diagnostics, plot_pdgrm
 
 
+@dataclass
+class SamplerConfig:
+    """Base configuration for all MCMC samplers."""
+    alpha_phi: float = 1.0
+    beta_phi: float = 1.0
+    alpha_delta: float = 1e-4
+    beta_delta: float = 1e-4
+    rng_key: int = 42
+    verbose: bool = True
+    outdir: Optional[str] = None
+    compute_lnz: bool = False
+
+    def __post_init__(self):
+        if self.outdir is not None:
+            os.makedirs(self.outdir, exist_ok=True)
+
+
+class BaseSampler(ABC):
+    """
+    Abstract base class for all MCMC samplers in LogPSplinePSD.
+
+    Provides common interface and structure for both univariate and multivariate
+    spectral estimation samplers.
+    """
+
+    def __init__(self, data, model, config: SamplerConfig):
+        self.data = data
+        self.model = model
+        self.config = config
+        
+        # Common attributes for all samplers
+        self.rng_key = jax.random.PRNGKey(config.rng_key)
+        self.runtime = np.nan
+        self.device = jax.devices()[0].platform
+        
+        # Setup data-specific attributes
+        self._setup_data()
+
+    @abstractmethod
+    def sample(self, n_samples: int, n_warmup: int = 1000, **kwargs) -> az.InferenceData:
+        """Run MCMC sampling and return inference data."""
+        pass
+
+    @abstractmethod
+    def _setup_data(self) -> None:
+        """Setup data attributes for sampling (univar vs multivar specific)."""
+        pass
+
+    @abstractmethod
+    def _get_lnz(self, samples: Dict[str, jnp.ndarray], sample_stats: Dict[str, Any]) -> Tuple[float, float]:
+        """Extract log normalizing constant from samples."""
+        pass
+
+    @property
+    @abstractmethod
+    def sampler_type(self) -> str:
+        """Return string identifier for the sampler type."""
+        pass
+
+    @property
+    @abstractmethod
+    def data_type(self) -> str:
+        """Return string identifier for the data type."""
+        pass
+
+    def to_arviz(
+        self, 
+        samples: Dict[str, jnp.ndarray], 
+        sample_stats: Dict[str, Any]
+    ) -> az.InferenceData:
+        """Convert samples to ArviZ InferenceData with diagnostics and plotting."""
+        lnz, lnz_err = self._get_lnz(samples, sample_stats)
+        
+        # Call the appropriate results_to_arviz based on data type
+        idata = self._create_inference_data(samples, sample_stats, lnz, lnz_err)
+
+        # Summary statistics
+        if self.config.verbose:
+            ess = az.ess(idata)
+            ess_min = ess.to_array().min().values
+            ess_max = ess.to_array().max().values
+            print(f"  ESS min: {ess_min:.1f}, max: {ess_max:.1f}")
+            if not (np.isnan(lnz) or np.isnan(lnz_err)):
+                print(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
+
+        # Save outputs if requested
+        if self.config.outdir is not None:
+            self._save_results(idata)
+
+        return idata
+
+    @abstractmethod
+    def _create_inference_data(
+        self, 
+        samples: Dict[str, jnp.ndarray], 
+        sample_stats: Dict[str, Any],
+        lnz: float,
+        lnz_err: float
+    ) -> az.InferenceData:
+        """Create InferenceData object (univar vs multivar specific)."""
+        pass
+
+    def _save_results(self, idata: az.InferenceData) -> None:
+        """Save inference results to disk."""
+        az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")
+        plot_diagnostics(idata, self.config.outdir)
+        az.summary(idata).to_csv(f"{self.config.outdir}/summary_statistics.csv")
+        
+        # Data-type specific plotting
+        self._save_plots(idata)
+
+    @abstractmethod
+    def _save_plots(self, idata: az.InferenceData) -> None:
+        """Save data-type specific plots."""
+        pass

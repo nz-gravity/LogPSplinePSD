@@ -3,10 +3,9 @@ import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
-from typing import Tuple, List
+from typing import List
 from numpyro.infer import MCMC, NUTS
 import matplotlib.pyplot as plt
-from tqdm.auto import trange
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.datatypes import MultivarFFT
 from log_psplines.psplines.multivar_psplines import MultivariateLogPSplines

@@ -11,9 +11,11 @@ import numpy as np
 from tqdm.auto import tqdm
 import morphZ
 
-from ..datatypes import Periodogram
-from ..psplines import LogPSplines
-from .base_sampler import BaseSampler, SamplerConfig, log_likelihood
+from ...arviz_utils.to_arviz import results_to_arviz
+from ...datatypes import Periodogram
+from ...plotting import plot_diagnostics, plot_pdgrm
+from ...psplines import LogPSplines, build_spline
+from .univar_base import UnivarBaseSampler, SamplerConfig, log_likelihood
 
 
 @dataclass
@@ -30,7 +32,7 @@ class MetropolisHastingsConfig(SamplerConfig):
     max_step_size: float = 10.0  # Maximum step size
 
 
-class MetropolisHastingsSampler(BaseSampler):
+class MetropolisHastingsSampler(UnivarBaseSampler):
 
     def __init__(
             self,

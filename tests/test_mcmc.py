@@ -9,6 +9,9 @@ from log_psplines.plotting import plot_pdgrm
 
 
 def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
+    outdir = os.path.join(outdir, "out_mcmc")
+    os.makedirs(outdir, exist_ok=True)
+
     for sampler in ["mh", "nuts"]:
         compute_lnz = sampler == "mh"  # only compute Lnz for MH sampler (OTHER IS BROKEN)
 

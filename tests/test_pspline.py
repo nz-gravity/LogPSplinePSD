@@ -9,8 +9,7 @@ from scipy.interpolate import BSpline
 from log_psplines.datatypes import Periodogram
 from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
-from log_psplines.psplines.initialisation import init_basis_and_penalty
-from log_psplines.samplers.base_sampler import log_likelihood
+from log_psplines.samplers.univar.univar_base import log_likelihood
 
 
 def test_spline_init(mock_pdgrm: Periodogram, outdir):

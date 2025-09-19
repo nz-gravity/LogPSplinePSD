@@ -12,9 +12,11 @@ from numpyro.infer.util import init_to_value, log_density
 import morphZ
 import numpy as np
 
-from ..datatypes import Periodogram
-from ..psplines import LogPSplines
-from .base_sampler import BaseSampler, SamplerConfig, log_likelihood
+from ...arviz_utils.to_arviz import results_to_arviz
+from ...datatypes import Periodogram
+from ...plotting import plot_diagnostics, plot_pdgrm
+from ...psplines import LogPSplines, build_spline
+from .univar_base import UnivarBaseSampler, SamplerConfig, log_likelihood
 
 
 @dataclass
@@ -55,7 +57,7 @@ def bayesian_model(
     numpyro.deterministic("lp", log_prior_v + lnl)
 
 
-class NUTSSampler(BaseSampler):
+class NUTSSampler(UnivarBaseSampler):
 
     def __init__(
             self,

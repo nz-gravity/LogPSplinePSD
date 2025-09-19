@@ -1,5 +1,5 @@
-from .metropolis_hastings import (
+from .univar import (
     MetropolisHastingsConfig,
     MetropolisHastingsSampler,
+    NUTSConfig, NUTSSampler
 )
-from .nuts import NUTSConfig, NUTSSampler

@@ -162,10 +162,8 @@ class MultivarBaseSampler(BaseSampler):
             weights_key = f"weights_delta_{j}"
             if weights_key in samples:
                 weights = samples[weights_key]
-                # Compute spline values
-                log_delta_j = jnp.array([
-                    self.all_bases[j] @ w for w in weights
-                ])
+                # Vectorized spline evaluation using JAX
+                log_delta_j = self._batch_spline_eval(self.all_bases[j], weights)
                 log_delta_components.append(log_delta_j)
 
         if log_delta_components:
@@ -174,15 +172,27 @@ class MultivarBaseSampler(BaseSampler):
             # Fallback
             return jnp.zeros((n_samples, self.n_freq, self.n_channels))
 
+    @jax.jit
+    def _batch_spline_eval(self, basis: jnp.ndarray, weights_batch: jnp.ndarray) -> jnp.ndarray:
+        """JIT-compiled batch spline evaluation over multiple weight vectors.
+
+        Args:
+            basis: Basis matrix (n_freq, n_basis)
+            weights_batch: Batch of weight vectors (n_samples, n_basis)
+
+        Returns:
+            Batch of spline evaluations (n_samples, n_freq)
+        """
+        return jax.vmap(lambda w: basis @ w)(weights_batch)
+
     def _reconstruct_theta_params(self, samples: Dict[str, jnp.ndarray], param_type: str) -> jnp.ndarray:
         """Reconstruct theta parameters from samples."""
         key = f"weights_theta_{param_type}"
         if key in samples and self.n_theta > 0:
             weights = samples[key]
             basis_idx = self.n_channels + (0 if param_type == "re" else 1)
-            theta_base = jnp.array([
-                self.all_bases[basis_idx] @ w for w in weights
-            ])
+            # Vectorized spline evaluation using JAX
+            theta_base = self._batch_spline_eval(self.all_bases[basis_idx], weights)
             # Tile to match expected shape
             return jnp.tile(theta_base[:, :, None], (1, 1, max(1, self.n_theta)))
         else:

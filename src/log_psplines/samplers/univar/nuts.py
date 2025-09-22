@@ -67,6 +67,9 @@ class NUTSSampler(UnivarBaseSampler):
         super().__init__(periodogram, spline_model, config)
         self.config: NUTSConfig = config  # Type hint for IDE
 
+        # Pre-compile NumPyro model for faster warmup
+        self._compile_model()
+
     @property
     def sampler_type(self) -> str:
         """Required by base class."""
@@ -183,6 +186,33 @@ class NUTSSampler(UnivarBaseSampler):
             alpha_delta=self.config.alpha_delta,
             beta_delta=self.config.beta_delta,
         )
+
+    def _compile_model(self) -> None:
+        """Pre-compile the NumPyro model to speed up warmup."""
+        try:
+            from numpyro.infer.util import initialize_model
+            if self.config.verbose:
+                print("Pre-compiling NumPyro model...")
+
+            # Initialize model with dummy data to trigger compilation
+            init_params = initialize_model(
+                self.rng_key,
+                bayesian_model,
+                model_kwargs=self._logp_kwargs,
+                init_strategy=init_to_value(
+                    values=dict(
+                        delta=self.config.alpha_delta / self.config.beta_delta,
+                        phi=self.config.alpha_phi / self.config.beta_phi,
+                        weights=self.spline_model.weights
+                    )
+                )
+            )
+
+            if self.config.verbose:
+                print("Model pre-compilation completed")
+        except Exception as e:
+            if self.config.verbose:
+                print(f"Warning: Model pre-compilation failed: {e}")
 
     def _compute_log_posterior(self, weights: jnp.ndarray, phi: float, delta: float) -> float:
         """

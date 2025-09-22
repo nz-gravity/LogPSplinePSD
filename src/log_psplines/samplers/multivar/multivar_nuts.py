@@ -157,6 +157,9 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         super().__init__(fft_data, spline_model, config)
         self.config: MultivarNUTSConfig = config
 
+        # Pre-compile NumPyro model for faster warmup
+        self._compile_model()
+
     @property
     def sampler_type(self) -> str:
         return "multivariate_nuts"
@@ -244,6 +247,38 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             init_values["weights_theta_im"] = self.spline_model.offdiag_im_model.weights
 
         return init_values
+
+    def _compile_model(self) -> None:
+        """Pre-compile the NumPyro model to speed up warmup."""
+        try:
+            from numpyro.infer.util import initialize_model
+            if self.config.verbose:
+                print("Pre-compiling NumPyro model...")
+
+            # Initialize model with dummy data to trigger compilation
+            init_params = initialize_model(
+                self.rng_key,
+                multivariate_psplines_model,
+                model_kwargs=dict(
+                    y_re=self.y_re,
+                    y_im=self.y_im,
+                    Z_re=self.Z_re,
+                    Z_im=self.Z_im,
+                    all_bases=self.all_bases,
+                    all_penalties=self.all_penalties,
+                    alpha_phi=self.config.alpha_phi,
+                    beta_phi=self.config.beta_phi,
+                    alpha_delta=self.config.alpha_delta,
+                    beta_delta=self.config.beta_delta,
+                ),
+                init_strategy=init_to_value(values=self._get_initial_values())
+            )
+
+            if self.config.verbose:
+                print("Model pre-compilation completed")
+        except Exception as e:
+            if self.config.verbose:
+                print(f"Warning: Model pre-compilation failed: {e}")
 
     def _get_lnz(self, samples: Dict[str, Any], sample_stats: Dict[str, Any]) -> tuple[float, float]:
         """Compute log normalizing constant for multivariate case."""

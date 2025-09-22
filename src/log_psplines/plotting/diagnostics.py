@@ -6,7 +6,7 @@ import numpy as np
 def plot_diagnostics(
     idata: az.InferenceData,
     outdir: str,
-    variables: list = ["phi", "delta", "weights"],
+    # variables: list = ["phi", "delta", "weights"],
     figsize: tuple = (12, 8),
 ) -> None:
     """
@@ -22,52 +22,58 @@ def plot_diagnostics(
         Figure size
     """
 
-    # Trace plots
-    az.plot_trace(idata, var_names=variables, figsize=figsize)
-    plt.suptitle("Trace plots - Adaptive MCMC")
-    plt.tight_layout()
-    plt.savefig(f"{outdir}/trace_plots.png")
+    try:
 
-    # Acceptance rate plot
-    if "acceptance_rate" in idata.sample_stats:
-        fig, ax = plt.subplots(figsize=(10, 4))
-        accept_rates = idata.sample_stats.acceptance_rate.values.flatten()
-        ax.plot(accept_rates, alpha=0.7)
-        ax.axhline(
-            idata.attrs.get("target_accept_rate", 0.44),
-            color="red",
-            linestyle="--",
-            label="Target",
-        )
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel("Acceptance Rate")
-        ax.set_title("Acceptance Rate Over Time")
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+        # Trace plots
+        az.plot_trace(idata, figsize=figsize) #, var_names=variables)
+        plt.suptitle("Trace plots - Adaptive MCMC")
         plt.tight_layout()
-        plt.savefig(f"{outdir}/acceptance_rate.png")
+        plt.savefig(f"{outdir}/trace_plots.png")
 
-    # Step size evolution
-    if "step_size_mean" in idata.sample_stats:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+        # Acceptance rate plot
+        if "acceptance_rate" in idata.sample_stats:
+            fig, ax = plt.subplots(figsize=(10, 4))
+            accept_rates = idata.sample_stats.acceptance_rate.values.flatten()
+            ax.plot(accept_rates, alpha=0.7)
+            ax.axhline(
+                idata.attrs.get("target_accept_rate", 0.44),
+                color="red",
+                linestyle="--",
+                label="Target",
+            )
+            ax.set_xlabel("Iteration")
+            ax.set_ylabel("Acceptance Rate")
+            ax.set_title("Acceptance Rate Over Time")
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.savefig(f"{outdir}/acceptance_rate.png")
 
-        step_means = idata.sample_stats.step_size_mean.values.flatten()
-        step_stds = idata.sample_stats.step_size_std.values.flatten()
+        # Step size evolution
+        if "step_size_mean" in idata.sample_stats:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
-        ax1.plot(step_means, alpha=0.7)
-        ax1.set_xlabel("Iteration")
-        ax1.set_ylabel("Mean Step Size")
-        ax1.set_title("Step Size Evolution")
-        ax1.grid(True, alpha=0.3)
+            step_means = idata.sample_stats.step_size_mean.values.flatten()
+            step_stds = idata.sample_stats.step_size_std.values.flatten()
 
-        ax2.plot(step_stds, alpha=0.7, color="orange")
-        ax2.set_xlabel("Iteration")
-        ax2.set_ylabel("Step Size Std")
-        ax2.set_title("Step Size Variability")
-        ax2.grid(True, alpha=0.3)
+            ax1.plot(step_means, alpha=0.7)
+            ax1.set_xlabel("Iteration")
+            ax1.set_ylabel("Mean Step Size")
+            ax1.set_title("Step Size Evolution")
+            ax1.grid(True, alpha=0.3)
 
-        plt.tight_layout()
-        plt.savefig(f"{outdir}/step_size_evolution.png")
+            ax2.plot(step_stds, alpha=0.7, color="orange")
+            ax2.set_xlabel("Iteration")
+            ax2.set_ylabel("Step Size Std")
+            ax2.set_title("Step Size Variability")
+            ax2.grid(True, alpha=0.3)
+
+            plt.tight_layout()
+            plt.savefig(f"{outdir}/step_size_evolution.png")
+
+    except Exception as e:
+        print(f"Error generating adaptive MCMC diagnostics: {e}")
+
 
     # NUTS-specific plots
     ## ... unsure what diagnostics we should add...

@@ -33,7 +33,9 @@ def plot_psd_matrix(
     empirical_psd: np.ndarray,
     outdir: str,
     filename: str = "psd_matrix_posterior.png",
-    dpi: int = 150
+    dpi: int = 150,
+    xscale='linear',
+    diag_yscale='linear',
 ) -> None:
     """Plot the reconstructed PSD matrix components.
 
@@ -68,7 +70,7 @@ def plot_psd_matrix(
 
                 ax.fill_between(freq, q05, q95, alpha=0.3, color='blue', label='Model 90% CI')
                 ax.plot(freq, q50, color='blue', label='Model Median')
-                ax.plot(freq, empirical_psd[:, i, i].real, 'k--', alpha=0.7, label='Empirical')
+                ax.plot(freq, empirical_psd[:, i, i].real, 'k--', alpha=0.3, label='Empirical')
                 ax.set_title(f'Auto-spectrum Channel {i}')
                 ax.set_yscale('log')
 
@@ -79,7 +81,7 @@ def plot_psd_matrix(
 
                 ax.fill_between(freq, q05, q95, alpha=0.3, color='green', label='Model 90% CI')
                 ax.plot(freq, q50, color='green', label='Model Median')
-                ax.plot(freq, empirical_psd[:, i, j].real, 'k--', alpha=0.7, label='Empirical')
+                ax.plot(freq, empirical_psd[:, i, j].real, 'k--', alpha=0.3, label='Empirical')
                 ax.set_title(f'Cross-spectrum Real ({i},{j})')
 
             else:  # Upper triangle (imaginary parts of cross-spectra)
@@ -89,8 +91,13 @@ def plot_psd_matrix(
 
                 ax.fill_between(freq, q05, q95, alpha=0.3, color='red', label='Model 90% CI')
                 ax.plot(freq, q50, color='red', label='Model Median')
-                ax.plot(freq, empirical_psd[:, i, j].imag, 'k--', alpha=0.7, label='Empirical')
+                ax.plot(freq, empirical_psd[:, i, j].imag, 'k--', alpha=0.3, label='Empirical')
                 ax.set_title(f'Cross-spectrum Imag ({i},{j})')
+
+
+            ax.set_xscale(xscale)
+            if i == j:
+                ax.set_yscale(diag_yscale)
 
             ax.set_xlabel('Frequency [Hz]')
             ax.legend()

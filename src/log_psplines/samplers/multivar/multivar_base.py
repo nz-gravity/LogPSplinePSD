@@ -19,6 +19,20 @@ from ..base_sampler import BaseSampler, SamplerConfig
 
 
 @jax.jit
+def batch_spline_eval(basis: jnp.ndarray, weights_batch: jnp.ndarray) -> jnp.ndarray:
+    """JIT-compiled batch spline evaluation over multiple weight vectors.
+
+    Args:
+        basis: Basis matrix (n_freq, n_basis)
+        weights_batch: Batch of weight vectors (n_samples, n_basis)
+
+    Returns:
+        Batch of spline evaluations (n_samples, n_freq)
+    """
+    return jax.vmap(lambda w: basis @ w)(weights_batch)
+
+
+@jax.jit
 def whittle_likelihood(
     y_re: jnp.ndarray,  # (n_freq, n_dim)
     y_im: jnp.ndarray,  # (n_freq, n_dim)
@@ -164,7 +178,7 @@ class MultivarBaseSampler(BaseSampler):
             if weights_key in samples:
                 weights = samples[weights_key]
                 # Vectorized spline evaluation using JAX
-                log_delta_j = self._batch_spline_eval(self.all_bases[j], weights)
+                log_delta_j = batch_spline_eval(self.all_bases[j], weights)
                 log_delta_components.append(log_delta_j)
 
         if log_delta_components:
@@ -173,19 +187,6 @@ class MultivarBaseSampler(BaseSampler):
             # Fallback
             return jnp.zeros((n_samples, self.n_freq, self.n_channels))
 
-    @jax.jit
-    def _batch_spline_eval(self, basis: jnp.ndarray, weights_batch: jnp.ndarray) -> jnp.ndarray:
-        """JIT-compiled batch spline evaluation over multiple weight vectors.
-
-        Args:
-            basis: Basis matrix (n_freq, n_basis)
-            weights_batch: Batch of weight vectors (n_samples, n_basis)
-
-        Returns:
-            Batch of spline evaluations (n_samples, n_freq)
-        """
-        return jax.vmap(lambda w: basis @ w)(weights_batch)
-
     def _reconstruct_theta_params(self, samples: Dict[str, jnp.ndarray], param_type: str) -> jnp.ndarray:
         """Reconstruct theta parameters from samples."""
         key = f"weights_theta_{param_type}"
@@ -193,7 +194,7 @@ class MultivarBaseSampler(BaseSampler):
             weights = samples[key]
             basis_idx = self.n_channels + (0 if param_type == "re" else 1)
             # Vectorized spline evaluation using JAX
-            theta_base = self._batch_spline_eval(self.all_bases[basis_idx], weights)
+            theta_base = batch_spline_eval(self.all_bases[basis_idx], weights)
             # Tile to match expected shape
             return jnp.tile(theta_base[:, :, None], (1, 1, max(1, self.n_theta)))
         else:

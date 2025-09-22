@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from ...datatypes import MultivarFFT
+from ...plotting import plot_psd_matrix, compute_empirical_psd
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -212,73 +213,22 @@ class MultivarBaseSampler(BaseSampler):
 
     def _plot_psd_matrix(self, idata: az.InferenceData) -> None:
         """Plot the reconstructed PSD matrix components."""
-        if "psd_matrix" not in idata.posterior_predictive:
-            return
-
-        psd_samples = idata.posterior_predictive["psd_matrix"].values
-
         # Create empirical PSD matrix for comparison
-        empirical_psd = self._compute_empirical_psd()
+        empirical_psd = compute_empirical_psd(
+            fft_data_re=np.array(self.fft_data.y_re),
+            fft_data_im=np.array(self.fft_data.y_im),
+            n_channels=self.n_channels
+        )
 
-        fig, axes = plt.subplots(self.n_channels, self.n_channels, figsize=(4 * self.n_channels, 4 * self.n_channels))
-        if self.n_channels == 1:
-            axes = [[axes]]
-        elif self.n_channels == 2:
-            axes = axes.reshape(self.n_channels, self.n_channels)
+        plot_psd_matrix(
+            idata=idata,
+            n_channels=self.n_channels,
+            freq=np.array(self.freq),
+            empirical_psd=empirical_psd,
+            outdir=self.config.outdir
+        )
 
-        for i in range(self.n_channels):
-            for j in range(self.n_channels):
-                ax = axes[i][j]
 
-                if i == j:  # Diagonal elements (auto-spectra)
-                    q05 = np.percentile(psd_samples[:, :, i, i].real, 5, axis=0)
-                    q50 = np.percentile(psd_samples[:, :, i, i].real, 50, axis=0)
-                    q95 = np.percentile(psd_samples[:, :, i, i].real, 95, axis=0)
-
-                    ax.fill_between(self.freq, q05, q95, alpha=0.3, color='blue', label='Model 90% CI')
-                    ax.plot(self.freq, q50, color='blue', label='Model Median')
-                    ax.plot(self.freq, empirical_psd[:, i, i].real, 'k--', alpha=0.7, label='Empirical')
-                    ax.set_title(f'Auto-spectrum Channel {i}')
-                    ax.set_yscale('log')
-
-                elif i > j:  # Lower triangle (real parts of cross-spectra)
-                    q05 = np.percentile(psd_samples[:, :, i, j].real, 5, axis=0)
-                    q50 = np.percentile(psd_samples[:, :, i, j].real, 50, axis=0)
-                    q95 = np.percentile(psd_samples[:, :, i, j].real, 95, axis=0)
-
-                    ax.fill_between(self.freq, q05, q95, alpha=0.3, color='green', label='Model 90% CI')
-                    ax.plot(self.freq, q50, color='green', label='Model Median')
-                    ax.plot(self.freq, empirical_psd[:, i, j].real, 'k--', alpha=0.7, label='Empirical')
-                    ax.set_title(f'Cross-spectrum Real ({i},{j})')
-
-                else:  # Upper triangle (imaginary parts of cross-spectra)
-                    q05 = np.percentile(psd_samples[:, :, i, j].imag, 5, axis=0)
-                    q50 = np.percentile(psd_samples[:, :, i, j].imag, 50, axis=0)
-                    q95 = np.percentile(psd_samples[:, :, i, j].imag, 95, axis=0)
-
-                    ax.fill_between(self.freq, q05, q95, alpha=0.3, color='red', label='Model 90% CI')
-                    ax.plot(self.freq, q50, color='red', label='Model Median')
-                    ax.plot(self.freq, empirical_psd[:, i, j].imag, 'k--', alpha=0.7, label='Empirical')
-                    ax.set_title(f'Cross-spectrum Imag ({i},{j})')
-
-                ax.set_xlabel('Frequency [Hz]')
-                ax.legend()
-                ax.grid(True, alpha=0.3)
-
-        plt.tight_layout()
-        plt.savefig(f"{self.config.outdir}/psd_matrix_posterior.png", dpi=150, bbox_inches='tight')
-        plt.close(fig)
-
-    def _compute_empirical_psd(self) -> np.ndarray:
-        """Compute empirical PSD matrix for comparison."""
-        fft_complex = self.fft_data.y_re + 1j * self.fft_data.y_im
-        empirical_psd = np.zeros((self.n_freq, self.n_channels, self.n_channels), dtype=complex)
-
-        for i in range(self.n_channels):
-            for j in range(self.n_channels):
-                empirical_psd[:, i, j] = 2 * (fft_complex[:, i] * np.conj(fft_complex[:, j]))
-
-        return empirical_psd
 
     def _plot_summary_diagnostics(self, idata: az.InferenceData) -> None:
         """Plot summary diagnostics for multivariate case."""

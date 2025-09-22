@@ -7,7 +7,9 @@ import jax.numpy as jnp
 from typing_extensions import Unpack
 
 from .datatypes import Periodogram, Timeseries
+from .datatypes.multivar import MultivarFFT
 from .psplines import LogPSplines
+from .psplines.multivar_psplines import MultivariateLogPSplines
 from .samplers import (
     MetropolisHastingsConfig,
     MetropolisHastingsSampler,
@@ -204,3 +206,97 @@ def run_mcmc(
         periodogram=pdgrm, spline_model=spline_model, config=config
     )
     return sampler_obj.sample(n_samples=n_samples, n_warmup=n_warmup)
+
+
+# TODO: Add unified run_mcmc function and factory functions
+# def run_mcmc_unified(data, sampler="nuts", **kwargs) -> az.InferenceData:
+#     """Unified interface for both univariate and multivariate MCMC sampling."""
+#     sampler_obj = create_sampler_and_model(data, sampler, **kwargs)
+#     return sampler_obj.sample(**kwargs)
+
+
+# def create_sampler_and_model(data, sampler_type="nuts", **kwargs):
+#     """Factory function that creates appropriate model and sampler based on data type."""
+#     if isinstance(data, Periodogram):
+#         # Univariate case
+#         from .psplines import LogPSplines
+#
+#         parametric_model = kwargs.pop("parametric_model", None)
+#         spline_kwargs = {k: kwargs.pop(k) for k in ["n_knots", "degree", "diffMatrixOrder", "knot_kwargs"] if k in kwargs}
+#
+#         model = LogPSplines.from_periodogram(
+#             data,
+#             n_knots=spline_kwargs.pop("n_knots", 10),
+#             degree=spline_kwargs.pop("degree", 3),
+#             diffMatrixOrder=spline_kwargs.pop("diffMatrixOrder", 2),
+#             parametric_model=parametric_model,
+#             knot_kwargs=spline_kwargs.pop("knot_kwargs", {}),
+#         )
+#
+#         # Create appropriate sampler
+#         config = create_sampler_config(sampler_type, **kwargs)
+#         if sampler_type.lower() == "nuts":
+#             sampler = NUTSSampler(data, model, config)
+#         elif sampler_type.lower() == "mh":
+#             sampler = MetropolisHastingsSampler(data, model, config)
+#         else:
+#             raise ValueError(f"Unknown sampler: {sampler_type}")
+#
+#     elif isinstance(data, MultivarFFT):
+#         # Multivariate case
+#         spline_kwargs = {k: kwargs.pop(k) for k in ["n_knots", "degree", "diffMatrixOrder", "knot_kwargs"] if k in kwargs}
+#
+#         model = MultivariateLogPSplines.from_multivar_fft(
+#             data,
+#             n_knots=spline_kwargs.pop("n_knots", 10),
+#             degree=spline_kwargs.pop("degree", 3),
+#             diffMatrixOrder=spline_kwargs.pop("diffMatrixOrder", 2),
+#             knot_kwargs=spline_kwargs.pop("knot_kwargs", {}),
+#         )
+#
+#         # For multivariate, we currently only support NUTS
+#         if sampler_type.lower() != "nuts":
+#             print(f"Warning: Only NUTS sampling supported for multivariate case. Using NUTS instead of {sampler_type}.")
+#
+#         # Import multivariate NUTS sampler when ready
+#         # config = create_sampler_config("nuts", **kwargs)
+#         # sampler = MultivarNUTSSampler(data, model, config)
+#         raise NotImplementedError("Multivariate sampling not yet integrated with unified interface")
+#
+#     else:
+#         raise ValueError(f"Unsupported data type: {type(data).__name__}. Expected Periodogram or MultivarFFT.")
+#
+#     return sampler
+
+
+# def create_sampler_config(sampler_type, **kwargs):
+#     """Create appropriate config object based on sampler type."""
+#     common_kwargs = {
+#         "alpha_phi": kwargs.pop("alpha_phi", 1.0),
+#         "beta_phi": kwargs.pop("beta_phi", 1.0),
+#         "alpha_delta": kwargs.pop("alpha_delta", 1e-4),
+#         "beta_delta": kwargs.pop("beta_delta", 1e-4),
+#         "rng_key": kwargs.pop("rng_key", 42),
+#         "verbose": kwargs.pop("verbose", True),
+#         "outdir": kwargs.pop("outdir", None),
+#         "compute_lnz": kwargs.pop("compute_lnz", False),
+#     }
+#
+#     if sampler_type.lower() == "nuts":
+#         return NUTSConfig(
+#             **common_kwargs,
+#             target_accept_prob=kwargs.pop("target_accept_prob", 0.8),
+#             max_tree_depth=kwargs.pop("max_tree_depth", 10),
+#         )
+#     elif sampler_type.lower() == "mh":
+#         return MetropolisHastingsConfig(
+#             **common_kwargs,
+#             target_accept_rate=kwargs.pop("target_accept_rate", 0.44),
+#             adaptation_window=kwargs.pop("adaptation_window", 50),
+#             adaptation_start=kwargs.pop("adaptation_start", 100),
+#             step_size_factor=kwargs.pop("step_size_factor", 1.1),
+#             min_step_size=kwargs.pop("min_step_size", 1e-6),
+#             max_step_size=kwargs.pop("max_step_size", 10.0),
+#         )
+#     else:
+#         raise ValueError(f"Unknown sampler type: {sampler_type}")

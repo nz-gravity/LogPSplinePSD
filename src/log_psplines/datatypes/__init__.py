@@ -1,2 +1,2 @@
 from .univar import Timeseries, Periodogram
-from .multivar import MultivarFFT
+from .multivar import MultivarFFT, MultivariateTimeseries

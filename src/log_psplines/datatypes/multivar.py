@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Tuple
 import numpy as np
 
+
 @dataclass
 class MultivarFFT:
     """
@@ -27,21 +28,49 @@ class MultivarFFT:
     n_dim: int
 
     @classmethod
-    def compute_fft(cls, x: jnp.ndarray, fs: float = 1.0) -> 'MultivarFFT':
+    def compute_fft(
+            cls,
+            x: jnp.ndarray,
+            fs: float = 1.0,
+            fmin: float = None,
+            fmax: float = None
+    ) -> 'MultivarFFT':
         """
         Compute FFT and Cholesky design matrices for multivariate time series.
         FFT is normalized by sqrt(n_time).
+
+        Parameters
+        ----------
+        x : jnp.ndarray
+            Input time series (n_time, n_channels)
+        fs : float
+            Sampling frequency
+        fmin, fmax : float, optional
+            Frequency range for filtering. If None, uses all positive frequencies.
         """
         n_time, n_dim = x.shape
         assert n_time > n_dim, f"N of time {n_time} must be greater than dim {n_dim}"
+
         x_fft = jnp.fft.fft(x, axis=0) / jnp.sqrt(n_time)
         freqs = jnp.fft.fftfreq(n_time, 1 / fs)
+
+        # Get positive frequencies only
         pos_freq_idx = freqs > 0
         freqs = freqs[pos_freq_idx]
         x_fft = x_fft[pos_freq_idx, :]
+
+        # Apply frequency range filtering if specified
+        if fmin is not None or fmax is not None:
+            fmin = fmin if fmin is not None else freqs[0]
+            fmax = fmax if fmax is not None else freqs[-1]
+            freq_mask = (freqs >= fmin) & (freqs <= fmax)
+            freqs = freqs[freq_mask]
+            x_fft = x_fft[freq_mask, :]
+
         y_re = jnp.real(x_fft)
         y_im = jnp.imag(x_fft)
         Z_re, Z_im = cls.compute_cholesky_design(x_fft)
+
         return cls(
             y_re=y_re,
             y_im=y_im,
@@ -50,6 +79,19 @@ class MultivarFFT:
             freq=freqs,
             n_freq=len(freqs),
             n_dim=n_dim
+        )
+
+    def cut(self, fmin: float, fmax: float) -> 'MultivarFFT':
+        """Return a new MultivarFFT within frequency range [fmin, fmax]."""
+        mask = (self.freq >= fmin) & (self.freq <= fmax)
+        return MultivarFFT(
+            y_re=self.y_re[mask],
+            y_im=self.y_im[mask],
+            Z_re=self.Z_re[mask],
+            Z_im=self.Z_im[mask],
+            freq=self.freq[mask],
+            n_freq=jnp.sum(mask),
+            n_dim=self.n_dim
         )
 
     @staticmethod
@@ -88,6 +130,8 @@ class MultivarFFT:
                 count += i
         return jnp.real(jnp.array(Z_k)), jnp.imag(jnp.array(Z_k))
 
+    def __repr__(self):
+        return f"MultivarFFT(n_freq={self.n_freq}, n_dim={self.n_dim})"
 
 @dataclass
 class MultivariateTimeseries:
@@ -112,6 +156,21 @@ class MultivariateTimeseries:
     def fs(self) -> float:
         return float(1 / (self.t[1] - self.t[0]))
 
-    def to_cross_spectral_density(self) -> "MultivarFFT":
-        """Convert to frequency domain using your DiscreteFFT logic"""
-        return MultivarFFT.compute_fft(self.y, fs=self.fs)
+    def standardise(self):
+        """Standardise entire dataset by same factor"""
+        self.std = jnp.std(self.y, axis=0)
+        y = (self.y - jnp.mean(self.y, axis=0)) / self.std
+        return MultivariateTimeseries(y, self.t, self.std)
+
+    def to_cross_spectral_density(
+            self,
+            fmin: float = None,
+            fmax: float = None
+    ) -> "MultivarFFT":
+        """
+        Convert to frequency domain with optional frequency range filtering.
+        """
+        return MultivarFFT.compute_fft(self.y, fs=self.fs, fmin=fmin, fmax=fmax)
+
+    def __repr__(self):
+        return f"MultivariateTimeseries(n_time={self.y.shape[0]}, n_channels={self.n_channels}, fs={self.fs:.3f})"

@@ -6,6 +6,10 @@ import jax.numpy as jnp
 import numpy as np
 from .initialisation import init_basis_and_penalty, init_knots, init_weights
 from tqdm.auto import trange
+import jax
+import jax.numpy as jnp
+from jax import vmap
+from jax.scipy.linalg import solve_triangular
 
 
 @dataclass
@@ -99,7 +103,14 @@ class MultivariateLogPSplines:
         freq_norm = (fft_data.freq - fft_data.freq.min()) / (fft_data.freq.max() - fft_data.freq.min())
 
         # Initialize knots (same for all components for now, linear spacing)
-        knots = np.linspace(0, 1, n_knots)
+        knot_method = knot_kwargs.get('method', 'linear')
+        if knot_method == 'linear':
+            knots = np.linspace(0, 1, n_knots)
+        elif knot_method == 'log':
+            knots = np.geomspace(fft_data.freq[1], fft_data.freq[-1], n_knots)
+            knots = (knots - knots.min()) / (knots.max() - knots.min())  # Normalize to [0,1]
+        else:
+            raise ValueError(f"Unknown knot placement method: {knot_method}")
 
         # Create basis and penalty matrices (same for all components)
         basis, penalty = init_basis_and_penalty(knots, degree, n_freq, diffMatrixOrder)
@@ -252,75 +263,62 @@ class MultivariateLogPSplines:
         return all_bases, all_penalties
 
     def reconstruct_psd_matrix(
-            self,
-            log_delta_sq_samples: jnp.ndarray,
-            theta_re_samples: jnp.ndarray,
-            theta_im_samples: jnp.ndarray,
-            n_samples_max: int = 50
+        self,
+        log_delta_sq_samples: jnp.ndarray,
+        theta_re_samples: jnp.ndarray,
+        theta_im_samples: jnp.ndarray,
+        n_samples_max: int = 50
     ) -> jnp.ndarray:
         """
-        Reconstruct PSD matrix from Cholesky components.
-
-        Parameters
-        ----------
-        log_delta_sq_samples : jnp.ndarray, shape (n_samples, n_freq, n_channels)
-            Samples of log diagonal elements
-        theta_re_samples : jnp.ndarray, shape (n_samples, n_freq, n_theta)
-            Samples of real off-diagonal elements  
-        theta_im_samples : jnp.ndarray, shape (n_samples, n_freq, n_theta)
-            Samples of imaginary off-diagonal elements
-        n_samples_max : int, default=50
-            Maximum number of samples to reconstruct (for computational efficiency)
-
-        Returns
-        -------
-        jnp.ndarray, shape (n_samples_used, n_freq, n_channels, n_channels)
-            Reconstructed PSD matrices
-
-        Notes
-        -----
-        Implements: S(f) = T^(-1) D T^(-H) where:
-        - D = diag(exp(log_delta_sq))  
-        - T is lower triangular with -theta in lower triangle
+        Reconstruct PSD matrix from Cholesky components using JAX for efficiency.
+        JIT-compiled for speed. Handles batch processing over samples and frequencies.
+        Returns:
+            psd_matrices: shape (n_samps, n_freq, n_channels, n_channels)
         """
         n_samples, n_freq, n_channels = log_delta_sq_samples.shape
         n_theta = theta_re_samples.shape[2] if theta_re_samples.ndim > 2 else 0
         n_samps = min(n_samples_max, n_samples)
 
-        psd_samples = np.zeros((n_samps, n_freq, n_channels, n_channels), dtype=complex)
+        # Subsample if needed
+        log_delta_sq = log_delta_sq_samples[:n_samps]
+        theta_re = theta_re_samples[:n_samps]
+        theta_im = theta_im_samples[:n_samps]
 
-        for i in trange(n_samps, desc="Reconstructing PSD matrices"):
-            for k in range(n_freq):
-                # Diagonal matrix D
-                D = np.diag(np.exp(log_delta_sq_samples[i, k, :]))
+        @jax.jit
+        def build_single_psd(log_delta_sq_sf, theta_re_sf, theta_im_sf):
+            """Process single sample at single frequency.
+            Args:
+                log_delta_sq_sf: shape (n_channels,)
+                theta_re_sf: shape (n_theta,)
+                theta_im_sf: shape (n_theta,)
+            """
+            D = jnp.diag(jnp.exp(log_delta_sq_sf))
+            T = jnp.eye(n_channels, dtype=jnp.complex64)
+            if n_theta > 0 and n_channels > 1:
+                theta_complex = theta_re_sf + 1j * theta_im_sf
+                tril_row, tril_col = jnp.tril_indices(n_channels, k=-1)
+                n_lower = len(tril_row)
+                n_use = min(n_theta, n_lower)
+                if n_use > 0:
+                    T = T.at[tril_row[:n_use], tril_col[:n_use]].set(-theta_complex[:n_use])
+            temp = solve_triangular(T, D, lower=True)
+            T_inv_H = solve_triangular(T, jnp.eye(n_channels, dtype=jnp.complex64), lower=True).conj().T
+            return temp @ T_inv_H
 
-                # Lower triangular matrix T  
-                T = np.eye(n_channels, dtype=complex)
+        @jax.jit
+        def process_single_sample(log_delta_sq_s, theta_re_s, theta_im_s):
+            """Process all frequencies for a single sample.
+            Args:
+                log_delta_sq_s: shape (n_freq, n_channels)
+                theta_re_s: shape (n_freq, n_theta)
+                theta_im_s: shape (n_freq, n_theta)
+            """
+            return vmap(build_single_psd, in_axes=(0, 0, 0))(log_delta_sq_s, theta_re_s, theta_im_s)
 
-                if n_theta > 0 and n_channels > 1:
-                    theta_idx = 0
-                    for row in range(1, n_channels):
-                        for col in range(row):
-                            if theta_idx < n_theta:
-                                theta_val = (theta_re_samples[i, k, theta_idx] +
-                                             1j * theta_im_samples[i, k, theta_idx])
-                                T[row, col] = -theta_val
-                                theta_idx += 1
-
-                # Reconstruct PSD: S = T^(-1) D T^(-H)
-                try:
-                    T_inv = np.linalg.inv(T)
-                    S = T_inv @ D @ T_inv.conj().T
-                    psd_samples[i, k] = S
-                except np.linalg.LinAlgError:
-                    # Fallback to diagonal if inversion fails
-                    psd_samples[i, k] = D
-
-        return psd_samples
+        # vmap over samples (axis 0)
+        return vmap(process_single_sample, in_axes=(0, 0, 0))(log_delta_sq, theta_re, theta_im)
 
     def __repr__(self):
         return (f"MultivariateLogPSplines(channels={self.n_channels}, "
                 f"knots={self.n_knots}, degree={self.degree}, "
                 f"penaltyOrder={self.diffMatrixOrder}, n_freq={self.n_freq})")
-
-

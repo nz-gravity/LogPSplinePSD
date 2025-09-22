@@ -9,6 +9,7 @@ import arviz as az
 import jax.numpy as jnp
 import morphZ
 import numpy as np
+import jax
 
 from ...arviz_utils.to_arviz import results_to_arviz
 from ...datatypes import Periodogram

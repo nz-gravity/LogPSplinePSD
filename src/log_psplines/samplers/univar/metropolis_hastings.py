@@ -15,7 +15,7 @@ import numpy as np
 from tqdm.auto import tqdm
 import morphZ
 
-from .base import UnivarBaseSampler, log_likelihood  # Updated import
+from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 from ..base_sampler import SamplerConfig
 
 

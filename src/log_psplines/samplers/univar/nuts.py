@@ -16,7 +16,7 @@ from numpyro.infer.util import init_to_value, log_density
 import morphZ
 import numpy as np
 
-from .base import UnivarBaseSampler, log_likelihood  # Updated import
+from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 from ..base_sampler import SamplerConfig
 
 

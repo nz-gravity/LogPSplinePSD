@@ -5,6 +5,8 @@ from log_psplines.psplines.multivar_psplines import MultivariateLogPSplines
 from log_psplines.samplers.multivar.multivar_nuts import MultivarNUTSSampler, MultivarNUTSConfig
 import os
 import matplotlib.pyplot as plt
+from log_psplines.plotting.psd_matrix import plot_psd_matrix, compute_empirical_psd
+
 import numpy as np
 
 RESULT_FN = "results/lisa/inference_data.nc"
@@ -37,7 +39,7 @@ else:
         fft_data,
         MultivariateLogPSplines.from_multivar_fft(
             fft_data,
-            n_knots=5,
+            n_knots=10,
             degree=3,
             diffMatrixOrder=2,
             knot_kwargs=dict(method='log')
@@ -47,44 +49,18 @@ else:
             outdir="results/lisa",
         )
     )
-    idata = sampler.sample(n_samples=50, n_warmup=50)
+    idata = sampler.sample(n_samples=200, n_warmup=200)
 
 
 print(idata)
 
-
-def _plot_psd_matrix(idata, fft_data, outdir=None):
-    """
-    Plot the posterior mean PSD matrix for each channel pair in log-log scale.
-    Args:
-        idata: ArviZ InferenceData containing posterior samples
-        fft_data: MultivarFFT object (for frequency axis)
-        outdir: Optional directory to save the plot
-    """
-    # Extract frequency axis
-    freqs = fft_data.freq
-    # Extract PSD samples: shape (n_samples, n_freq, n_channels, n_channels)
-    psd_samples = idata.posterior['psd_matrix'].values  # adjust key if needed
-    # Take mean over samples
-    psd_mean = np.mean(psd_samples, axis=0)  # shape (n_freq, n_channels, n_channels)
-    n_channels = psd_mean.shape[1]
-    # Plot each channel pair
-    fig, axes = plt.subplots(n_channels, n_channels, figsize=(4*n_channels, 4*n_channels))
-    for i in range(n_channels):
-        for j in range(n_channels):
-            ax = axes[i, j] if n_channels > 1 else axes
-            ax.plot(freqs, psd_mean[:, i, j])
-            ax.set_xscale('log')
-            ax.set_yscale('log')
-            ax.set_xlabel('Frequency [Hz]')
-            ax.set_ylabel('PSD')
-            ax.set_title(f'PSD: Ch {i+1} vs Ch {j+1}')
-            ax.grid(True, which='both', ls='--', alpha=0.5)
-    plt.tight_layout()
-    if outdir:
-        plt.savefig(f'{outdir}/psd_matrix_loglog.png')
-    else:
-        plt.show()
-
-# Call the plotting function after print(idata)
-_plot_psd_matrix(idata, fft_data, outdir='results/lisa')
+plot_psd_matrix(
+    idata=idata,
+    n_channels=3,
+    freq=fft_data.freq,
+    empirical_psd=compute_empirical_psd(fft_data.y_re, fft_data.y_im, n_channels=3),
+    outdir="results/lisa",
+    filename="psd_matrix_posterior.png",
+    diag_yscale='log',
+    xscale='log'
+)

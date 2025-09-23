@@ -2,7 +2,7 @@
 
 import warnings
 from dataclasses import asdict
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, Tuple
 
 import arviz as az
 import jax
@@ -33,8 +33,80 @@ def results_to_arviz(
         raise ValueError(f"Unsupported data type: {type(data)}")
 
 
+def _add_chain_dim(data_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Add chain dimension to sample arrays (shared utility)."""
+    result = {}
+    for k, v in data_dict.items():
+        v_array = np.array(v)
+        # Always add chain dimension as first dimension if not present
+        # NumPyro with 1 chain returns samples without chain dimension
+        if v_array.ndim == 1:  # Scalar parameters: (n_draws,) -> (1, n_draws)
+            result[k] = v_array[None, :]
+        elif v_array.ndim == 2:  # Vector parameters: (n_draws, dim) -> (1, n_draws, dim)
+            result[k] = v_array[None, :, :]
+        elif v_array.ndim == 3:  # Matrix parameters: (n_draws, dim1, dim2) -> (1, n_draws, dim1, dim2)
+            result[k] = v_array[None, :, :, :]
+        elif v_array.ndim == 4:  # Already has chain dim: (n_chains, n_draws, dim1, dim2)
+            result[k] = v_array
+        else:
+            # Handle higher dimensional cases
+            result[k] = v_array[None, ...]
+    return result
+
+
+def _prepare_samples_and_stats(
+    samples: Dict[str, Any],
+    sample_stats: Dict[str, Any]
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Prepare samples and sample_stats by adding chain dimensions."""
+    samples = _add_chain_dim(samples)
+    sample_stats = _add_chain_dim(sample_stats)
+    return samples, sample_stats
+
+
+def _handle_log_posterior(sample_stats: Dict[str, Any]) -> None:
+    """Add log posterior to sample_stats if likelihood and prior exist."""
+    if {"log_likelihood", "log_prior"}.issubset(sample_stats.keys()):
+        sample_stats["lp"] = sample_stats["log_likelihood"] + sample_stats["log_prior"]
+
+
+def _prepare_attributes_and_dims(
+    config: "SamplerConfig",
+    attributes: Dict[str, Any],
+    samples: Dict[str, Any],
+    coords: Dict[str, Any],
+    dims: Dict[str, Any],
+    sample_stats: Dict[str, Any],
+    data,
+    model
+) -> None:
+    """Prepare attributes, coordinates, and dimensions for InferenceData."""
+    # Convert config to attributes (handle booleans)
+    config_attrs = {
+        k: int(v) if isinstance(v, bool) else v
+        for k, v in asdict(config).items()
+    }
+    attributes.update(config_attrs)
+
+    # Add ESS calculation
+    try:
+        attributes.update(dict(ess=az.ess(samples).to_array().values.flatten()))
+    except:
+        attributes.update(dict(ess=[]))
+
+    # Add base coordinates that both functions use
+    coords.update({
+        "chain": range(samples[list(samples.keys())[0]].shape[0]),
+        "draw": range(samples[list(samples.keys())[0]].shape[1]),
+    })
+
+    # Add log posterior to dims if it was added to sample_stats
+    if "lp" in sample_stats:
+        dims["lp"] = ["chain", "draw"]
+
+
 def _pack_spline_model(spline_model) -> Dataset:
-    """Pack spline model parameters into xarray Dataset."""
+    """Pack univariate spline model parameters into xarray Dataset."""
     data = {
         "knots": (["knots_dim"], np.array(spline_model.knots)),
         "degree": spline_model.degree,
@@ -76,21 +148,14 @@ def _pack_spline_model(spline_model) -> Dataset:
 def _create_univar_inference_data(
         samples: dict,
         sample_stats: dict,
-        config: "BaseSampler",
+        config: "SamplerConfig",
         periodogram: "Periodogram",
         spline_model: "LogPSplines",
         attributes: Dict[str, Any],
     ) -> az.InferenceData:
     """Create InferenceData for univariate case."""
-    # Ensure all arrays have chain dimension
-    def add_chain_dim(data_dict):
-        return {
-            k: np.array(v)[None, ...] if np.array(v).ndim <= 2 else np.array(v)
-            for k, v in data_dict.items()
-        }
-
-    samples = add_chain_dim(samples)
-    sample_stats = add_chain_dim(sample_stats)
+    # Prepare samples and stats with chain dimensions
+    samples, sample_stats = _prepare_samples_and_stats(samples, sample_stats)
 
     # Extract dimensions
     n_chains, n_draws, n_weights = samples["weights"].shape
@@ -103,67 +168,46 @@ def _create_univar_inference_data(
         if n_draws > n_pp
         else slice(None)
     )
-
     pp_samples = np.array([spline_model(w) for w in weights_chain0[pp_idx]])
     pp_samples = np.exp(pp_samples)
 
-    # Coordinates
+    # Handle log posterior
+    _handle_log_posterior(sample_stats)
+
+    # Setup coordinates and dimensions
     coords = {
-        "chain": range(n_chains),
-        "draw": range(n_draws),
         "pp_draw": range(n_pp),
         "weight_dim": range(n_weights),
         "freq": periodogram.freqs,
     }
 
-    # Dimensions for each data group
     dims = {
-        # Posterior
         "phi": ["chain", "draw"],
         "delta": ["chain", "draw"],
         "weights": ["chain", "draw", "weight_dim"],
-        # Sample stats
         **{k: ["chain", "draw"] for k in sample_stats.keys()},
-        # Observed data
-        "periodogram": ["freq"],
-        # Posterior predictive
-        "psd": ["chain", "pp_draw", "freq"],
+        "periodogram": ["freq"],  # Observed data
+        "psd": ["chain", "pp_draw", "freq"],  # Posterior predictive
     }
 
-    # Add log posterior if both likelihood and prior exist
-    if {"log_likelihood", "log_prior"}.issubset(sample_stats.keys()):
-        sample_stats["lp"] = (
-            sample_stats["log_likelihood"] + sample_stats["log_prior"]
-        )
+    # Prepare attributes and basic coords/dims using helper
+    _prepare_attributes_and_dims(config, attributes, samples, coords, dims, sample_stats, periodogram, spline_model)
 
-    # Convert config to attributes (handle booleans)
-    config_attrs = {
-        k: int(v) if isinstance(v, bool) else v
-        for k, v in asdict(config).items()
-    }
-    attributes.update(config_attrs)
-    attributes.update(dict(ess=az.ess(samples).to_array().values.flatten()))
-
-    # Create InferenceData with custom posterior_psd group
+    # Create base InferenceData
     idata = az.from_dict(
         posterior=samples,
         sample_stats=sample_stats,
         observed_data={"periodogram": periodogram.power},
-        dims={k: v for k, v in dims.items() if k != "psd"},
-        coords={k: v for k, v in coords.items() if k != "pp_draw"},
+        dims={k: v for k, v in dims.items() if k not in ["psd", "lp"]},  # Exclude manually added groups
+        coords=coords,
         attrs=attributes,
     )
 
     # Add posterior predictive samples
     idata.add_groups(
         posterior_psd=Dataset(
-            {
-                "psd": DataArray(pp_samples, dims=["pp_draw", "freq"]),
-            },
-            coords={
-                "pp_draw": coords["pp_draw"],
-                "freq": coords["freq"],
-            },
+            {"psd": DataArray(pp_samples, dims=["pp_draw", "freq"])},
+            coords={"pp_draw": coords["pp_draw"], "freq": coords["freq"]},
         )
     )
 
@@ -179,31 +223,9 @@ def _create_multivar_inference_data(
         spline_model: "MultivariateLogPSplines",
         attributes: Dict[str, Any],
     ) -> az.InferenceData:
-
     """Create InferenceData for multivariate case."""
-
-    # Ensure all arrays have chain dimension - FIXED VERSION
-    def add_chain_dim(data_dict):
-        result = {}
-        for k, v in data_dict.items():
-            v_array = np.array(v)
-            # Always add chain dimension as first dimension if not present
-            # NumPyro with 1 chain returns samples without chain dimension
-            if v_array.ndim == 1:  # Scalar parameters: (n_draws,) -> (1, n_draws)
-                result[k] = v_array[None, :]
-            elif v_array.ndim == 2:  # Vector parameters: (n_draws, dim) -> (1, n_draws, dim)
-                result[k] = v_array[None, :, :]
-            elif v_array.ndim == 3:  # Matrix parameters: (n_draws, dim1, dim2) -> (1, n_draws, dim1, dim2)
-                result[k] = v_array[None, :, :, :]
-            elif v_array.ndim == 4:  # Already has chain dim: (n_chains, n_draws, dim1, dim2)
-                result[k] = v_array
-            else:
-                # Handle higher dimensional cases
-                result[k] = v_array[None, ...]
-        return result
-
-    samples = add_chain_dim(samples)
-    sample_stats = add_chain_dim(sample_stats)
+    # Prepare samples and stats with chain dimensions
+    samples, sample_stats = _prepare_samples_and_stats(samples, sample_stats)
 
     # Extract dimensions from a standard sample
     first_sample_key = next((k for k, v in samples.items() if "weights_" in k), next(iter(samples.keys())))
@@ -214,84 +236,53 @@ def _create_multivar_inference_data(
     psd_samples = _compute_posterior_predictive_multivar(samples, spline_model, fft_data)
     n_pp = psd_samples.shape[0]
 
-    # Coordinates
+    # Handle log posterior
+    _handle_log_posterior(sample_stats)
+
+    # Setup coordinates and dimensions
     coords = {
-        "chain": range(n_chains),
-        "draw": range(n_draws),
         "pp_draw": range(n_pp),
         "freq": np.array(fft_data.freq),
         "channels": range(fft_data.n_dim),
     }
 
-    # Dimensions for each data group
     dims = {}
 
     # Posterior samples - handle weights with proper dimensions
     for key, array in samples.items():
         array_shape = array.shape
         if key.startswith("weights_"):
-            # Extract the component type from the key (e.g., "delta_0", "theta_re")
             component = key[8:]  # Remove "weights_" prefix
             dims[key] = ["chain", "draw", f"{component}_basis_dim"]
             coords[f"{component}_basis_dim"] = range(array_shape[-1])
         elif key in ["phi", "delta"] or key.startswith(("phi_", "delta_")):
-            # Scalar hyperparameters
             dims[key] = ["chain", "draw"]
 
-    # Sample stats - handle multivariate-specific variables properly
+    # Sample stats - handle multivariate-specific variables
     for key, array in sample_stats.items():
         array_shape = array.shape
-
-        if key == "log_delta_sq":
-            # Should now have shape: (1, n_draws, n_freq, n_channels)
-            if len(array_shape) == 4:
-                dims[key] = ["chain", "draw", "freq", "channels"]
-            else:
-                # Fallback for unexpected shapes
-                dims[key] = ["chain", "draw"] + [f"{key}_dim_{i}" for i in range(len(array_shape)-2)]
-                for i in range(2, len(array_shape)):
-                    coords[f"{key}_dim_{i-2}"] = range(array_shape[i])
-
-        elif key in ["theta_re", "theta_im"]:
-            # Should have shape: (1, n_draws, n_freq, n_theta)
-            if len(array_shape) == 4:
-                dims[key] = ["chain", "draw", "freq", f"{key}_theta_dim"]
-                coords[f"{key}_theta_dim"] = range(array_shape[-1])
-            else:
-                # Fallback
-                dims[key] = ["chain", "draw"] + [f"{key}_dim_{i}" for i in range(len(array_shape)-2)]
-                for i in range(2, len(array_shape)):
-                    coords[f"{key}_dim_{i-2}"] = range(array_shape[i])
-
+        if key == "log_delta_sq" and len(array_shape) == 4:
+            dims[key] = ["chain", "draw", "freq", "channels"]
+        elif key in ["theta_re", "theta_im"] and len(array_shape) == 4:
+            dims[key] = ["chain", "draw", "freq", f"{key}_theta_dim"]
+            coords[f"{key}_theta_dim"] = range(array_shape[-1])
         elif key == "log_likelihood":
-            # Scalar likelihood: should be (1, n_draws)
             dims[key] = ["chain", "draw"]
-        else:
-            # Generic handling for other sample stats
-            nd = len(array_shape)
-            if nd == 2:
-                dims[key] = ["chain", "draw"]
-            else:
-                dims[key] = ["chain", "draw"] + [f"{key}_dim_{i}" for i in range(nd-2)]
-                for i in range(2, nd):
-                    coords[f"{key}_dim_{i-2}"] = range(array_shape[i])
+        elif len(array_shape) == 2:
+            dims[key] = ["chain", "draw"]
+        else:  # Generic fallback
+            dims[key] = ["chain", "draw"] + [f"{key}_dim_{i}" for i in range(len(array_shape)-2)]
+            for i in range(2, len(array_shape)):
+                coords[f"{key}_dim_{i-2}"] = range(array_shape[i])
 
-    # Observed data
+    # Observed data and posterior predictive
     dims.update({
         "fft_re": ["freq", "channels"],
         "fft_im": ["freq", "channels"],
-        # Posterior predictive
         "psd_matrix": ["pp_draw", "freq", "channels", "channels"],
     })
 
-    # Add log posterior if both likelihood and prior exist
-    if {"log_likelihood", "log_prior"}.issubset(sample_stats.keys()):
-        sample_stats["lp"] = (
-                sample_stats["log_likelihood"] + sample_stats["log_prior"]
-        )
-        dims["lp"] = ["chain", "draw"]
-
-    # Extract values from attributes dict and update with multivar-specific attributes
+    # Update attributes with multivar-specific values
     attributes.update({
         "data_type": "multivariate",
         "n_channels": fft_data.n_dim,
@@ -300,20 +291,10 @@ def _create_multivar_inference_data(
         "frequencies": np.array(fft_data.freq),
     })
 
-    # Convert config to attributes (handle booleans)
-    config_attrs = {
-        k: int(v) if isinstance(v, bool) else v
-        for k, v in asdict(config).items()
-    }
-    attributes.update(config_attrs)
+    # Use shared attribute and dimension preparation
+    _prepare_attributes_and_dims(config, attributes, samples, coords, dims, sample_stats, fft_data, spline_model)
 
-    # Add ESS calculation
-    try:
-        attributes.update(dict(ess=az.ess(samples).to_array().values.flatten()))
-    except:
-        attributes.update(dict(ess=[]))
-
-    # Create InferenceData
+    # Create base InferenceData
     idata = az.from_dict(
         posterior=samples,
         sample_stats=sample_stats,
@@ -321,7 +302,7 @@ def _create_multivar_inference_data(
             "fft_re": np.array(fft_data.y_re),
             "fft_im": np.array(fft_data.y_im)
         },
-        dims=dims,
+        dims={k: v for k, v in dims.items() if k not in ["psd_matrix", "lp"]},  # Exclude manually added groups
         coords=coords,
         attrs=attributes,
     )
@@ -329,9 +310,7 @@ def _create_multivar_inference_data(
     # Add posterior predictive samples
     idata.add_groups(
         posterior_psd=Dataset(
-            {
-                "psd_matrix": DataArray(psd_samples, dims=["pp_draw", "freq", "channels", "channels"]),
-            },
+            {"psd_matrix": DataArray(psd_samples, dims=["pp_draw", "freq", "channels", "channels"])},
             coords={
                 "pp_draw": coords["pp_draw"],
                 "freq": coords["freq"],
@@ -359,6 +338,24 @@ def batch_spline_eval(basis: jnp.ndarray, weights_batch: jnp.ndarray) -> jnp.nda
     return jnp.sum(basis[None, :, :] * weights_batch[:, None, :], axis=-1)
 
 
+def _pack_model_component(model, prefix: str, data: Dict[str, Any], coords: Dict[str, Any]) -> None:
+    """Pack a single model component into data and coords dicts."""
+    data.update({
+        f"{prefix}_knots": ([f"{prefix}_knots_dim"], np.array(model.knots)),
+        f"{prefix}_basis": ([f"{prefix}_freq", f"{prefix}_weights_dim"], np.array(model.basis)),
+        f"{prefix}_penalty_matrix": ([f"{prefix}_weights_dim_row", f"{prefix}_weights_dim_col"],
+                                     np.array(model.penalty_matrix)),
+        f"{prefix}_parametric_model": ([f"{prefix}_freq"], np.array(model.parametric_model)),
+    })
+    coords.update({
+        f"{prefix}_knots_dim": np.arange(len(model.knots)),
+        f"{prefix}_weights_dim": np.arange(model.basis.shape[1]),
+        f"{prefix}_weights_dim_row": np.arange(model.penalty_matrix.shape[0]),
+        f"{prefix}_weights_dim_col": np.arange(model.penalty_matrix.shape[1]),
+        f"{prefix}_freq": np.arange(model.basis.shape[0]),
+    })
+
+
 def _pack_spline_model_multivar(spline_model) -> Dataset:
     """Pack multivariate spline model parameters into xarray Dataset."""
     data = {
@@ -371,60 +368,15 @@ def _pack_spline_model_multivar(spline_model) -> Dataset:
 
     coords = {}
 
-    # Diagonal models
+    # Pack diagonal models
     for i, diag_model in enumerate(spline_model.diagonal_models):
-        prefix = f"diag_{i}"
-        data.update({
-            f"{prefix}_knots": ([f"{prefix}_knots_dim"], np.array(diag_model.knots)),
-            f"{prefix}_basis": ([f"{prefix}_freq", f"{prefix}_weights_dim"], np.array(diag_model.basis)),
-            f"{prefix}_penalty_matrix": ([f"{prefix}_weights_dim_row", f"{prefix}_weights_dim_col"],
-                                         np.array(diag_model.penalty_matrix)),
-            f"{prefix}_parametric_model": ([f"{prefix}_freq"], np.array(diag_model.parametric_model)),
-        })
-        coords.update({
-            f"{prefix}_knots_dim": np.arange(len(diag_model.knots)),
-            f"{prefix}_weights_dim": np.arange(diag_model.basis.shape[1]),
-            f"{prefix}_weights_dim_row": np.arange(diag_model.penalty_matrix.shape[0]),
-            f"{prefix}_weights_dim_col": np.arange(diag_model.penalty_matrix.shape[1]),
-            f"{prefix}_freq": np.arange(diag_model.basis.shape[0]),
-        })
+        _pack_model_component(diag_model, f"diag_{i}", data, coords)
 
-    # Off-diagonal models
+    # Pack off-diagonal models if they exist
     if spline_model.offdiag_re_model is not None:
-        data.update({
-            "offdiag_re_knots": (["offdiag_knots_dim"], np.array(spline_model.offdiag_re_model.knots)),
-            "offdiag_re_basis": (["offdiag_freq", "offdiag_weights_dim"],
-                                 np.array(spline_model.offdiag_re_model.basis)),
-            "offdiag_re_penalty_matrix": (["offdiag_weights_dim_row", "offdiag_weights_dim_col"],
-                                          np.array(spline_model.offdiag_re_model.penalty_matrix)),
-            "offdiag_re_parametric_model": (["offdiag_freq"],
-                                            np.array(spline_model.offdiag_re_model.parametric_model)),
-        })
-        coords.update({
-            "offdiag_knots_dim": np.arange(len(spline_model.offdiag_re_model.knots)),
-            "offdiag_weights_dim": np.arange(spline_model.offdiag_re_model.basis.shape[1]),
-            "offdiag_weights_dim_row": np.arange(spline_model.offdiag_re_model.penalty_matrix.shape[0]),
-            "offdiag_weights_dim_col": np.arange(spline_model.offdiag_re_model.penalty_matrix.shape[1]),
-            "offdiag_freq": np.arange(spline_model.offdiag_re_model.basis.shape[0]),
-        })
-
+        _pack_model_component(spline_model.offdiag_re_model, "offdiag_re", data, coords)
     if spline_model.offdiag_im_model is not None:
-        data.update({
-            "offdiag_im_knots": (["offdiag_knots_dim"], np.array(spline_model.offdiag_im_model.knots)),
-            "offdiag_im_basis": (["offdiag_freq", "offdiag_weights_dim"],
-                                 np.array(spline_model.offdiag_im_model.basis)),
-            "offdiag_im_penalty_matrix": (["offdiag_weights_dim_row", "offdiag_weights_dim_col"],
-                                          np.array(spline_model.offdiag_im_model.penalty_matrix)),
-            "offdiag_im_parametric_model": (["offdiag_freq"],
-                                            np.array(spline_model.offdiag_im_model.parametric_model)),
-        })
-        coords.update({
-            "offdiag_knots_dim": np.arange(len(spline_model.offdiag_im_model.knots)),
-            "offdiag_weights_dim": np.arange(spline_model.offdiag_im_model.basis.shape[1]),
-            "offdiag_weights_dim_row": np.arange(spline_model.offdiag_im_model.penalty_matrix.shape[0]),
-            "offdiag_weights_dim_col": np.arange(spline_model.offdiag_im_model.penalty_matrix.shape[1]),
-            "offdiag_freq": np.arange(spline_model.offdiag_im_model.basis.shape[0]),
-        })
+        _pack_model_component(spline_model.offdiag_im_model, "offdiag_im", data, coords)
 
     return Dataset(
         {

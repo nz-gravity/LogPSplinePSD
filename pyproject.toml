@@ -41,6 +41,7 @@ dependencies = [
 gw = [
     "gwpy>=1.3.0",
     "gwosc",
+    "pycbc",
 ]
 dev = [
     "pytest",

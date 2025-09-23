@@ -9,6 +9,7 @@ from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.psd_diagnostics import PSDDiagnostics
 
 
+
 def test_plot_whitening_ar2(outdir):
     outdir = os.path.join(outdir, "out_psd_diagnostics")
     os.makedirs(outdir, exist_ok=True)

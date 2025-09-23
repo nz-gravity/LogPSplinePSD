@@ -62,29 +62,7 @@ class UnivarBaseSampler(BaseSampler):
     def data_type(self) -> str:
         return "univariate"
 
-    def _create_inference_data(
-        self,
-        samples: Dict[str, jnp.ndarray],
-        sample_stats: Dict[str, Any],
-        lnz: float,
-        lnz_err: float
-    ) -> az.InferenceData:
-        """Create InferenceData for univariate case."""
-        return results_to_arviz(
-            samples=samples,
-            sample_stats=sample_stats,
-            periodogram=self.periodogram,
-            spline_model=self.spline_model,
-            config=self.config,
-            attributes=dict(
-                device=str(self.device),
-                runtime=self.runtime,
-                lnz=lnz,
-                lnz_err=lnz_err,
-                sampler_type=self.sampler_type,
-                data_type=self.data_type,
-            ),
-        )
+
 
     def _save_plots(self, idata: az.InferenceData) -> None:
         """Save univariate-specific plots."""

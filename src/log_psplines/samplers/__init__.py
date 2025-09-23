@@ -3,3 +3,7 @@ from .univar import (
     MetropolisHastingsSampler,
     NUTSConfig, NUTSSampler
 )
+from .multivar import (
+    MultivarNUTSConfig,
+    MultivarNUTSSampler
+)

@@ -1,31 +1,33 @@
-from typing import Literal, Optional
+from typing import Union, Literal, Optional
 
 import arviz as az
 import jax.numpy as jnp
 
-from .datatypes import Periodogram, Timeseries
+from .core.abc import ModelFactory
+from .datatypes import Periodogram
 from .datatypes.multivar import MultivarFFT
 from .psplines import LogPSplines
-from .psplines.multivar_psplines import MultivariateLogPSplines
 from .samplers import (
     MetropolisHastingsConfig,
     MetropolisHastingsSampler,
+    MultivarNUTSConfig,
+    MultivarNUTSSampler,
     NUTSConfig,
     NUTSSampler,
 )
 
 
 def run_mcmc(
-    pdgrm: Periodogram,
-    parametric_model: jnp.ndarray = None,
-    sampler: str = "nuts",
+    data: Union[Periodogram, MultivarFFT],
+    sampler: Literal["nuts", "mh"] = "nuts",
     n_samples: int = 1000,
     n_warmup: int = 500,
-    # Direct parameters instead of TypedDict unpacking
+    # Model parameters
     n_knots: int = 10,
     degree: int = 3,
     diffMatrixOrder: int = 2,
     knot_kwargs: dict = {},
+    parametric_model: Optional[jnp.ndarray] = None,
     # Sampler parameters
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
@@ -44,55 +46,44 @@ def run_mcmc(
     **kwargs
 ) -> az.InferenceData:
     """
-    Bayesian spectral estimation using MCMC sampling with log P-splines.
-
-    Performs non-parametric Bayesian inference of power spectral densities using
-    penalized B-spline models. Particularly useful for gravitational wave data
-    analysis where smooth spectral estimates are needed while preserving sharp
-    spectral features.
+    Unified MCMC interface for both univariate and multivariate PSD estimation.
 
     Parameters
     ----------
-    pdgrm : Periodogram
-        Input periodogram data, typically from gravitational wave strain
-        measurements or detector noise characterization
-    parametric_model : jnp.ndarray, optional, default=None
-        Known parametric component to subtract (e.g., instrumental lines,
-        astrophysical templates). Must match periodogram frequency grid
-    sampler : {'nuts', 'mh'}, default='nuts'
-        MCMC sampler algorithm:
-
-        - 'nuts': No-U-Turn Sampler (efficient for smooth posteriors)
-        - 'mh': Metropolis-Hastings (robust for complex/multimodal posteriors)
-
+    data : Periodogram or MultivarFFT
+        Input data for analysis
+    sampler : {"nuts", "mh"}
+        MCMC sampler type (note: multivariate only supports "nuts")
     n_samples : int, default=1000
-        Number of posterior samples to collect after warmup phase
+        Number of posterior samples to collect
     n_warmup : int, default=500
-        Number of warmup iterations for sampler adaptation and burn-in
+        Number of warmup/burn-in samples
     n_knots : int, default=10
-        Number of knots for the P-spline basis
+        Number of knots for B-spline basis
     degree : int, default=3
-        Degree of the B-spline basis functions
+        Degree of B-spline basis functions
     diffMatrixOrder : int, default=2
-        Order of the difference matrix for the penalty term
+        Order of difference penalty matrix
     knot_kwargs : dict, default={}
         Additional keyword arguments for knot allocation
+    parametric_model : Optional[jnp.ndarray], default=None
+        Known parametric component (univariate only)
     alpha_phi : float, default=1.0
-        Alpha parameter for the precision prior
+        Alpha parameter for precision prior
     beta_phi : float, default=1.0
-        Beta parameter for the precision prior
+        Beta parameter for precision prior
     alpha_delta : float, default=1e-4
-        Alpha parameter for the smoothing prior
+        Alpha parameter for smoothing prior
     beta_delta : float, default=1e-4
-        Beta parameter for the smoothing prior
+        Beta parameter for smoothing prior
     rng_key : int, default=42
         Random number generator key
     verbose : bool, default=True
         Whether to print progress information
-    outdir : str, optional, default=None
+    outdir : Optional[str], default=None
         Directory to save output files
     compute_lnz : bool, default=False
-        Whether to compute the log evidence
+        Whether to compute log evidence
     target_accept_prob : float, default=0.8
         Target acceptance probability for NUTS
     max_tree_depth : int, default=10
@@ -101,169 +92,177 @@ def run_mcmc(
         Target acceptance rate for MH
     adaptation_window : int, default=50
         Adaptation window for MH
+    **kwargs
+        Additional keyword arguments
 
     Returns
     -------
     az.InferenceData
-        ArviZ InferenceData object containing:
-
-        - Posterior samples for spline coefficients and smoothing parameters
-        - MCMC diagnostics (R-hat, ESS, divergences, energy statistics)
-        - Log-likelihood traces and model comparison metrics
-        - Reconstructed power spectral density samples
+        ArviZ InferenceData object with MCMC results
     """
 
-    # Create spline model
-    spline_model = LogPSplines.from_periodogram(
-        pdgrm,
-        n_knots=n_knots,
-        degree=degree,
-        diffMatrixOrder=diffMatrixOrder,
-        parametric_model=parametric_model,
-        knot_kwargs=knot_kwargs,
+    # Validate sampler for multivariate case
+    if isinstance(data, MultivarFFT) and sampler != "nuts":
+        if verbose:
+            print(f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler}")
+        sampler = "nuts"
+
+    # Create model using factory
+    model_kwargs = {
+        "n_knots": n_knots,
+        "degree": degree,
+        "diffMatrixOrder": diffMatrixOrder,
+        "knot_kwargs": knot_kwargs
+    }
+
+    if isinstance(data, Periodogram):
+        model_kwargs["parametric_model"] = parametric_model
+
+    model = ModelFactory.create_model(data, **model_kwargs)
+
+    # Create sampler
+    sampler_obj = create_sampler(
+        data=data,
+        model=model,
+        sampler_type=sampler,
+        alpha_phi=alpha_phi,
+        beta_phi=beta_phi,
+        alpha_delta=alpha_delta,
+        beta_delta=beta_delta,
+        rng_key=rng_key,
+        verbose=verbose,
+        outdir=outdir,
+        compute_lnz=compute_lnz,
+        target_accept_prob=target_accept_prob,
+        max_tree_depth=max_tree_depth,
+        target_accept_rate=target_accept_rate,
+        adaptation_window=adaptation_window,
+        **kwargs
     )
 
-    if sampler == "nuts":
-        config = NUTSConfig(
-            alpha_phi=alpha_phi,
-            beta_phi=beta_phi,
-            alpha_delta=alpha_delta,
-            beta_delta=beta_delta,
-            rng_key=rng_key,
-            verbose=verbose,
-            outdir=outdir,
-            compute_lnz=compute_lnz,
-            target_accept_prob=target_accept_prob,
-            max_tree_depth=max_tree_depth,
-        )
-        print("Spline model:", spline_model)
-        print("Sampler config:", config)
-        sampler_obj = NUTSSampler(
-            periodogram=pdgrm, spline_model=spline_model, config=config
-        )
-
-    elif sampler == "mh":
-        config = MetropolisHastingsConfig(
-            alpha_phi=alpha_phi,
-            beta_phi=beta_phi,
-            alpha_delta=alpha_delta,
-            beta_delta=beta_delta,
-            rng_key=rng_key,
-            verbose=verbose,
-            outdir=outdir,
-            compute_lnz=compute_lnz,
-            target_accept_rate=target_accept_rate,
-            adaptation_window=adaptation_window,
-            adaptation_start=100,  # Hardcoded default
-            step_size_factor=1.1,  # Hardcoded default
-            min_step_size=1e-6,  # Hardcoded default
-            max_step_size=10.0,  # Hardcoded default
-        )
-        print("Spline model:", spline_model)
-        print("Sampler config:", config)
-        sampler_obj = MetropolisHastingsSampler(
-            periodogram=pdgrm, spline_model=spline_model, config=config
-        )
-    else:
-        raise ValueError(
-            f"Unknown sampler '{sampler}'. Choose 'nuts' or 'mh'."
-        )
-
-    # ensure no extra kwargs remain
-    if kwargs:
-        raise ValueError(f"Unknown arguments: {', '.join(kwargs.keys())}")
     return sampler_obj.sample(n_samples=n_samples, n_warmup=n_warmup)
 
 
-# TODO: Add unified run_mcmc function and factory functions
-# def run_mcmc_unified(data, sampler="nuts", **kwargs) -> az.InferenceData:
-#     """Unified interface for both univariate and multivariate MCMC sampling."""
-#     sampler_obj = create_sampler_and_model(data, sampler, **kwargs)
-#     return sampler_obj.sample(**kwargs)
+def create_sampler(
+    data: Union[Periodogram, MultivarFFT],
+    model,
+    sampler_type: Literal["nuts", "mh"] = "nuts",
+    alpha_phi: float = 1.0,
+    beta_phi: float = 1.0,
+    alpha_delta: float = 1e-4,
+    beta_delta: float = 1e-4,
+    rng_key: int = 42,
+    verbose: bool = True,
+    outdir: Optional[str] = None,
+    compute_lnz: bool = False,
+    target_accept_prob: float = 0.8,
+    max_tree_depth: int = 10,
+    target_accept_rate: float = 0.44,
+    adaptation_window: int = 50,
+    **kwargs
+):
+    """Factory function to create appropriate sampler."""
+
+    common_config_kwargs = {
+        "alpha_phi": alpha_phi,
+        "beta_phi": beta_phi,
+        "alpha_delta": alpha_delta,
+        "beta_delta": beta_delta,
+        "rng_key": rng_key,
+        "verbose": verbose,
+        "outdir": outdir,
+        "compute_lnz": compute_lnz,
+    }
+
+    if isinstance(data, Periodogram):
+        # Univariate case
+        if sampler_type == "nuts":
+            config = NUTSConfig(
+                **common_config_kwargs,
+                target_accept_prob=target_accept_prob,
+                max_tree_depth=max_tree_depth,
+            )
+            return NUTSSampler(data, model, config)
+        elif sampler_type == "mh":
+            config = MetropolisHastingsConfig(
+                **common_config_kwargs,
+                target_accept_rate=target_accept_rate,
+                adaptation_window=adaptation_window,
+                adaptation_start=100,
+                step_size_factor=1.1,
+                min_step_size=1e-6,
+                max_step_size=10.0,
+            )
+            return MetropolisHastingsSampler(data, model, config)
+        else:
+            raise ValueError(f"Unknown sampler_type '{sampler_type}' for univariate data. Choose 'nuts' or 'mh'.")
+
+    elif isinstance(data, MultivarFFT):
+        # Multivariate case (NUTS only for now)
+        if sampler_type != "nuts":
+            if verbose:
+                print(f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler_type}")
+        config = MultivarNUTSConfig(
+            **common_config_kwargs,
+            target_accept_prob=target_accept_prob,
+            max_tree_depth=max_tree_depth,
+        )
+        return MultivarNUTSSampler(data, model, config)
+
+    else:
+        raise ValueError(f"Unsupported data type: {type(data).__name__}. Expected Periodogram or MultivarFFT.")
 
 
-# def create_sampler_and_model(data, sampler_type="nuts", **kwargs):
-#     """Factory function that creates appropriate model and sampler based on data type."""
-#     if isinstance(data, Periodogram):
-#         # Univariate case
-#         from .psplines import LogPSplines
-#
-#         parametric_model = kwargs.pop("parametric_model", None)
-#         spline_kwargs = {k: kwargs.pop(k) for k in ["n_knots", "degree", "diffMatrixOrder", "knot_kwargs"] if k in kwargs}
-#
-#         model = LogPSplines.from_periodogram(
-#             data,
-#             n_knots=spline_kwargs.pop("n_knots", 10),
-#             degree=spline_kwargs.pop("degree", 3),
-#             diffMatrixOrder=spline_kwargs.pop("diffMatrixOrder", 2),
-#             parametric_model=parametric_model,
-#             knot_kwargs=spline_kwargs.pop("knot_kwargs", {}),
-#         )
-#
-#         # Create appropriate sampler
-#         config = create_sampler_config(sampler_type, **kwargs)
-#         if sampler_type.lower() == "nuts":
-#             sampler = NUTSSampler(data, model, config)
-#         elif sampler_type.lower() == "mh":
-#             sampler = MetropolisHastingsSampler(data, model, config)
-#         else:
-#             raise ValueError(f"Unknown sampler: {sampler_type}")
-#
-#     elif isinstance(data, MultivarFFT):
-#         # Multivariate case
-#         spline_kwargs = {k: kwargs.pop(k) for k in ["n_knots", "degree", "diffMatrixOrder", "knot_kwargs"] if k in kwargs}
-#
-#         model = MultivariateLogPSplines.from_multivar_fft(
-#             data,
-#             n_knots=spline_kwargs.pop("n_knots", 10),
-#             degree=spline_kwargs.pop("degree", 3),
-#             diffMatrixOrder=spline_kwargs.pop("diffMatrixOrder", 2),
-#             knot_kwargs=spline_kwargs.pop("knot_kwargs", {}),
-#         )
-#
-#         # For multivariate, we currently only support NUTS
-#         if sampler_type.lower() != "nuts":
-#             print(f"Warning: Only NUTS sampling supported for multivariate case. Using NUTS instead of {sampler_type}.")
-#
-#         # Import multivariate NUTS sampler when ready
-#         # config = create_sampler_config("nuts", **kwargs)
-#         # sampler = MultivarNUTSSampler(data, model, config)
-#         raise NotImplementedError("Multivariate sampling not yet integrated with unified interface")
-#
-#     else:
-#         raise ValueError(f"Unsupported data type: {type(data).__name__}. Expected Periodogram or MultivarFFT.")
-#
-#     return sampler
-
-
-# def create_sampler_config(sampler_type, **kwargs):
-#     """Create appropriate config object based on sampler type."""
-#     common_kwargs = {
-#         "alpha_phi": kwargs.pop("alpha_phi", 1.0),
-#         "beta_phi": kwargs.pop("beta_phi", 1.0),
-#         "alpha_delta": kwargs.pop("alpha_delta", 1e-4),
-#         "beta_delta": kwargs.pop("beta_delta", 1e-4),
-#         "rng_key": kwargs.pop("rng_key", 42),
-#         "verbose": kwargs.pop("verbose", True),
-#         "outdir": kwargs.pop("outdir", None),
-#         "compute_lnz": kwargs.pop("compute_lnz", False),
-#     }
-#
-#     if sampler_type.lower() == "nuts":
-#         return NUTSConfig(
-#             **common_kwargs,
-#             target_accept_prob=kwargs.pop("target_accept_prob", 0.8),
-#             max_tree_depth=kwargs.pop("max_tree_depth", 10),
-#         )
-#     elif sampler_type.lower() == "mh":
-#         return MetropolisHastingsConfig(
-#             **common_kwargs,
-#             target_accept_rate=kwargs.pop("target_accept_rate", 0.44),
-#             adaptation_window=kwargs.pop("adaptation_window", 50),
-#             adaptation_start=kwargs.pop("adaptation_start", 100),
-#             step_size_factor=kwargs.pop("step_size_factor", 1.1),
-#             min_step_size=kwargs.pop("min_step_size", 1e-6),
-#             max_step_size=kwargs.pop("max_step_size", 10.0),
-#         )
-#     else:
-#         raise ValueError(f"Unknown sampler type: {sampler_type}")
+# Separate univariate function for backward compatibility
+def run_mcmc_univariate(
+    pdgrm: Periodogram,
+    parametric_model: Optional[jnp.ndarray] = None,
+    sampler: Literal["nuts", "mh"] = "nuts",
+    n_samples: int = 1000,
+    n_warmup: int = 500,
+    n_knots: int = 10,
+    degree: int = 3,
+    diffMatrixOrder: int = 2,
+    knot_kwargs: dict = {},
+    alpha_phi: float = 1.0,
+    beta_phi: float = 1.0,
+    alpha_delta: float = 1e-4,
+    beta_delta: float = 1e-4,
+    rng_key: int = 42,
+    verbose: bool = True,
+    outdir: Optional[str] = None,
+    compute_lnz: bool = False,
+    target_accept_prob: float = 0.8,
+    max_tree_depth: int = 10,
+    target_accept_rate: float = 0.44,
+    adaptation_window: int = 50,
+    **kwargs
+) -> az.InferenceData:
+    """
+    Backward-compatible univariate MCMC function.
+    Use run_mcmc for unified interface.
+    """
+    return run_mcmc(
+        data=pdgrm,
+        parametric_model=parametric_model,
+        sampler=sampler,
+        n_samples=n_samples,
+        n_warmup=n_warmup,
+        n_knots=n_knots,
+        degree=degree,
+        diffMatrixOrder=diffMatrixOrder,
+        knot_kwargs=knot_kwargs,
+        alpha_phi=alpha_phi,
+        beta_phi=beta_phi,
+        alpha_delta=alpha_delta,
+        beta_delta=beta_delta,
+        rng_key=rng_key,
+        verbose=verbose,
+        outdir=outdir,
+        compute_lnz=compute_lnz,
+        target_accept_prob=target_accept_prob,
+        max_tree_depth=max_tree_depth,
+        target_accept_rate=target_accept_rate,
+        adaptation_window=adaptation_window,
+        **kwargs
+    )

@@ -77,6 +77,9 @@ def multivariate_psplines_model(
     component_idx = 0
     log_delta_components = []
 
+    # Initialize total log prior accumulator
+    log_prior_total = jnp.array(0.0)
+
     # Diagonal components (one per channel)
     for j in range(n_dim):  # Now n_dim is a concrete Python int
         delta = numpyro.sample(f"delta_{j}", dist.Gamma(alpha_delta, beta_delta))
@@ -89,6 +92,7 @@ def multivariate_psplines_model(
         wPw = jnp.dot(weights, jnp.dot(all_penalties[component_idx], weights))
         log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
         numpyro.factor(f"weights_prior_delta_{j}", log_prior_w)
+        log_prior_total += log_prior_w
 
         # Compute log diagonal element
         log_delta_sq_j = all_bases[component_idx] @ weights
@@ -109,6 +113,7 @@ def multivariate_psplines_model(
         wPw_re = jnp.dot(weights_re, jnp.dot(all_penalties[component_idx], weights_re))
         log_prior_w_re = 0.5 * k * jnp.log(phi_re) - 0.5 * phi_re * wPw_re
         numpyro.factor("weights_prior_theta_re", log_prior_w_re)
+        log_prior_total += log_prior_w_re
 
         theta_re_base = all_bases[component_idx] @ weights_re
         theta_re = jnp.tile(theta_re_base[:, None], (1, max(1, n_theta)))
@@ -124,6 +129,7 @@ def multivariate_psplines_model(
         wPw_im = jnp.dot(weights_im, jnp.dot(all_penalties[component_idx], weights_im))
         log_prior_w_im = 0.5 * k * jnp.log(phi_im) - 0.5 * phi_im * wPw_im
         numpyro.factor("weights_prior_theta_im", log_prior_w_im)
+        log_prior_total += log_prior_w_im
 
         theta_im_base = all_bases[component_idx] @ weights_im
         theta_im = jnp.tile(theta_im_base[:, None], (1, max(1, n_theta)))
@@ -138,6 +144,7 @@ def multivariate_psplines_model(
     numpyro.factor("likelihood", log_likelihood)
 
     # Store deterministic quantities for diagnostics
+    numpyro.deterministic("lp", log_prior_total + log_likelihood)
     numpyro.deterministic("log_delta_sq", log_delta_sq)
     numpyro.deterministic("theta_re", theta_re)
     numpyro.deterministic("theta_im", theta_im)
@@ -222,7 +229,7 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         stats = mcmc.get_extra_fields()
 
         # Move deterministic quantities from samples to stats
-        for key in ["log_delta_sq", "theta_re", "theta_im", "log_likelihood"]:
+        for key in ["lp", "log_delta_sq", "theta_re", "theta_im", "log_likelihood"]:
             if key in samples:
                 stats[key] = samples.pop(key)
 

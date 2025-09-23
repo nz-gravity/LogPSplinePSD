@@ -392,16 +392,3 @@ def build_spline(
     return (ln_spline_basis @ weights) + log_parametric
 
 
-#     @property
-#     def basis_sparsity(self) -> jnp.ndarray:
-#         """Compute the sparsity of the spline basis."""
-#         return _compute_sparsity(self.basis)
-#
-#     @property
-#     def penalty_sparsity(self) -> jnp.ndarray:
-#         """Compute the sparsity of the penalty matrix."""
-#         return _compute_sparsity(self.penalty_matrix)
-#
-# def _compute_sparsity(x) -> jnp.ndarray:
-#     # copy x to avoid modifying the original array
-#     return jnp.count_nonzero(x) / x.size

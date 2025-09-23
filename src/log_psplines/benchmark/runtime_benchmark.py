@@ -85,7 +85,7 @@ class RuntimeBenchmark:
             ess_i = []
             for rep in range(reps):
                 idata = run_mcmc(
-                    pdgrm=pdgrm,
+                    data=pdgrm,
                     rng_key=rep,
                     **mcmc_kwgs,
                 )
@@ -132,7 +132,7 @@ class RuntimeBenchmark:
         mcmc_kwgs = MCMC_DEFAULTS.copy()
         mcmc_kwgs["verbose"] = self.verbose
         mcmc_kwgs["sampler"] = sampler
-        mcmc_kwgs["pdgrm"] = pdgrm
+        mcmc_kwgs["data"] = pdgrm
         mcmc_kwgs["n_samples"] = self.n_mcmc
         mcmc_kwgs["n_warmup"] = self.n_warmup
 

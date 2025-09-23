@@ -23,6 +23,7 @@ class MultivarNUTSConfig(SamplerConfig):
     target_accept_prob: float = 0.8
     max_tree_depth: int = 10
     dense_mass: bool = True
+    save_nuts_diagnostics: bool = True
 
 
 @jax.jit
@@ -209,6 +210,7 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             self.config.beta_phi,
             self.config.alpha_delta,
             self.config.beta_delta,
+            extra_fields=("potential_energy","num_steps","accept_prob",) if self.config.save_nuts_diagnostics else (),
         )
         self.runtime = time.time() - start_time
 

@@ -12,7 +12,7 @@ def test_mcmc(mock_pdgrm: Periodogram, outdir: str):
     outdir = os.path.join(outdir, "out_mcmc")
     os.makedirs(outdir, exist_ok=True)
 
-    for sampler in ["mh", "nuts"]:
+    for sampler in ["nuts", "mh"]:
         compute_lnz = sampler == "mh"  # only compute Lnz for MH sampler (OTHER IS BROKEN)
 
         idata = run_mcmc(

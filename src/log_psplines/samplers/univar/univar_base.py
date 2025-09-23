@@ -62,8 +62,6 @@ class UnivarBaseSampler(BaseSampler):
     def data_type(self) -> str:
         return "univariate"
 
-
-
     def _save_plots(self, idata: az.InferenceData) -> None:
         """Save univariate-specific plots."""
         fig, _ = plot_pdgrm(idata=idata)

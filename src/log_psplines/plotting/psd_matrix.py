@@ -48,10 +48,10 @@ def plot_psd_matrix(
         filename: Output filename
         dpi: Resolution for saved figure
     """
-    if "psd_matrix" not in idata.posterior_predictive:
+    if "psd_matrix" not in idata.posterior_psd:
         return
 
-    psd_samples = idata.posterior_predictive["psd_matrix"].values
+    psd_samples = idata.posterior_psd["psd_matrix"].values
 
     fig, axes = plt.subplots(n_channels, n_channels, figsize=(4 * n_channels, 4 * n_channels))
     if n_channels == 1:

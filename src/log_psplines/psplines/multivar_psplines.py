@@ -275,6 +275,14 @@ class MultivariateLogPSplines:
         Returns:
             psd_matrices: shape (n_samps, n_freq, n_channels, n_channels)
         """
+        # Handle arrays that may have chain dimension (1, n_draws, n_freq, n_channels)
+        if log_delta_sq_samples.ndim == 4:  # (n_chains, n_draws, n_freq, n_channels)
+            log_delta_sq_samples = log_delta_sq_samples[0]  # Take first chain
+        if theta_re_samples.ndim == 4:
+            theta_re_samples = theta_re_samples[0]
+        if theta_im_samples.ndim == 4:
+            theta_im_samples = theta_im_samples[0]
+
         n_samples, n_freq, n_channels = log_delta_sq_samples.shape
         n_theta = theta_re_samples.shape[2] if theta_re_samples.ndim > 2 else 0
         n_samps = min(n_samples_max, n_samples)

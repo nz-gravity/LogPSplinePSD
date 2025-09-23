@@ -11,6 +11,38 @@ class LVKData:
         self.psd = psd
         self.freqs = freqs
 
+
+    @classmethod
+    def from_simulation(cls, duration: int = 4, fs: int = 1024) -> "LVKData":
+        import requests
+        from io import StringIO
+        from pycbc.types import FrequencySeries as PycbcFrequencySeries
+        import numpy as np
+        import pycbc.noise
+
+        # --- Download the ASD file from LIGO DCC ---
+        url = "https://dcc.ligo.org/public/0165/T2000012/002/aligo_O3actual_H1.txt"
+        response = requests.get(url)
+        response.raise_for_status()  # ensure it downloaded properly
+
+        # --- Parse into numpy arrays ---
+        data = np.loadtxt(StringIO(response.text))
+        freq, asd = data[:, 0], data[:, 1]
+
+        # --- Convert ASD → PSD ---
+        psd_vals = asd ** 2
+
+        # --- Wrap into PyCBC FrequencySeries ---
+        delta_f = freq[1] - freq[0]
+        psd = PycbcFrequencySeries(psd_vals, delta_f=delta_f, copy=True)
+
+        # ---- simulate noise timeseries -----
+        delta_t = 1.0 / fs
+        tsamples = int(duration / delta_t)
+        ts = pycbc.noise.noise_from_psd(tsamples, delta_t, psd, seed=127)
+        strain = ts.numpy()
+        return cls(strain=strain, psd=psd_vals, freqs=freq)
+
     @classmethod
     def download_data(
         cls,

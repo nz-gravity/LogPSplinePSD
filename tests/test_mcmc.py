@@ -34,25 +34,19 @@ def test_multivar_mcmc(outdir):
     fft_data = MultivarFFT.compute_fft(x, fs=1.0)
     print(f"FFT shapes: y_re={fft_data.y_re.shape}, Z_re={fft_data.Z_re.shape}")
 
-    # Create multivariate P-splines model
-    mv_model = MultivariateLogPSplines.from_multivar_fft(
-        fft_data,
+    # Run unified MCMC (multivariate NUTS)
+    idata = run_mcmc(
+        data=fft_data,
+        sampler="nuts",
         n_knots=5,  # Small for fast testing
         degree=3,
-        diffMatrixOrder=2
-    )
-    print(f"Created model: {mv_model}")
-
-    # Set up sampler with temporary output directory
-    config = MultivarNUTSConfig(
-        verbose=True,
+        diffMatrixOrder=2,
+        n_samples=50,
+        n_warmup=50,
         outdir=outdir,
+        verbose=True,
         target_accept_prob=0.8
     )
-    sampler = MultivarNUTSSampler(fft_data, mv_model, config)
-
-    # Run short sampling
-    idata = sampler.sample(n_samples=50, n_warmup=50)
 
     # Basic checks
     assert idata is not None
@@ -61,7 +55,6 @@ def test_multivar_mcmc(outdir):
 
     # Check key parameters exist
     assert "log_likelihood" in idata.sample_stats.data_vars
-    # print shape of log_likelihood
     print(f"log_likelihood shape: {idata.sample_stats['log_likelihood'].shape}")
 
     # Check diagonal parameters
@@ -76,6 +69,12 @@ def test_multivar_mcmc(outdir):
 
     # Test PSD reconstruction if we have the required samples
     if all(key in idata.sample_stats.data_vars for key in ["log_delta_sq", "theta_re", "theta_im"]):
+        mv_model = MultivariateLogPSplines.from_multivar_fft(
+            fft_data,
+            n_knots=5,
+            degree=3,
+            diffMatrixOrder=2
+        )
         psd_reconstructed = mv_model.reconstruct_psd_matrix(
             idata.sample_stats["log_delta_sq"].values,
             idata.sample_stats["theta_re"].values,
@@ -83,8 +82,6 @@ def test_multivar_mcmc(outdir):
             n_samples_max=4
         )
         print(f"Reconstructed PSD shape: {psd_reconstructed.shape}")
-
-        # Basic sanity checks
         assert psd_reconstructed.shape[1] == fft_data.n_freq
         assert psd_reconstructed.shape[2] == n_dim
         assert psd_reconstructed.shape[3] == n_dim
@@ -109,7 +106,6 @@ def test_multivar_mcmc(outdir):
     )
 
     print("✓ Multivariate analysis test passed!")
-
 
 
 def test_mcmc(mock_pdgrm: Periodogram, outdir: str):

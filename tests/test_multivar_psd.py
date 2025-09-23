@@ -2,17 +2,14 @@
 Simple test for multivariate NUTS sampler with VARMAData.
 """
 
-import pytest
 import numpy as np
-import tempfile
 
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.datatypes import MultivarFFT
 from log_psplines.psplines.multivar_psplines import MultivariateLogPSplines
 from log_psplines.samplers.multivar.multivar_nuts import MultivarNUTSSampler, MultivarNUTSConfig
 import os
-
-
+from log_psplines.plotting.psd_matrix import plot_psd_matrix, compute_empirical_psd
 
 
 def test_multivar_analysis(outdir):
@@ -20,10 +17,9 @@ def test_multivar_analysis(outdir):
     outdir = f"{outdir}/test_multivar_analysis"
     os.makedirs(outdir, exist_ok=True)
 
-
     # Generate test data
     np.random.seed(42)
-    varma = VARMAData(n_samples=256)
+    varma = VARMAData(n_samples=1024)
     x = varma.data
     n_dim = varma.dim
 
@@ -60,6 +56,8 @@ def test_multivar_analysis(outdir):
 
     # Check key parameters exist
     assert "log_likelihood" in idata.sample_stats.data_vars
+    # print shape of log_likelihood
+    print(f"log_likelihood shape: {idata.sample_stats['log_likelihood'].shape}")
 
     # Check diagonal parameters
     for j in range(n_dim):
@@ -86,6 +84,23 @@ def test_multivar_analysis(outdir):
         assert psd_reconstructed.shape[2] == n_dim
         assert psd_reconstructed.shape[3] == n_dim
 
+    # check that results saved, and plots created
+    result_fn = os.path.join(outdir, "inference_data.nc")
+    assert os.path.exists(result_fn), "InferenceData file not found!"
+
+    plot_fn = os.path.join(outdir, "psd_matrix_posterior.png")
+    assert os.path.exists(plot_fn), "PSD matrix plot file not found!"
+
+    plot_psd_matrix(
+        idata=idata,
+        n_channels=n_dim,
+        freq=fft_data.freq,
+        empirical_psd=compute_empirical_psd(fft_data.y_re, fft_data.y_im, n_channels=n_dim),
+        outdir=outdir,
+        filename="psd_matrix_posterior.png",
+        dpi=100,
+        xscale='linear',
+        diag_yscale='log',
+    )
+
     print("✓ Multivariate analysis test passed!")
-
-

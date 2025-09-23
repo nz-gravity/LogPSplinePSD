@@ -28,14 +28,7 @@ def results_to_arviz(
     if isinstance(data, Periodogram):
         return _create_univar_inference_data(samples, sample_stats, config, data, model, attributes)
     elif isinstance(data, MultivarFFT):
-        return _create_multivar_inference_data(
-            samples, sample_stats, config, data, model, attributes,
-            lnz=attributes.get("lnz", np.nan),
-            lnz_err=attributes.get("lnz_err", np.nan),
-            runtime=attributes.get("runtime", np.nan),
-            sampler_type=attributes.get("sampler_type", "unknown"),
-            device=jax.default_backend()
-        )
+        return _create_multivar_inference_data(samples, sample_stats, config, data, model, attributes)
     else:
         raise ValueError(f"Unsupported data type: {type(data)}")
 
@@ -185,11 +178,6 @@ def _create_multivar_inference_data(
         fft_data: MultivarFFT,
         spline_model: "MultivariateLogPSplines",
         attributes: Dict[str, Any],
-        lnz: float,
-        lnz_err: float,
-        runtime: float,
-        sampler_type: str,
-        device: jax.devices,
     ) -> az.InferenceData:
 
     """Create InferenceData for multivariate case."""
@@ -303,13 +291,8 @@ def _create_multivar_inference_data(
         )
         dims["lp"] = ["chain", "draw"]
 
-    # Attributes
+    # Extract values from attributes dict and update with multivar-specific attributes
     attributes.update({
-        "device": str(device),
-        "runtime": runtime,
-        "lnz": lnz,
-        "lnz_err": lnz_err,
-        "sampler_type": sampler_type,
         "data_type": "multivariate",
         "n_channels": fft_data.n_dim,
         "n_freq": fft_data.n_freq,

@@ -3,10 +3,9 @@ from typing import Union, Literal, Optional
 import arviz as az
 import jax.numpy as jnp
 
-from .core.abc import ModelFactory
 from .datatypes import Periodogram
 from .datatypes.multivar import MultivarFFT
-from .psplines import LogPSplines
+from .psplines import LogPSplines, MultivariateLogPSplines
 from .samplers import (
     MetropolisHastingsConfig,
     MetropolisHastingsSampler,
@@ -107,18 +106,32 @@ def run_mcmc(
             print(f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler}")
         sampler = "nuts"
 
-    # Create model using factory
-    model_kwargs = {
-        "n_knots": n_knots,
-        "degree": degree,
-        "diffMatrixOrder": diffMatrixOrder,
-        "knot_kwargs": knot_kwargs
-    }
-
+    # Create model based on data type
     if isinstance(data, Periodogram):
-        model_kwargs["parametric_model"] = parametric_model
-
-    model = ModelFactory.create_model(data, **model_kwargs)
+        # Univariate case
+        model = LogPSplines.from_periodogram(
+            data,
+            n_knots=n_knots,
+            degree=degree,
+            diffMatrixOrder=diffMatrixOrder,
+            parametric_model=parametric_model,
+            knot_kwargs=knot_kwargs,
+        )
+    elif isinstance(data, MultivarFFT):
+        # Multivariate case
+        if parametric_model is not None:
+            raise ValueError("parametric_model is not supported for multivariate data. "
+                           "Parametric models are only available for univariate Periodogram data.")
+        model = MultivariateLogPSplines.from_multivar_fft(
+            data,
+            n_knots=n_knots,
+            degree=degree,
+            diffMatrixOrder=diffMatrixOrder,
+            knot_kwargs=knot_kwargs,
+        )
+    else:
+        raise ValueError(f"Unsupported data type: {type(data)}. "
+                       "Expected Periodogram or MultivarFFT.")
 
     # Create sampler
     sampler_obj = create_sampler(

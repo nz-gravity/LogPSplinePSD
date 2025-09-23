@@ -110,16 +110,29 @@ class BaseSampler(ABC):
 
         return idata
 
-    @abstractmethod
     def _create_inference_data(
-        self, 
-        samples: Dict[str, jnp.ndarray], 
+        self,
+        samples: Dict[str, jnp.ndarray],
         sample_stats: Dict[str, Any],
         lnz: float,
         lnz_err: float
     ) -> az.InferenceData:
-        """Create InferenceData object (univar vs multivar specific)."""
-        pass
+        """Create InferenceData object for both univar and multivar cases."""
+        return results_to_arviz(
+            samples=samples,
+            sample_stats=sample_stats,
+            data=self.data,
+            model=self.model,
+            config=self.config,
+            attributes=dict(
+                device=str(self.device),
+                runtime=self.runtime,
+                lnz=lnz,
+                lnz_err=lnz_err,
+                sampler_type=self.sampler_type,
+                data_type=self.data_type,
+            ),
+        )
 
     def _save_results(self, idata: az.InferenceData) -> None:
         """Save inference results to disk."""

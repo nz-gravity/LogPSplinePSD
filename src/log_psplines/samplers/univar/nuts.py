@@ -101,7 +101,7 @@ class NUTSSampler(UnivarBaseSampler):
             kernel,
             num_warmup=n_warmup,
             num_samples=n_samples,
-            num_chains=1,
+            num_chains=self.config.num_chains,
             progress_bar=self.config.verbose,
             jit_model_args=True,
         )
@@ -121,7 +121,7 @@ class NUTSSampler(UnivarBaseSampler):
             self.config.beta_phi,
             self.config.alpha_delta,
             self.config.beta_delta,
-            extra_fields=("potential_energy","num_steps","accept_prob",) if self.config.save_nuts_diagnostics else (),
+            extra_fields=("potential_energy", "energy", "num_steps","accept_prob",) if self.config.save_nuts_diagnostics else (),
         )
         self.runtime = time.time() - start_time
 

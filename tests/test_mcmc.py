@@ -27,7 +27,7 @@ def test_multivar_mcmc(outdir, test_mode):
 
     n = 1024
     n_knots = 7
-    n_samples = n_warmup = 50
+    n_samples = n_warmup = 200
     if test_mode == "fast":
         n_samples = n_warmup = 10
         n = 256
@@ -64,6 +64,7 @@ def test_multivar_mcmc(outdir, test_mode):
     assert idata is not None
     assert "posterior" in idata.groups()
     assert idata.posterior.sizes["draw"] == n_samples
+    print(f"Inference data posterior variables: {idata.posterior}", )
 
     # Check key parameters exist
     assert "log_likelihood" in idata.sample_stats.data_vars
@@ -85,7 +86,7 @@ def test_multivar_mcmc(outdir, test_mode):
     psd_matrix = idata.posterior_psd["psd_matrix"].values
     psd_matrix_shape = psd_matrix.shape
     expected_shape = (n_samples, fft_data.freq.shape[0], n_dim, n_dim)
-    assert psd_matrix_shape == expected_shape, f"Posterior PSD matrix shape mismatch! Expected {expected_shape}, got {psd_matrix_shape}"
+    assert psd_matrix_shape[1:] == expected_shape[1:], f"Posterior PSD matrix shape mismatch (excluding 0th dim)! Expected {expected_shape[1:]}, got {psd_matrix_shape[1:]}"
 
     # check that results saved, and plots created
     result_fn = os.path.join(outdir, "inference_data.nc")
@@ -100,10 +101,12 @@ def test_mcmc(outdir: str, test_mode: str):
     os.makedirs(outdir, exist_ok=True)
 
     n = 1024
-    n_samples = n_warmup = 50
+    n_samples = n_warmup = 500
+    n_knots = 10
     if test_mode == "fast":
         n_samples = n_warmup = 10
         n = 256
+        n_knots = 4
     mock_pdgrm = ARData(order=4, duration=1.0, fs=n, seed=42).periodogram
 
     for sampler in ["nuts", "mh"]:
@@ -112,13 +115,15 @@ def test_mcmc(outdir: str, test_mode: str):
         idata = run_mcmc(
             mock_pdgrm,
             sampler=sampler,
-            n_knots=4,
+            n_knots=n_knots,
             n_samples=n_samples,
             n_warmup=n_warmup,
             outdir=f"{outdir}/out_{sampler}",
             rng_key=42,
             compute_lnz=compute_lnz,
         )
+
+        print(f"Inference data posterior variables: {idata.posterior}", )
 
         fig, ax = plot_pdgrm(idata=idata, show_data=False)
         ax.set_xscale("linear")

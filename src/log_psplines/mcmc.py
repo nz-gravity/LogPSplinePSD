@@ -21,6 +21,7 @@ def run_mcmc(
     sampler: Literal["nuts", "mh"] = "nuts",
     n_samples: int = 1000,
     n_warmup: int = 500,
+    num_chains: int = 1,
     # Model parameters
     n_knots: int = 10,
     degree: int = 3,
@@ -57,6 +58,8 @@ def run_mcmc(
         Number of posterior samples to collect
     n_warmup : int, default=500
         Number of warmup/burn-in samples
+    num_chains : int, default=1
+        Number of MCMC chains to run for convergence diagnostics
     n_knots : int, default=10
         Number of knots for B-spline basis
     degree : int, default=3
@@ -138,6 +141,7 @@ def run_mcmc(
         data=data,
         model=model,
         sampler_type=sampler,
+        num_chains=num_chains,
         alpha_phi=alpha_phi,
         beta_phi=beta_phi,
         alpha_delta=alpha_delta,
@@ -160,6 +164,7 @@ def create_sampler(
     data: Union[Periodogram, MultivarFFT],
     model,
     sampler_type: Literal["nuts", "mh"] = "nuts",
+    num_chains: int = 1,
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
     alpha_delta: float = 1e-4,
@@ -174,6 +179,7 @@ def create_sampler(
     adaptation_window: int = 50,
     **kwargs
 ):
+
     """Factory function to create appropriate sampler."""
 
     common_config_kwargs = {
@@ -181,6 +187,7 @@ def create_sampler(
         "beta_phi": beta_phi,
         "alpha_delta": alpha_delta,
         "beta_delta": beta_delta,
+        "num_chains": num_chains,
         "rng_key": rng_key,
         "verbose": verbose,
         "outdir": outdir,

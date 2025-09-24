@@ -66,6 +66,10 @@ def test_multivar_mcmc(outdir, test_mode):
     assert idata.posterior.sizes["draw"] == n_samples
     print(f"Inference data posterior variables: {idata.posterior}", )
 
+    # check sampler type in attributes
+    assert hasattr(idata, "attrs") and "sampler_type" in idata.attrs, "Sampler type not found in InferenceData attributes."
+    assert idata.attrs["sampler_type"] == 'multivariate_nuts', f"Unexpected sampler type: {idata.attrs['sampler_type']}"
+
     # Check key parameters exist
     assert "log_likelihood" in idata.sample_stats.data_vars
     assert "lp" in idata.sample_stats.data_vars

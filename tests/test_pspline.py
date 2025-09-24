@@ -11,6 +11,17 @@ from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
 from log_psplines.samplers.univar.univar_base import log_likelihood
 
+import scipy
+
+from log_psplines.datatypes import Periodogram, Timeseries
+from log_psplines.example_datasets.ar_data import ARData
+import pytest
+
+@pytest.fixture
+def mock_pdgrm() -> Periodogram:
+    """Generate synthetic AR noise data."""
+    return ARData(order=4, duration=1.0, fs=256, seed=42).periodogram
+
 
 def test_spline_init(mock_pdgrm: Periodogram, outdir):
     out = os.path.join(outdir, "out_spline_init")

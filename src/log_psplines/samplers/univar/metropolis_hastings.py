@@ -232,7 +232,7 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
             "delta": float(self.current_delta),
             "log_posterior": float(self.current_log_posterior),
             "n_accepted_weights": n_accepted_weights,
-            "acceptance_rate": n_accepted_weights / self.n_weights,
+            "accept_prob": n_accepted_weights / self.n_weights,
             "step_sizes": np.array(self.step_sizes),
         }
 
@@ -248,7 +248,7 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
         }
 
         sample_stats = {
-            "acceptance_rate": np.empty(n_samples, dtype=np.float32),
+            "accept_prob": np.empty(n_samples, dtype=np.float32),
             "lp": np.empty(n_samples, dtype=np.float32),
             "step_size_mean": np.empty(n_samples, dtype=np.float32),
             "step_size_std": np.empty(n_samples, dtype=np.float32),
@@ -298,7 +298,7 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
                         )
                     )
 
-                    sample_stats["acceptance_rate"][j] = step_info["acceptance_rate"]
+                    sample_stats["accept_prob"][j] = step_info["accept_prob"]
                     sample_stats["lp"][j] = lp
                     sample_stats["step_size_mean"][j] = np.mean(step_info["step_sizes"])
                     sample_stats["step_size_std"][j] = np.std(step_info["step_sizes"])
@@ -307,7 +307,7 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
                 if i % 100 == 0:
                     phase = "Warmup" if i < n_warmup else "Sampling"
                     desc = (
-                        f"{phase} | Accept: {step_info['acceptance_rate']:.3f} | "
+                        f"{phase} | Accept: {step_info['accept_prob']:.3f} | "
                         f"LogPost: {step_info['log_posterior']:.1f} | "
                         f"StepSize: {np.mean(step_info['step_sizes']):.4f}"
                     )
@@ -319,8 +319,8 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
 
         if self.config.verbose:
             final_accept = 0
-            if len(sample_stats["acceptance_rate"]) > 50:
-                final_accept = np.mean(sample_stats["acceptance_rate"][-50:])
+            if len(sample_stats["accept_prob"]) > 50:
+                final_accept = np.mean(sample_stats["accept_prob"][-50:])
 
             print(f"\nSampling completed in {self.runtime:.2f} seconds")
             print(

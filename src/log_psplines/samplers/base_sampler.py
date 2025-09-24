@@ -26,6 +26,7 @@ class SamplerConfig:
     beta_phi: float = 1.0
     alpha_delta: float = 1e-4
     beta_delta: float = 1e-4
+    num_chains: int = 1
     rng_key: int = 42
     verbose: bool = True
     outdir: Optional[str] = None

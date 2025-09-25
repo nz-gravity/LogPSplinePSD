@@ -1,5 +1,3 @@
-import os
-
 import arviz as az
 import matplotlib.pyplot as plt
 
@@ -12,12 +10,7 @@ import numpy as np
 
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.datatypes import MultivarFFT
-from log_psplines.psplines.multivar_psplines import MultivariateLogPSplines
-from log_psplines.samplers.multivar.multivar_nuts import MultivarNUTSSampler, MultivarNUTSConfig
 import os
-from log_psplines.plotting.psd_matrix import plot_psd_matrix, compute_empirical_psd
-
-
 
 
 def test_multivar_mcmc(outdir, test_mode):
@@ -34,10 +27,12 @@ def test_multivar_mcmc(outdir, test_mode):
         n_knots = 5
 
 
+    psd_scale = 1e-42
+
     # Generate test data
     np.random.seed(42)
     varma = VARMAData(n_samples=n)
-    x = varma.data
+    x = varma.data * np.sqrt(psd_scale)
     n_dim = varma.dim
 
     print(f"VARMA data shape: {x.shape}, dim={n_dim}")
@@ -104,6 +99,8 @@ def test_mcmc(outdir: str, test_mode: str):
     outdir = os.path.join(outdir, "out_mcmc/univar")
     os.makedirs(outdir, exist_ok=True)
 
+    psd_scale = 1e-42
+
     n = 1024
     n_samples = n_warmup = 500
     n_knots = 10
@@ -111,18 +108,19 @@ def test_mcmc(outdir: str, test_mode: str):
         n_samples = n_warmup = 10
         n = 256
         n_knots = 4
-    mock_pdgrm = ARData(order=4, duration=1.0, fs=n, seed=42).periodogram
+    ar_data = ARData(order=4, duration=1.0, fs=n, seed=42, sigma=np.sqrt(psd_scale))
+    print(f"{ar_data.ts}")
 
     for sampler in ["nuts", "mh"]:
         compute_lnz = sampler == "mh"  # only compute Lnz for MH sampler (OTHER IS BROKEN)
-
+        sampler_out = f"{outdir}/out_{sampler}"
         idata = run_mcmc(
-            mock_pdgrm,
+            ar_data.ts,
             sampler=sampler,
             n_knots=n_knots,
             n_samples=n_samples,
             n_warmup=n_warmup,
-            outdir=f"{outdir}/out_{sampler}",
+            outdir=sampler_out,
             rng_key=42,
             compute_lnz=compute_lnz,
         )
@@ -132,12 +130,12 @@ def test_mcmc(outdir: str, test_mode: str):
         fig, ax = plot_pdgrm(idata=idata, show_data=False)
         ax.set_xscale("linear")
         fig.savefig(
-            os.path.join(outdir, f"test_mcmc_{sampler}.png"), transparent=False
+            os.path.join(sampler_out, f"test_mcmc_{sampler}.png"), transparent=False
         )
         plt.close(fig)
 
         # check inference data saved
-        fname = os.path.join(outdir, f"out_{sampler}", "inference_data.nc")
+        fname = os.path.join(sampler_out, "inference_data.nc")
         assert os.path.exists(
             fname
         ), f"Inference data file {fname} does not exist."
@@ -150,6 +148,12 @@ def test_mcmc(outdir: str, test_mode: str):
         # assert that weights are present and have correct shape
         weights = get_weights(idata_loaded)
         assert weights is not None, "Weights not found in posterior."
+
+        post_psd = idata_loaded.posterior_psd.psd.median(dim=['pp_draw'])
+        posd_psd_scale = post_psd.median().item()
+        print(f"Posterior PSD scale (median): {posd_psd_scale:.2e}, expected ~{psd_scale:.2e}")
+        # should be within 1 order of magnitude
+        assert np.isclose(posd_psd_scale, psd_scale, rtol=1.0), "Posterior PSD scale is not within expected range."
 
     compare_results(
         az.from_netcdf(os.path.join(outdir, "out_nuts", "inference_data.nc")),

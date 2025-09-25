@@ -14,7 +14,7 @@ def test_ar(outdir):
     fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
     for i, ax in enumerate(axes.flat):
         ar_data = ARData(
-            order=i + 1, duration=8.0, fs=1024.0, sigma=1.0, seed=42
+            order=i + 1, duration=8.0, fs=1024.0, sigma=1e-21, seed=42
         )
         ax = ar_data.plot(ax=ax)
         ax.set_title(f"AR({i + 1}) Process")

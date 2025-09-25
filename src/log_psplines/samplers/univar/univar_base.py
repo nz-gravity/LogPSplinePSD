@@ -44,10 +44,9 @@ class UnivarBaseSampler(BaseSampler):
         spline_model: LogPSplines,
         config: SamplerConfig
     ):
-        # Type hints for clarity
+        # Always ensure periodogram is the correct (standardized) one with scaling_factor
         self.periodogram: Periodogram = periodogram
         self.spline_model: LogPSplines = spline_model
-
         super().__init__(periodogram, spline_model, config)
 
     def _setup_data(self) -> None:
@@ -112,3 +111,5 @@ class UnivarBaseSampler(BaseSampler):
     def _compute_log_posterior(self, weights: jnp.ndarray, phi: float, delta: float) -> float:
         """Compute log posterior for LnZ calculation. To be implemented by concrete samplers."""
         raise NotImplementedError("Concrete sampler must implement _compute_log_posterior")
+
+

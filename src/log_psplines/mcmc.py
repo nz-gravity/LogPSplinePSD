@@ -5,6 +5,9 @@ import jax.numpy as jnp
 
 from .datatypes import Periodogram
 from .datatypes.multivar import MultivarFFT
+from .datatypes.univar import Timeseries
+from .datatypes.multivar import MultivariateTimeseries
+from .datatypes.multivar import MultivarFFT
 from .psplines import LogPSplines, MultivariateLogPSplines
 from .samplers import (
     MetropolisHastingsConfig,
@@ -17,7 +20,7 @@ from .samplers import (
 
 
 def run_mcmc(
-    data: Union[Periodogram, MultivarFFT],
+    data: Union[Timeseries, MultivariateTimeseries, Periodogram, MultivarFFT],
     sampler: Literal["nuts", "mh"] = "nuts",
     n_samples: int = 1000,
     n_warmup: int = 500,
@@ -50,8 +53,10 @@ def run_mcmc(
 
     Parameters
     ----------
-    data : Periodogram or MultivarFFT
-        Input data for analysis
+    data : Timeseries, MultivariateTimeseries, Periodogram or MultivarFFT
+        Input data for analysis. When timeseries data is provided, it will be
+        automatically standardized for numerical stability, and posterior samples
+        will be rescaled to original units.
     sampler : {"nuts", "mh"}
         MCMC sampler type (note: multivariate only supports "nuts")
     n_samples : int, default=1000
@@ -103,42 +108,62 @@ def run_mcmc(
         ArviZ InferenceData object with MCMC results
     """
 
-    # Validate sampler for multivariate case
-    if isinstance(data, MultivarFFT) and sampler != "nuts":
-        if verbose:
-            print(f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler}")
-        sampler = "nuts"
+    # Handle raw timeseries input - standardize automatically
+    processed_data = None
 
-    # Create model based on data type
-    if isinstance(data, Periodogram):
+    if isinstance(data, (Timeseries, MultivariateTimeseries)):
+        # Standardize the raw timeseries for numerical stability
+        standardized_ts = data.standardise_for_psd()
+
+        # Convert to processed format for existing pipeline
+        if isinstance(data, Timeseries):
+            processed_data = standardized_ts.to_periodogram()
+        else:  # MultivariateTimeseries
+            processed_data = standardized_ts.to_cross_spectral_density()
+
+        if verbose:
+            print(f"Standardized data: original scale ~{processed_data.scaling_factor:.2e}")
+
+        # Validate sampler for standardized data
+        if isinstance(processed_data, MultivarFFT) and sampler != "nuts":
+            if verbose:
+                print(f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler}")
+            sampler = "nuts"
+
+    if isinstance(data, (Periodogram, MultivarFFT)):
+        processed_data = data  # Use as is
+
+
+    # Create model based on processed data type
+    if isinstance(processed_data, Periodogram):
         # Univariate case
         model = LogPSplines.from_periodogram(
-            data,
+            processed_data,
             n_knots=n_knots,
             degree=degree,
             diffMatrixOrder=diffMatrixOrder,
-            parametric_model=parametric_model,
+            parametric_model=parametric_model if isinstance(data, (Periodogram, Timeseries)) else None,
             knot_kwargs=knot_kwargs,
         )
-    elif isinstance(data, MultivarFFT):
+    elif isinstance(processed_data, MultivarFFT):
         # Multivariate case
-        if parametric_model is not None:
+        if parametric_model is not None and isinstance(data, Periodogram):
             raise ValueError("parametric_model is not supported for multivariate data. "
                            "Parametric models are only available for univariate Periodogram data.")
         model = MultivariateLogPSplines.from_multivar_fft(
-            data,
+            processed_data,
             n_knots=n_knots,
             degree=degree,
             diffMatrixOrder=diffMatrixOrder,
             knot_kwargs=knot_kwargs,
         )
     else:
-        raise ValueError(f"Unsupported data type: {type(data)}. "
-                       "Expected Periodogram or MultivarFFT.")
+        raise ValueError(f"Unsupported processed data type: {type(processed_data)}.")
 
     # Create sampler
+    # Always use processed_data (the standardized Periodogram or MultivarFFT) for the sampler and model
     sampler_obj = create_sampler(
-        data=data,
+        data=processed_data,  # Always use processed_data, which has correct scaling_factor
         model=model,
         sampler_type=sampler,
         num_chains=num_chains,
@@ -154,11 +179,11 @@ def run_mcmc(
         max_tree_depth=max_tree_depth,
         target_accept_rate=target_accept_rate,
         adaptation_window=adaptation_window,
+        scaling_factor=processed_data.scaling_factor,  # Pass scaling info to sampler
         **kwargs
     )
 
     return sampler_obj.sample(n_samples=n_samples, n_warmup=n_warmup)
-
 
 def create_sampler(
     data: Union[Periodogram, MultivarFFT],
@@ -177,6 +202,7 @@ def create_sampler(
     max_tree_depth: int = 10,
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
+    scaling_factor: float = 1.0,
     **kwargs
 ):
 
@@ -192,6 +218,7 @@ def create_sampler(
         "verbose": verbose,
         "outdir": outdir,
         "compute_lnz": compute_lnz,
+        "scaling_factor": scaling_factor
     }
 
     if isinstance(data, Periodogram):
@@ -232,57 +259,3 @@ def create_sampler(
     else:
         raise ValueError(f"Unsupported data type: {type(data).__name__}. Expected Periodogram or MultivarFFT.")
 
-
-# Separate univariate function for backward compatibility
-def run_mcmc_univariate(
-    pdgrm: Periodogram,
-    parametric_model: Optional[jnp.ndarray] = None,
-    sampler: Literal["nuts", "mh"] = "nuts",
-    n_samples: int = 1000,
-    n_warmup: int = 500,
-    n_knots: int = 10,
-    degree: int = 3,
-    diffMatrixOrder: int = 2,
-    knot_kwargs: dict = {},
-    alpha_phi: float = 1.0,
-    beta_phi: float = 1.0,
-    alpha_delta: float = 1e-4,
-    beta_delta: float = 1e-4,
-    rng_key: int = 42,
-    verbose: bool = True,
-    outdir: Optional[str] = None,
-    compute_lnz: bool = False,
-    target_accept_prob: float = 0.8,
-    max_tree_depth: int = 10,
-    target_accept_rate: float = 0.44,
-    adaptation_window: int = 50,
-    **kwargs
-) -> az.InferenceData:
-    """
-    Backward-compatible univariate MCMC function.
-    Use run_mcmc for unified interface.
-    """
-    return run_mcmc(
-        data=pdgrm,
-        parametric_model=parametric_model,
-        sampler=sampler,
-        n_samples=n_samples,
-        n_warmup=n_warmup,
-        n_knots=n_knots,
-        degree=degree,
-        diffMatrixOrder=diffMatrixOrder,
-        knot_kwargs=knot_kwargs,
-        alpha_phi=alpha_phi,
-        beta_phi=beta_phi,
-        alpha_delta=alpha_delta,
-        beta_delta=beta_delta,
-        rng_key=rng_key,
-        verbose=verbose,
-        outdir=outdir,
-        compute_lnz=compute_lnz,
-        target_accept_prob=target_accept_prob,
-        max_tree_depth=max_tree_depth,
-        target_accept_rate=target_accept_rate,
-        adaptation_window=adaptation_window,
-        **kwargs
-    )

@@ -168,9 +168,15 @@ def _create_univar_inference_data(
         if n_draws > n_pp
         else slice(None)
     )
-    pp_samples = np.array([spline_model(w) for w in weights_chain0[pp_idx]])
+    pp_samples = np.array([spline_model(w) for w in weights_chain0[pp_idx]], dtype=np.float64)
     pp_samples = np.exp(pp_samples)
 
+    # Ensure arrays are numpy before rescaling
+    pp_samples = np.array(pp_samples, dtype=np.float64)
+    observed_power = np.array(periodogram.power, dtype=np.float64)
+
+    pp_samples_rescaled = pp_samples * config.scaling_factor
+    observed_power_rescaled = observed_power * config.scaling_factor
     # Handle log posterior
     _handle_log_posterior(sample_stats)
 
@@ -197,7 +203,7 @@ def _create_univar_inference_data(
     idata = az.from_dict(
         posterior=samples,
         sample_stats=sample_stats,
-        observed_data={"periodogram": periodogram.power},
+        observed_data={"periodogram": observed_power_rescaled},
         dims={k: v for k, v in dims.items() if k not in ["psd", "lp"]},  # Exclude manually added groups
         coords=coords,
         attrs=attributes,
@@ -206,11 +212,10 @@ def _create_univar_inference_data(
     # Add posterior predictive samples
     idata.add_groups(
         posterior_psd=Dataset(
-            {"psd": DataArray(pp_samples, dims=["pp_draw", "freq"])},
+            {"psd": DataArray(pp_samples_rescaled, dims=["pp_draw", "freq"])},
             coords={"pp_draw": coords["pp_draw"], "freq": coords["freq"]},
         )
     )
-
     # Add spline model info
     idata.add_groups(spline_model=_pack_spline_model(spline_model))
     return idata
@@ -235,6 +240,35 @@ def _create_multivar_inference_data(
     # Create posterior predictive samples
     psd_samples = _compute_posterior_predictive_multivar(samples, spline_model, fft_data)
     n_pp = psd_samples.shape[0]
+
+    # Ensure arrays are numpy before rescaling
+    psd_samples = np.array(psd_samples)
+    fft_y_re = np.array(fft_data.y_re)
+    fft_y_im = np.array(fft_data.y_im)
+
+    # Rescale each cross-spectral component
+    psd_samples_rescaled = np.zeros_like(psd_samples)
+    for i in range(fft_data.n_dim):
+        for j in range(fft_data.n_dim):
+            psd_samples_rescaled[:, :, i, j] = psd_samples[:, :, i, j] * config.scaling_factor
+    # Also rescale observed FFT data
+    observed_fft_re_rescaled = fft_y_re * np.sqrt(config.scaling_factor)
+    observed_fft_im_rescaled = fft_y_im * np.sqrt(config.scaling_factor)
+    # Compute and rescale observed cross-spectral density (periodogram)
+    y_re = observed_fft_re_rescaled
+    y_im = observed_fft_im_rescaled
+    n_freq, n_dim = y_re.shape
+    observed_csd = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex64)
+    for i in range(n_dim):
+        for j in range(n_dim):
+            observed_csd[:, i, j] = (y_re[:, i] + 1j * y_im[:, i]) * np.conj(y_re[:, j] + 1j * y_im[:, j])
+            observed_csd[:, i, j] *= config.scaling_factor
+    observed_csd = np.real(observed_csd)
+    if config.verbose:
+        print(f"Rescaling multivariate posterior samples: max scaling ~{config.scaling_factor:.2e}")
+    psd_samples = psd_samples_rescaled
+    observed_fft_data_rescaled = {"fft_re": observed_fft_re_rescaled, "fft_im": observed_fft_im_rescaled}
+    observed_psd_rescaled = {"periodogram": observed_csd}
 
     # Handle log posterior
     _handle_log_posterior(sample_stats)
@@ -299,8 +333,8 @@ def _create_multivar_inference_data(
         posterior=samples,
         sample_stats=sample_stats,
         observed_data={
-            "fft_re": np.array(fft_data.y_re),
-            "fft_im": np.array(fft_data.y_im)
+            "fft_re": np.array(observed_fft_data_rescaled["fft_re"]),
+            "fft_im": np.array(observed_fft_data_rescaled["fft_im"])
         },
         dims={k: v for k, v in dims.items() if k not in ["psd_matrix", "lp"]},  # Exclude manually added groups
         coords=coords,

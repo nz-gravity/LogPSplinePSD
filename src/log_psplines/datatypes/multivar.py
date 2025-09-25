@@ -1,7 +1,6 @@
-import jax.numpy as jnp
-from dataclasses import dataclass
-from typing import Tuple
 import numpy as np
+from dataclasses import dataclass
+from typing import Tuple, Optional
 
 
 @dataclass
@@ -19,21 +18,23 @@ class MultivarFFT:
         n_freq: Number of frequencies
         n_dim: Number of channels
     """
-    y_re: jnp.ndarray
-    y_im: jnp.ndarray
-    Z_re: jnp.ndarray
-    Z_im: jnp.ndarray
-    freq: jnp.ndarray
+    y_re: np.ndarray
+    y_im: np.ndarray
+    Z_re: np.ndarray
+    Z_im: np.ndarray
+    freq: np.ndarray
     n_freq: int
     n_dim: int
+    scaling_factor: Optional[float] = 1.0  # Track the PSD scaling factor
 
     @classmethod
     def compute_fft(
             cls,
-            x: jnp.ndarray,
+            x: np.ndarray,
             fs: float = 1.0,
             fmin: float = None,
-            fmax: float = None
+            fmax: float = None,
+            scaling_factor: Optional[float] = 1.0
     ) -> 'MultivarFFT':
         """
         Compute FFT and Cholesky design matrices for multivariate time series.
@@ -41,7 +42,7 @@ class MultivarFFT:
 
         Parameters
         ----------
-        x : jnp.ndarray
+        x : np.ndarray
             Input time series (n_time, n_channels)
         fs : float
             Sampling frequency
@@ -51,8 +52,8 @@ class MultivarFFT:
         n_time, n_dim = x.shape
         assert n_time > n_dim, f"N of time {n_time} must be greater than dim {n_dim}"
 
-        x_fft = jnp.fft.fft(x, axis=0) / jnp.sqrt(n_time)
-        freqs = jnp.fft.fftfreq(n_time, 1 / fs)
+        x_fft = np.fft.fft(x, axis=0) / np.sqrt(n_time)
+        freqs = np.fft.fftfreq(n_time, 1 / fs)
 
         # Get positive frequencies only
         pos_freq_idx = freqs > 0
@@ -61,14 +62,14 @@ class MultivarFFT:
 
         # Apply frequency range filtering if specified
         if fmin is not None or fmax is not None:
-            fmin = fmin if fmin is not None else freqs[0]
+            fmin = fmin if fmin is not None else freqs[1] # skip zero freq
             fmax = fmax if fmax is not None else freqs[-1]
             freq_mask = (freqs >= fmin) & (freqs <= fmax)
             freqs = freqs[freq_mask]
             x_fft = x_fft[freq_mask, :]
 
-        y_re = jnp.real(x_fft)
-        y_im = jnp.imag(x_fft)
+        y_re = np.real(x_fft)
+        y_im = np.imag(x_fft)
         Z_re, Z_im = cls.compute_cholesky_design(x_fft)
 
         return cls(
@@ -78,7 +79,8 @@ class MultivarFFT:
             Z_im=Z_im,
             freq=freqs,
             n_freq=len(freqs),
-            n_dim=n_dim
+            n_dim=n_dim,
+            scaling_factor=scaling_factor
         )
 
     def cut(self, fmin: float, fmax: float) -> 'MultivarFFT':
@@ -90,12 +92,12 @@ class MultivarFFT:
             Z_re=self.Z_re[mask],
             Z_im=self.Z_im[mask],
             freq=self.freq[mask],
-            n_freq=jnp.sum(mask),
+            n_freq=int(np.sum(mask)),
             n_dim=self.n_dim
         )
 
     @staticmethod
-    def compute_cholesky_design(x_fft: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def compute_cholesky_design(x_fft: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute Cholesky design matrices Z_re, Z_im for multivariate PSD.
         For each frequency, Z_k[j, i, l] = FFT of previous components for Cholesky off-diagonal.
@@ -120,7 +122,7 @@ class MultivarFFT:
         """
         n, p = x_fft.shape
         if p <= 1:
-            return jnp.zeros((n, p, 0)), jnp.zeros((n, p, 0))
+            return np.zeros((n, p, 0)), np.zeros((n, p, 0))
         n_theta = int(p * (p - 1) / 2)
         Z_k = np.zeros((n, p, n_theta), dtype=np.complex64)
         for j in range(n):
@@ -128,24 +130,33 @@ class MultivarFFT:
             for i in range(1, p):
                 Z_k[j, i, count:count + i] = np.array(x_fft[j, :i])
                 count += i
-        return jnp.real(jnp.array(Z_k)), jnp.imag(jnp.array(Z_k))
+        return np.real(Z_k), np.imag(Z_k)
+
+    @property
+    def amplitude_range(self) -> Tuple[float, float]:
+        amps = (np.min(self.y_re), np.max(self.y_re))
+        return (float(f"{amps[0]:.3g}"), float(f"{amps[1]:.3g}"))
+
 
     def __repr__(self):
-        return f"MultivarFFT(n_freq={self.n_freq}, n_dim={self.n_dim})"
+        return f"MultivarFFT(n_freq={self.n_freq}, n_dim={self.n_dim}, amplitudes={self.amplitude_range})"
 
 @dataclass
 class MultivariateTimeseries:
-    y: jnp.ndarray  # Shape: (n_time, n_channels)
-    t: jnp.ndarray = None
-    std: jnp.ndarray = None  # Per-channel std
+    y: np.ndarray  # numpy array (n_time, n_channels) for numerical stability
+    t: np.ndarray = None  # numpy array
+    std: np.ndarray = None  # numpy array, per-channel std
+    scaling_factor: Optional[float] = 1.0  # numpy array for per-channel scaling
+    original_stds: Optional[np.ndarray] = None    # numpy array for original per-channel stds
 
     def __post_init__(self):
         if self.t is None:
-            self.t = jnp.arange(self.y.shape[0])
+            self.t = np.arange(self.y.shape[0])
         if self.std is None:
-            self.std = jnp.std(self.y, axis=0)
-        assert self.y.shape[0] == self.t.shape[0], "y and t must have the same length"
-        if jnp.isnan(self.y).any() or jnp.isnan(self.t).any():
+            self.std = np.std(self.y, axis=0)
+        if self.y.shape[0] != self.t.shape[0]:
+            raise ValueError("y and t must have the same length")
+        if np.isnan(self.y).any() or np.isnan(self.t).any():
             raise ValueError("y or t contains NaN values.")
 
     @property
@@ -157,20 +168,34 @@ class MultivariateTimeseries:
         return float(1 / (self.t[1] - self.t[0]))
 
     def standardise(self):
-        """Standardise entire dataset by same factor"""
-        self.std = jnp.std(self.y, axis=0)
-        y = (self.y - jnp.mean(self.y, axis=0)) / self.std
+        self.std = np.std(self.y, axis=0)
+        y = (self.y - np.mean(self.y, axis=0)) / self.std
         return MultivariateTimeseries(y, self.t, self.std)
+
+    def standardise_for_psd(self):
+        if self.original_stds is None:
+            self.original_stds = np.std(self.y, axis=0)
+        y_standardized = (self.y - np.mean(self.y, axis=0)) / self.original_stds
+        psd_scaling_factor = np.std(self.y) ** 2.0
+        return MultivariateTimeseries(
+            y=y_standardized,
+            t=self.t,
+            std=np.ones_like(self.original_stds),
+            scaling_factor=psd_scaling_factor,
+            original_stds=self.original_stds
+        )
 
     def to_cross_spectral_density(
             self,
             fmin: float = None,
             fmax: float = None
     ) -> "MultivarFFT":
-        """
-        Convert to frequency domain with optional frequency range filtering.
-        """
-        return MultivarFFT.compute_fft(self.y, fs=self.fs, fmin=fmin, fmax=fmax)
+        return MultivarFFT.compute_fft(self.y, fs=self.fs, fmin=fmin, fmax=fmax,  scaling_factor=self.scaling_factor)
+
+    @property
+    def amplitude_range(self) -> Tuple[float, float]:
+        amps = (np.min(self.y), np.max(self.y))
+        return (float(f"{amps[0]:.3g}"), float(f"{amps[1]:.3g}"))
 
     def __repr__(self):
-        return f"MultivariateTimeseries(n_time={self.y.shape[0]}, n_channels={self.n_channels}, fs={self.fs:.3f})"
+        return f"MultivariateTimeseries(n_time={self.y.shape[0]}, n_channels={self.n_channels}, fs={self.fs:.3f}, amplitudes={self.amplitude_range})"

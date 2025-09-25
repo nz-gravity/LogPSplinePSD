@@ -33,6 +33,7 @@ def plot_pdgrm(
     interactive=False,
 ):
 
+    posterior_psd = None
     if idata:
         from ..arviz_utils import (
             get_periodogram,
@@ -43,6 +44,7 @@ def plot_pdgrm(
         pdgrm = get_periodogram(idata)
         spline_model = get_spline_model(idata)
         weights = get_weights(idata, weights)
+        posterior_psd = idata.posterior_psd.psd
 
     plt_data = unpack_data(
         pdgrm=pdgrm,
@@ -52,6 +54,7 @@ def plot_pdgrm(
         use_uniform_ci=use_uniform_ci,
         use_parametric_model=use_parametric_model,
         freqs=freqs,
+        posterior_psd=posterior_psd
     )
 
     if interactive:

@@ -31,6 +31,7 @@ class SamplerConfig:
     verbose: bool = True
     outdir: Optional[str] = None
     compute_lnz: bool = False
+    scaling_factor: float = 1.0  # To track any data scaling
 
     def __post_init__(self):
         if self.outdir is not None:

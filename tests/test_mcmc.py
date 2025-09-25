@@ -164,3 +164,5 @@ def test_mcmc(outdir: str, test_mode: str):
 
     fig = plot_pdgrm(idata=idata, interactive=True)  # test interactive mode
     fig.write_html(os.path.join(outdir, "test_mcmc_interactive.html"))
+
+

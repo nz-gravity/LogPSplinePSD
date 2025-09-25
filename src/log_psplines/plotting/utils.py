@@ -1,6 +1,5 @@
 import dataclasses
 
-import arviz as az
 import jax.numpy as jnp
 import numpy as np
 
@@ -37,13 +36,30 @@ def unpack_data(
     use_uniform_ci=True,
     use_parametric_model=True,
     freqs=None,
+    posterior_psd=None
 ):
     plt_dat = PlottingData()
     if pdgrm is not None:
         plt_dat.pdgrm = np.array(pdgrm.power, dtype=np.float64) * yscalar
         plt_dat.freqs = np.array(pdgrm.freqs)
 
-    if spline_model is not None:
+    if plt_dat.freqs is None and freqs is None:
+        plt_dat.freqs = np.linspace(0, 1, plt_dat.n)
+    elif freqs is not None:
+        plt_dat.freqs = freqs
+
+
+
+    if posterior_psd is not None:
+        ci = np.percentile(
+            posterior_psd, q=jnp.array([16, 50, 84]), axis=0
+        )
+        plt_dat.ci = ci
+        plt_dat.model = ci[1]
+
+
+
+    if plt_dat.model is None and spline_model is not None:
 
         if weights is None:
             # just use the initial weights/0 weights
@@ -78,10 +94,7 @@ def unpack_data(
             ln_spline = ln_ci[1]
         plt_dat.model = np.exp(ln_spline, dtype=np.float64) * yscalar
 
-    if plt_dat.freqs is None and freqs is None:
-        plt_dat.freqs = np.linspace(0, 1, plt_dat.n)
-    elif freqs is not None:
-        plt_dat.freqs = freqs
+
 
     return plt_dat
 

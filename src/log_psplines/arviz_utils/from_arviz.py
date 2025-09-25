@@ -64,8 +64,8 @@ def get_weights(
 
 def get_periodogram(idata: az.InferenceData) -> Periodogram:
     return Periodogram(
-        power=jnp.array(idata["observed_data"]["periodogram"].values),
-        freqs=jnp.array(
+        power=np.array(idata["observed_data"]["periodogram"].values),
+        freqs=np.array(
             idata["observed_data"]["periodogram"].coords["freq"].values
         ),
     )

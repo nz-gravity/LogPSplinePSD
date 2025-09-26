@@ -23,17 +23,20 @@ def plot_pdgrm(
     yscalar=1.0,
     ax=None,
     idata=None,
+    true_psd=None,
     model_color=MODEL_COL,
     model_label="Model",
     data_color=DATA_COL,
     data_label="Data",
     knot_color=KNOTS_COL,
+    true_color="k",
     show_data=True,
     figsize=(4, 3),
     interactive=False,
 ):
 
     posterior_psd = None
+    true_psd = true_psd
     if idata:
         from ..arviz_utils import (
             get_periodogram,
@@ -45,6 +48,10 @@ def plot_pdgrm(
         spline_model = get_spline_model(idata)
         weights = get_weights(idata, weights)
         posterior_psd = idata.posterior_psd.psd
+
+        # Extract true_psd from attributes if available
+        if true_psd is None and hasattr(idata, 'attrs') and 'true_psd' in idata.attrs:
+            true_psd = idata.attrs['true_psd']
 
     plt_data = unpack_data(
         pdgrm=pdgrm,
@@ -63,6 +70,7 @@ def plot_pdgrm(
             spline_model=spline_model,
             show_knots=show_knots,
             show_parametric=show_parametric,
+            true_psd=true_psd,
             model_color=model_color,
             model_label=model_label,
             data_color=data_color,
@@ -77,6 +85,7 @@ def plot_pdgrm(
             spline_model=spline_model,
             show_knots=show_knots,
             show_parametric=show_parametric,
+            true_psd=true_psd,
             model_color=model_color,
             model_label=model_label,
             data_color=data_color,
@@ -93,6 +102,7 @@ def _plt_backend(
     spline_model,
     show_knots,
     show_parametric,
+    true_psd,
     model_color,
     model_label,
     data_color,
@@ -156,6 +166,17 @@ def _plt_backend(
             ls="--",
         )
 
+    # Plot true PSD if available
+    if true_psd is not None:
+        ax.loglog(
+            plt_data.freqs,
+            true_psd,
+            label="True PSD",
+            color="k",
+            ls="--",
+            linewidth=2,
+        )
+
     ax.set_xlim(plt_data.freqs.min(), plt_data.freqs.max())
     fig.legend(bbox_to_anchor=(1.05, 1.0), loc="upper left", frameon=False)
     ax.set_xlabel("Frequency [Hz]")
@@ -169,6 +190,7 @@ def _plotly_backend(
     spline_model,
     show_knots,
     show_parametric,
+    true_psd,
     model_color,
     model_label,
     data_color,
@@ -244,6 +266,18 @@ def _plotly_backend(
                 mode="lines",
                 line=dict(color=model_color, dash="dash"),
                 name="Parametric",
+            )
+        )
+
+    # Plot true PSD if available
+    if true_psd is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=plt_data.freqs,
+                y=true_psd,
+                mode="lines",
+                name="True PSD",
+                line=dict(color="black", dash="dash", width=3),
             )
         )
 

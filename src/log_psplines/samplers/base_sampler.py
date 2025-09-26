@@ -32,6 +32,7 @@ class SamplerConfig:
     outdir: Optional[str] = None
     compute_lnz: bool = False
     scaling_factor: float = 1.0  # To track any data scaling
+    true_psd: Optional[jnp.ndarray] = None  # True PSD for diagnostics
 
     def __post_init__(self):
         if self.outdir is not None:
@@ -105,6 +106,21 @@ class BaseSampler(ABC):
             print(f"  ESS min: {ess_min:.1f}, max: {ess_max:.1f}")
             if not (np.isnan(lnz) or np.isnan(lnz_err)):
                 print(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
+
+            # Print RIAE diagnostics if true_psd was provided
+            if hasattr(idata.attrs, 'get') and 'riae' in idata.attrs:
+                riae_median = idata.attrs['riae']
+                if 'riae_errorbars' in idata.attrs:
+                    # RIAE error bars are stored as [q05, q25, median, q75, q95]
+                    errorbars = idata.attrs['riae_errorbars']
+                    if len(errorbars) >= 5:
+                        # Use IQR (interquartile range) for symmetric error representation
+                        iqr_half = (errorbars[3] - errorbars[1]) / 2.0  # (q75 - q25) / 2
+                        print(f"  RIAE: {riae_median:.3f} ± {iqr_half:.3f}")
+                    else:
+                        print(f"  RIAE: {riae_median:.3f}")
+                else:
+                    print(f"  RIAE: {riae_median:.3f}")
 
         # Save outputs if requested
         if self.config.outdir is not None:

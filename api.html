@@ -402,113 +402,67 @@ document.write(`
 <h2>run_mcmc<a class="headerlink" href="#run-mcmc" title="Link to this heading">#</a></h2>
 <dl class="py function">
 <dt class="sig sig-object py" id="log_psplines.mcmc.run_mcmc">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.mcmc.</span></span><span class="sig-name descname"><span class="pre">run_mcmc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pdgrm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Periodogram</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parametric_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampler</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'nuts'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_warmup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwgs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Unpack</span><span class="p"><span class="pre">[</span></span><span class="pre">NUTSKwargs</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Unpack</span><span class="p"><span class="pre">[</span></span><span class="pre">MHKwargs</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Unpack</span><span class="p"><span class="pre">[</span></span><span class="pre">SplineKwargs</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Unpack</span><span class="p"><span class="pre">[</span></span><span class="pre">SamplerKwargs</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">InferenceData</span></span></span><a class="headerlink" href="#log_psplines.mcmc.run_mcmc" title="Link to this definition">#</a></dt>
-<dd><p>Bayesian spectral estimation using MCMC sampling with log P-splines.</p>
-<p>Performs non-parametric Bayesian inference of power spectral densities using 
-penalized B-spline models. Particularly useful for gravitational wave data 
-analysis where smooth spectral estimates are needed while preserving sharp 
-spectral features.</p>
+<span class="sig-prename descclassname"><span class="pre">log_psplines.mcmc.</span></span><span class="sig-name descname"><span class="pre">run_mcmc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Timeseries</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultivariateTimeseries</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Periodogram</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultivarFFT</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampler</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'nuts'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'mh'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'nuts'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_warmup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_chains</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">degree</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diffMatrixOrder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knot_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parametric_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_psd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_phi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta_phi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_delta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta_delta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_lnz</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_accept_prob</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_tree_depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_accept_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.44</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adaptation_window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">InferenceData</span></span></span><a class="headerlink" href="#log_psplines.mcmc.run_mcmc" title="Link to this definition">#</a></dt>
+<dd><p>Unified MCMC interface for both univariate and multivariate PSD estimation.</p>
 <section id="parameters">
 <h3>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h3>
-<dl>
-<dt>pdgrm<span class="classifier">Periodogram</span></dt><dd><p>Input periodogram data, typically from gravitational wave strain 
-measurements or detector noise characterization</p>
+<dl class="simple">
+<dt>data<span class="classifier">Timeseries, MultivariateTimeseries, Periodogram or MultivarFFT</span></dt><dd><p>Input data for analysis. When timeseries data is provided, it will be
+automatically standardized for numerical stability, and posterior samples
+will be rescaled to original units.</p>
 </dd>
-<dt>parametric_model<span class="classifier">jnp.ndarray, optional, default=None</span></dt><dd><p>Known parametric component to subtract (e.g., instrumental lines,
-astrophysical templates). Must match periodogram frequency grid</p>
+<dt>sampler<span class="classifier">{“nuts”, “mh”}</span></dt><dd><p>MCMC sampler type (note: multivariate only supports “nuts”)</p>
 </dd>
-<dt>sampler<span class="classifier">{‘nuts’, ‘mh’}, default=’nuts’</span></dt><dd><p>MCMC sampler algorithm:</p>
-<ul class="simple">
-<li><p>‘nuts’: No-U-Turn Sampler (efficient for smooth posteriors)</p></li>
-<li><p>‘mh’: Metropolis-Hastings (robust for complex/multimodal posteriors)</p></li>
-</ul>
+<dt>n_samples<span class="classifier">int, default=1000</span></dt><dd><p>Number of posterior samples to collect</p>
 </dd>
-<dt>n_samples<span class="classifier">int, default=1000</span></dt><dd><p>Number of posterior samples to collect after warmup phase</p>
+<dt>n_warmup<span class="classifier">int, default=500</span></dt><dd><p>Number of warmup/burn-in samples</p>
 </dd>
-<dt>n_warmup<span class="classifier">int, default=500</span></dt><dd><p>Number of warmup iterations for sampler adaptation and burn-in</p>
+<dt>num_chains<span class="classifier">int, default=1</span></dt><dd><p>Number of MCMC chains to run for convergence diagnostics</p>
 </dd>
-<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>kwgs<span class="classifier">TypedDict parameters</span></dt><dd><p>Configuration parameters from <code class="xref py py-class docutils literal notranslate"><span class="pre">NUTSKwargs</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">MHKwargs</span></code>, 
-<code class="xref py py-class docutils literal notranslate"><span class="pre">SplineKwargs</span></code>, and <code class="xref py py-class docutils literal notranslate"><span class="pre">SamplerKwargs</span></code>. Key parameters include:</p>
-<p><strong>Spline model</strong>: <code class="docutils literal notranslate"><span class="pre">n_knots</span></code> (default=10), <code class="docutils literal notranslate"><span class="pre">degree</span></code> (default=3)
-<strong>NUTS</strong>: <code class="docutils literal notranslate"><span class="pre">target_accept_prob</span></code> (default=0.8), <code class="docutils literal notranslate"><span class="pre">max_tree_depth</span></code> (default=10)  
-<strong>MH</strong>: <code class="docutils literal notranslate"><span class="pre">target_accept_rate</span></code> (default=0.44), <code class="docutils literal notranslate"><span class="pre">adaptation_window</span></code> (default=50)
-<strong>Priors</strong>: <code class="docutils literal notranslate"><span class="pre">alpha_phi</span></code>, <code class="docutils literal notranslate"><span class="pre">beta_phi</span></code> (default=1.0), <code class="docutils literal notranslate"><span class="pre">alpha_delta</span></code>, <code class="docutils literal notranslate"><span class="pre">beta_delta</span></code> (default=1e-4)</p>
+<dt>n_knots<span class="classifier">int, default=10</span></dt><dd><p>Number of knots for B-spline basis</p>
+</dd>
+<dt>degree<span class="classifier">int, default=3</span></dt><dd><p>Degree of B-spline basis functions</p>
+</dd>
+<dt>diffMatrixOrder<span class="classifier">int, default=2</span></dt><dd><p>Order of difference penalty matrix</p>
+</dd>
+<dt>knot_kwargs<span class="classifier">dict, default={}</span></dt><dd><p>Additional keyword arguments for knot allocation</p>
+</dd>
+<dt>parametric_model<span class="classifier">Optional[jnp.ndarray], default=None</span></dt><dd><p>Known parametric component (univariate only)</p>
+</dd>
+<dt>alpha_phi<span class="classifier">float, default=1.0</span></dt><dd><p>Alpha parameter for precision prior</p>
+</dd>
+<dt>beta_phi<span class="classifier">float, default=1.0</span></dt><dd><p>Beta parameter for precision prior</p>
+</dd>
+<dt>alpha_delta<span class="classifier">float, default=1e-4</span></dt><dd><p>Alpha parameter for smoothing prior</p>
+</dd>
+<dt>beta_delta<span class="classifier">float, default=1e-4</span></dt><dd><p>Beta parameter for smoothing prior</p>
+</dd>
+<dt>rng_key<span class="classifier">int, default=42</span></dt><dd><p>Random number generator key</p>
+</dd>
+<dt>verbose<span class="classifier">bool, default=True</span></dt><dd><p>Whether to print progress information</p>
+</dd>
+<dt>outdir<span class="classifier">Optional[str], default=None</span></dt><dd><p>Directory to save output files</p>
+</dd>
+<dt>compute_lnz<span class="classifier">bool, default=False</span></dt><dd><p>Whether to compute log evidence</p>
+</dd>
+<dt>target_accept_prob<span class="classifier">float, default=0.8</span></dt><dd><p>Target acceptance probability for NUTS</p>
+</dd>
+<dt>max_tree_depth<span class="classifier">int, default=10</span></dt><dd><p>Maximum tree depth for NUTS</p>
+</dd>
+<dt>target_accept_rate<span class="classifier">float, default=0.44</span></dt><dd><p>Target acceptance rate for MH</p>
+</dd>
+<dt>adaptation_window<span class="classifier">int, default=50</span></dt><dd><p>Adaptation window for MH</p>
+</dd>
+<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs</dt><dd><p>Additional keyword arguments</p>
 </dd>
 </dl>
 </section>
 <section id="returns">
 <h3>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h3>
 <dl class="simple">
-<dt>az.InferenceData</dt><dd><p>ArviZ InferenceData object containing:</p>
-<ul class="simple">
-<li><p>Posterior samples for spline coefficients and smoothing parameters</p></li>
-<li><p>MCMC diagnostics (R-hat, ESS, divergences, energy statistics)</p></li>
-<li><p>Log-likelihood traces and model comparison metrics</p></li>
-<li><p>Reconstructed power spectral density samples</p></li>
-</ul>
+<dt>az.InferenceData</dt><dd><p>ArviZ InferenceData object with MCMC results</p>
 </dd>
 </dl>
-</section>
-<section id="notes">
-<h3>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h3>
-<p>The log P-spline approach models the log power spectral density as a smooth
-function using B-spline basis functions with a roughness penalty. This provides
-flexible spectral estimation while avoiding overfitting through automatic
-smoothness selection via the hierarchical Bayesian framework.</p>
-<p>For gravitational wave applications, this method excels at:
-- Noise power spectral density estimation for detector characterization
-- Non-parametric background estimation for transient searches  
-- Spectral line identification and characterization
-- Model-independent spectral reconstruction</p>
-</section>
-<section id="examples">
-<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h3>
-<p>Basic spectral estimation with default NUTS sampler:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">idata</span> <span class="o">=</span> <span class="n">run_mcmc</span><span class="p">(</span><span class="n">pdgrm</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span> <span class="n">n_warmup</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>High-resolution analysis for detecting narrow spectral features:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">idata</span> <span class="o">=</span> <span class="n">run_mcmc</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">pdgrm</span><span class="p">,</span> 
-<span class="gp">... </span>    <span class="n">n_knots</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> 
-<span class="gp">... </span>    <span class="n">degree</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">target_accept_prob</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">n_samples</span><span class="o">=</span><span class="mi">3000</span>
-<span class="gp">... </span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Robust sampling with Metropolis-Hastings for difficult posteriors:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">idata</span> <span class="o">=</span> <span class="n">run_mcmc</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">pdgrm</span><span class="p">,</span> 
-<span class="gp">... </span>    <span class="n">sampler</span><span class="o">=</span><span class="s1">&#39;mh&#39;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">target_accept_rate</span><span class="o">=</span><span class="mf">0.44</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">adaptation_window</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">n_samples</span><span class="o">=</span><span class="mi">5000</span>
-<span class="gp">... </span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Analysis with known parametric component removal:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Subtract known 60 Hz line and harmonics</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">template</span> <span class="o">=</span> <span class="n">create_line_template</span><span class="p">(</span><span class="n">frequencies</span><span class="p">,</span> <span class="p">[</span><span class="mi">60</span><span class="p">,</span> <span class="mi">120</span><span class="p">,</span> <span class="mi">180</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">idata</span> <span class="o">=</span> <span class="n">run_mcmc</span><span class="p">(</span><span class="n">pdgrm</span><span class="p">,</span> <span class="n">parametric_model</span><span class="o">=</span><span class="n">template</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Custom prior specification for strong smoothing:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">idata</span> <span class="o">=</span> <span class="n">run_mcmc</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">pdgrm</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">alpha_delta</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">,</span>  <span class="c1"># Stronger smoothing prior</span>
-<span class="gp">... </span>    <span class="n">beta_delta</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">n_knots</span><span class="o">=</span><span class="mi">15</span>
-<span class="gp">... </span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="see-also">
-<h3>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h3>
-<p>NUTSKwargs : NUTS sampler configuration parameters
-MHKwargs : Metropolis-Hastings sampler configuration  
-SplineKwargs : P-spline model configuration
-SamplerKwargs : Common sampler parameters</p>
 </section>
 </dd></dl>
 
@@ -590,8 +544,8 @@ lines, astrophysical templates). Default is None (uniform spectrum)</p>
 </dd>
 </dl>
 </section>
-<section id="id4">
-<h3>Examples<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
+<section id="examples">
+<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h3>
 <p>Create a log P-spline model from gravitational wave periodogram data:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">mypackage</span><span class="w"> </span><span class="kn">import</span> <span class="n">Periodogram</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Assume &#39;pdgrm&#39; is a Periodogram object from GW strain data</span>
@@ -627,8 +581,8 @@ lines, astrophysical templates). Default is None (uniform spectrum)</p>
 </pre></div>
 </div>
 </section>
-<section id="id5">
-<h3>Notes<a class="headerlink" href="#id5" title="Link to this heading">#</a></h3>
+<section id="notes">
+<h3>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h3>
 <p><strong>Mathematical Foundation:</strong></p>
 <p>The penalized B-spline approach balances model flexibility with smoothness
 by minimizing an objective function of the form:</p>
@@ -671,8 +625,8 @@ stable with few knots</p></li>
 <li><p>Parametric model should match the frequency grid of the periodogram</p></li>
 </ul>
 </section>
-<section id="id6">
-<h3>See Also<a class="headerlink" href="#id6" title="Link to this heading">#</a></h3>
+<section id="see-also">
+<h3>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h3>
 <p>run_mcmc : MCMC sampling with LogPSplines models
 Periodogram : Input data structure for spectral analysis
 init_knots : Knot placement algorithms
@@ -695,8 +649,8 @@ init_basis_and_penalty : Basis and penalty matrix construction</p>
 <dt class="sig sig-object py" id="log_psplines.psplines.initialisation.init_knots">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.psplines.initialisation.</span></span><span class="sig-name descname"><span class="pre">init_knots</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">periodogram</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Periodogram</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parametric_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'density'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#log_psplines.psplines.initialisation.init_knots" title="Link to this definition">#</a></dt>
 <dd><p>Select knots using various placement strategies.</p>
-<section id="id7">
-<h3>Parameters<a class="headerlink" href="#id7" title="Link to this heading">#</a></h3>
+<section id="id4">
+<h3>Parameters<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
 <dl class="simple">
 <dt>n_knots<span class="classifier">int</span></dt><dd><p>Total number of knots to select</p>
 </dd>
@@ -712,8 +666,8 @@ init_basis_and_penalty : Basis and penalty matrix construction</p>
 </dd>
 </dl>
 </section>
-<section id="id8">
-<h3>Returns<a class="headerlink" href="#id8" title="Link to this heading">#</a></h3>
+<section id="id5">
+<h3>Returns<a class="headerlink" href="#id5" title="Link to this heading">#</a></h3>
 <dl class="simple">
 <dt>np.ndarray</dt><dd><p>Array of knot locations normalized to [0, 1]</p>
 </dd>

@@ -27,7 +27,7 @@ def test_multivar_mcmc(outdir, test_mode):
         n_knots = 5
 
 
-    psd_scale = 1e-42
+    psd_scale = 1
 
     # Generate test data
     np.random.seed(42)
@@ -99,7 +99,7 @@ def test_mcmc(outdir: str, test_mode: str):
     outdir = os.path.join(outdir, "out_mcmc/univar")
     os.makedirs(outdir, exist_ok=True)
 
-    psd_scale = 1e-42
+    psd_scale = 1 # e-42
 
     n = 1024
     n_samples = n_warmup = 500
@@ -123,6 +123,7 @@ def test_mcmc(outdir: str, test_mode: str):
             outdir=sampler_out,
             rng_key=42,
             compute_lnz=compute_lnz,
+            true_psd=ar_data.psd_theoretical,
         )
 
         print(f"Inference data posterior variables: {idata.posterior}", )

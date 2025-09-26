@@ -26,11 +26,17 @@ def results_to_arviz(
     """Unified ArviZ conversion for both univar and multivar cases."""
 
     if isinstance(data, Periodogram):
-        return _create_univar_inference_data(samples, sample_stats, config, data, model, attributes)
+        idata = _create_univar_inference_data(samples, sample_stats, config, data, model, attributes)
     elif isinstance(data, MultivarFFT):
-        return _create_multivar_inference_data(samples, sample_stats, config, data, model, attributes)
+        idata = _create_multivar_inference_data(samples, sample_stats, config, data, model, attributes)
     else:
         raise ValueError(f"Unsupported data type: {type(data)}")
+
+    # Compute diagnostics if true_psd is provided (using posterior_psd from idata)
+    if config.true_psd is not None:
+        idata.attrs.update(_compute_psd_diagnostics(idata, config, data))
+
+    return idata
 
 
 def _add_chain_dim(data_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -504,3 +510,81 @@ def _reconstruct_theta_params(samples: Dict[str, jnp.ndarray], spline_model, fft
         first_sample = next(iter(samples.values()))
         n_samples = first_sample.shape[1]  # n_draws
         return jnp.zeros((n_samples, fft_data.n_freq, max(1, spline_model.n_theta)))
+
+
+def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
+    """Compute PSD diagnostics when true_psd is provided using the posterior_psd from idata."""
+    diagnostics = {}
+
+    # Save true_psd in attributes
+    diagnostics["true_psd"] = config.true_psd
+
+    # Compute relative integrated absolute error (RIAE) using stored posterior_psd
+    if isinstance(data, Periodogram):
+        # Univariate case - use idata.posterior_psd.psd
+        if "psd" in idata.posterior_psd:
+            psd_samples = idata.posterior_psd["psd"].values  # Shape: (pp_draw, freq)
+            median_psd = np.median(psd_samples, axis=0)
+
+            riae = _compute_riae(median_psd, config.true_psd, data.freqs)
+            riae_errorbars = _compute_riae_errorbars(psd_samples, config.true_psd, data.freqs)
+
+            diagnostics["riae"] = riae
+            # Store errorbars as list/tuple instead of dict for netCDF serialization
+            diagnostics["riae_errorbars"] = [
+                riae_errorbars["q05"],
+                riae_errorbars["q25"],
+                riae_errorbars["median"],
+                riae_errorbars["q75"],
+                riae_errorbars["q95"]
+            ]
+
+    elif isinstance(data, MultivarFFT):
+        # Multivariate case - use idata.posterior_psd.psd_matrix
+        if "psd_matrix" in idata.posterior_psd:
+            psd_matrix_samples = idata.posterior_psd["psd_matrix"].values  # Shape: (pp_draw, freq, channels, channels)
+            median_psd_matrix = np.median(psd_matrix_samples, axis=0)
+
+            # Compute RIAE for each diagonal component (auto-spectra)
+            for i in range(data.n_dim):
+                median_psd = median_psd_matrix[:, i, i]  # Auto-spectrum for channel i
+                true_psd_component = config.true_psd[:, i, i] if config.true_psd is not None and config.true_psd.ndim == 3 else None
+                if true_psd_component is not None:
+                    riae = _compute_riae(median_psd, true_psd_component, np.array(data.freq))
+                    psd_component_samples = psd_matrix_samples[:, :, i, i]  # (pp_draw, freq)
+                    riae_errorbars = _compute_riae_errorbars(psd_component_samples, true_psd_component, np.array(data.freq))
+                    diagnostics[f"riae_ch{i}"] = riae
+                    # Store errorbars as list/tuple instead of dict for netCDF serialization
+                    diagnostics[f"riae_errorbars_ch{i}"] = [
+                        riae_errorbars["q05"],
+                        riae_errorbars["q25"],
+                        riae_errorbars["median"],
+                        riae_errorbars["q75"],
+                        riae_errorbars["q95"]
+                    ]
+
+    return diagnostics
+
+
+def _compute_riae(median_psd: np.ndarray, true_psd: np.ndarray, freqs: np.ndarray) -> float:
+    """Compute relative integrated absolute error (RIAE)."""
+    numerator = np.trapz(np.abs(median_psd - true_psd), freqs)
+    denominator = np.trapz(true_psd, freqs)
+    return float(numerator / denominator)
+
+
+def _compute_riae_errorbars(psd_samples: np.ndarray, true_psd: np.ndarray, freqs: np.ndarray) -> Dict[str, float]:
+    """Compute errorbars for RIAE based on quantiles from posterior predictive samples."""
+    riae_samples = []
+    for psd in psd_samples:
+        riae = _compute_riae(psd, true_psd, freqs)
+        riae_samples.append(riae)
+
+    riae_samples = np.array(riae_samples)
+    return {
+        "q05": float(np.percentile(riae_samples, 5)),
+        "q25": float(np.percentile(riae_samples, 25)),
+        "median": float(np.median(riae_samples)),
+        "q75": float(np.percentile(riae_samples, 75)),
+        "q95": float(np.percentile(riae_samples, 95)),
+    }

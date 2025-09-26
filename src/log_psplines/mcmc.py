@@ -31,6 +31,7 @@ def run_mcmc(
     diffMatrixOrder: int = 2,
     knot_kwargs: dict = {},
     parametric_model: Optional[jnp.ndarray] = None,
+    true_psd: Optional[jnp.ndarray] = None,
     # Sampler parameters
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
@@ -180,6 +181,7 @@ def run_mcmc(
         target_accept_rate=target_accept_rate,
         adaptation_window=adaptation_window,
         scaling_factor=processed_data.scaling_factor,  # Pass scaling info to sampler
+        true_psd=true_psd,
         **kwargs
     )
 
@@ -203,6 +205,7 @@ def create_sampler(
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
     scaling_factor: float = 1.0,
+    true_psd: Optional[jnp.ndarray] = None,
     **kwargs
 ):
 
@@ -218,7 +221,8 @@ def create_sampler(
         "verbose": verbose,
         "outdir": outdir,
         "compute_lnz": compute_lnz,
-        "scaling_factor": scaling_factor
+        "scaling_factor": scaling_factor,
+        "true_psd": true_psd
     }
 
     if isinstance(data, Periodogram):
@@ -258,4 +262,3 @@ def create_sampler(
 
     else:
         raise ValueError(f"Unsupported data type: {type(data).__name__}. Expected Periodogram or MultivarFFT.")
-

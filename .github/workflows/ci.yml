@@ -16,18 +16,26 @@ jobs:
       - uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
-          ref: main       # Replace with your branch
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            pyproject.toml
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[dev]
-          python -m pip install -e .[gw]
-          pre-commit install
+          python -m pip install -e '.[dev,gw]'
+
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pre-commit-
 
       - name: pre-commit
         run: pre-commit run --all-files --verbose --show-diff-on-failure

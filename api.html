@@ -473,26 +473,26 @@ will be rescaled to original units.</p>
 <dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.psplines.</span></span><span class="sig-name descname"><span class="pre">LogPSplines</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">degree</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diffMatrixOrder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parametric_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.psplines.LogPSplines" title="Link to this definition">#</a></dt>
 <dd><p>Bayesian log-power spectral density model using penalized B-splines.</p>
-<p>This class implements a flexible non-parametric model for log power spectral 
+<p>This class implements a flexible non-parametric model for log power spectral
 densities using B-spline basis functions with roughness penalties. The approach
-is particularly well-suited for gravitational wave data analysis, enabling 
-smooth spectral reconstruction while preserving sharp spectral features and 
+is particularly well-suited for gravitational wave data analysis, enabling
+smooth spectral reconstruction while preserving sharp spectral features and
 automatically selecting appropriate smoothness levels.</p>
 <p>The model represents the log power spectral density as:</p>
 <div class="math notranslate nohighlight">
 \[\log S(f) = \sum_{j=1}^{K} w_j B_j(f) + \log S_{\text{param}}(f)\]</div>
-<p>where <span class="math notranslate nohighlight">\(B_j(f)\)</span> are B-spline basis functions, <span class="math notranslate nohighlight">\(w_j\)</span> are spline 
+<p>where <span class="math notranslate nohighlight">\(B_j(f)\)</span> are B-spline basis functions, <span class="math notranslate nohighlight">\(w_j\)</span> are spline
 coefficients, and <span class="math notranslate nohighlight">\(S_{\text{param}}(f)\)</span> is an optional parametric component.
-Smoothness is enforced via a penalty on the <span class="math notranslate nohighlight">\(k\)</span>-th order differences of 
+Smoothness is enforced via a penalty on the <span class="math notranslate nohighlight">\(k\)</span>-th order differences of
 the coefficients.</p>
 <section id="id3">
 <h3>Parameters<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
 <dl class="simple">
-<dt>degree<span class="classifier">int</span></dt><dd><p>Polynomial degree of B-spline basis functions (0-5). Higher degrees 
+<dt>degree<span class="classifier">int</span></dt><dd><p>Polynomial degree of B-spline basis functions (0-5). Higher degrees
 provide smoother basis functions but require more knots for flexibility.
 Common choices: 1 (linear), 2 (quadratic), 3 (cubic)</p>
 </dd>
-<dt>diffMatrixOrder<span class="classifier">int  </span></dt><dd><p>Order of finite difference penalty matrix (0-4). Controls the type of
+<dt>diffMatrixOrder<span class="classifier">int</span></dt><dd><p>Order of finite difference penalty matrix (0-4). Controls the type of
 smoothness enforced:</p>
 <ul class="simple">
 <li><p>0: Penalizes coefficient magnitude (ridge-like)</p></li>
@@ -506,7 +506,7 @@ smoothness enforced:</p>
 <dt>basis<span class="classifier">jnp.ndarray, shape (n, n_basis)</span></dt><dd><p>B-spline basis matrix evaluated at periodogram frequencies.
 Each column represents one basis function</p>
 </dd>
-<dt>penalty_matrix<span class="classifier">jnp.ndarray, shape (n_basis, n_basis)  </span></dt><dd><p>Roughness penalty matrix for enforcing smoothness. Typically sparse
+<dt>penalty_matrix<span class="classifier">jnp.ndarray, shape (n_basis, n_basis)</span></dt><dd><p>Roughness penalty matrix for enforcing smoothness. Typically sparse
 with structure determined by <cite>diffMatrixOrder</cite></p>
 </dd>
 <dt>knots<span class="classifier">np.ndarray, shape (n_knots,)</span></dt><dd><p>Interior knot positions defining the B-spline basis. Knot placement
@@ -515,7 +515,7 @@ affects model flexibility and computational efficiency</p>
 <dt>weights<span class="classifier">jnp.ndarray, shape (n_basis,), optional</span></dt><dd><p>Spline coefficients/weights. Initialized to zeros and typically
 estimated during MCMC sampling. Default is None</p>
 </dd>
-<dt>parametric_model<span class="classifier">jnp.ndarray, shape (n,), optional  </span></dt><dd><p>Known parametric component of the power spectrum (e.g., instrumental
+<dt>parametric_model<span class="classifier">jnp.ndarray, shape (n,), optional</span></dt><dd><p>Known parametric component of the power spectrum (e.g., instrumental
 lines, astrophysical templates). Default is None (uniform spectrum)</p>
 </dd>
 </dl>
@@ -529,7 +529,7 @@ lines, astrophysical templates). Default is None (uniform spectrum)</p>
 </dd>
 <dt>n_knots<span class="classifier">int</span></dt><dd><p>Number of interior knots</p>
 </dd>
-<dt>n_basis<span class="classifier">int  </span></dt><dd><p>Number of basis functions (n_knots + degree - 1)</p>
+<dt>n_basis<span class="classifier">int</span></dt><dd><p>Number of basis functions (n_knots + degree - 1)</p>
 </dd>
 </dl>
 </section>
@@ -550,8 +550,8 @@ lines, astrophysical templates). Default is None (uniform spectrum)</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">mypackage</span><span class="w"> </span><span class="kn">import</span> <span class="n">Periodogram</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Assume &#39;pdgrm&#39; is a Periodogram object from GW strain data</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">LogPSplines</span><span class="o">.</span><span class="n">from_periodogram</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">pdgrm</span><span class="p">,</span> 
-<span class="gp">... </span>    <span class="n">n_knots</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> 
+<span class="gp">... </span>    <span class="n">pdgrm</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">n_knots</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">degree</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">diffMatrixOrder</span><span class="o">=</span><span class="mi">2</span>
 <span class="gp">... </span><span class="p">)</span>
@@ -571,7 +571,7 @@ lines, astrophysical templates). Default is None (uniform spectrum)</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">LogPSplines</span><span class="o">.</span><span class="n">from_periodogram</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">pdgrm</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">n_knots</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">degree</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> 
+<span class="gp">... </span>    <span class="n">degree</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">parametric_model</span><span class="o">=</span><span class="n">line_template</span>
 <span class="gp">... </span><span class="p">)</span>
 </pre></div>
@@ -589,7 +589,7 @@ by minimizing an objective function of the form:</p>
 <div class="math notranslate nohighlight">
 \[L(w) = ||y - Bw||^2 + \lambda w^T P w\]</div>
 <p>where <span class="math notranslate nohighlight">\(y\)</span> is the log periodogram, <span class="math notranslate nohighlight">\(B\)</span> is the basis matrix,
-<span class="math notranslate nohighlight">\(w\)</span> are coefficients, <span class="math notranslate nohighlight">\(P\)</span> is the penalty matrix, and 
+<span class="math notranslate nohighlight">\(w\)</span> are coefficients, <span class="math notranslate nohighlight">\(P\)</span> is the penalty matrix, and
 <span class="math notranslate nohighlight">\(\lambda\)</span> is the smoothing parameter.</p>
 <p><strong>Computational Considerations:</strong></p>
 <ul class="simple">

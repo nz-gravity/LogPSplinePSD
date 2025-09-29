@@ -109,6 +109,14 @@ def run_mcmc(
         ArviZ InferenceData object with MCMC results
     """
 
+    # Scale true_psd to match standardized data if necessary
+    scaled_true_psd = true_psd
+    if true_psd is not None and isinstance(data, (Timeseries, MultivariateTimeseries)):
+        # Data will be standardized, so true_psd needs to be scaled to match
+        # First get the scaling factor that will be used
+        standardized_ts = data.standardise_for_psd()
+        scaled_true_psd = true_psd * standardized_ts.scaling_factor
+
     # Handle raw timeseries input - standardize automatically
     processed_data = None
 
@@ -134,7 +142,6 @@ def run_mcmc(
     if isinstance(data, (Periodogram, MultivarFFT)):
         processed_data = data  # Use as is
 
-
     # Create model based on processed data type
     if isinstance(processed_data, Periodogram):
         # Univariate case
@@ -143,14 +150,11 @@ def run_mcmc(
             n_knots=n_knots,
             degree=degree,
             diffMatrixOrder=diffMatrixOrder,
-            parametric_model=parametric_model if isinstance(data, (Periodogram, Timeseries)) else None,
+            parametric_model=parametric_model if parametric_model is not None else None,
             knot_kwargs=knot_kwargs,
         )
     elif isinstance(processed_data, MultivarFFT):
         # Multivariate case
-        if parametric_model is not None and isinstance(data, Periodogram):
-            raise ValueError("parametric_model is not supported for multivariate data. "
-                           "Parametric models are only available for univariate Periodogram data.")
         model = MultivariateLogPSplines.from_multivar_fft(
             processed_data,
             n_knots=n_knots,
@@ -180,8 +184,8 @@ def run_mcmc(
         max_tree_depth=max_tree_depth,
         target_accept_rate=target_accept_rate,
         adaptation_window=adaptation_window,
-        scaling_factor=processed_data.scaling_factor,  # Pass scaling info to sampler
-        true_psd=true_psd,
+        scaling_factor=processed_data.scaling_factor if processed_data and hasattr(processed_data, 'scaling_factor') else 1.0,  # Pass scaling info to sampler
+        true_psd=scaled_true_psd,
         **kwargs
     )
 

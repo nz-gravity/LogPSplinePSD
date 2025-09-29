@@ -319,7 +319,7 @@ def _create_multivar_inference_data(
     dims.update({
         "fft_re": ["freq", "channels"],
         "fft_im": ["freq", "channels"],
-        "psd_matrix": ["pp_draw", "freq", "channels", "channels"],
+        "psd_matrix": ["pp_draw", "freq", "channels", "channels2"],
     })
 
     # Update attributes with multivar-specific values
@@ -350,11 +350,12 @@ def _create_multivar_inference_data(
     # Add posterior predictive samples
     idata.add_groups(
         posterior_psd=Dataset(
-            {"psd_matrix": DataArray(psd_samples, dims=["pp_draw", "freq", "channels", "channels"])},
+            {"psd_matrix": DataArray(psd_samples, dims=["pp_draw", "freq", "channels", "channels2"])},
             coords={
                 "pp_draw": coords["pp_draw"],
                 "freq": coords["freq"],
                 "channels": coords["channels"],
+                "channels2": coords["channels"],
             },
         )
     )
@@ -519,7 +520,7 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
     # Save true_psd in attributes
     diagnostics["true_psd"] = config.true_psd
 
-    # Compute relative integrated absolute error (RIAE) using stored posterior_psd
+    # Compute relative integrated absolute error (RIAE) and CI coverage using stored posterior_psd
     if isinstance(data, Periodogram):
         # Univariate case - use idata.posterior_psd.psd
         if "psd" in idata.posterior_psd:
@@ -529,7 +530,11 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
             riae = _compute_riae(median_psd, config.true_psd, data.freqs)
             riae_errorbars = _compute_riae_errorbars(psd_samples, config.true_psd, data.freqs)
 
+            # Compute CI coverage
+            ci_coverage = _compute_ci_coverage_univar(psd_samples, config.true_psd)
+
             diagnostics["riae"] = riae
+            diagnostics["ci_coverage"] = ci_coverage
             # Store errorbars as list/tuple instead of dict for netCDF serialization
             diagnostics["riae_errorbars"] = [
                 riae_errorbars["q05"],
@@ -542,7 +547,7 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
     elif isinstance(data, MultivarFFT):
         # Multivariate case - use idata.posterior_psd.psd_matrix
         if "psd_matrix" in idata.posterior_psd:
-            psd_matrix_samples = idata.posterior_psd["psd_matrix"].values  # Shape: (pp_draw, freq, channels, channels)
+            psd_matrix_samples = idata.posterior_psd["psd_matrix"].values  # Shape: (pp_draw, freq, channels, channels_out)
             median_psd_matrix = np.median(psd_matrix_samples, axis=0)
 
             # Compute matrix RIAE using Frobenius norm
@@ -565,7 +570,11 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
                     "q95": float(np.percentile(matrix_riae_samples, 95)),
                 }
 
+                # Compute CI coverage for multivariate
+                ci_coverage_matrix = _compute_ci_coverage_multivar(psd_matrix_samples, true_psd_real)
+
                 diagnostics["riae_matrix"] = riae_matrix
+                diagnostics["ci_coverage"] = ci_coverage_matrix
                 diagnostics["riae_matrix_errorbars"] = [
                     riae_matrix_errorbars["q05"],
                     riae_matrix_errorbars["q25"],
@@ -615,3 +624,54 @@ def _compute_riae_errorbars(psd_samples: np.ndarray, true_psd: np.ndarray, freqs
         "q75": float(np.percentile(riae_samples, 75)),
         "q95": float(np.percentile(riae_samples, 95)),
     }
+
+
+def _compute_ci_coverage_univar(psd_samples: np.ndarray, true_psd: np.ndarray) -> float:
+    """Compute 95% credible interval coverage for univariate PSD."""
+    # psd_samples: (pp_draw, freq)
+    posterior_lower = np.percentile(psd_samples, 2.5, axis=0)  # (freq,)
+    posterior_upper = np.percentile(psd_samples, 97.5, axis=0)  # (freq,)
+    coverage = np.mean((true_psd >= posterior_lower) & (true_psd <= posterior_upper))
+    return float(coverage)
+
+
+
+def _complex_to_real(matrix):
+    """
+    Transform a complex valued Hermitian matrix to a real valued matrix.
+
+    Upper triangular elements (including diagonal) contain the real parts,
+    lower triangular elements (excluding diagonal) contain the imaginary parts.
+    """
+    n = matrix.shape[0]
+    real_matrix = np.zeros_like(matrix, dtype=float)
+    real_matrix[np.triu_indices(n)] = np.real(matrix[np.triu_indices(n)])
+    real_matrix[np.tril_indices(n, -1)] = np.imag(matrix[np.tril_indices(n, -1)])
+    return real_matrix
+
+
+def _compute_ci_coverage_multivar(psd_matrix_samples: np.ndarray, true_psd_real: np.ndarray) -> float:
+    """Compute 95% credible interval coverage for multivariate PSD matrix."""
+    # psd_matrix_samples: (pp_draw, freq, channels, channels_out)
+
+    # Transform true_psd to real-valued representation
+    true_psd = np.zeros_like(true_psd_real)
+    for i in range(true_psd_real.shape[0]):
+        true_psd[i] = _complex_to_real(true_psd_real[i])
+
+    psd_matrix_real = np.zeros_like(psd_matrix_samples, dtype=np.float64)
+
+    # transform each sample to real-valued representation
+    for i in range(psd_matrix_samples.shape[0]):
+        for j in range(psd_matrix_samples.shape[1]):
+            psd_matrix_real[i, j] = _complex_to_real(psd_matrix_samples[i, j])
+
+    # Compute 95% CI for each element across pp_draw
+    posterior_lower = np.percentile(psd_matrix_real, 2.5, axis=0)  # (freq, channels, channels_out)
+    posterior_upper = np.percentile(psd_matrix_real, 97.5, axis=0)  # (freq, channels, channels_out)
+    # Coverage is fraction of matrix elements where true_psd is within CI
+    coverage = np.mean((true_psd_real >= posterior_lower) & (true_psd_real <= posterior_upper))
+    return float(coverage)
+
+
+

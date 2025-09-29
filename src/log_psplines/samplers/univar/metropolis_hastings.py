@@ -2,26 +2,28 @@
 Metropolis-Hastings sampler for univariate PSD estimation.
 """
 
+import tempfile
 import time
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Dict, Tuple
-import tempfile
 
 import arviz as az
 import jax
 import jax.numpy as jnp
+import morphZ
 import numpy as np
 from tqdm.auto import tqdm
-import morphZ
 
-from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 from ..base_sampler import SamplerConfig
+from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
 
 @dataclass
 class MetropolisHastingsConfig(SamplerConfig):
-    target_accept_rate: float = 0.44  # Optimal for component-wise (d=1) updates
+    target_accept_rate: float = (
+        0.44  # Optimal for component-wise (d=1) updates
+    )
     adaptation_window: int = 50  # Adapt every N iterations
     adaptation_start: int = 100  # Start adapting after N iterations
 
@@ -39,10 +41,10 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
     """
 
     def __init__(
-            self,
-            periodogram,
-            spline_model,
-            config: MetropolisHastingsConfig = None,
+        self,
+        periodogram,
+        spline_model,
+        config: MetropolisHastingsConfig = None,
     ):
         if config is None:
             config = MetropolisHastingsConfig()
@@ -61,7 +63,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
         # Current parameter values
         self.current_weights = jnp.array(self.spline_model.weights)
         self.current_phi = self.config.alpha_phi / (
-                self.config.beta_phi * self.config.alpha_delta / self.config.beta_delta
+            self.config.beta_phi
+            * self.config.alpha_delta
+            / self.config.beta_delta
         )
         self.current_delta = self.config.alpha_delta / self.config.beta_delta
 
@@ -110,7 +114,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
         """Required by base class."""
         return "metropolis_hastings"
 
-    def _log_posterior(self, weights: jnp.ndarray, phi: float, delta: float) -> float:
+    def _log_posterior(
+        self, weights: jnp.ndarray, phi: float, delta: float
+    ) -> float:
         """Wrapper for JIT-compiled log posterior."""
         return log_posterior(
             weights,
@@ -130,21 +136,23 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
         """Update weights using JIT-compiled component-wise Metropolis-Hastings."""
         self.rng_key, subkey = jax.random.split(self.rng_key)
 
-        new_weights, acceptance_mask, new_log_posterior = update_weights_componentwise(
-            self.current_weights,
-            self.step_sizes,
-            self.current_phi,
-            self.current_delta,
-            self.log_pdgrm,
-            self.basis_matrix,
-            self.log_parametric,
-            self.penalty_matrix,
-            subkey,
-            self.n_weights,
-            self.config.alpha_phi,
-            self.config.beta_phi,
-            self.config.alpha_delta,
-            self.config.beta_delta,
+        new_weights, acceptance_mask, new_log_posterior = (
+            update_weights_componentwise(
+                self.current_weights,
+                self.step_sizes,
+                self.current_phi,
+                self.current_delta,
+                self.log_pdgrm,
+                self.basis_matrix,
+                self.log_parametric,
+                self.penalty_matrix,
+                subkey,
+                self.n_weights,
+                self.config.alpha_phi,
+                self.config.beta_phi,
+                self.config.alpha_delta,
+                self.config.beta_delta,
+            )
         )
 
         self.current_weights = new_weights
@@ -190,7 +198,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
         if self.iteration % self.config.adaptation_window == 0:
             for i in range(self.n_weights):
                 if self.proposal_counts[i] > 0:
-                    accept_rate = self.accept_counts[i] / self.proposal_counts[i]
+                    accept_rate = (
+                        self.accept_counts[i] / self.proposal_counts[i]
+                    )
 
                     if accept_rate < self.config.target_accept_rate:
                         self.step_sizes = self.step_sizes.at[i].multiply(
@@ -236,7 +246,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
             "step_sizes": np.array(self.step_sizes),
         }
 
-    def sample(self, n_samples: int, n_warmup: int = 500, **kwargs) -> az.InferenceData:
+    def sample(
+        self, n_samples: int, n_warmup: int = 500, **kwargs
+    ) -> az.InferenceData:
         """Run Metropolis-Hastings sampling."""
         total_iterations = n_warmup + n_samples
 
@@ -265,10 +277,10 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
             )
 
         with tqdm(
-                total=total_iterations,
-                disable=not self.config.verbose,
-                desc="MH",
-                leave=True,
+            total=total_iterations,
+            disable=not self.config.verbose,
+            desc="MH",
+            leave=True,
         ) as pbar:
 
             for i in range(total_iterations):
@@ -300,8 +312,12 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
 
                     sample_stats["accept_prob"][j] = step_info["accept_prob"]
                     sample_stats["lp"][j] = lp
-                    sample_stats["step_size_mean"][j] = np.mean(step_info["step_sizes"])
-                    sample_stats["step_size_std"][j] = np.std(step_info["step_sizes"])
+                    sample_stats["step_size_mean"][j] = np.mean(
+                        step_info["step_sizes"]
+                    )
+                    sample_stats["step_size_std"][j] = np.std(
+                        step_info["step_sizes"]
+                    )
 
                 # Update progress bar
                 if i % 100 == 0:
@@ -331,23 +347,24 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
         return self.to_arviz(samples, sample_stats)
 
     def _get_lnz(
-            self,
-            samples: Dict[str, np.ndarray],
-            sample_stats: Dict[str, Any]
+        self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
         """Compute log normalizing constant using morphZ."""
         if not self.config.compute_lnz:
             return np.nan, np.nan
 
-        post_smp = np.concatenate([
-            samples['weights'],
-            samples['phi'][:, None],
-            samples['delta'][:, None]
-        ], axis=1)
-        lp = sample_stats['lp']
+        post_smp = np.concatenate(
+            [
+                samples["weights"],
+                samples["phi"][:, None],
+                samples["delta"][:, None],
+            ],
+            axis=1,
+        )
+        lp = sample_stats["lp"]
 
         def lp_fn(sample):
-            weights = sample[:self.n_weights]
+            weights = sample[: self.n_weights]
             phi = sample[self.n_weights]
             delta = sample[self.n_weights + 1]
             return log_posterior(weights, phi, delta, **self._logp_kwargs)
@@ -371,18 +388,19 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
             beta_delta=self.config.beta_delta,
         )
 
-    def _compute_log_posterior(self, weights: jnp.ndarray, phi: float, delta: float) -> float:
+    def _compute_log_posterior(
+        self, weights: jnp.ndarray, phi: float, delta: float
+    ) -> float:
         """Compute log posterior for given parameters (used by base class)."""
-        return log_posterior(
-            weights, phi, delta, **self._logp_kwargs
-        )
+        return log_posterior(weights, phi, delta, **self._logp_kwargs)
 
 
 # ==================== JAX OPTIMIZED FUNCTIONS ====================
 
+
 @jax.jit
 def log_prior_weights(
-        weights: jnp.ndarray, phi: float, penalty_matrix: jnp.ndarray
+    weights: jnp.ndarray, phi: float, penalty_matrix: jnp.ndarray
 ) -> jnp.ndarray:
     """Log prior for weights: MVN(0, (phi * P)^-1)."""
     precision = phi * penalty_matrix
@@ -394,7 +412,7 @@ def log_prior_weights(
 
 @jax.jit
 def log_prior_phi(
-        phi: float, delta: float, alpha_phi: float, beta_phi: float
+    phi: float, delta: float, alpha_phi: float, beta_phi: float
 ) -> jnp.ndarray:
     """Log prior for phi: Gamma(alpha_phi, delta * beta_phi)."""
     return jnp.where(
@@ -409,7 +427,7 @@ def log_prior_phi(
 
 @jax.jit
 def log_prior_delta(
-        delta: float, alpha_delta: float, beta_delta: float
+    delta: float, alpha_delta: float, beta_delta: float
 ) -> jnp.ndarray:
     """Log prior for delta: Gamma(alpha_delta, beta_delta)."""
     return jnp.where(
@@ -424,17 +442,17 @@ def log_prior_delta(
 
 @jax.jit
 def log_posterior(
-        weights: jnp.ndarray,
-        phi: float,
-        delta: float,
-        log_pdgrm: jnp.ndarray,
-        basis_matrix: jnp.ndarray,
-        log_parametric: jnp.ndarray,
-        penalty_matrix: jnp.ndarray,
-        alpha_phi: float,
-        beta_phi: float,
-        alpha_delta: float,
-        beta_delta: float,
+    weights: jnp.ndarray,
+    phi: float,
+    delta: float,
+    log_pdgrm: jnp.ndarray,
+    basis_matrix: jnp.ndarray,
+    log_parametric: jnp.ndarray,
+    penalty_matrix: jnp.ndarray,
+    alpha_phi: float,
+    beta_phi: float,
+    alpha_delta: float,
+    beta_delta: float,
 ) -> float:
     """Complete log posterior computation."""
     log_like = log_likelihood(weights, log_pdgrm, basis_matrix, log_parametric)
@@ -448,12 +466,12 @@ def log_posterior(
 
 @jax.jit
 def gibbs_update_phi(
-        weights: jnp.ndarray,
-        penalty_matrix: jnp.ndarray,
-        current_delta: float,
-        alpha_phi: float,
-        beta_phi: float,
-        rng_key: jax.random.PRNGKey,
+    weights: jnp.ndarray,
+    penalty_matrix: jnp.ndarray,
+    current_delta: float,
+    alpha_phi: float,
+    beta_phi: float,
+    rng_key: jax.random.PRNGKey,
 ) -> jnp.ndarray:
     """Gibbs update for phi parameter."""
     k = len(weights)
@@ -467,12 +485,12 @@ def gibbs_update_phi(
 
 @jax.jit
 def gibbs_update_delta(
-        current_phi: float,
-        alpha_phi: float,
-        beta_phi: float,
-        alpha_delta: float,
-        beta_delta: float,
-        rng_key: jax.random.PRNGKey,
+    current_phi: float,
+    alpha_phi: float,
+    beta_phi: float,
+    alpha_delta: float,
+    beta_delta: float,
+    rng_key: jax.random.PRNGKey,
 ) -> jnp.ndarray:
     """Gibbs update for delta parameter."""
     shape = alpha_phi + alpha_delta
@@ -483,20 +501,20 @@ def gibbs_update_delta(
 
 @partial(jax.jit, static_argnums=(9,))
 def update_weights_componentwise(
-        weights: jnp.ndarray,
-        step_sizes: jnp.ndarray,
-        phi: float,
-        delta: float,
-        log_pdgrm: jnp.ndarray,
-        basis_matrix: jnp.ndarray,
-        log_parametric: jnp.ndarray,
-        penalty_matrix: jnp.ndarray,
-        rng_key: jax.random.PRNGKey,
-        n_weights: int,
-        alpha_phi: float,
-        beta_phi: float,
-        alpha_delta: float,
-        beta_delta: float,
+    weights: jnp.ndarray,
+    step_sizes: jnp.ndarray,
+    phi: float,
+    delta: float,
+    log_pdgrm: jnp.ndarray,
+    basis_matrix: jnp.ndarray,
+    log_parametric: jnp.ndarray,
+    penalty_matrix: jnp.ndarray,
+    rng_key: jax.random.PRNGKey,
+    n_weights: int,
+    alpha_phi: float,
+    beta_phi: float,
+    alpha_delta: float,
+    beta_delta: float,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, float]:
     """Component-wise Metropolis-Hastings update for weights."""
     current_log_post = log_posterior(

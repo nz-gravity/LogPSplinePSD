@@ -1,7 +1,9 @@
 import os
+
 import pytest
 
 FAST_RUN = False
+
 
 @pytest.fixture(scope="session")
 def test_mode():
@@ -31,4 +33,3 @@ def outdir():
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     return outdir
-

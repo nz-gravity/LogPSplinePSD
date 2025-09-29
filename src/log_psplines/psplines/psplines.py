@@ -16,43 +16,43 @@ class LogPSplines:
     """
     Bayesian log-power spectral density model using penalized B-splines.
 
-    This class implements a flexible non-parametric model for log power spectral 
+    This class implements a flexible non-parametric model for log power spectral
     densities using B-spline basis functions with roughness penalties. The approach
-    is particularly well-suited for gravitational wave data analysis, enabling 
-    smooth spectral reconstruction while preserving sharp spectral features and 
+    is particularly well-suited for gravitational wave data analysis, enabling
+    smooth spectral reconstruction while preserving sharp spectral features and
     automatically selecting appropriate smoothness levels.
 
     The model represents the log power spectral density as:
-    
+
     .. math::
         \\log S(f) = \\sum_{j=1}^{K} w_j B_j(f) + \\log S_{\\text{param}}(f)
-        
-    where :math:`B_j(f)` are B-spline basis functions, :math:`w_j` are spline 
+
+    where :math:`B_j(f)` are B-spline basis functions, :math:`w_j` are spline
     coefficients, and :math:`S_{\\text{param}}(f)` is an optional parametric component.
-    Smoothness is enforced via a penalty on the :math:`k`-th order differences of 
+    Smoothness is enforced via a penalty on the :math:`k`-th order differences of
     the coefficients.
 
     Parameters
     ----------
     degree : int
-        Polynomial degree of B-spline basis functions (0-5). Higher degrees 
+        Polynomial degree of B-spline basis functions (0-5). Higher degrees
         provide smoother basis functions but require more knots for flexibility.
         Common choices: 1 (linear), 2 (quadratic), 3 (cubic)
-    diffMatrixOrder : int  
+    diffMatrixOrder : int
         Order of finite difference penalty matrix (0-4). Controls the type of
         smoothness enforced:
-        
+
         - 0: Penalizes coefficient magnitude (ridge-like)
-        - 1: Penalizes first differences (encourages constant slopes)  
+        - 1: Penalizes first differences (encourages constant slopes)
         - 2: Penalizes second differences (encourages straight lines)
         - 3+: Higher-order smoothness penalties
-        
+
     n : int
         Number of frequency bins in the periodogram/data
     basis : jnp.ndarray, shape (n, n_basis)
         B-spline basis matrix evaluated at periodogram frequencies.
         Each column represents one basis function
-    penalty_matrix : jnp.ndarray, shape (n_basis, n_basis)  
+    penalty_matrix : jnp.ndarray, shape (n_basis, n_basis)
         Roughness penalty matrix for enforcing smoothness. Typically sparse
         with structure determined by `diffMatrixOrder`
     knots : np.ndarray, shape (n_knots,)
@@ -61,19 +61,19 @@ class LogPSplines:
     weights : jnp.ndarray, shape (n_basis,), optional
         Spline coefficients/weights. Initialized to zeros and typically
         estimated during MCMC sampling. Default is None
-    parametric_model : jnp.ndarray, shape (n,), optional  
+    parametric_model : jnp.ndarray, shape (n,), optional
         Known parametric component of the power spectrum (e.g., instrumental
         lines, astrophysical templates). Default is None (uniform spectrum)
 
     Attributes
-    ---------- 
+    ----------
     log_parametric_model : jnp.ndarray
         Cached logarithm of the parametric model component
     order : int
-        B-spline order (degree + 1) 
+        B-spline order (degree + 1)
     n_knots : int
         Number of interior knots
-    n_basis : int  
+    n_basis : int
         Number of basis functions (n_knots + degree - 1)
 
     Methods
@@ -92,8 +92,8 @@ class LogPSplines:
     >>> from mypackage import Periodogram
     >>> # Assume 'pdgrm' is a Periodogram object from GW strain data
     >>> model = LogPSplines.from_periodogram(
-    ...     pdgrm, 
-    ...     n_knots=15, 
+    ...     pdgrm,
+    ...     n_knots=15,
     ...     degree=3,
     ...     diffMatrixOrder=2
     ... )
@@ -113,7 +113,7 @@ class LogPSplines:
     >>> model = LogPSplines.from_periodogram(
     ...     pdgrm,
     ...     n_knots=12,
-    ...     degree=3, 
+    ...     degree=3,
     ...     parametric_model=line_template
     ... )
 
@@ -124,19 +124,19 @@ class LogPSplines:
     Notes
     -----
     **Mathematical Foundation:**
-    
+
     The penalized B-spline approach balances model flexibility with smoothness
     by minimizing an objective function of the form:
-    
+
     .. math::
         L(w) = ||y - Bw||^2 + \\lambda w^T P w
-        
+
     where :math:`y` is the log periodogram, :math:`B` is the basis matrix,
-    :math:`w` are coefficients, :math:`P` is the penalty matrix, and 
+    :math:`w` are coefficients, :math:`P` is the penalty matrix, and
     :math:`\\lambda` is the smoothing parameter.
 
     **Computational Considerations:**
-    
+
     - Basis and penalty matrices are typically sparse, enabling efficient
       computation for large datasets
     - Knot placement affects both model flexibility and numerical stability
@@ -144,19 +144,19 @@ class LogPSplines:
       stable with few knots
 
     **Gravitational Wave Applications:**
-    
+
     This model excels at:
-    
+
     - Detector noise characterization and PSD estimation
     - Non-parametric background modeling for burst searches
-    - Spectral line detection and characterization  
+    - Spectral line detection and characterization
     - Model-independent reconstruction of astrophysical spectra
     - Handling both smooth continuum and sharp spectral features
 
     **Validation Rules:**
-    
+
     The class enforces several consistency checks:
-    
+
     - Degree must be ≥ diffMatrixOrder for mathematical validity
     - Degree limited to 0-5 for numerical stability
     - Number of knots must exceed degree for well-defined basis
@@ -234,7 +234,7 @@ class LogPSplines:
         ----------
         periodogram : Periodogram
             Input periodogram containing frequency grid and power measurements
-        n_knots : int  
+        n_knots : int
             Number of interior knots to place. More knots provide greater
             flexibility but may lead to overfitting without sufficient penalty
         degree : int
@@ -261,8 +261,8 @@ class LogPSplines:
         High-resolution model for detailed spectral features:
 
         >>> model = LogPSplines.from_periodogram(
-        ...     pdgrm, 
-        ...     n_knots=25, 
+        ...     pdgrm,
+        ...     n_knots=25,
         ...     degree=3,
         ...     diffMatrixOrder=2,
         ...     knot_kwargs={'placement': 'adaptive'}
@@ -296,7 +296,7 @@ class LogPSplines:
     def log_parametric_model(self) -> jnp.ndarray:
         """
         Logarithm of the parametric model component.
-        
+
         Returns
         -------
         jnp.ndarray, shape (n,)
@@ -326,7 +326,7 @@ class LogPSplines:
         """
         Evaluate the log power spectral density.
 
-        Computes the weighted sum of B-spline basis functions plus the 
+        Computes the weighted sum of B-spline basis functions plus the
         logarithmic parametric component.
 
         Parameters
@@ -345,7 +345,7 @@ class LogPSplines:
         --------
         >>> log_psd = model(weights)
         >>> psd = jnp.exp(log_psd)  # Convert to linear scale
-        
+
         >>> # Evaluate spline component only (no parametric model)
         >>> log_spline_only = model(weights, use_parametric_model=False)
         """
@@ -362,7 +362,7 @@ class LogPSplines:
 
         Creates a three-panel plot showing:
         1. Individual B-spline basis functions
-        2. Basis function overview  
+        2. Basis function overview
         3. Penalty matrix structure (sparsity pattern)
 
         Parameters
@@ -390,5 +390,3 @@ def build_spline(
     log_parametric: jnp.ndarray,
 ) -> jnp.ndarray:
     return (ln_spline_basis @ weights) + log_parametric
-
-

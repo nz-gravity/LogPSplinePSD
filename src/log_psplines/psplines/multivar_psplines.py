@@ -1,15 +1,16 @@
-from .psplines import LogPSplines
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
-from ..datatypes import MultivarFFT
-import jax.numpy as jnp
-import numpy as np
-from .initialisation import init_basis_and_penalty, init_knots, init_weights
-from tqdm.auto import trange
+from typing import List, Optional, Tuple
+
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import vmap
 from jax.scipy.linalg import solve_triangular
+from tqdm.auto import trange
+
+from ..datatypes import MultivarFFT
+from .initialisation import init_basis_and_penalty, init_knots, init_weights
+from .psplines import LogPSplines
 
 
 @dataclass
@@ -28,7 +29,7 @@ class MultivariateLogPSplines:
     ----------
     degree : int
         Polynomial degree of B-spline basis functions
-    diffMatrixOrder : int  
+    diffMatrixOrder : int
         Order of finite difference penalty matrix
     n_freq : int
         Number of frequency bins
@@ -37,10 +38,11 @@ class MultivariateLogPSplines:
     diagonal_models : List[LogPSplines]
         P-spline models for diagonal PSD components (one per channel)
     offdiag_re_model : LogPSplines, optional
-        P-spline model for real parts of off-diagonal terms  
+        P-spline model for real parts of off-diagonal terms
     offdiag_im_model : LogPSplines, optional
         P-spline model for imaginary parts of off-diagonal terms
     """
+
     degree: int
     diffMatrixOrder: int
     n_freq: int
@@ -49,7 +51,9 @@ class MultivariateLogPSplines:
     # P-spline components for each Cholesky parameter
     diagonal_models: List[LogPSplines]  # One per channel
     offdiag_re_model: Optional[LogPSplines] = None  # Real off-diagonal terms
-    offdiag_im_model: Optional[LogPSplines] = None  # Imaginary off-diagonal terms
+    offdiag_im_model: Optional[LogPSplines] = (
+        None  # Imaginary off-diagonal terms
+    )
 
     def __post_init__(self):
         """Validate multivariate model parameters."""
@@ -68,13 +72,13 @@ class MultivariateLogPSplines:
 
     @classmethod
     def from_multivar_fft(
-            cls,
-            fft_data: MultivarFFT,
-            n_knots: int,
-            degree: int = 3,
-            diffMatrixOrder: int = 2,
-            knot_kwargs: dict = {},
-    ) -> 'MultivariateLogPSplines':
+        cls,
+        fft_data: MultivarFFT,
+        n_knots: int,
+        degree: int = 3,
+        diffMatrixOrder: int = 2,
+        knot_kwargs: dict = {},
+    ) -> "MultivariateLogPSplines":
         """
         Factory method to construct multivariate P-spline model from FFT data.
 
@@ -100,27 +104,37 @@ class MultivariateLogPSplines:
         n_channels = fft_data.n_dim
 
         # Create frequency grid for knot placement (normalized to [0,1])
-        freq_norm = (fft_data.freq - fft_data.freq.min()) / (fft_data.freq.max() - fft_data.freq.min())
+        freq_norm = (fft_data.freq - fft_data.freq.min()) / (
+            fft_data.freq.max() - fft_data.freq.min()
+        )
 
         # Initialize knots (same for all components for now, linear spacing)
-        knot_method = knot_kwargs.get('method', 'linear')
-        if knot_method == 'linear':
+        knot_method = knot_kwargs.get("method", "linear")
+        if knot_method == "linear":
             knots = np.linspace(0, 1, n_knots)
-        elif knot_method == 'log':
+        elif knot_method == "log":
             knots = np.geomspace(fft_data.freq[1], fft_data.freq[-1], n_knots)
-            knots = (knots - knots.min()) / (knots.max() - knots.min())  # Normalize to [0,1]
+            knots = (knots - knots.min()) / (
+                knots.max() - knots.min()
+            )  # Normalize to [0,1]
         else:
             raise ValueError(f"Unknown knot placement method: {knot_method}")
 
         # Create basis and penalty matrices (same for all components)
-        basis, penalty = init_basis_and_penalty(knots, degree, n_freq, diffMatrixOrder)
+        basis, penalty = init_basis_and_penalty(
+            knots, degree, n_freq, diffMatrixOrder
+        )
 
         # Create diagonal models (one per channel)
         diagonal_models = []
         for i in range(n_channels):
             # Create pseudo-periodogram for initialization (using diagonal of empirical PSD)
-            empirical_diag_power = fft_data.y_re[:, i] ** 2 + fft_data.y_im[:, i] ** 2
-            empirical_diag_power = jnp.maximum(empirical_diag_power, 1e-12)  # Avoid log(0)
+            empirical_diag_power = (
+                fft_data.y_re[:, i] ** 2 + fft_data.y_im[:, i] ** 2
+            )
+            empirical_diag_power = jnp.maximum(
+                empirical_diag_power, 1e-12
+            )  # Avoid log(0)
 
             # Create dummy LogPSplines object for init_weights function
             dummy_model = LogPSplines(
@@ -131,11 +145,13 @@ class MultivariateLogPSplines:
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=jnp.zeros(basis.shape[1]),
-                parametric_model=jnp.ones(n_freq)
+                parametric_model=jnp.ones(n_freq),
             )
 
             # Initialize weights for this diagonal component
-            initial_weights = init_weights(jnp.log(empirical_diag_power), dummy_model)
+            initial_weights = init_weights(
+                jnp.log(empirical_diag_power), dummy_model
+            )
 
             diagonal_model = LogPSplines(
                 degree=degree,
@@ -145,7 +161,9 @@ class MultivariateLogPSplines:
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=initial_weights,
-                parametric_model=jnp.ones(n_freq)  # No parametric component for now
+                parametric_model=jnp.ones(
+                    n_freq
+                ),  # No parametric component for now
             )
             diagonal_models.append(diagonal_model)
 
@@ -155,16 +173,23 @@ class MultivariateLogPSplines:
 
         if n_channels > 1:
             # Simple empirical cross-spectra initialization for sanity checking
-            n_theta = int(n_channels * (n_channels - 1) / 2)  # Number of off-diagonal parameters
+            n_theta = int(
+                n_channels * (n_channels - 1) / 2
+            )  # Number of off-diagonal parameters
             empirical_csd = jnp.zeros(n_freq)
             theta_idx = 0
             for i in range(1, n_channels):
                 for j in range(i):
                     # Average cross-spectrum magnitude across all channel pairs and frequencies
-                    csd_ij = fft_data.y_re[:, i] * fft_data.y_re[:, j] + fft_data.y_im[:, i] * fft_data.y_im[:, j]
+                    csd_ij = (
+                        fft_data.y_re[:, i] * fft_data.y_re[:, j]
+                        + fft_data.y_im[:, i] * fft_data.y_im[:, j]
+                    )
                     empirical_csd = empirical_csd.at[:].add(jnp.abs(csd_ij))
                     theta_idx += 1
-            empirical_csd = empirical_csd / n_theta  # Average across theta components
+            empirical_csd = (
+                empirical_csd / n_theta
+            )  # Average across theta components
 
             # Initialize with small values based on empirical estimates
             small_init = jnp.log(jnp.maximum(empirical_csd, 1e-8))
@@ -178,7 +203,7 @@ class MultivariateLogPSplines:
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=jnp.zeros(basis.shape[1]),
-                parametric_model=jnp.ones(n_freq)
+                parametric_model=jnp.ones(n_freq),
             )
             initial_weights_offdiag = init_weights(small_init, dummy_model)
 
@@ -190,7 +215,7 @@ class MultivariateLogPSplines:
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=initial_weights_offdiag,
-                parametric_model=jnp.ones(n_freq)
+                parametric_model=jnp.ones(n_freq),
             )
 
             offdiag_im_model = LogPSplines(
@@ -201,7 +226,7 @@ class MultivariateLogPSplines:
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=initial_weights_offdiag,  # Same initialization for real and imaginary
-                parametric_model=jnp.ones(n_freq)
+                parametric_model=jnp.ones(n_freq),
             )
 
         return cls(
@@ -211,7 +236,7 @@ class MultivariateLogPSplines:
             n_channels=n_channels,
             diagonal_models=diagonal_models,
             offdiag_re_model=offdiag_re_model,
-            offdiag_im_model=offdiag_im_model
+            offdiag_im_model=offdiag_im_model,
         )
 
     @property
@@ -234,7 +259,9 @@ class MultivariateLogPSplines:
         """Total number of P-spline components."""
         return self.n_channels + (2 if self.n_theta > 0 else 0)
 
-    def get_all_bases_and_penalties(self) -> Tuple[List[jnp.ndarray], List[jnp.ndarray]]:
+    def get_all_bases_and_penalties(
+        self,
+    ) -> Tuple[List[jnp.ndarray], List[jnp.ndarray]]:
         """
         Get basis and penalty matrices for all components (for NumPyro model).
 
@@ -267,7 +294,7 @@ class MultivariateLogPSplines:
         log_delta_sq_samples: jnp.ndarray,
         theta_re_samples: jnp.ndarray,
         theta_im_samples: jnp.ndarray,
-        n_samples_max: int = 50
+        n_samples_max: int = 50,
     ) -> jnp.ndarray:
         """
         Reconstruct PSD matrix from Cholesky components using JAX for efficiency.
@@ -276,7 +303,9 @@ class MultivariateLogPSplines:
             psd_matrices: shape (n_samps, n_freq, n_channels, n_channels)
         """
         # Handle arrays that may have chain dimension (1, n_draws, n_freq, n_channels)
-        if log_delta_sq_samples.ndim == 4:  # (n_chains, n_draws, n_freq, n_channels)
+        if (
+            log_delta_sq_samples.ndim == 4
+        ):  # (n_chains, n_draws, n_freq, n_channels)
             log_delta_sq_samples = log_delta_sq_samples[0]  # Take first chain
         if theta_re_samples.ndim == 4:
             theta_re_samples = theta_re_samples[0]
@@ -308,9 +337,17 @@ class MultivariateLogPSplines:
                 n_lower = len(tril_row)
                 n_use = min(n_theta, n_lower)
                 if n_use > 0:
-                    T = T.at[tril_row[:n_use], tril_col[:n_use]].set(-theta_complex[:n_use])
+                    T = T.at[tril_row[:n_use], tril_col[:n_use]].set(
+                        -theta_complex[:n_use]
+                    )
             temp = solve_triangular(T, D, lower=True)
-            T_inv_H = solve_triangular(T, jnp.eye(n_channels, dtype=jnp.complex64), lower=True).conj().T
+            T_inv_H = (
+                solve_triangular(
+                    T, jnp.eye(n_channels, dtype=jnp.complex64), lower=True
+                )
+                .conj()
+                .T
+            )
             return temp @ T_inv_H
 
         @jax.jit
@@ -321,14 +358,20 @@ class MultivariateLogPSplines:
                 theta_re_s: shape (n_freq, n_theta)
                 theta_im_s: shape (n_freq, n_theta)
             """
-            return vmap(build_single_psd, in_axes=(0, 0, 0))(log_delta_sq_s, theta_re_s, theta_im_s)
+            return vmap(build_single_psd, in_axes=(0, 0, 0))(
+                log_delta_sq_s, theta_re_s, theta_im_s
+            )
 
         # vmap over samples (axis 0)
-        psd_matrices = vmap(process_single_sample, in_axes=(0, 0, 0))(log_delta_sq, theta_re, theta_im)
+        psd_matrices = vmap(process_single_sample, in_axes=(0, 0, 0))(
+            log_delta_sq, theta_re, theta_im
+        )
         # Apply consistent scaling factor (divide by 2*pi) to match empirical PSD convention
         return psd_matrices / (2 * jnp.pi)
 
     def __repr__(self):
-        return (f"MultivariateLogPSplines(channels={self.n_channels}, "
-                f"knots={self.n_knots}, degree={self.degree}, "
-                f"penaltyOrder={self.diffMatrixOrder}, n_freq={self.n_freq})")
+        return (
+            f"MultivariateLogPSplines(channels={self.n_channels}, "
+            f"knots={self.n_knots}, degree={self.degree}, "
+            f"penaltyOrder={self.diffMatrixOrder}, n_freq={self.n_freq})"
+        )

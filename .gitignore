@@ -293,3 +293,4 @@ cython_debug/
 /docs/mh_out/
 .vscode/
 *venv
+/AGENTS.md

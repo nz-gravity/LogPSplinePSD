@@ -1,27 +1,24 @@
 """Compare the impact of different numbers of knots on IAE using MH sampler (with repeats)"""
-import os.path
 
+import os.path
+from pathlib import Path
+
+import arviz as az
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pathlib import Path
 import scipy
 from scipy.interpolate import UnivariateSpline
+from spectrum import pyule
 
+from log_psplines.arviz_utils.from_arviz import get_posterior_psd
 from log_psplines.example_datasets import ARData
 from log_psplines.mcmc import run_mcmc
-from spectrum import pyule
-import jax
-import arviz as az
-from log_psplines.arviz_utils.from_arviz import get_posterior_psd
-
-import numpy as np
 
 np.random.seed(0)
 
 order, fs = 4, 512.0
-
-
 
 
 jax.config.update("jax_enable_x64", True)
@@ -34,7 +31,9 @@ def yule_walker_psd(time_series: np.ndarray, order: int, fs: float = 1.0):
     return yule_psd[1:], freqs[1:]
 
 
-def compute_iae(prediction: np.ndarray, truth: np.ndarray, freqs: np.ndarray) -> float:
+def compute_iae(
+    prediction: np.ndarray, truth: np.ndarray, freqs: np.ndarray
+) -> float:
     """Compute Integrated Average Error using trapezoidal integration"""
     abs_error = np.abs(prediction - truth)
     iae = scipy.integrate.trapezoid(abs_error, freqs) / (freqs[-1] - freqs[0])
@@ -52,7 +51,9 @@ def run_analysis_for_knots(
 
     parametric_model = None
     if use_parametric_model:
-        parametric_model = yule_walker_psd(data.ts.y, order=data.order, fs=data.fs)[0]
+        parametric_model = yule_walker_psd(
+            data.ts.y, order=data.order, fs=data.fs
+        )[0]
 
     results = []
 
@@ -63,7 +64,9 @@ def run_analysis_for_knots(
             n_knots=n_knots,
             n_samples=3000,  # Reduced for faster computation
             n_warmup=2000,
-            rng_key=np.random.randint(0, 1_000_000),  # randomize seed for repeats
+            rng_key=np.random.randint(
+                0, 1_000_000
+            ),  # randomize seed for repeats
             knot_kwargs=dict(method="uniform"),
         )
 
@@ -93,18 +96,18 @@ def run_analysis_for_knots(
 
     return results
 
-import matplotlib.pyplot as plt
+
 import matplotlib.colors as mcolors
-from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
 
 
 def darken(color, amount=0.6):
     """Darken a matplotlib color"""
     r, g, b = mcolors.to_rgb(color)
     return (r * amount, g * amount, b * amount)
-
 
 
 def plot_comparison_for_knots(results_dict: dict, outdir: str = "output"):
@@ -148,12 +151,13 @@ def plot_comparison_for_knots(results_dict: dict, outdir: str = "output"):
             notch=False,
             patch_artist=True,
             showfliers=False,
-            boxprops=dict(facecolor=colors[label], color=colors[label], alpha=alpha_box),
+            boxprops=dict(
+                facecolor=colors[label], color=colors[label], alpha=alpha_box
+            ),
             whiskerprops=dict(color=colors[label], alpha=alpha_box),
             capprops=dict(color=colors[label], alpha=alpha_box),
             medianprops=dict(color=colors[label], alpha=alpha_box),
         )
-
 
     # Formatting
     ax.set_xticks(base_positions)
@@ -164,8 +168,22 @@ def plot_comparison_for_knots(results_dict: dict, outdir: str = "output"):
 
     # Legend
     legend_elements = [
-        Line2D([0], [0], color=colors["with_parametric"], lw=6, alpha=alpha_box, label="With Parametric"),
-        Line2D([0], [0], color=colors["without_parametric"], lw=6, alpha=alpha_box, label="Without Parametric"),
+        Line2D(
+            [0],
+            [0],
+            color=colors["with_parametric"],
+            lw=6,
+            alpha=alpha_box,
+            label="With Parametric",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=colors["without_parametric"],
+            lw=6,
+            alpha=alpha_box,
+            label="Without Parametric",
+        ),
         # Line2D([0], [0], color="gray", lw=2, label="Mean (dashed)", ls="--"),
     ]
     ax.legend(handles=legend_elements, frameon=False)
@@ -175,11 +193,17 @@ def plot_comparison_for_knots(results_dict: dict, outdir: str = "output"):
     # ax.grid(True, alpha=0.3, axis="y")
 
     plt.tight_layout()
-    fig.savefig(f"{outdir}/iae_vs_knots_comparison_box.png", dpi=300, bbox_inches="tight")
+    fig.savefig(
+        f"{outdir}/iae_vs_knots_comparison_box.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
     return fig
 
 
-def plot_comparison_for_knots_bands(results_dict: dict, outdir: str = "output", smoothing_factor: float = 0.1):
+def plot_comparison_for_knots_bands(
+    results_dict: dict, outdir: str = "output", smoothing_factor: float = 0.1
+):
     """Create band plots for different numbers of knots comparing with/without parametric."""
     fig, ax = plt.subplots(1, 1, figsize=(5, 3.5))
 
@@ -229,23 +253,43 @@ def plot_comparison_for_knots_bands(results_dict: dict, outdir: str = "output", 
 
         # Create smooth interpolations
         # Note: s parameter controls smoothing (0 = exact interpolation, higher = more smoothing)
-        median_smooth = UnivariateSpline(all_knots, medians, s=smoothing_factor)(x_smooth)
+        median_smooth = UnivariateSpline(
+            all_knots, medians, s=smoothing_factor
+        )(x_smooth)
 
-        q1_lower_smooth = UnivariateSpline(all_knots, q1_lower, s=smoothing_factor)(x_smooth)
-        q1_upper_smooth = UnivariateSpline(all_knots, q1_upper, s=smoothing_factor)(x_smooth)
+        q1_lower_smooth = UnivariateSpline(
+            all_knots, q1_lower, s=smoothing_factor
+        )(x_smooth)
+        q1_upper_smooth = UnivariateSpline(
+            all_knots, q1_upper, s=smoothing_factor
+        )(x_smooth)
 
-        q2_lower_smooth = UnivariateSpline(all_knots, q2_lower, s=smoothing_factor)(x_smooth)
-        q2_upper_smooth = UnivariateSpline(all_knots, q2_upper, s=smoothing_factor)(x_smooth)
+        q2_lower_smooth = UnivariateSpline(
+            all_knots, q2_lower, s=smoothing_factor
+        )(x_smooth)
+        q2_upper_smooth = UnivariateSpline(
+            all_knots, q2_upper, s=smoothing_factor
+        )(x_smooth)
 
-        q3_lower_smooth = UnivariateSpline(all_knots, q3_lower, s=smoothing_factor)(x_smooth)
-        q3_upper_smooth = UnivariateSpline(all_knots, q3_upper, s=smoothing_factor)(x_smooth)
+        q3_lower_smooth = UnivariateSpline(
+            all_knots, q3_lower, s=smoothing_factor
+        )(x_smooth)
+        q3_upper_smooth = UnivariateSpline(
+            all_knots, q3_upper, s=smoothing_factor
+        )(x_smooth)
 
         # Plot smooth bands (from outermost to innermost)
         color = colors[label]
 
         # 3σ band (lightest)
-        ax.fill_between(x_smooth, q3_lower_smooth, q3_upper_smooth,
-                        color=color, alpha=0.15, label=f'{label.replace("_", " ").title()} 3σ')
+        ax.fill_between(
+            x_smooth,
+            q3_lower_smooth,
+            q3_upper_smooth,
+            color=color,
+            alpha=0.15,
+            label=f'{label.replace("_", " ").title()} 3σ',
+        )
 
         # # 2σ band (medium)
         # ax.fill_between(x_smooth, q2_lower_smooth, q2_upper_smooth,
@@ -256,8 +300,13 @@ def plot_comparison_for_knots_bands(results_dict: dict, outdir: str = "output", 
         #                 color=color, alpha=0.4)
 
         # Median line
-        ax.plot(x_smooth, median_smooth, color=color, linewidth=2,
-                label=f'{label.replace("_", " ").title()} Median')
+        ax.plot(
+            x_smooth,
+            median_smooth,
+            color=color,
+            linewidth=2,
+            label=f'{label.replace("_", " ").title()} Median',
+        )
 
         # # Optional: add points at actual knot locations
         # ax.scatter(all_knots, medians, color=color, s=20, zorder=10, alpha=0.8)
@@ -268,19 +317,27 @@ def plot_comparison_for_knots_bands(results_dict: dict, outdir: str = "output", 
     ax.set_xticks(all_knots)
 
     # Legend
-    ax.legend(frameon=False, loc='best')
+    ax.legend(frameon=False, loc="best")
 
     # Optional: add grid for easier reading
 
     plt.tight_layout()
-    fig.savefig(f"{outdir}/iae_vs_knots_comparison_bands_smooth.png", dpi=300, bbox_inches="tight")
+    fig.savefig(
+        f"{outdir}/iae_vs_knots_comparison_bands_smooth.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
     return fig
 
 
 def rerun(knot_range, data, n_repeats, all_results):
 
     for use_parametric_model in [False, True]:
-        label = "without_parametric" if not use_parametric_model else "with_parametric"
+        label = (
+            "without_parametric"
+            if not use_parametric_model
+            else "with_parametric"
+        )
         print(f"\n{'=' * 50}")
         print(f"Running analysis {label}")
         print(f"{'=' * 50}")
@@ -289,7 +346,13 @@ def rerun(knot_range, data, n_repeats, all_results):
         for n_knots in knot_range:
             print(f"\nProcessing {n_knots} knots...")
             outdir = f"output/{label}/knots_{n_knots}"
-            data = ARData(order=order, duration=2.0, fs=fs, sigma=1.0, seed=np.random.randint(0, 1_000_000))
+            data = ARData(
+                order=order,
+                duration=2.0,
+                fs=fs,
+                sigma=1.0,
+                seed=np.random.randint(0, 1_000_000),
+            )
             knot_results = run_analysis_for_knots(
                 data,
                 n_knots,
@@ -311,8 +374,6 @@ def rerun(knot_range, data, n_repeats, all_results):
 def main():
     """Main analysis function"""
 
-
-
     knot_range = list(range(5, 21, 1))  # Knots from 5 to 20 in steps of 1
     n_repeats = 3
 
@@ -330,7 +391,6 @@ def main():
     for label in all_results.keys():
         df = pd.read_csv(f"output/{label}/iae_results.csv")
         all_results[label] = df.to_dict(orient="records")
-
 
     # Now plot both curves together with error bars
     plot_comparison_for_knots(all_results, outdir="output")

@@ -11,14 +11,14 @@ class LVKData:
         self.psd = psd
         self.freqs = freqs
 
-
     @classmethod
     def from_simulation(cls, duration: int = 4, fs: int = 1024) -> "LVKData":
-        import requests
         from io import StringIO
-        from pycbc.types import FrequencySeries as PycbcFrequencySeries
+
         import numpy as np
         import pycbc.noise
+        import requests
+        from pycbc.types import FrequencySeries as PycbcFrequencySeries
 
         # --- Download the ASD file from LIGO DCC ---
         url = "https://dcc.ligo.org/public/0165/T2000012/002/aligo_O3actual_H1.txt"
@@ -30,7 +30,7 @@ class LVKData:
         freq, asd = data[:, 0], data[:, 1]
 
         # --- Convert ASD → PSD ---
-        psd_vals = asd ** 2
+        psd_vals = asd**2
 
         # --- Wrap into PyCBC FrequencySeries ---
         delta_f = freq[1] - freq[0]

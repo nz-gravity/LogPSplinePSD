@@ -1,10 +1,11 @@
 import dataclasses
+import os
+import warnings
+
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import requests
-import warnings
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -412,6 +413,3 @@ class LISAData:
 
 ONE_YEAR = "https://zenodo.org/record/15698080/files/tdi.h5?download=1"
 TEN_DAYS = "https://raw.githubusercontent.com/nz-gravity/test_data/main/lisa_noise/noise_4a_truncated/data/tdi.h5"
-
-
-

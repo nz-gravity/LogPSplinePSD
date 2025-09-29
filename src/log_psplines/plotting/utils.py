@@ -36,7 +36,7 @@ def unpack_data(
     use_uniform_ci=True,
     use_parametric_model=True,
     freqs=None,
-    posterior_psd=None
+    posterior_psd=None,
 ):
     plt_dat = PlottingData()
     if pdgrm is not None:
@@ -48,16 +48,10 @@ def unpack_data(
     elif freqs is not None:
         plt_dat.freqs = freqs
 
-
-
     if posterior_psd is not None:
-        ci = np.percentile(
-            posterior_psd, q=jnp.array([16, 50, 84]), axis=0
-        )
+        ci = np.percentile(posterior_psd, q=jnp.array([16, 50, 84]), axis=0)
         plt_dat.ci = ci
         plt_dat.model = ci[1]
-
-
 
     if plt_dat.model is None and spline_model is not None:
 
@@ -93,8 +87,6 @@ def unpack_data(
             plt_dat.ci = np.exp(ln_ci, dtype=np.float64) * yscalar
             ln_spline = ln_ci[1]
         plt_dat.model = np.exp(ln_spline, dtype=np.float64) * yscalar
-
-
 
     return plt_dat
 

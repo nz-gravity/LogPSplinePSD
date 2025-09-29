@@ -22,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: main
-          
+
       - name: Check semantic commit message
         continue-on-error: true
         run: |
@@ -38,12 +38,12 @@ jobs:
           else
             echo "✅ Semantic commit detected - proceeding with release"
           fi
-          
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-          
+
       - name: Semantic Version Release
         id: release
         uses: python-semantic-release/python-semantic-release@v9.12.0
@@ -51,13 +51,13 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           git_committer_name: "github-actions"
           git_committer_email: "actions@users.noreply.github.com"
-          
+
       - name: build dist for pypi
         if: steps.release.outputs.released == 'true'
         run: |
           python -m pip install --upgrade build
           python -m build --sdist --wheel --outdir dist/
-          
+
       - name: pypi-publish
         if: steps.release.outputs.released == 'true'
         uses: pypa/gh-action-pypi-publish@v1.12.3

@@ -4,18 +4,16 @@ import time
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
+import scipy
 from scipy.interpolate import BSpline
 
-from log_psplines.datatypes import Periodogram
+from log_psplines.datatypes import Periodogram, Timeseries
+from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
 from log_psplines.samplers.univar.univar_base import log_likelihood
 
-import scipy
-
-from log_psplines.datatypes import Periodogram, Timeseries
-from log_psplines.example_datasets.ar_data import ARData
-import pytest
 
 @pytest.fixture
 def mock_pdgrm() -> Periodogram:

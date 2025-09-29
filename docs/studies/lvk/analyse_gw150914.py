@@ -7,6 +7,7 @@ gravitational wave event data, with particular focus on Power Spectral Density
 """
 
 import jax
+
 jax.config.update("jax_enable_x64", True)
 
 import argparse
@@ -28,7 +29,6 @@ from log_psplines.arviz_utils import (
 )
 from log_psplines.datatypes import Periodogram
 from log_psplines.mcmc import run_mcmc
-
 
 # Configuration constants
 DEFAULT_FFT_LENGTH = 4
@@ -357,7 +357,7 @@ def process_detector_data(
                 d=15,
             ),
             diffMatrixOrder=4,
-            degree=5
+            degree=5,
         )
 
     # Extract posterior samples and compute quantiles

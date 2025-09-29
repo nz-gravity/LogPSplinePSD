@@ -1,13 +1,20 @@
-from lisa_data import LISAData, download, TEN_DAYS
-from log_psplines.mcmc import run_mcmc
-from log_psplines.datatypes import MultivariateTimeseries
-from log_psplines.psplines.multivar_psplines import MultivariateLogPSplines
-from log_psplines.samplers.multivar.multivar_nuts import MultivarNUTSSampler, MultivarNUTSConfig
 import os
-import matplotlib.pyplot as plt
-from log_psplines.plotting.psd_matrix import plot_psd_matrix, compute_empirical_psd
 
+import matplotlib.pyplot as plt
 import numpy as np
+from lisa_data import TEN_DAYS, LISAData, download
+
+from log_psplines.datatypes import MultivariateTimeseries
+from log_psplines.mcmc import run_mcmc
+from log_psplines.plotting.psd_matrix import (
+    compute_empirical_psd,
+    plot_psd_matrix,
+)
+from log_psplines.psplines.multivar_psplines import MultivariateLogPSplines
+from log_psplines.samplers.multivar.multivar_nuts import (
+    MultivarNUTSConfig,
+    MultivarNUTSSampler,
+)
 
 RESULT_FN = "results/lisa/inference_data.nc"
 DATA_FPATH = "data/tdi.h5"
@@ -31,6 +38,7 @@ print(fft_data)
 if os.path.exists(RESULT_FN):
     print(f"Found existing results at {RESULT_FN}, loading...")
     import arviz as az
+
     idata = az.from_netcdf(RESULT_FN)
 
 else:
@@ -42,12 +50,12 @@ else:
             n_knots=10,
             degree=3,
             diffMatrixOrder=2,
-            knot_kwargs=dict(method='log')
+            knot_kwargs=dict(method="log"),
         ),
         MultivarNUTSConfig(
             verbose=True,
             outdir="results/lisa",
-        )
+        ),
     )
     idata = sampler.sample(n_samples=200, n_warmup=200)
 
@@ -58,9 +66,11 @@ plot_psd_matrix(
     idata=idata,
     n_channels=3,
     freq=fft_data.freq,
-    empirical_psd=compute_empirical_psd(fft_data.y_re, fft_data.y_im, n_channels=3),
+    empirical_psd=compute_empirical_psd(
+        fft_data.y_re, fft_data.y_im, n_channels=3
+    ),
     outdir="results/lisa",
     filename="psd_matrix_posterior.png",
-    diag_yscale='log',
-    xscale='log'
+    diag_yscale="log",
+    xscale="log",
 )

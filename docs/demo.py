@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 
+from log_psplines.arviz_utils.from_arviz import get_spline_model
 from log_psplines.example_datasets import ARData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm
-from log_psplines.arviz_utils.from_arviz import get_spline_model
 
 ar4 = ARData(order=4, duration=2.0, fs=512.0, sigma=1.0, seed=42)
 kawrgs = dict(

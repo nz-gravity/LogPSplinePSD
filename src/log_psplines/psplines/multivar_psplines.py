@@ -324,7 +324,9 @@ class MultivariateLogPSplines:
             return vmap(build_single_psd, in_axes=(0, 0, 0))(log_delta_sq_s, theta_re_s, theta_im_s)
 
         # vmap over samples (axis 0)
-        return vmap(process_single_sample, in_axes=(0, 0, 0))(log_delta_sq, theta_re, theta_im)
+        psd_matrices = vmap(process_single_sample, in_axes=(0, 0, 0))(log_delta_sq, theta_re, theta_im)
+        # Apply consistent scaling factor (divide by 2*pi) to match empirical PSD convention
+        return psd_matrices / (2 * jnp.pi)
 
     def __repr__(self):
         return (f"MultivariateLogPSplines(channels={self.n_channels}, "

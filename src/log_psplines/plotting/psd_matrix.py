@@ -5,26 +5,6 @@ import numpy as np
 from typing import Optional
 
 
-def compute_empirical_psd(fft_data_re: np.ndarray, fft_data_im: np.ndarray, n_channels: int, N: int) -> np.ndarray:
-    """Compute empirical PSD matrix for comparison from FFT data.
-
-    Args:
-        fft_data_re: Real part of FFT data (n_freq, n_channels)
-        fft_data_im: Imaginary part of FFT data (n_freq, n_channels)
-        n_channels: Number of channels
-        N: Number of time samples
-
-    Returns:
-        Empirical PSD matrix (n_freq, n_channels, n_channels) as complex array
-    """
-    fft_complex = fft_data_re + 1j * fft_data_im
-    empirical_psd = np.zeros((fft_data_re.shape[0], n_channels, n_channels), dtype=complex)
-
-    for i in range(n_channels):
-        for j in range(n_channels):
-            empirical_psd[:, i, j] = 2 * (fft_complex[:, i] * np.conj(fft_complex[:, j])) / (N * 2 * np.pi)
-
-    return empirical_psd
 
 
 def plot_psd_matrix(

@@ -17,7 +17,7 @@ def test_multivar_mcmc(outdir, test_mode):
     outdir = f"{outdir}/out_mcmc/multivar"
     os.makedirs(outdir, exist_ok=True)
 
-    n = 1024
+    n = 256
     n_knots = 10
     n_samples = n_warmup = 600
     if test_mode == "fast":
@@ -88,10 +88,12 @@ def test_multivar_mcmc(outdir, test_mode):
     expected_shape = (n_samples, varma.freq.shape[0], n_dim, n_dim)
     assert psd_matrix_shape[1:] == expected_shape[1:], f"Posterior PSD matrix shape mismatch (excluding 0th dim)! Expected {expected_shape[1:]}, got {psd_matrix_shape[1:]}"
 
-    # Check RIAE computation for multivariate
+    # Check RIAE and CI coverage computation for multivariate
     print(f"InferenceData attributes: {list(idata.attrs.keys())}")
     if 'riae_matrix' in idata.attrs:
         print(f"RIAE Matrix: {idata.attrs['riae_matrix']:.3f}")
+    if 'ci_coverage' in idata.attrs:
+        print(f"CI Coverage: {idata.attrs['ci_coverage']:.3f}")
 
     # check that results saved, and plots created
     result_fn = os.path.join(outdir, "inference_data.nc")

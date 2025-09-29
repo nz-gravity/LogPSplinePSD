@@ -545,23 +545,36 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
             psd_matrix_samples = idata.posterior_psd["psd_matrix"].values  # Shape: (pp_draw, freq, channels, channels)
             median_psd_matrix = np.median(psd_matrix_samples, axis=0)
 
-            # Compute RIAE for each diagonal component (auto-spectra)
-            for i in range(data.n_dim):
-                median_psd = median_psd_matrix[:, i, i]  # Auto-spectrum for channel i
-                true_psd_component = config.true_psd[:, i, i] if config.true_psd is not None and config.true_psd.ndim == 3 else None
-                if true_psd_component is not None:
-                    riae = _compute_riae(median_psd, true_psd_component, np.array(data.freq))
-                    psd_component_samples = psd_matrix_samples[:, :, i, i]  # (pp_draw, freq)
-                    riae_errorbars = _compute_riae_errorbars(psd_component_samples, true_psd_component, np.array(data.freq))
-                    diagnostics[f"riae_ch{i}"] = riae
-                    # Store errorbars as list/tuple instead of dict for netCDF serialization
-                    diagnostics[f"riae_errorbars_ch{i}"] = [
-                        riae_errorbars["q05"],
-                        riae_errorbars["q25"],
-                        riae_errorbars["median"],
-                        riae_errorbars["q75"],
-                        riae_errorbars["q95"]
-                    ]
+            # Compute matrix RIAE using Frobenius norm
+            if config.true_psd is not None and config.true_psd.ndim == 3:
+                # Take real part of true_psd for numerical stability
+                true_psd_real = np.real(config.true_psd)
+                riae_matrix = _compute_matrix_riae(median_psd_matrix, true_psd_real, np.array(data.freq))
+
+                # Compute matrix RIAE errorbars from samples
+                matrix_riae_samples = []
+                for psd_matrix in psd_matrix_samples:
+                    matrix_riae = _compute_matrix_riae(psd_matrix, true_psd_real, np.array(data.freq))
+                    matrix_riae_samples.append(matrix_riae)
+                matrix_riae_samples = np.array(matrix_riae_samples)
+                riae_matrix_errorbars = {
+                    "q05": float(np.percentile(matrix_riae_samples, 5)),
+                    "q25": float(np.percentile(matrix_riae_samples, 25)),
+                    "median": float(np.median(matrix_riae_samples)),
+                    "q75": float(np.percentile(matrix_riae_samples, 75)),
+                    "q95": float(np.percentile(matrix_riae_samples, 95)),
+                }
+
+                diagnostics["riae_matrix"] = riae_matrix
+                diagnostics["riae_matrix_errorbars"] = [
+                    riae_matrix_errorbars["q05"],
+                    riae_matrix_errorbars["q25"],
+                    riae_matrix_errorbars["median"],
+                    riae_matrix_errorbars["q75"],
+                    riae_matrix_errorbars["q95"]
+                ]
+
+        # Do not compute per-channel RIAE for multivariate - use matrix RIAE only
 
     return diagnostics
 
@@ -570,6 +583,20 @@ def _compute_riae(median_psd: np.ndarray, true_psd: np.ndarray, freqs: np.ndarra
     """Compute relative integrated absolute error (RIAE)."""
     numerator = np.trapz(np.abs(median_psd - true_psd), freqs)
     denominator = np.trapz(true_psd, freqs)
+    return float(numerator / denominator)
+
+
+def _compute_matrix_riae(median_psd_matrix: np.ndarray, true_psd_matrix: np.ndarray, freqs: np.ndarray) -> float:
+    """Compute RIAE for multivariate PSD matrix using Frobenius norm."""
+    # Compute Frobenius norm for each frequency
+
+    diff_frobenius = np.array([np.linalg.norm(median_psd_matrix[k] - true_psd_matrix[k], 'fro') for k in range(len(freqs))])
+    true_frobenius = np.array([np.linalg.norm(true_psd_matrix[k], 'fro') for k in range(len(freqs))])
+
+    # Integrate using trapezoidal rule (or sum for uniform freq spacing)
+    numerator = np.trapz(diff_frobenius, freqs)
+    denominator = np.trapz(true_frobenius, freqs)
+
     return float(numerator / denominator)
 
 

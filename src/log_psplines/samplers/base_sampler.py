@@ -108,19 +108,21 @@ class BaseSampler(ABC):
                 print(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
 
             # Print RIAE diagnostics if true_psd was provided
-            if hasattr(idata.attrs, 'get') and 'riae' in idata.attrs:
-                riae_median = idata.attrs['riae']
-                if 'riae_errorbars' in idata.attrs:
-                    # RIAE error bars are stored as [q05, q25, median, q75, q95]
-                    errorbars = idata.attrs['riae_errorbars']
+            if hasattr(idata.attrs, 'get'):
+                if 'riae' in idata.attrs:
+                    # Univariate case
+                    riae_median = idata.attrs['riae']
+                    errorbars = idata.attrs.get('riae_errorbars', [])
                     if len(errorbars) >= 5:
-                        # Use IQR (interquartile range) for symmetric error representation
-                        iqr_half = (errorbars[3] - errorbars[1]) / 2.0  # (q75 - q25) / 2
+                        iqr_half = (errorbars[3] - errorbars[1]) / 2.0
                         print(f"  RIAE: {riae_median:.3f} ± {iqr_half:.3f}")
                     else:
                         print(f"  RIAE: {riae_median:.3f}")
-                else:
-                    print(f"  RIAE: {riae_median:.3f}")
+
+                # Check for multivariate RIAE
+                if 'riae_matrix' in idata.attrs:
+                    riae_matrix = idata.attrs['riae_matrix']
+                    print(f"  RIAE (matrix): {riae_matrix:.3f}")
 
         # Save outputs if requested
         if self.config.outdir is not None:

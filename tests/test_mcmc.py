@@ -2,14 +2,13 @@ import arviz as az
 import matplotlib.pyplot as plt
 
 from log_psplines.arviz_utils import compare_results, get_weights
-from log_psplines.mcmc import Periodogram, run_mcmc
-from log_psplines.plotting import plot_pdgrm
+from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
+from log_psplines.plotting import plot_pdgrm, plot_psd_matrix
 from log_psplines.example_datasets.ar_data import ARData
 
 import numpy as np
 
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.datatypes import MultivarFFT
 import os
 
 
@@ -20,30 +19,31 @@ def test_multivar_mcmc(outdir, test_mode):
 
     n = 1024
     n_knots = 7
-    n_samples = n_warmup = 200
+    n_samples = n_warmup = 600
     if test_mode == "fast":
         n_samples = n_warmup = 10
         n = 256
         n_knots = 5
 
-
-    psd_scale = 1
-
     # Generate test data
     np.random.seed(42)
     varma = VARMAData(n_samples=n)
-    x = varma.data * np.sqrt(psd_scale)
     n_dim = varma.dim
+    varma.plot(fname=os.path.join(outdir, "varma_data.png"))
 
-    print(f"VARMA data shape: {x.shape}, dim={n_dim}")
 
-    # Convert to FFT
-    fft_data = MultivarFFT.compute_fft(x, fs=1.0)
-    print(f"FFT shapes: y_re={fft_data.y_re.shape}, Z_re={fft_data.Z_re.shape}")
+    print(f"VARMA data shape: {varma.data.shape}, dim={n_dim}")
+
+    timeseries = MultivariateTimeseries(
+        t=varma.time,
+        y=varma.data,
+    )
+    print(f"Timeseries: {timeseries}")
+
 
     # Run unified MCMC (multivariate NUTS)
     idata = run_mcmc(
-        data=fft_data,
+        data=timeseries,
         sampler="nuts",
         n_knots=n_knots,  # Small for fast testing
         degree=3,
@@ -52,7 +52,8 @@ def test_multivar_mcmc(outdir, test_mode):
         n_warmup=n_warmup,
         outdir=outdir,
         verbose=True,
-        target_accept_prob=0.8
+        target_accept_prob=0.8,
+        true_psd=varma.get_true_psd()
     )
 
     # Basic checks
@@ -84,14 +85,31 @@ def test_multivar_mcmc(outdir, test_mode):
     # check the posterior psd matrix shape
     psd_matrix = idata.posterior_psd["psd_matrix"].values
     psd_matrix_shape = psd_matrix.shape
-    expected_shape = (n_samples, fft_data.freq.shape[0], n_dim, n_dim)
+    expected_shape = (n_samples, varma.freq.shape[0], n_dim, n_dim)
     assert psd_matrix_shape[1:] == expected_shape[1:], f"Posterior PSD matrix shape mismatch (excluding 0th dim)! Expected {expected_shape[1:]}, got {psd_matrix_shape[1:]}"
+
+    # Check RIAE computation for multivariate
+    print(f"InferenceData attributes: {list(idata.attrs.keys())}")
+    if 'riae_matrix' in idata.attrs:
+        print(f"RIAE Matrix: {idata.attrs['riae_matrix']:.3f}")
 
     # check that results saved, and plots created
     result_fn = os.path.join(outdir, "inference_data.nc")
     plot_fn = os.path.join(outdir, "psd_matrix_posterior.png")
     assert os.path.exists(result_fn), "InferenceData file not found!"
     assert os.path.exists(plot_fn), "PSD matrix plot file not found!"
+
+
+    plot_psd_matrix(
+        idata=idata,
+        n_channels=n_dim,
+        freq=varma.freq,
+        empirical_psd=varma.get_periodogram(),
+        outdir=outdir,
+        filename="psd_matrix_posterior_check.png",
+        xscale='linear',
+        diag_yscale='log',
+    )
 
 
 
@@ -165,5 +183,3 @@ def test_mcmc(outdir: str, test_mode: str):
 
     fig = plot_pdgrm(idata=idata, interactive=True)  # test interactive mode
     fig.write_html(os.path.join(outdir, "test_mcmc_interactive.html"))
-
-

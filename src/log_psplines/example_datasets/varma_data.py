@@ -39,6 +39,7 @@ class VARMAData:
         self.freq = (
                 np.linspace(0, 0.5, self.n_freq_samples, endpoint=False)[1:] * self.fs
         )
+        self.time = np.arange(n_samples) / self.fs
         self.data = None  # set in "resimulate"
         self.periodogram = None  # set in "resimulate"
         self.welch_psd = None  # set in "resimulate"
@@ -104,53 +105,71 @@ class VARMAData:
 
         self.data = x[101:]
 
-    def plot(self, axs=None, fname: Optional[str] = None):
+    def get_periodogram(self):
         """
-        Matrix plot: diagonal is the PSD, below diagonal is real CSD, above diagonal is imag CSD.
-        Plots both the true PSD (from self.psd) and the periodogram (from self.data).
+        Return consistently scaled periodogram (PSD matrix) for the data.
+        Scaling: 2 * FFT_i * FFT_j^* / (N * 2 * pi)
+        This matches the theoretical and empirical expectations for multivariate PSD.
+        The first frequency bin is skipped for numerical stability.
         """
-
-        if self.data is None:
-            raise ValueError("No data to plot. Run resimulate first.")
-        n_freq = self.n_freq_samples - 1
+        n_freq = self.n_freq_samples
         dim = self.dim
-        # Compute periodogram and CSD
         data = self.data
         N = data.shape[0]
-        # Remove mean
         data = data - np.mean(data, axis=0)
-        # FFT
         fft_data = rfft(data, axis=0)[:n_freq]
         periodogram = np.empty((n_freq, dim, dim), dtype=np.complex128)
         for i in range(dim):
             for j in range(dim):
-                periodogram[:, i, j] = fft_data[:, i] * np.conj(fft_data[:, j]) / N
-        # True PSD (self.psd): shape (n_freq, dim, dim)
-        true_psd = self.psd  # shape (n_freq, dim, dim)
-        freq = self.freq  # shape (n_freq,)
+                periodogram[:, i, j] = 2 * (fft_data[:, i] * np.conj(fft_data[:, j])) / (N * 2 * np.pi)
+        # Add epsilon to avoid log(0) and extremely small values
+        eps = 1e-12
+        periodogram = np.where(np.abs(periodogram) < eps, eps, periodogram)
+        # Skip first frequency bin
+        return periodogram[1:, ...]
+
+    def get_true_psd(self):
+        """
+        Return consistently scaled true PSD matrix.
+        Scaling: Already normalized by (2 * pi) in _calculate_true_varma_psd.
+        The first frequency bin is skipped for numerical stability.
+        """
+        eps = 1e-12
+        true_psd = np.where(np.abs(self.psd) < eps, eps, self.psd)
+        return true_psd
+
+
+    def plot(self, axs=None, fname: Optional[str] = None):
+        """
+        Matrix plot: diagonal is the PSD, below diagonal is real CSD, above diagonal is imag CSD.
+        Plots both the true PSD and the periodogram using consistent scaling.
+        """
+        if self.data is None:
+            raise ValueError("No data to plot. Run resimulate first.")
+        dim = self.dim
+        periodogram = self.get_periodogram()
+        true_psd = self.get_true_psd()
+        freq = self.freq
         # Setup axes
         if axs is None:
             fig, axs = plt.subplots(dim, dim, figsize=(4 * dim, 4 * dim), sharex=True)
         else:
             fig = axs[0, 0].figure
-
         data_kwgs = dict(alpha=0.3, lw=2, zorder=-10, color='k')
         true_kwgs = dict(lw=1, zorder=10, color='k')
         for i in range(dim):
             for j in range(dim):
                 ax = axs[i, j]
                 if i == j:
-                    # Diagonal: PSD
                     ax.plot(freq, true_psd[:, i, i].real, label="True PSD", **true_kwgs)
                     ax.plot(freq, periodogram[:, i, i].real, label="Periodogram", **data_kwgs)
                     ax.set_title(f"PSD: channel {i + 1}")
+                    ax.set_yscale("log")
                 elif i > j:
-                    # Below diagonal: real CSD
                     ax.plot(freq, true_psd[:, i, j].real, label="True Re(CSD)",  **true_kwgs)
                     ax.plot(freq, periodogram[:, i, j].real, label="Periodogram Re(CSD)", **data_kwgs)
                     ax.set_title(f"Re(CSD): {i + 1},{j + 1}")
                 else:
-                    # Above diagonal: imag CSD
                     ax.plot(freq, true_psd[:, i, j].imag, label="True Im(CSD)", **true_kwgs)
                     ax.plot(freq, periodogram[:, i, j].imag, label="Periodogram Im(CSD)", **data_kwgs)
                     ax.set_title(f"Im(CSD): {i + 1},{j + 1}")

@@ -5,13 +5,14 @@ import numpy as np
 from typing import Optional
 
 
-def compute_empirical_psd(fft_data_re: np.ndarray, fft_data_im: np.ndarray, n_channels: int) -> np.ndarray:
+def compute_empirical_psd(fft_data_re: np.ndarray, fft_data_im: np.ndarray, n_channels: int, N: int) -> np.ndarray:
     """Compute empirical PSD matrix for comparison from FFT data.
 
     Args:
         fft_data_re: Real part of FFT data (n_freq, n_channels)
         fft_data_im: Imaginary part of FFT data (n_freq, n_channels)
         n_channels: Number of channels
+        N: Number of time samples
 
     Returns:
         Empirical PSD matrix (n_freq, n_channels, n_channels) as complex array
@@ -21,7 +22,7 @@ def compute_empirical_psd(fft_data_re: np.ndarray, fft_data_im: np.ndarray, n_ch
 
     for i in range(n_channels):
         for j in range(n_channels):
-            empirical_psd[:, i, j] = 2 * (fft_complex[:, i] * np.conj(fft_complex[:, j]))
+            empirical_psd[:, i, j] = 2 * (fft_complex[:, i] * np.conj(fft_complex[:, j])) / (N * 2 * np.pi)
 
     return empirical_psd
 
@@ -71,6 +72,12 @@ def plot_psd_matrix(
                 ax.fill_between(freq, q05, q95, alpha=0.3, color='blue', label='Model 90% CI')
                 ax.plot(freq, q50, color='blue', label='Model Median')
                 ax.plot(freq, empirical_psd[:, i, i].real, 'k--', alpha=0.3, label='Empirical')
+
+                # Plot true PSD if available
+                if 'true_psd' in idata.attrs and idata.attrs['true_psd'] is not None:
+                    true_psd_matrix = idata.attrs['true_psd']
+                    if true_psd_matrix.ndim == 3 and true_psd_matrix.shape[0] == len(freq):
+                        ax.plot(freq, np.real(true_psd_matrix[:, i, i]), 'r-', alpha=0.7, label='True PSD')
                 ax.set_title(f'Auto-spectrum Channel {i}')
                 ax.set_yscale('log')
 
@@ -82,6 +89,12 @@ def plot_psd_matrix(
                 ax.fill_between(freq, q05, q95, alpha=0.3, color='green', label='Model 90% CI')
                 ax.plot(freq, q50, color='green', label='Model Median')
                 ax.plot(freq, empirical_psd[:, i, j].real, 'k--', alpha=0.3, label='Empirical')
+
+                # Plot true PSD if available
+                if 'true_psd' in idata.attrs and idata.attrs['true_psd'] is not None:
+                    true_psd_matrix = idata.attrs['true_psd']
+                    if true_psd_matrix.ndim == 3 and true_psd_matrix.shape[0] == len(freq):
+                        ax.plot(freq, np.real(true_psd_matrix[:, i, j]), 'r-', alpha=0.7, label='True PSD')
                 ax.set_title(f'Cross-spectrum Real ({i},{j})')
 
             else:  # Upper triangle (imaginary parts of cross-spectra)
@@ -92,6 +105,12 @@ def plot_psd_matrix(
                 ax.fill_between(freq, q05, q95, alpha=0.3, color='red', label='Model 90% CI')
                 ax.plot(freq, q50, color='red', label='Model Median')
                 ax.plot(freq, empirical_psd[:, i, j].imag, 'k--', alpha=0.3, label='Empirical')
+
+                # Plot true PSD if available
+                if 'true_psd' in idata.attrs and idata.attrs['true_psd'] is not None:
+                    true_psd_matrix = idata.attrs['true_psd']
+                    if true_psd_matrix.ndim == 3 and true_psd_matrix.shape[0] == len(freq):
+                        ax.plot(freq, np.imag(true_psd_matrix[:, i, j]), 'r-', alpha=0.7, label='True PSD')
                 ax.set_title(f'Cross-spectrum Imag ({i},{j})')
 
 

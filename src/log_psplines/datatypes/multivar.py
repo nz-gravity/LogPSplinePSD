@@ -56,13 +56,13 @@ class MultivarFFT:
         freqs = np.fft.fftfreq(n_time, 1 / fs)
 
         # Get positive frequencies only
-        pos_freq_idx = freqs > 0
+        pos_freq_idx = freqs > 0 # skip zero freq
         freqs = freqs[pos_freq_idx]
         x_fft = x_fft[pos_freq_idx, :]
 
         # Apply frequency range filtering if specified
         if fmin is not None or fmax is not None:
-            fmin = fmin if fmin is not None else freqs[1] # skip zero freq
+            fmin = fmin if fmin is not None else freqs[0] # skip zero freq
             fmax = fmax if fmax is not None else freqs[-1]
             freq_mask = (freqs >= fmin) & (freqs <= fmax)
             freqs = freqs[freq_mask]

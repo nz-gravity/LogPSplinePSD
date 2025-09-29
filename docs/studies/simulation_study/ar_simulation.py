@@ -1,15 +1,16 @@
 """Compare the impact of a parametric model vs no parametric model"""
 
+import jax
 import matplotlib.pyplot as plt
+import morphz
+import numpy as np
+from spectrum import pyule
 
+from log_psplines.arviz_utils.compare_results import compare_results
 from log_psplines.example_datasets import ARData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm
-import numpy as np
-from spectrum import pyule
-from log_psplines.arviz_utils.compare_results import compare_results
-import jax
-import morphz
+
 jax.config.update("jax_enable_x64", True)
 
 
@@ -20,10 +21,14 @@ def yule_walker_psd(time_series: np.ndarray, order: int, fs: float = 1.0):
     return yule_psd[1:], freqs[1:]
 
 
-def run_analysis(data:ARData, use_parametric_model: bool = True, outdir: str = "output"):
+def run_analysis(
+    data: ARData, use_parametric_model: bool = True, outdir: str = "output"
+):
     parametric_model = None
     if use_parametric_model:
-        parametric_model = yule_walker_psd(data.ts.y, order=data.order, fs=data.fs)[0]
+        parametric_model = yule_walker_psd(
+            data.ts.y, order=data.order, fs=data.fs
+        )[0]
 
     kawrgs = dict(
         pdgrm=data.periodogram,
@@ -36,7 +41,9 @@ def run_analysis(data:ARData, use_parametric_model: bool = True, outdir: str = "
     )
 
     inference_mh = run_mcmc(**kawrgs, sampler="mh", outdir=f"{outdir}/mh_out")
-    inference_nuts = run_mcmc(**kawrgs, sampler="nuts", outdir=f"{outdir}/nuts_out")
+    inference_nuts = run_mcmc(
+        **kawrgs, sampler="nuts", outdir=f"{outdir}/nuts_out"
+    )
 
     fig, ax = plt.subplots(1, 1, figsize=(4, 3))
     ax.plot(
@@ -64,7 +71,12 @@ def run_analysis(data:ARData, use_parametric_model: bool = True, outdir: str = "
     )
 
     ax.set_xscale("linear")
-    fig.savefig(f"{outdir}/compare.png", transparent=False, bbox_inches="tight", dpi=300)
+    fig.savefig(
+        f"{outdir}/compare.png",
+        transparent=False,
+        bbox_inches="tight",
+        dpi=300,
+    )
 
 
 # with and without parametric model
@@ -77,11 +89,12 @@ for use_parametric_model in [False, True]:
     if use_parametric_model:
         label = "with_parametric"
     outdir = f"output/{label}"
-    run_analysis(data, use_parametric_model=use_parametric_model, outdir=outdir)
+    run_analysis(
+        data, use_parametric_model=use_parametric_model, outdir=outdir
+    )
     compare_results(
         f"{outdir}/mh_out/inference_data.nc",
         f"{outdir}/nuts_out/inference_data.nc",
         labels=["MH", "NUTS"],
         outdir=outdir,
     )
-

@@ -6,10 +6,10 @@ import tempfile
 from typing import Any, Dict, Tuple
 
 import arviz as az
+import jax
 import jax.numpy as jnp
 import morphZ
 import numpy as np
-import jax
 
 from ...arviz_utils.to_arviz import results_to_arviz
 from ...datatypes import Periodogram
@@ -42,7 +42,7 @@ class UnivarBaseSampler(BaseSampler):
         self,
         periodogram: Periodogram,
         spline_model: LogPSplines,
-        config: SamplerConfig
+        config: SamplerConfig,
     ):
         # Always ensure periodogram is the correct (standardized) one with scaling_factor
         self.periodogram: Periodogram = periodogram
@@ -67,24 +67,25 @@ class UnivarBaseSampler(BaseSampler):
         fig.savefig(f"{self.config.outdir}/posterior_predictive.png")
 
     def _get_lnz(
-        self,
-        samples: Dict[str, np.ndarray],
-        sample_stats: Dict[str, Any]
+        self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
         """Default implementation for univariate LnZ computation."""
         if not self.config.compute_lnz:
             return np.nan, np.nan
 
         # Combine all parameters into single posterior sample array
-        post_smp = np.concatenate([
-            samples['weights'],
-            samples['phi'][:, None],
-            samples['delta'][:, None]
-        ], axis=1)
-        lp = sample_stats['lp']
+        post_smp = np.concatenate(
+            [
+                samples["weights"],
+                samples["phi"][:, None],
+                samples["delta"][:, None],
+            ],
+            axis=1,
+        )
+        lp = sample_stats["lp"]
 
         def lp_fn(sample):
-            weights = sample[:self.n_weights]
+            weights = sample[: self.n_weights]
             phi = sample[self.n_weights]
             delta = sample[self.n_weights + 1]
             return self._compute_log_posterior(weights, phi, delta)
@@ -108,8 +109,10 @@ class UnivarBaseSampler(BaseSampler):
             beta_delta=self.config.beta_delta,
         )
 
-    def _compute_log_posterior(self, weights: jnp.ndarray, phi: float, delta: float) -> float:
+    def _compute_log_posterior(
+        self, weights: jnp.ndarray, phi: float, delta: float
+    ) -> float:
         """Compute log posterior for LnZ calculation. To be implemented by concrete samplers."""
-        raise NotImplementedError("Concrete sampler must implement _compute_log_posterior")
-
-
+        raise NotImplementedError(
+            "Concrete sampler must implement _compute_log_posterior"
+        )

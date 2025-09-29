@@ -2,22 +2,22 @@
 NUTS sampler for univariate PSD estimation.
 """
 
+import tempfile
 import time
 from dataclasses import dataclass
 from typing import Tuple
-import tempfile
 
 import arviz as az
 import jax.numpy as jnp
+import morphZ
+import numpy as np
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value, log_density
-import morphZ
-import numpy as np
 
-from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 from ..base_sampler import SamplerConfig
+from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
 
 @dataclass
@@ -29,14 +29,14 @@ class NUTSConfig(SamplerConfig):
 
 
 def bayesian_model(
-        log_pdgrm: jnp.ndarray,
-        lnspline_basis: jnp.ndarray,
-        penalty_matrix: jnp.ndarray,
-        ln_parametric: jnp.ndarray,
-        alpha_phi,
-        beta_phi,
-        alpha_delta,
-        beta_delta,
+    log_pdgrm: jnp.ndarray,
+    lnspline_basis: jnp.ndarray,
+    penalty_matrix: jnp.ndarray,
+    ln_parametric: jnp.ndarray,
+    alpha_phi,
+    beta_phi,
+    alpha_delta,
+    beta_delta,
 ):
     """NumPyro model for univariate PSD estimation."""
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
@@ -76,7 +76,9 @@ class NUTSSampler(UnivarBaseSampler):
         """Required by base class."""
         return "nuts"
 
-    def sample(self, n_samples: int, n_warmup: int = 500, **kwargs) -> az.InferenceData:
+    def sample(
+        self, n_samples: int, n_warmup: int = 500, **kwargs
+    ) -> az.InferenceData:
         """Run NUTS sampling."""
         # Initialize starting values
         delta_0 = self.config.alpha_delta / self.config.beta_delta
@@ -121,7 +123,16 @@ class NUTSSampler(UnivarBaseSampler):
             self.config.beta_phi,
             self.config.alpha_delta,
             self.config.beta_delta,
-            extra_fields=("potential_energy", "energy", "num_steps","accept_prob",) if self.config.save_nuts_diagnostics else (),
+            extra_fields=(
+                (
+                    "potential_energy",
+                    "energy",
+                    "num_steps",
+                    "accept_prob",
+                )
+                if self.config.save_nuts_diagnostics
+                else ()
+            ),
         )
         self.runtime = time.time() - start_time
 
@@ -131,7 +142,7 @@ class NUTSSampler(UnivarBaseSampler):
         # Extract samples and convert to ArviZ
         samples = mcmc.get_samples()
         stats = mcmc.get_extra_fields()
-        stats['lp'] = samples.pop('lp')
+        stats["lp"] = samples.pop("lp")
 
         return self.to_arviz(samples, stats)
 
@@ -141,16 +152,19 @@ class NUTSSampler(UnivarBaseSampler):
             return np.nan, np.nan
 
         # Prepare posterior samples for evidence calculation
-        posterior_samples = jnp.concatenate([
-            samples["weights"],
-            samples["phi"][:, None],
-            samples["delta"][:, None]
-        ], axis=1)
+        posterior_samples = jnp.concatenate(
+            [
+                samples["weights"],
+                samples["phi"][:, None],
+                samples["delta"][:, None],
+            ],
+            axis=1,
+        )
         lposterior = sample_stats["lp"]
 
         def log_posterior_fn(params):
             """Log posterior function for morphZ."""
-            weights = params[:self.n_weights]
+            weights = params[: self.n_weights]
             phi = params[self.n_weights]
             delta = params[self.n_weights + 1]
             param_dict = {
@@ -168,9 +182,9 @@ class NUTSSampler(UnivarBaseSampler):
             posterior_samples,
             lposterior,
             log_posterior_fn,
-            morph_type='pair',
+            morph_type="pair",
             kde_bw="cv_iso",
-            output_path=tempfile.gettempdir()
+            output_path=tempfile.gettempdir(),
         )[0]
 
         return float(lnz_res.lnz), float(lnz_res.uncertainty)
@@ -193,6 +207,7 @@ class NUTSSampler(UnivarBaseSampler):
         """Pre-compile the NumPyro model to speed up warmup."""
         try:
             from numpyro.infer.util import initialize_model
+
             if self.config.verbose:
                 print("Pre-compiling NumPyro model...")
 
@@ -205,9 +220,9 @@ class NUTSSampler(UnivarBaseSampler):
                     values=dict(
                         delta=self.config.alpha_delta / self.config.beta_delta,
                         phi=self.config.alpha_phi / self.config.beta_phi,
-                        weights=self.spline_model.weights
+                        weights=self.spline_model.weights,
                     )
-                )
+                ),
             )
 
             if self.config.verbose:
@@ -216,7 +231,9 @@ class NUTSSampler(UnivarBaseSampler):
             if self.config.verbose:
                 print(f"Warning: Model pre-compilation failed: {e}")
 
-    def _compute_log_posterior(self, weights: jnp.ndarray, phi: float, delta: float) -> float:
+    def _compute_log_posterior(
+        self, weights: jnp.ndarray, phi: float, delta: float
+    ) -> float:
         """
         Compute log posterior for given parameters.
 
@@ -225,4 +242,6 @@ class NUTSSampler(UnivarBaseSampler):
         """
         # You could move the log_posterior function from your MH sampler here
         # For now, we use numpyro's log_density in _get_lnz
-        raise NotImplementedError("Use numpyro.log_density via _logp_kwargs instead")
+        raise NotImplementedError(
+            "Use numpyro.log_density via _logp_kwargs instead"
+        )

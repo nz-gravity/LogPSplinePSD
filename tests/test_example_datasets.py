@@ -1,12 +1,13 @@
+import os
+
 import matplotlib.pyplot as plt
 
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.example_datasets.varma_data import VARMAData
 
-import os
+OUT = "out_example_datasets"
 
-OUT = 'out_example_datasets'
 
 def test_ar(outdir):
     outdir = f"{outdir}/{OUT}"

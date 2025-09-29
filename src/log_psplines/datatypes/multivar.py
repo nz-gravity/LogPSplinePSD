@@ -1,6 +1,7 @@
-import numpy as np
 from dataclasses import dataclass
-from typing import Tuple, Optional
+from typing import Optional, Tuple
+
+import numpy as np
 
 
 @dataclass
@@ -18,6 +19,7 @@ class MultivarFFT:
         n_freq: Number of frequencies
         n_dim: Number of channels
     """
+
     y_re: np.ndarray
     y_im: np.ndarray
     Z_re: np.ndarray
@@ -29,13 +31,13 @@ class MultivarFFT:
 
     @classmethod
     def compute_fft(
-            cls,
-            x: np.ndarray,
-            fs: float = 1.0,
-            fmin: float = None,
-            fmax: float = None,
-            scaling_factor: Optional[float] = 1.0
-    ) -> 'MultivarFFT':
+        cls,
+        x: np.ndarray,
+        fs: float = 1.0,
+        fmin: float = None,
+        fmax: float = None,
+        scaling_factor: Optional[float] = 1.0,
+    ) -> "MultivarFFT":
         """
         Compute FFT and Cholesky design matrices for multivariate time series.
         FFT is normalized by sqrt(n_time).
@@ -50,22 +52,24 @@ class MultivarFFT:
             Frequency range for filtering. If None, uses all positive frequencies.
         """
         n_time, n_dim = x.shape
-        assert n_time > n_dim, f"N of time {n_time} must be greater than dim {n_dim}"
+        assert (
+            n_time > n_dim
+        ), f"N of time {n_time} must be greater than dim {n_dim}"
 
         # standardise
-        x = (x - np.mean(x, axis=0))
+        x = x - np.mean(x, axis=0)
 
         x_fft = np.fft.fft(x, axis=0) / np.sqrt(n_time)
         freqs = np.fft.fftfreq(n_time, 1 / fs)
 
         # Get positive frequencies only
-        pos_freq_idx = freqs > 0 # skip zero freq
+        pos_freq_idx = freqs > 0  # skip zero freq
         freqs = freqs[pos_freq_idx]
         x_fft = x_fft[pos_freq_idx, :]
 
         # Apply frequency range filtering if specified
         if fmin is not None or fmax is not None:
-            fmin = fmin if fmin is not None else freqs[0] # skip zero freq
+            fmin = fmin if fmin is not None else freqs[0]  # skip zero freq
             fmax = fmax if fmax is not None else freqs[-1]
             freq_mask = (freqs >= fmin) & (freqs <= fmax)
             freqs = freqs[freq_mask]
@@ -83,10 +87,10 @@ class MultivarFFT:
             freq=freqs,
             n_freq=len(freqs),
             n_dim=n_dim,
-            scaling_factor=scaling_factor
+            scaling_factor=scaling_factor,
         )
 
-    def cut(self, fmin: float, fmax: float) -> 'MultivarFFT':
+    def cut(self, fmin: float, fmax: float) -> "MultivarFFT":
         """Return a new MultivarFFT within frequency range [fmin, fmax]."""
         mask = (self.freq >= fmin) & (self.freq <= fmax)
         return MultivarFFT(
@@ -96,11 +100,13 @@ class MultivarFFT:
             Z_im=self.Z_im[mask],
             freq=self.freq[mask],
             n_freq=int(np.sum(mask)),
-            n_dim=self.n_dim
+            n_dim=self.n_dim,
         )
 
     @staticmethod
-    def compute_cholesky_design(x_fft: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def compute_cholesky_design(
+        x_fft: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute Cholesky design matrices Z_re, Z_im for multivariate PSD.
         For each frequency, Z_k[j, i, l] = FFT of previous components for Cholesky off-diagonal.
@@ -131,7 +137,7 @@ class MultivarFFT:
         for j in range(n):
             count = 0
             for i in range(1, p):
-                Z_k[j, i, count:count + i] = np.array(x_fft[j, :i])
+                Z_k[j, i, count : count + i] = np.array(x_fft[j, :i])
                 count += i
         return np.real(Z_k), np.imag(Z_k)
 
@@ -140,13 +146,14 @@ class MultivarFFT:
         amps = (np.min(self.y_re), np.max(self.y_re))
         return (float(f"{amps[0]:.3g}"), float(f"{amps[1]:.3g}"))
 
-
     def __repr__(self):
         return f"MultivarFFT(n_freq={self.n_freq}, n_dim={self.n_dim}, amplitudes={self.amplitude_range})"
 
     @property
     def empirical_psd(self):
-        return self.get_empirical_psd(self.y_re, self.y_im) * self.scaling_factor
+        return (
+            self.get_empirical_psd(self.y_re, self.y_im) * self.scaling_factor
+        )
 
     @staticmethod
     def get_empirical_psd(y_re, y_im) -> np.ndarray:
@@ -158,7 +165,9 @@ class MultivarFFT:
         norm_factor = 2 * np.pi
         for i in range(n_dim):
             for j in range(n_dim):
-                empirical_psd[:, i, j] = 2 * (_y[:, i] * np.conj(_y[:, j])) / norm_factor
+                empirical_psd[:, i, j] = (
+                    2 * (_y[:, i] * np.conj(_y[:, j])) / norm_factor
+                )
         return empirical_psd
 
 
@@ -167,8 +176,12 @@ class MultivariateTimeseries:
     y: np.ndarray  # numpy array (n_time, n_channels) for numerical stability
     t: np.ndarray = None  # numpy array
     std: np.ndarray = None  # numpy array, per-channel std
-    scaling_factor: Optional[float] = 1.0  # numpy array for per-channel scaling
-    original_stds: Optional[np.ndarray] = None    # numpy array for original per-channel stds
+    scaling_factor: Optional[float] = (
+        1.0  # numpy array for per-channel scaling
+    )
+    original_stds: Optional[np.ndarray] = (
+        None  # numpy array for original per-channel stds
+    )
 
     def __post_init__(self):
         if self.t is None:
@@ -196,22 +209,28 @@ class MultivariateTimeseries:
     def standardise_for_psd(self):
         if self.original_stds is None:
             self.original_stds = np.std(self.y, axis=0)
-        y_standardized = (self.y - np.mean(self.y, axis=0)) / self.original_stds
+        y_standardized = (
+            self.y - np.mean(self.y, axis=0)
+        ) / self.original_stds
         psd_scaling_factor = np.std(self.y) ** 2.0
         return MultivariateTimeseries(
             y=y_standardized,
             t=self.t,
             std=np.ones_like(self.original_stds),
             scaling_factor=psd_scaling_factor,
-            original_stds=self.original_stds
+            original_stds=self.original_stds,
         )
 
     def to_cross_spectral_density(
-            self,
-            fmin: float = None,
-            fmax: float = None
+        self, fmin: float = None, fmax: float = None
     ) -> "MultivarFFT":
-        return MultivarFFT.compute_fft(self.y, fs=self.fs, fmin=fmin, fmax=fmax,  scaling_factor=self.scaling_factor)
+        return MultivarFFT.compute_fft(
+            self.y,
+            fs=self.fs,
+            fmin=fmin,
+            fmax=fmax,
+            scaling_factor=self.scaling_factor,
+        )
 
     @property
     def amplitude_range(self) -> Tuple[float, float]:

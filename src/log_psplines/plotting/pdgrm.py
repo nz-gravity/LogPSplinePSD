@@ -50,8 +50,12 @@ def plot_pdgrm(
         posterior_psd = idata.posterior_psd.psd
 
         # Extract true_psd from attributes if available
-        if true_psd is None and hasattr(idata, 'attrs') and 'true_psd' in idata.attrs:
-            true_psd = idata.attrs['true_psd']
+        if (
+            true_psd is None
+            and hasattr(idata, "attrs")
+            and "true_psd" in idata.attrs
+        ):
+            true_psd = idata.attrs["true_psd"]
 
     plt_data = unpack_data(
         pdgrm=pdgrm,
@@ -61,7 +65,7 @@ def plot_pdgrm(
         use_uniform_ci=use_uniform_ci,
         use_parametric_model=use_parametric_model,
         freqs=freqs,
-        posterior_psd=posterior_psd
+        posterior_psd=posterior_psd,
     )
 
     if interactive:

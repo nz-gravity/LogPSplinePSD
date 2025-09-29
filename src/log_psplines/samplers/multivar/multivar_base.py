@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import morphZ
 import numpy as np
+
 from ...datatypes import MultivarFFT
 from ...plotting import plot_psd_matrix
 from ...psplines.multivar_psplines import MultivariateLogPSplines
@@ -17,7 +18,9 @@ from ..base_sampler import BaseSampler, SamplerConfig
 
 
 @jax.jit
-def batch_spline_eval(basis: jnp.ndarray, weights_batch: jnp.ndarray) -> jnp.ndarray:
+def batch_spline_eval(
+    basis: jnp.ndarray, weights_batch: jnp.ndarray
+) -> jnp.ndarray:
     """JIT-compiled batch spline evaluation over multiple weight vectors.
 
     Args:
@@ -32,28 +35,32 @@ def batch_spline_eval(basis: jnp.ndarray, weights_batch: jnp.ndarray) -> jnp.nda
 
 @jax.jit
 def whittle_likelihood(
-        y_re: jnp.ndarray,  # (n_freq, n_dim)
-        y_im: jnp.ndarray,  # (n_freq, n_dim)
-        Z_re: jnp.ndarray,  # (n_freq, n_dim, n_theta)
-        Z_im: jnp.ndarray,  # (n_freq, n_dim, n_theta)
-        log_delta_sq: jnp.ndarray,  # (n_freq, n_dim)
-        theta_re: jnp.ndarray,  # (n_freq, n_theta)
-        theta_im: jnp.ndarray  # (n_freq, n_theta)
+    y_re: jnp.ndarray,  # (n_freq, n_dim)
+    y_im: jnp.ndarray,  # (n_freq, n_dim)
+    Z_re: jnp.ndarray,  # (n_freq, n_dim, n_theta)
+    Z_im: jnp.ndarray,  # (n_freq, n_dim, n_theta)
+    log_delta_sq: jnp.ndarray,  # (n_freq, n_dim)
+    theta_re: jnp.ndarray,  # (n_freq, n_theta)
+    theta_im: jnp.ndarray,  # (n_freq, n_theta)
 ) -> jnp.ndarray:
     """Multivariate Whittle likelihood for Cholesky PSD parameterization."""
     sum_log_det = -jnp.sum(log_delta_sq)
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
 
     if Z_re.shape[2] > 0:
-        Z_theta_re = jnp.einsum('fij,fj->fi', Z_re, theta_re) - jnp.einsum('fij,fj->fi', Z_im, theta_im)
-        Z_theta_im = jnp.einsum('fij,fj->fi', Z_re, theta_im) + jnp.einsum('fij,fj->fi', Z_im, theta_re)
+        Z_theta_re = jnp.einsum("fij,fj->fi", Z_re, theta_re) - jnp.einsum(
+            "fij,fj->fi", Z_im, theta_im
+        )
+        Z_theta_im = jnp.einsum("fij,fj->fi", Z_re, theta_im) + jnp.einsum(
+            "fij,fj->fi", Z_im, theta_re
+        )
         u_re = y_re - Z_theta_re
         u_im = y_im - Z_theta_im
     else:
         u_re = y_re
         u_im = y_im
 
-    numerator = u_re ** 2 + u_im ** 2
+    numerator = u_re**2 + u_im**2
     internal = numerator * exp_neg_log_delta
     tmp2 = -jnp.sum(internal)
     return sum_log_det + tmp2
@@ -68,10 +75,10 @@ class MultivarBaseSampler(BaseSampler):
     """
 
     def __init__(
-            self,
-            fft_data: MultivarFFT,
-            spline_model: MultivariateLogPSplines,
-            config: SamplerConfig
+        self,
+        fft_data: MultivarFFT,
+        spline_model: MultivariateLogPSplines,
+        config: SamplerConfig,
     ):
         # Type hints for clarity
         self.fft_data: MultivarFFT = fft_data
@@ -86,7 +93,9 @@ class MultivarBaseSampler(BaseSampler):
         self.n_theta = self.spline_model.n_theta
 
         # Get all bases and penalties for NumPyro model
-        self.all_bases, self.all_penalties = self.spline_model.get_all_bases_and_penalties()
+        self.all_bases, self.all_penalties = (
+            self.spline_model.get_all_bases_and_penalties()
+        )
 
         # FFT data arrays for JAX operations
         self.y_re = jnp.array(self.fft_data.y_re)
@@ -103,7 +112,7 @@ class MultivarBaseSampler(BaseSampler):
             Z_im=self.Z_im,
             freq=self.freq,
             n_freq=self.n_freq,
-            n_dim=self.n_channels
+            n_dim=self.n_channels,
         )
 
     @property
@@ -123,16 +132,14 @@ class MultivarBaseSampler(BaseSampler):
                 n_channels=self.n_channels,
                 freq=np.array(self.freq),
                 empirical_psd=empirical_psd,
-                outdir=self.config.outdir
+                outdir=self.config.outdir,
             )
         except Exception as e:
             if self.config.verbose:
                 print(f"Warning: Could not create plots: {e}")
 
     def _get_lnz(
-            self,
-            samples: Dict[str, np.ndarray],
-            sample_stats: Dict[str, Any]
+        self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
         """Multivariate LnZ computation using morphZ."""
         if not self.config.compute_lnz:
@@ -145,8 +152,10 @@ class MultivarBaseSampler(BaseSampler):
             param_names = []
 
             for name, sample_array in samples.items():
-                if name.startswith(('weights_', 'delta_', 'phi_')):
-                    flat_samples = sample_array.reshape(sample_array.shape[0], -1)
+                if name.startswith(("weights_", "delta_", "phi_")):
+                    flat_samples = sample_array.reshape(
+                        sample_array.shape[0], -1
+                    )
                     all_samples.append(flat_samples)
                     param_sizes.append(flat_samples.shape[1])
                     param_names.append(name)
@@ -155,7 +164,9 @@ class MultivarBaseSampler(BaseSampler):
                 return np.nan, np.nan
 
             posterior_samples = np.concatenate(all_samples, axis=1)
-            lposterior = sample_stats.get("log_likelihood", sample_stats.get("lp", None))
+            lposterior = sample_stats.get(
+                "log_likelihood", sample_stats.get("lp", None)
+            )
 
             if lposterior is None:
                 return np.nan, np.nan
@@ -171,9 +182,9 @@ class MultivarBaseSampler(BaseSampler):
                 posterior_samples,
                 lposterior,
                 log_posterior_fn,
-                morph_type='pair',
+                morph_type="pair",
                 kde_bw="cv_iso",
-                output_path=tempfile.gettempdir()
+                output_path=tempfile.gettempdir(),
             )[0]
 
             return float(lnz_res.lnz), float(lnz_res.uncertainty)

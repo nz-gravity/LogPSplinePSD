@@ -1,13 +1,11 @@
-from typing import Union, Literal, Optional
+from typing import Literal, Optional, Union
 
 import arviz as az
 import jax.numpy as jnp
 
 from .datatypes import Periodogram
-from .datatypes.multivar import MultivarFFT
+from .datatypes.multivar import MultivarFFT, MultivariateTimeseries
 from .datatypes.univar import Timeseries
-from .datatypes.multivar import MultivariateTimeseries
-from .datatypes.multivar import MultivarFFT
 from .psplines import LogPSplines, MultivariateLogPSplines
 from .samplers import (
     MetropolisHastingsConfig,
@@ -47,7 +45,7 @@ def run_mcmc(
     # MH specific
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
-    **kwargs
+    **kwargs,
 ) -> az.InferenceData:
     """
     Unified MCMC interface for both univariate and multivariate PSD estimation.
@@ -111,7 +109,9 @@ def run_mcmc(
 
     # Scale true_psd to match standardized data if necessary
     scaled_true_psd = true_psd
-    if true_psd is not None and isinstance(data, (Timeseries, MultivariateTimeseries)):
+    if true_psd is not None and isinstance(
+        data, (Timeseries, MultivariateTimeseries)
+    ):
         # Data will be standardized, so true_psd needs to be scaled to match
         # First get the scaling factor that will be used
         standardized_ts = data.standardise_for_psd()
@@ -131,12 +131,16 @@ def run_mcmc(
             processed_data = standardized_ts.to_cross_spectral_density()
 
         if verbose:
-            print(f"Standardized data: original scale ~{processed_data.scaling_factor:.2e}")
+            print(
+                f"Standardized data: original scale ~{processed_data.scaling_factor:.2e}"
+            )
 
         # Validate sampler for standardized data
         if isinstance(processed_data, MultivarFFT) and sampler != "nuts":
             if verbose:
-                print(f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler}")
+                print(
+                    f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler}"
+                )
             sampler = "nuts"
 
     if isinstance(data, (Periodogram, MultivarFFT)):
@@ -150,7 +154,9 @@ def run_mcmc(
             n_knots=n_knots,
             degree=degree,
             diffMatrixOrder=diffMatrixOrder,
-            parametric_model=parametric_model if parametric_model is not None else None,
+            parametric_model=(
+                parametric_model if parametric_model is not None else None
+            ),
             knot_kwargs=knot_kwargs,
         )
     elif isinstance(processed_data, MultivarFFT):
@@ -163,7 +169,9 @@ def run_mcmc(
             knot_kwargs=knot_kwargs,
         )
     else:
-        raise ValueError(f"Unsupported processed data type: {type(processed_data)}.")
+        raise ValueError(
+            f"Unsupported processed data type: {type(processed_data)}."
+        )
 
     # Create sampler
     # Always use processed_data (the standardized Periodogram or MultivarFFT) for the sampler and model
@@ -184,12 +192,17 @@ def run_mcmc(
         max_tree_depth=max_tree_depth,
         target_accept_rate=target_accept_rate,
         adaptation_window=adaptation_window,
-        scaling_factor=processed_data.scaling_factor if processed_data and hasattr(processed_data, 'scaling_factor') else 1.0,  # Pass scaling info to sampler
+        scaling_factor=(
+            processed_data.scaling_factor
+            if processed_data and hasattr(processed_data, "scaling_factor")
+            else 1.0
+        ),  # Pass scaling info to sampler
         true_psd=scaled_true_psd,
-        **kwargs
+        **kwargs,
     )
 
     return sampler_obj.sample(n_samples=n_samples, n_warmup=n_warmup)
+
 
 def create_sampler(
     data: Union[Periodogram, MultivarFFT],
@@ -210,9 +223,8 @@ def create_sampler(
     adaptation_window: int = 50,
     scaling_factor: float = 1.0,
     true_psd: Optional[jnp.ndarray] = None,
-    **kwargs
+    **kwargs,
 ):
-
     """Factory function to create appropriate sampler."""
 
     common_config_kwargs = {
@@ -226,7 +238,7 @@ def create_sampler(
         "outdir": outdir,
         "compute_lnz": compute_lnz,
         "scaling_factor": scaling_factor,
-        "true_psd": true_psd
+        "true_psd": true_psd,
     }
 
     if isinstance(data, Periodogram):
@@ -250,13 +262,17 @@ def create_sampler(
             )
             return MetropolisHastingsSampler(data, model, config)
         else:
-            raise ValueError(f"Unknown sampler_type '{sampler_type}' for univariate data. Choose 'nuts' or 'mh'.")
+            raise ValueError(
+                f"Unknown sampler_type '{sampler_type}' for univariate data. Choose 'nuts' or 'mh'."
+            )
 
     elif isinstance(data, MultivarFFT):
         # Multivariate case (NUTS only for now)
         if sampler_type != "nuts":
             if verbose:
-                print(f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler_type}")
+                print(
+                    f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler_type}"
+                )
         config = MultivarNUTSConfig(
             **common_config_kwargs,
             target_accept_prob=target_accept_prob,
@@ -265,4 +281,6 @@ def create_sampler(
         return MultivarNUTSSampler(data, model, config)
 
     else:
-        raise ValueError(f"Unsupported data type: {type(data).__name__}. Expected Periodogram or MultivarFFT.")
+        raise ValueError(
+            f"Unsupported data type: {type(data).__name__}. Expected Periodogram or MultivarFFT."
+        )

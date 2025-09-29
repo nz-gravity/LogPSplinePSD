@@ -10,7 +10,9 @@ from log_psplines.mcmc import run_mcmc
 from log_psplines.psplines.knots_locator import init_knots
 
 
-def mock_gwpy_timeseries_from_simulation(detector, gps_start, gps_end, **kwargs):
+def mock_gwpy_timeseries_from_simulation(
+    detector, gps_start, gps_end, **kwargs
+):
     duration = gps_end - gps_start
     fs = 4096  # or use kwargs.get('sample_rate', 4096) if needed
     lvk_sim = LVKData.from_simulation(duration=duration, fs=fs)
@@ -20,7 +22,10 @@ def mock_gwpy_timeseries_from_simulation(detector, gps_start, gps_end, **kwargs)
 def test_lvk_mcmc(outdir, test_mode):
     out = os.path.join(outdir, "out_lvk_mcmc")
     os.makedirs(out, exist_ok=True)
-    with patch('gwpy.timeseries.TimeSeries.fetch_open_data', side_effect=mock_gwpy_timeseries_from_simulation):
+    with patch(
+        "gwpy.timeseries.TimeSeries.fetch_open_data",
+        side_effect=mock_gwpy_timeseries_from_simulation,
+    ):
         lvk_data = LVKData.download_data(
             detector="L1", gps_start=1126259462, duration=2, fmin=256, fmax=512
         )
@@ -46,9 +51,9 @@ def test_lvk_mcmc(outdir, test_mode):
         n_samples=200,
         n_warmup=200,
         n_knots=50,
-        outdir = out,
-        rng_key = 42,
-        knot_kwargs = dict(
+        outdir=out,
+        rng_key=42,
+        knot_kwargs=dict(
             method="uniform",
         ),
     )

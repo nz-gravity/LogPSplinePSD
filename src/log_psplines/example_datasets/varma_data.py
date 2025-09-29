@@ -1,8 +1,8 @@
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.pyplot as plt
 from numpy.fft import rfft
-from typing import Optional
 
 
 class VARMAData:
@@ -11,12 +11,14 @@ class VARMAData:
     """
 
     def __init__(
-            self,
-            n_samples: int = 1024,
-            sigma: np.ndarray = np.array([[1.0, 0.9], [0.9, 1.0]]),
-            var_coeffs: np.ndarray = np.array([[[0.5, 0.0], [0.0, -0.3]], [[0.0, 0.0], [0.0, -0.5]]]),
-            vma_coeffs: np.ndarray = np.array([[[1.0, 0.0], [0.0, 1.0]]]),
-            seed: int = None,
+        self,
+        n_samples: int = 1024,
+        sigma: np.ndarray = np.array([[1.0, 0.9], [0.9, 1.0]]),
+        var_coeffs: np.ndarray = np.array(
+            [[[0.5, 0.0], [0.0, -0.3]], [[0.0, 0.0], [0.0, -0.5]]]
+        ),
+        vma_coeffs: np.ndarray = np.array([[[1.0, 0.0], [0.0, 1.0]]]),
+        seed: int = None,
     ):
         """
         Initialize the SimVARMA class.
@@ -37,7 +39,8 @@ class VARMAData:
 
         self.fs = 2 * np.pi
         self.freq = (
-                np.linspace(0, 0.5, self.n_freq_samples, endpoint=False)[1:] * self.fs
+            np.linspace(0, 0.5, self.n_freq_samples, endpoint=False)[1:]
+            * self.fs
         )
         self.time = np.arange(n_samples) / self.fs
         self.data = None  # set in "resimulate"
@@ -95,7 +98,7 @@ class VARMAData:
             x[i] = np.sum(
                 np.matmul(
                     self.var_coeffs,
-                    x[i - 1: i - lag_ar - 1: -1][..., np.newaxis],
+                    x[i - 1 : i - lag_ar - 1 : -1][..., np.newaxis],
                 ),
                 axis=(0, -1),
             ) + np.sum(
@@ -121,7 +124,11 @@ class VARMAData:
         periodogram = np.empty((n_freq, dim, dim), dtype=np.complex128)
         for i in range(dim):
             for j in range(dim):
-                periodogram[:, i, j] = 2 * (fft_data[:, i] * np.conj(fft_data[:, j])) / (N * 2 * np.pi)
+                periodogram[:, i, j] = (
+                    2
+                    * (fft_data[:, i] * np.conj(fft_data[:, j]))
+                    / (N * 2 * np.pi)
+                )
         # Add epsilon to avoid log(0) and extremely small values
         eps = 1e-12
         periodogram = np.where(np.abs(periodogram) < eps, eps, periodogram)
@@ -138,7 +145,6 @@ class VARMAData:
         true_psd = np.where(np.abs(self.psd) < eps, eps, self.psd)
         return true_psd
 
-
     def plot(self, axs=None, fname: Optional[str] = None):
         """
         Matrix plot: diagonal is the PSD, below diagonal is real CSD, above diagonal is imag CSD.
@@ -152,26 +158,58 @@ class VARMAData:
         freq = self.freq
         # Setup axes
         if axs is None:
-            fig, axs = plt.subplots(dim, dim, figsize=(4 * dim, 4 * dim), sharex=True)
+            fig, axs = plt.subplots(
+                dim, dim, figsize=(4 * dim, 4 * dim), sharex=True
+            )
         else:
             fig = axs[0, 0].figure
-        data_kwgs = dict(alpha=0.3, lw=2, zorder=-10, color='k')
-        true_kwgs = dict(lw=1, zorder=10, color='k')
+        data_kwgs = dict(alpha=0.3, lw=2, zorder=-10, color="k")
+        true_kwgs = dict(lw=1, zorder=10, color="k")
         for i in range(dim):
             for j in range(dim):
                 ax = axs[i, j]
                 if i == j:
-                    ax.plot(freq, true_psd[:, i, i].real, label="True PSD", **true_kwgs)
-                    ax.plot(freq, periodogram[:, i, i].real, label="Periodogram", **data_kwgs)
+                    ax.plot(
+                        freq,
+                        true_psd[:, i, i].real,
+                        label="True PSD",
+                        **true_kwgs,
+                    )
+                    ax.plot(
+                        freq,
+                        periodogram[:, i, i].real,
+                        label="Periodogram",
+                        **data_kwgs,
+                    )
                     ax.set_title(f"PSD: channel {i + 1}")
                     ax.set_yscale("log")
                 elif i > j:
-                    ax.plot(freq, true_psd[:, i, j].real, label="True Re(CSD)",  **true_kwgs)
-                    ax.plot(freq, periodogram[:, i, j].real, label="Periodogram Re(CSD)", **data_kwgs)
+                    ax.plot(
+                        freq,
+                        true_psd[:, i, j].real,
+                        label="True Re(CSD)",
+                        **true_kwgs,
+                    )
+                    ax.plot(
+                        freq,
+                        periodogram[:, i, j].real,
+                        label="Periodogram Re(CSD)",
+                        **data_kwgs,
+                    )
                     ax.set_title(f"Re(CSD): {i + 1},{j + 1}")
                 else:
-                    ax.plot(freq, true_psd[:, i, j].imag, label="True Im(CSD)", **true_kwgs)
-                    ax.plot(freq, periodogram[:, i, j].imag, label="Periodogram Im(CSD)", **data_kwgs)
+                    ax.plot(
+                        freq,
+                        true_psd[:, i, j].imag,
+                        label="True Im(CSD)",
+                        **true_kwgs,
+                    )
+                    ax.plot(
+                        freq,
+                        periodogram[:, i, j].imag,
+                        label="Periodogram Im(CSD)",
+                        **data_kwgs,
+                    )
                     ax.set_title(f"Im(CSD): {i + 1},{j + 1}")
                 if i == dim - 1:
                     ax.set_xlabel("Frequency (rad)")
@@ -185,11 +223,11 @@ class VARMAData:
 
 
 def _calculate_true_varma_psd(
-        n_samples: int,
-        dim: int,
-        var_coeffs: np.ndarray,
-        vma_coeffs: np.ndarray,
-        sigma: np.ndarray,
+    n_samples: int,
+    dim: int,
+    var_coeffs: np.ndarray,
+    vma_coeffs: np.ndarray,
+    sigma: np.ndarray,
 ) -> np.ndarray:
     """
     Calculate the spectral matrix for given frequencies.

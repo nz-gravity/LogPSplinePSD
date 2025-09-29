@@ -10,7 +10,7 @@ class Timeseries:
     y: np.ndarray  # numpy array for numerical stability with extreme scales
     std: float = 1.0
     scaling_factor: float = 1.0  # Track the PSD scaling factor
-    original_std: Optional[float] = None   # Store original standard deviation
+    original_std: Optional[float] = None  # Store original standard deviation
 
     @property
     def n(self):
@@ -25,7 +25,9 @@ class Timeseries:
         """Compute the one-sided periodogram of the timeseries."""
         freq = np.fft.rfftfreq(len(self.y), d=1 / self.fs)
         power = 2 * np.abs(np.fft.rfft(self.y)) ** 2 / len(self.y) / self.fs
-        return Periodogram(freq[1:], power[1:], scaling_factor=self.scaling_factor)
+        return Periodogram(
+            freq[1:], power[1:], scaling_factor=self.scaling_factor
+        )
 
     def standardise(self):
         """Standardise the timeseries to have zero mean and unit variance."""
@@ -41,13 +43,13 @@ class Timeseries:
         # Standardize to unit variance
         y_standardized = (self.y - np.mean(self.y)) / self.original_std
         # The PSD scaling factor is the square of the amplitude scaling
-        psd_scaling_factor = self.original_std ** 2
+        psd_scaling_factor = self.original_std**2
         return Timeseries(
             t=self.t,
             y=y_standardized,
             std=1.0,
             scaling_factor=psd_scaling_factor,
-            original_std=self.original_std
+            original_std=self.original_std,
         )
 
     @property
@@ -83,7 +85,12 @@ class Periodogram:
     def highpass(self, min_freq: float) -> "Periodogram":
         """Return a new Periodogram with frequencies above a threshold."""
         mask = self.freqs > min_freq
-        return Periodogram(self.freqs[mask], self.power[mask], filtered=True, scaling_factor=self.scaling_factor)
+        return Periodogram(
+            self.freqs[mask],
+            self.power[mask],
+            filtered=True,
+            scaling_factor=self.scaling_factor,
+        )
 
     def to_timeseries(self) -> "Timeseries":
         """Compute the inverse FFT of the periodogram."""
@@ -92,10 +99,14 @@ class Periodogram:
         return Timeseries(np.array(t), np.array(y))
 
     def __mul__(self, other):
-        return Periodogram(self.freqs, self.power * other, scaling_factor=self.scaling_factor)
+        return Periodogram(
+            self.freqs, self.power * other, scaling_factor=self.scaling_factor
+        )
 
     def __truediv__(self, other):
-        return Periodogram(self.freqs, self.power / other, scaling_factor=self.scaling_factor)
+        return Periodogram(
+            self.freqs, self.power / other, scaling_factor=self.scaling_factor
+        )
 
     def __repr__(self):
         return f"Periodogram(n={self.n}, fs={self.fs:.3f}, filtered={self.filtered}, amplitudes={self.amplitude_range})"
@@ -103,7 +114,12 @@ class Periodogram:
     def cut(self, fmin, fmax):
         """Return a new Periodogram with frequencies within [fmin, fmax]."""
         mask = (self.freqs >= fmin) & (self.freqs <= fmax)
-        return Periodogram(self.freqs[mask], self.power[mask], filtered=True, scaling_factor=self.scaling_factor)
+        return Periodogram(
+            self.freqs[mask],
+            self.power[mask],
+            filtered=True,
+            scaling_factor=self.scaling_factor,
+        )
 
     @property
     def amplitude_range(self):

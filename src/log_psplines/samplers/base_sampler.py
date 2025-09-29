@@ -22,6 +22,7 @@ from ..plotting import plot_diagnostics, plot_pdgrm
 @dataclass
 class SamplerConfig:
     """Base configuration for all MCMC samplers."""
+
     alpha_phi: float = 1.0
     beta_phi: float = 1.0
     alpha_delta: float = 1e-4
@@ -51,17 +52,19 @@ class BaseSampler(ABC):
         self.data = data
         self.model = model
         self.config = config
-        
+
         # Common attributes for all samplers
         self.rng_key = jax.random.PRNGKey(config.rng_key)
         self.runtime = np.nan
         self.device = jax.devices()[0].platform
-        
+
         # Setup data-specific attributes
         self._setup_data()
 
     @abstractmethod
-    def sample(self, n_samples: int, n_warmup: int = 1000, **kwargs) -> az.InferenceData:
+    def sample(
+        self, n_samples: int, n_warmup: int = 1000, **kwargs
+    ) -> az.InferenceData:
         """Run MCMC sampling and return inference data."""
         pass
 
@@ -71,7 +74,9 @@ class BaseSampler(ABC):
         pass
 
     @abstractmethod
-    def _get_lnz(self, samples: Dict[str, jnp.ndarray], sample_stats: Dict[str, Any]) -> Tuple[float, float]:
+    def _get_lnz(
+        self, samples: Dict[str, jnp.ndarray], sample_stats: Dict[str, Any]
+    ) -> Tuple[float, float]:
         """Extract log normalizing constant from samples."""
         pass
 
@@ -88,15 +93,15 @@ class BaseSampler(ABC):
         pass
 
     def to_arviz(
-        self, 
-        samples: Dict[str, jnp.ndarray], 
-        sample_stats: Dict[str, Any]
+        self, samples: Dict[str, jnp.ndarray], sample_stats: Dict[str, Any]
     ) -> az.InferenceData:
         """Convert samples to ArviZ InferenceData with diagnostics and plotting."""
         lnz, lnz_err = self._get_lnz(samples, sample_stats)
-        
+
         # Call the appropriate results_to_arviz based on data type
-        idata = self._create_inference_data(samples, sample_stats, lnz, lnz_err)
+        idata = self._create_inference_data(
+            samples, sample_stats, lnz, lnz_err
+        )
 
         # Summary statistics
         if self.config.verbose:
@@ -108,11 +113,11 @@ class BaseSampler(ABC):
                 print(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
 
             # Print RIAE diagnostics if true_psd was provided
-            if hasattr(idata.attrs, 'get'):
-                if 'riae' in idata.attrs:
+            if hasattr(idata.attrs, "get"):
+                if "riae" in idata.attrs:
                     # Univariate case
-                    riae_median = idata.attrs['riae']
-                    errorbars = idata.attrs.get('riae_errorbars', [])
+                    riae_median = idata.attrs["riae"]
+                    errorbars = idata.attrs.get("riae_errorbars", [])
                     if len(errorbars) >= 5:
                         iqr_half = (errorbars[3] - errorbars[1]) / 2.0
                         print(f"  RIAE: {riae_median:.3f} ± {iqr_half:.3f}")
@@ -120,8 +125,8 @@ class BaseSampler(ABC):
                         print(f"  RIAE: {riae_median:.3f}")
 
                 # Check for multivariate RIAE
-                if 'riae_matrix' in idata.attrs:
-                    riae_matrix = idata.attrs['riae_matrix']
+                if "riae_matrix" in idata.attrs:
+                    riae_matrix = idata.attrs["riae_matrix"]
                     print(f"  RIAE (matrix): {riae_matrix:.3f}")
 
         # Save outputs if requested
@@ -135,7 +140,7 @@ class BaseSampler(ABC):
         samples: Dict[str, jnp.ndarray],
         sample_stats: Dict[str, Any],
         lnz: float,
-        lnz_err: float
+        lnz_err: float,
     ) -> az.InferenceData:
         """Create InferenceData object for both univar and multivar cases."""
         return results_to_arviz(
@@ -158,8 +163,10 @@ class BaseSampler(ABC):
         """Save inference results to disk."""
         az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")
         plot_diagnostics(idata, self.config.outdir)
-        az.summary(idata).to_csv(f"{self.config.outdir}/summary_statistics.csv")
-        
+        az.summary(idata).to_csv(
+            f"{self.config.outdir}/summary_statistics.csv"
+        )
+
         # Data-type specific plotting
         self._save_plots(idata)
 

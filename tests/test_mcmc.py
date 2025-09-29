@@ -18,7 +18,7 @@ def test_multivar_mcmc(outdir, test_mode):
     os.makedirs(outdir, exist_ok=True)
 
     n = 1024
-    n_knots = 7
+    n_knots = 10
     n_samples = n_warmup = 600
     if test_mode == "fast":
         n_samples = n_warmup = 10

@@ -52,6 +52,9 @@ class MultivarFFT:
         n_time, n_dim = x.shape
         assert n_time > n_dim, f"N of time {n_time} must be greater than dim {n_dim}"
 
+        # standardise
+        x = (x - np.mean(x, axis=0))
+
         x_fft = np.fft.fft(x, axis=0) / np.sqrt(n_time)
         freqs = np.fft.fftfreq(n_time, 1 / fs)
 
@@ -140,6 +143,24 @@ class MultivarFFT:
 
     def __repr__(self):
         return f"MultivarFFT(n_freq={self.n_freq}, n_dim={self.n_dim}, amplitudes={self.amplitude_range})"
+
+    @property
+    def empirical_psd(self):
+        return self.get_empirical_psd(self.y_re, self.y_im) * self.scaling_factor
+
+    @staticmethod
+    def get_empirical_psd(y_re, y_im) -> np.ndarray:
+        y_re = np.array(y_re, dtype=np.float64)
+        y_im = np.array(y_im, dtype=np.float64)
+        n_freq, n_dim = y_re.shape
+        _y = y_re + 1j * y_im
+        empirical_psd = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex128)
+        norm_factor = 2 * np.pi
+        for i in range(n_dim):
+            for j in range(n_dim):
+                empirical_psd[:, i, j] = 2 * (_y[:, i] * np.conj(_y[:, j])) / norm_factor
+        return empirical_psd
+
 
 @dataclass
 class MultivariateTimeseries:

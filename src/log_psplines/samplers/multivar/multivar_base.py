@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import morphZ
 import numpy as np
 from ...datatypes import MultivarFFT
-from ...plotting import plot_psd_matrix, compute_empirical_psd
+from ...plotting import plot_psd_matrix
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -114,12 +114,10 @@ class MultivarBaseSampler(BaseSampler):
         """Save multivariate-specific plots."""
         try:
             # Create empirical PSD matrix for comparison
-            empirical_psd = compute_empirical_psd(
-                fft_data_re=np.array(self.fft_data.y_re),
-                fft_data_im=np.array(self.fft_data.y_im),
-                n_channels=self.n_channels
+            empirical_psd = MultivarFFT.get_empirical_psd(
+                np.array(self.fft_data.y_re, dtype=np.float64),
+                np.array(self.fft_data.y_im, dtype=np.float64),
             )
-
             plot_psd_matrix(
                 idata=idata,
                 n_channels=self.n_channels,

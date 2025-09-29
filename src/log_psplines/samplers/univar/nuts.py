@@ -2,21 +2,18 @@
 NUTS sampler for univariate PSD estimation.
 """
 
-import tempfile
 import time
 from dataclasses import dataclass
-from typing import Tuple
 
 import arviz as az
 import jax.numpy as jnp
-import morphZ
-import numpy as np
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
-from numpyro.infer.util import init_to_value, log_density
+from numpyro.infer.util import init_to_value
 
 from ..base_sampler import SamplerConfig
+from .metropolis_hastings import log_posterior as mh_log_posterior
 from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
 
@@ -146,52 +143,9 @@ class NUTSSampler(UnivarBaseSampler):
 
         return self.to_arviz(samples, stats)
 
-    def _get_lnz(self, samples, sample_stats) -> Tuple[float, float]:
-        """Compute log normalizing constant using morphZ."""
-        if not self.config.compute_lnz:
-            return np.nan, np.nan
-
-        # Prepare posterior samples for evidence calculation
-        posterior_samples = jnp.concatenate(
-            [
-                samples["weights"],
-                samples["phi"][:, None],
-                samples["delta"][:, None],
-            ],
-            axis=1,
-        )
-        lposterior = sample_stats["lp"]
-
-        def log_posterior_fn(params):
-            """Log posterior function for morphZ."""
-            weights = params[: self.n_weights]
-            phi = params[self.n_weights]
-            delta = params[self.n_weights + 1]
-            param_dict = {
-                "weights": weights,
-                "phi": phi,
-                "delta": delta,
-            }
-            log_prob, _ = log_density(
-                bayesian_model, (), self._logp_kwargs, param_dict
-            )
-            return log_prob
-
-        # Compute evidence using morphZ
-        lnz_res = morphZ.evidence(
-            posterior_samples,
-            lposterior,
-            log_posterior_fn,
-            morph_type="pair",
-            kde_bw="cv_iso",
-            output_path=tempfile.gettempdir(),
-        )[0]
-
-        return float(lnz_res.lnz), float(lnz_res.uncertainty)
-
     @property
     def _logp_kwargs(self):
-        """Arguments for log posterior computation (used by morphZ)."""
+        """Arguments passed to the NumPyro model / log-density helpers."""
         return dict(
             log_pdgrm=self.log_pdgrm,
             lnspline_basis=self.basis_matrix,
@@ -241,7 +195,18 @@ class NUTSSampler(UnivarBaseSampler):
         Could be used instead of numpyro's log_density if needed.
         """
         # You could move the log_posterior function from your MH sampler here
-        # For now, we use numpyro's log_density in _get_lnz
-        raise NotImplementedError(
-            "Use numpyro.log_density via _logp_kwargs instead"
+        return float(
+            mh_log_posterior(
+                weights,
+                phi,
+                delta,
+                log_pdgrm=self.log_pdgrm,
+                basis_matrix=self.basis_matrix,
+                log_parametric=self.log_parametric,
+                penalty_matrix=self.penalty_matrix,
+                alpha_phi=self.config.alpha_phi,
+                beta_phi=self.config.beta_phi,
+                alpha_delta=self.config.alpha_delta,
+                beta_delta=self.config.beta_delta,
+            )
         )

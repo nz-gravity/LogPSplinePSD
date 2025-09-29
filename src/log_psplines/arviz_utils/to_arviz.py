@@ -2,7 +2,7 @@
 
 import warnings
 from dataclasses import asdict
-from typing import Any, Dict, Union, Tuple
+from typing import Any, Dict, Tuple, Union
 
 import arviz as az
 import jax
@@ -16,19 +16,23 @@ warnings.filterwarnings("ignore", module="arviz")
 
 
 def results_to_arviz(
-        samples: Dict[str, jnp.ndarray],
-        sample_stats: Dict[str, Any],
-        config: "SamplerConfig",
-        data: Union[Periodogram, MultivarFFT],
-        model: Union["LogPSplines", "MultivariateLogPSplines"],
-        attributes: Dict[str, Any],
+    samples: Dict[str, jnp.ndarray],
+    sample_stats: Dict[str, Any],
+    config: "SamplerConfig",
+    data: Union[Periodogram, MultivarFFT],
+    model: Union["LogPSplines", "MultivariateLogPSplines"],
+    attributes: Dict[str, Any],
 ) -> az.InferenceData:
     """Unified ArviZ conversion for both univar and multivar cases."""
 
     if isinstance(data, Periodogram):
-        idata = _create_univar_inference_data(samples, sample_stats, config, data, model, attributes)
+        idata = _create_univar_inference_data(
+            samples, sample_stats, config, data, model, attributes
+        )
     elif isinstance(data, MultivarFFT):
-        idata = _create_multivar_inference_data(samples, sample_stats, config, data, model, attributes)
+        idata = _create_multivar_inference_data(
+            samples, sample_stats, config, data, model, attributes
+        )
     else:
         raise ValueError(f"Unsupported data type: {type(data)}")
 
@@ -48,11 +52,17 @@ def _add_chain_dim(data_dict: Dict[str, Any]) -> Dict[str, Any]:
         # NumPyro with 1 chain returns samples without chain dimension
         if v_array.ndim == 1:  # Scalar parameters: (n_draws,) -> (1, n_draws)
             result[k] = v_array[None, :]
-        elif v_array.ndim == 2:  # Vector parameters: (n_draws, dim) -> (1, n_draws, dim)
+        elif (
+            v_array.ndim == 2
+        ):  # Vector parameters: (n_draws, dim) -> (1, n_draws, dim)
             result[k] = v_array[None, :, :]
-        elif v_array.ndim == 3:  # Matrix parameters: (n_draws, dim1, dim2) -> (1, n_draws, dim1, dim2)
+        elif (
+            v_array.ndim == 3
+        ):  # Matrix parameters: (n_draws, dim1, dim2) -> (1, n_draws, dim1, dim2)
             result[k] = v_array[None, :, :, :]
-        elif v_array.ndim == 4:  # Already has chain dim: (n_chains, n_draws, dim1, dim2)
+        elif (
+            v_array.ndim == 4
+        ):  # Already has chain dim: (n_chains, n_draws, dim1, dim2)
             result[k] = v_array
         else:
             # Handle higher dimensional cases
@@ -61,8 +71,7 @@ def _add_chain_dim(data_dict: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _prepare_samples_and_stats(
-    samples: Dict[str, Any],
-    sample_stats: Dict[str, Any]
+    samples: Dict[str, Any], sample_stats: Dict[str, Any]
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Prepare samples and sample_stats by adding chain dimensions."""
     samples = _add_chain_dim(samples)
@@ -73,7 +82,9 @@ def _prepare_samples_and_stats(
 def _handle_log_posterior(sample_stats: Dict[str, Any]) -> None:
     """Add log posterior to sample_stats if likelihood and prior exist."""
     if {"log_likelihood", "log_prior"}.issubset(sample_stats.keys()):
-        sample_stats["lp"] = sample_stats["log_likelihood"] + sample_stats["log_prior"]
+        sample_stats["lp"] = (
+            sample_stats["log_likelihood"] + sample_stats["log_prior"]
+        )
 
 
 def _prepare_attributes_and_dims(
@@ -84,7 +95,7 @@ def _prepare_attributes_and_dims(
     dims: Dict[str, Any],
     sample_stats: Dict[str, Any],
     data,
-    model
+    model,
 ) -> None:
     """Prepare attributes, coordinates, and dimensions for InferenceData."""
     # Convert config to attributes (handle booleans)
@@ -92,19 +103,29 @@ def _prepare_attributes_and_dims(
         k: int(v) if isinstance(v, bool) else v
         for k, v in asdict(config).items()
     }
+
+    true_psd_attr = config_attrs.pop("true_psd", None)
+    if true_psd_attr is not None:
+        # Track that a reference PSD was supplied without serializing it twice
+        config_attrs["true_psd_provided"] = 1
+
     attributes.update(config_attrs)
 
     # Add ESS calculation
     try:
-        attributes.update(dict(ess=az.ess(samples).to_array().values.flatten()))
+        attributes.update(
+            dict(ess=az.ess(samples).to_array().values.flatten())
+        )
     except:
         attributes.update(dict(ess=[]))
 
     # Add base coordinates that both functions use
-    coords.update({
-        "chain": range(samples[list(samples.keys())[0]].shape[0]),
-        "draw": range(samples[list(samples.keys())[0]].shape[1]),
-    })
+    coords.update(
+        {
+            "chain": range(samples[list(samples.keys())[0]].shape[0]),
+            "draw": range(samples[list(samples.keys())[0]].shape[1]),
+        }
+    )
 
     # Add log posterior to dims if it was added to sample_stats
     if "lp" in sample_stats:
@@ -150,15 +171,14 @@ def _pack_spline_model(spline_model) -> Dataset:
     )
 
 
-
 def _create_univar_inference_data(
-        samples: dict,
-        sample_stats: dict,
-        config: "SamplerConfig",
-        periodogram: "Periodogram",
-        spline_model: "LogPSplines",
-        attributes: Dict[str, Any],
-    ) -> az.InferenceData:
+    samples: dict,
+    sample_stats: dict,
+    config: "SamplerConfig",
+    periodogram: "Periodogram",
+    spline_model: "LogPSplines",
+    attributes: Dict[str, Any],
+) -> az.InferenceData:
     """Create InferenceData for univariate case."""
     # Prepare samples and stats with chain dimensions
     samples, sample_stats = _prepare_samples_and_stats(samples, sample_stats)
@@ -174,7 +194,9 @@ def _create_univar_inference_data(
         if n_draws > n_pp
         else slice(None)
     )
-    pp_samples = np.array([spline_model(w) for w in weights_chain0[pp_idx]], dtype=np.float64)
+    pp_samples = np.array(
+        [spline_model(w) for w in weights_chain0[pp_idx]], dtype=np.float64
+    )
     pp_samples = np.exp(pp_samples)
 
     # Ensure arrays are numpy before rescaling
@@ -203,14 +225,25 @@ def _create_univar_inference_data(
     }
 
     # Prepare attributes and basic coords/dims using helper
-    _prepare_attributes_and_dims(config, attributes, samples, coords, dims, sample_stats, periodogram, spline_model)
+    _prepare_attributes_and_dims(
+        config,
+        attributes,
+        samples,
+        coords,
+        dims,
+        sample_stats,
+        periodogram,
+        spline_model,
+    )
 
     # Create base InferenceData
     idata = az.from_dict(
         posterior=samples,
         sample_stats=sample_stats,
         observed_data={"periodogram": observed_power_rescaled},
-        dims={k: v for k, v in dims.items() if k not in ["psd", "lp"]},  # Exclude manually added groups
+        dims={
+            k: v for k, v in dims.items() if k not in ["psd", "lp"]
+        },  # Exclude manually added groups
         coords=coords,
         attrs=attributes,
     )
@@ -226,25 +259,31 @@ def _create_univar_inference_data(
     idata.add_groups(spline_model=_pack_spline_model(spline_model))
     return idata
 
+
 def _create_multivar_inference_data(
-        samples: dict,
-        sample_stats: dict,
-        config: "SamplerConfig",
-        fft_data: MultivarFFT,
-        spline_model: "MultivariateLogPSplines",
-        attributes: Dict[str, Any],
-    ) -> az.InferenceData:
+    samples: dict,
+    sample_stats: dict,
+    config: "SamplerConfig",
+    fft_data: MultivarFFT,
+    spline_model: "MultivariateLogPSplines",
+    attributes: Dict[str, Any],
+) -> az.InferenceData:
     """Create InferenceData for multivariate case."""
     # Prepare samples and stats with chain dimensions
     samples, sample_stats = _prepare_samples_and_stats(samples, sample_stats)
 
     # Extract dimensions from a standard sample
-    first_sample_key = next((k for k, v in samples.items() if "weights_" in k), next(iter(samples.keys())))
+    first_sample_key = next(
+        (k for k, v in samples.items() if "weights_" in k),
+        next(iter(samples.keys())),
+    )
     sample_shape = samples[first_sample_key].shape
     n_chains, n_draws = sample_shape[:2]
 
     # Create posterior predictive samples
-    psd_samples = _compute_posterior_predictive_multivar(samples, spline_model, fft_data)
+    psd_samples = _compute_posterior_predictive_multivar(
+        samples, spline_model, fft_data
+    )
     n_pp = psd_samples.shape[0]
 
     # Ensure arrays are numpy before rescaling
@@ -256,7 +295,9 @@ def _create_multivar_inference_data(
     psd_samples_rescaled = np.zeros_like(psd_samples)
     for i in range(fft_data.n_dim):
         for j in range(fft_data.n_dim):
-            psd_samples_rescaled[:, :, i, j] = psd_samples[:, :, i, j] * config.scaling_factor
+            psd_samples_rescaled[:, :, i, j] = (
+                psd_samples[:, :, i, j] * config.scaling_factor
+            )
     # Also rescale observed FFT data
     observed_fft_re_rescaled = fft_y_re * np.sqrt(config.scaling_factor)
     observed_fft_im_rescaled = fft_y_im * np.sqrt(config.scaling_factor)
@@ -267,13 +308,20 @@ def _create_multivar_inference_data(
     observed_csd = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex64)
     for i in range(n_dim):
         for j in range(n_dim):
-            observed_csd[:, i, j] = (y_re[:, i] + 1j * y_im[:, i]) * np.conj(y_re[:, j] + 1j * y_im[:, j])
+            observed_csd[:, i, j] = (y_re[:, i] + 1j * y_im[:, i]) * np.conj(
+                y_re[:, j] + 1j * y_im[:, j]
+            )
             observed_csd[:, i, j] *= config.scaling_factor
     observed_csd = np.real(observed_csd)
     if config.verbose:
-        print(f"Rescaling multivariate posterior samples: max scaling ~{config.scaling_factor:.2e}")
+        print(
+            f"Rescaling multivariate posterior samples: max scaling ~{config.scaling_factor:.2e}"
+        )
     psd_samples = psd_samples_rescaled
-    observed_fft_data_rescaled = {"fft_re": observed_fft_re_rescaled, "fft_im": observed_fft_im_rescaled}
+    observed_fft_data_rescaled = {
+        "fft_re": observed_fft_re_rescaled,
+        "fft_im": observed_fft_im_rescaled,
+    }
     observed_psd_rescaled = {"periodogram": observed_csd}
 
     # Handle log posterior
@@ -311,28 +359,43 @@ def _create_multivar_inference_data(
         elif len(array_shape) == 2:
             dims[key] = ["chain", "draw"]
         else:  # Generic fallback
-            dims[key] = ["chain", "draw"] + [f"{key}_dim_{i}" for i in range(len(array_shape)-2)]
+            dims[key] = ["chain", "draw"] + [
+                f"{key}_dim_{i}" for i in range(len(array_shape) - 2)
+            ]
             for i in range(2, len(array_shape)):
                 coords[f"{key}_dim_{i-2}"] = range(array_shape[i])
 
     # Observed data and posterior predictive
-    dims.update({
-        "fft_re": ["freq", "channels"],
-        "fft_im": ["freq", "channels"],
-        "psd_matrix": ["pp_draw", "freq", "channels", "channels"],
-    })
+    dims.update(
+        {
+            "fft_re": ["freq", "channels"],
+            "fft_im": ["freq", "channels"],
+            "psd_matrix": ["pp_draw", "freq", "channels", "channels"],
+        }
+    )
 
     # Update attributes with multivar-specific values
-    attributes.update({
-        "data_type": "multivariate",
-        "n_channels": fft_data.n_dim,
-        "n_freq": fft_data.n_freq,
-        "n_theta": spline_model.n_theta,
-        "frequencies": np.array(fft_data.freq),
-    })
+    attributes.update(
+        {
+            "data_type": "multivariate",
+            "n_channels": fft_data.n_dim,
+            "n_freq": fft_data.n_freq,
+            "n_theta": spline_model.n_theta,
+            "frequencies": np.array(fft_data.freq),
+        }
+    )
 
     # Use shared attribute and dimension preparation
-    _prepare_attributes_and_dims(config, attributes, samples, coords, dims, sample_stats, fft_data, spline_model)
+    _prepare_attributes_and_dims(
+        config,
+        attributes,
+        samples,
+        coords,
+        dims,
+        sample_stats,
+        fft_data,
+        spline_model,
+    )
 
     # Create base InferenceData
     idata = az.from_dict(
@@ -340,9 +403,11 @@ def _create_multivar_inference_data(
         sample_stats=sample_stats,
         observed_data={
             "fft_re": np.array(observed_fft_data_rescaled["fft_re"]),
-            "fft_im": np.array(observed_fft_data_rescaled["fft_im"])
+            "fft_im": np.array(observed_fft_data_rescaled["fft_im"]),
         },
-        dims={k: v for k, v in dims.items() if k not in ["psd_matrix", "lp"]},  # Exclude manually added groups
+        dims={
+            k: v for k, v in dims.items() if k not in ["psd_matrix", "lp"]
+        },  # Exclude manually added groups
         coords=coords,
         attrs=attributes,
     )
@@ -350,7 +415,12 @@ def _create_multivar_inference_data(
     # Add posterior predictive samples
     idata.add_groups(
         posterior_psd=Dataset(
-            {"psd_matrix": DataArray(psd_samples, dims=["pp_draw", "freq", "channels", "channels"])},
+            {
+                "psd_matrix": DataArray(
+                    psd_samples,
+                    dims=["pp_draw", "freq", "channels", "channels"],
+                )
+            },
             coords={
                 "pp_draw": coords["pp_draw"],
                 "freq": coords["freq"],
@@ -365,7 +435,9 @@ def _create_multivar_inference_data(
 
 
 @jax.jit
-def batch_spline_eval(basis: jnp.ndarray, weights_batch: jnp.ndarray) -> jnp.ndarray:
+def batch_spline_eval(
+    basis: jnp.ndarray, weights_batch: jnp.ndarray
+) -> jnp.ndarray:
     """JIT-compiled batch spline evaluation over multiple weight vectors.
 
     Args:
@@ -378,22 +450,43 @@ def batch_spline_eval(basis: jnp.ndarray, weights_batch: jnp.ndarray) -> jnp.nda
     return jnp.sum(basis[None, :, :] * weights_batch[:, None, :], axis=-1)
 
 
-def _pack_model_component(model, prefix: str, data: Dict[str, Any], coords: Dict[str, Any]) -> None:
+def _pack_model_component(
+    model, prefix: str, data: Dict[str, Any], coords: Dict[str, Any]
+) -> None:
     """Pack a single model component into data and coords dicts."""
-    data.update({
-        f"{prefix}_knots": ([f"{prefix}_knots_dim"], np.array(model.knots)),
-        f"{prefix}_basis": ([f"{prefix}_freq", f"{prefix}_weights_dim"], np.array(model.basis)),
-        f"{prefix}_penalty_matrix": ([f"{prefix}_weights_dim_row", f"{prefix}_weights_dim_col"],
-                                     np.array(model.penalty_matrix)),
-        f"{prefix}_parametric_model": ([f"{prefix}_freq"], np.array(model.parametric_model)),
-    })
-    coords.update({
-        f"{prefix}_knots_dim": np.arange(len(model.knots)),
-        f"{prefix}_weights_dim": np.arange(model.basis.shape[1]),
-        f"{prefix}_weights_dim_row": np.arange(model.penalty_matrix.shape[0]),
-        f"{prefix}_weights_dim_col": np.arange(model.penalty_matrix.shape[1]),
-        f"{prefix}_freq": np.arange(model.basis.shape[0]),
-    })
+    data.update(
+        {
+            f"{prefix}_knots": (
+                [f"{prefix}_knots_dim"],
+                np.array(model.knots),
+            ),
+            f"{prefix}_basis": (
+                [f"{prefix}_freq", f"{prefix}_weights_dim"],
+                np.array(model.basis),
+            ),
+            f"{prefix}_penalty_matrix": (
+                [f"{prefix}_weights_dim_row", f"{prefix}_weights_dim_col"],
+                np.array(model.penalty_matrix),
+            ),
+            f"{prefix}_parametric_model": (
+                [f"{prefix}_freq"],
+                np.array(model.parametric_model),
+            ),
+        }
+    )
+    coords.update(
+        {
+            f"{prefix}_knots_dim": np.arange(len(model.knots)),
+            f"{prefix}_weights_dim": np.arange(model.basis.shape[1]),
+            f"{prefix}_weights_dim_row": np.arange(
+                model.penalty_matrix.shape[0]
+            ),
+            f"{prefix}_weights_dim_col": np.arange(
+                model.penalty_matrix.shape[1]
+            ),
+            f"{prefix}_freq": np.arange(model.basis.shape[0]),
+        }
+    )
 
 
 def _pack_spline_model_multivar(spline_model) -> Dataset:
@@ -414,9 +507,13 @@ def _pack_spline_model_multivar(spline_model) -> Dataset:
 
     # Pack off-diagonal models if they exist
     if spline_model.offdiag_re_model is not None:
-        _pack_model_component(spline_model.offdiag_re_model, "offdiag_re", data, coords)
+        _pack_model_component(
+            spline_model.offdiag_re_model, "offdiag_re", data, coords
+        )
     if spline_model.offdiag_im_model is not None:
-        _pack_model_component(spline_model.offdiag_im_model, "offdiag_im", data, coords)
+        _pack_model_component(
+            spline_model.offdiag_im_model, "offdiag_im", data, coords
+        )
 
     return Dataset(
         {
@@ -431,14 +528,18 @@ def _pack_spline_model_multivar(spline_model) -> Dataset:
     )
 
 
-def _compute_posterior_predictive_multivar(samples: Dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT) -> jnp.ndarray:
+def _compute_posterior_predictive_multivar(
+    samples: Dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT
+) -> jnp.ndarray:
     """Compute posterior predictive PSD matrices from samples."""
     # Extract samples - handle different possible sample structures
     if "log_delta_sq" in samples:
         log_delta_sq = samples["log_delta_sq"]
         # Remove chain dimension if present (take first chain only for posterior predictive)
         if log_delta_sq.ndim == 4:  # (n_chains, n_draws, n_freq, n_channels)
-            log_delta_sq = log_delta_sq[0]  # Take first chain: (n_draws, n_freq, n_channels)
+            log_delta_sq = log_delta_sq[
+                0
+            ]  # Take first chain: (n_draws, n_freq, n_channels)
         theta_re = samples.get("theta_re")
         theta_im = samples.get("theta_im")
         # Default to zeros if not present
@@ -454,9 +555,15 @@ def _compute_posterior_predictive_multivar(samples: Dict[str, jnp.ndarray], spli
                 theta_im = theta_im[0]
     else:
         # Reconstruct from individual component samples
-        log_delta_sq = _reconstruct_log_delta_sq(samples, spline_model, fft_data)
-        theta_re = _reconstruct_theta_params(samples, spline_model, fft_data, "re")
-        theta_im = _reconstruct_theta_params(samples, spline_model, fft_data, "im")
+        log_delta_sq = _reconstruct_log_delta_sq(
+            samples, spline_model, fft_data
+        )
+        theta_re = _reconstruct_theta_params(
+            samples, spline_model, fft_data, "re"
+        )
+        theta_im = _reconstruct_theta_params(
+            samples, spline_model, fft_data, "im"
+        )
 
     # Use spline model's reconstruction method
     return spline_model.reconstruct_psd_matrix(
@@ -464,20 +571,26 @@ def _compute_posterior_predictive_multivar(samples: Dict[str, jnp.ndarray], spli
     )
 
 
-def _reconstruct_log_delta_sq(samples: Dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT) -> jnp.ndarray:
+def _reconstruct_log_delta_sq(
+    samples: Dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT
+) -> jnp.ndarray:
     """Reconstruct log_delta_sq from individual diagonal component samples."""
     # Get all bases once
     all_bases, _ = spline_model.get_all_bases_and_penalties()
 
     first_sample = next(iter(samples.values()))
     n_chains = first_sample.shape[0]  # Assume chain dim added
-    n_samples = first_sample.shape[0] * first_sample.shape[1]  # Total draws across chains
+    n_samples = (
+        first_sample.shape[0] * first_sample.shape[1]
+    )  # Total draws across chains
     log_delta_components = []
 
     for j in range(fft_data.n_dim):
         weights_key = f"weights_delta_{j}"
         if weights_key in samples:
-            weights_full = samples[weights_key]  # Shape: (n_chains, n_draws, n_weights)
+            weights_full = samples[
+                weights_key
+            ]  # Shape: (n_chains, n_draws, n_weights)
             # For posterior predictive, use first chain only
             weights = weights_full[0]  # Shape: (n_draws, n_weights)
             # Vectorized spline evaluation using JAX
@@ -485,13 +598,20 @@ def _reconstruct_log_delta_sq(samples: Dict[str, jnp.ndarray], spline_model, fft
             log_delta_components.append(log_delta_j)
 
     if log_delta_components:
-        return jnp.stack(log_delta_components, axis=2)  # (n_samples, n_freq, n_channels)
+        return jnp.stack(
+            log_delta_components, axis=2
+        )  # (n_samples, n_freq, n_channels)
     else:
         # Fallback
         return jnp.zeros((n_samples, fft_data.n_freq, fft_data.n_dim))
 
 
-def _reconstruct_theta_params(samples: Dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT, param_type: str) -> jnp.ndarray:
+def _reconstruct_theta_params(
+    samples: Dict[str, jnp.ndarray],
+    spline_model,
+    fft_data: MultivarFFT,
+    param_type: str,
+) -> jnp.ndarray:
     """Reconstruct theta parameters from samples."""
     # Get all bases once
     all_bases, _ = spline_model.get_all_bases_and_penalties()
@@ -505,11 +625,15 @@ def _reconstruct_theta_params(samples: Dict[str, jnp.ndarray], spline_model, fft
         # Vectorized spline evaluation using JAX
         theta_base = batch_spline_eval(all_bases[basis_idx], weights)
         # Tile to match expected shape
-        return jnp.tile(theta_base[:, :, None], (1, 1, max(1, spline_model.n_theta)))
+        return jnp.tile(
+            theta_base[:, :, None], (1, 1, max(1, spline_model.n_theta))
+        )
     else:
         first_sample = next(iter(samples.values()))
         n_samples = first_sample.shape[1]  # n_draws
-        return jnp.zeros((n_samples, fft_data.n_freq, max(1, spline_model.n_theta)))
+        return jnp.zeros(
+            (n_samples, fft_data.n_freq, max(1, spline_model.n_theta))
+        )
 
 
 def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
@@ -517,17 +641,24 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
     diagnostics = {}
 
     # Save true_psd in attributes
-    diagnostics["true_psd"] = config.true_psd
+    diagnostics["true_psd"] = np.asarray(config.true_psd)
+    coverage_recorded = False
+    coverage_interval = (5.0, 95.0)
+    coverage_level = 0.90
 
     # Compute relative integrated absolute error (RIAE) using stored posterior_psd
     if isinstance(data, Periodogram):
         # Univariate case - use idata.posterior_psd.psd
         if "psd" in idata.posterior_psd:
-            psd_samples = idata.posterior_psd["psd"].values  # Shape: (pp_draw, freq)
+            psd_samples = idata.posterior_psd[
+                "psd"
+            ].values  # Shape: (pp_draw, freq)
             median_psd = np.median(psd_samples, axis=0)
 
             riae = _compute_riae(median_psd, config.true_psd, data.freqs)
-            riae_errorbars = _compute_riae_errorbars(psd_samples, config.true_psd, data.freqs)
+            riae_errorbars = _compute_riae_errorbars(
+                psd_samples, config.true_psd, data.freqs
+            )
 
             diagnostics["riae"] = riae
             # Store errorbars as list/tuple instead of dict for netCDF serialization
@@ -536,23 +667,46 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
                 riae_errorbars["q25"],
                 riae_errorbars["median"],
                 riae_errorbars["q75"],
-                riae_errorbars["q95"]
+                riae_errorbars["q95"],
             ]
+
+            coverage = _compute_coverage(
+                psd_samples, config.true_psd, *coverage_interval
+            )
+            diagnostics["coverage"] = coverage
+            coverage_recorded = True
 
     elif isinstance(data, MultivarFFT):
         # Multivariate case - use idata.posterior_psd.psd_matrix
         if "psd_matrix" in idata.posterior_psd:
-            psd_matrix_samples = idata.posterior_psd["psd_matrix"].values  # Shape: (pp_draw, freq, channels, channels)
+            psd_matrix_samples = idata.posterior_psd[
+                "psd_matrix"
+            ].values  # Shape: (pp_draw, freq, channels, channels)
             median_psd_matrix = np.median(psd_matrix_samples, axis=0)
 
             # Compute RIAE for each diagonal component (auto-spectra)
             for i in range(data.n_dim):
-                median_psd = median_psd_matrix[:, i, i]  # Auto-spectrum for channel i
-                true_psd_component = config.true_psd[:, i, i] if config.true_psd is not None and config.true_psd.ndim == 3 else None
+                median_psd = median_psd_matrix[
+                    :, i, i
+                ]  # Auto-spectrum for channel i
+                true_psd_component = (
+                    config.true_psd[:, i, i]
+                    if config.true_psd is not None
+                    and config.true_psd.ndim == 3
+                    else None
+                )
                 if true_psd_component is not None:
-                    riae = _compute_riae(median_psd, true_psd_component, np.array(data.freq))
-                    psd_component_samples = psd_matrix_samples[:, :, i, i]  # (pp_draw, freq)
-                    riae_errorbars = _compute_riae_errorbars(psd_component_samples, true_psd_component, np.array(data.freq))
+                    riae = _compute_riae(
+                        median_psd, true_psd_component, np.array(data.freq)
+                    )
+                    psd_component_samples = psd_matrix_samples[
+                        :, :, i, i
+                    ]  # (pp_draw, freq)
+                    riae_errorbars = _compute_riae_errorbars(
+                        psd_component_samples,
+                        true_psd_component,
+                        np.array(data.freq),
+                    )
                     diagnostics[f"riae_ch{i}"] = riae
                     # Store errorbars as list/tuple instead of dict for netCDF serialization
                     diagnostics[f"riae_errorbars_ch{i}"] = [
@@ -560,20 +714,36 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
                         riae_errorbars["q25"],
                         riae_errorbars["median"],
                         riae_errorbars["q75"],
-                        riae_errorbars["q95"]
+                        riae_errorbars["q95"],
                     ]
+
+                    coverage = _compute_coverage(
+                        psd_component_samples,
+                        true_psd_component,
+                        *coverage_interval,
+                    )
+                    diagnostics[f"coverage_ch{i}"] = coverage
+                    coverage_recorded = True
+
+    if coverage_recorded:
+        diagnostics["coverage_interval"] = list(coverage_interval)
+        diagnostics["coverage_level"] = coverage_level
 
     return diagnostics
 
 
-def _compute_riae(median_psd: np.ndarray, true_psd: np.ndarray, freqs: np.ndarray) -> float:
+def _compute_riae(
+    median_psd: np.ndarray, true_psd: np.ndarray, freqs: np.ndarray
+) -> float:
     """Compute relative integrated absolute error (RIAE)."""
     numerator = np.trapz(np.abs(median_psd - true_psd), freqs)
     denominator = np.trapz(true_psd, freqs)
     return float(numerator / denominator)
 
 
-def _compute_riae_errorbars(psd_samples: np.ndarray, true_psd: np.ndarray, freqs: np.ndarray) -> Dict[str, float]:
+def _compute_riae_errorbars(
+    psd_samples: np.ndarray, true_psd: np.ndarray, freqs: np.ndarray
+) -> Dict[str, float]:
     """Compute errorbars for RIAE based on quantiles from posterior predictive samples."""
     riae_samples = []
     for psd in psd_samples:
@@ -588,3 +758,17 @@ def _compute_riae_errorbars(psd_samples: np.ndarray, true_psd: np.ndarray, freqs
         "q75": float(np.percentile(riae_samples, 75)),
         "q95": float(np.percentile(riae_samples, 95)),
     }
+
+
+def _compute_coverage(
+    psd_samples: np.ndarray,
+    true_psd: np.ndarray,
+    lower_q: float,
+    upper_q: float,
+) -> float:
+    """Compute the fraction of frequencies where the true PSD lies within a central interval."""
+    lower = np.percentile(psd_samples, lower_q, axis=0)
+    upper = np.percentile(psd_samples, upper_q, axis=0)
+    true_psd = np.asarray(true_psd)
+    coverage_mask = (true_psd >= lower) & (true_psd <= upper)
+    return float(np.mean(coverage_mask))

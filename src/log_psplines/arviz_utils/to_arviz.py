@@ -8,6 +8,7 @@ import arviz as az
 import jax
 import jax.numpy as jnp
 import numpy as np
+from scipy.integrate import simpson
 from xarray import DataArray, Dataset
 
 from log_psplines.datatypes import MultivarFFT, Periodogram
@@ -740,9 +741,9 @@ def _compute_riae(
     median_psd: np.ndarray, true_psd: np.ndarray, freqs: np.ndarray
 ) -> float:
     """Compute relative integrated absolute error (RIAE)."""
-    numerator = np.trapz(np.abs(median_psd - true_psd), freqs)
-    denominator = np.trapz(true_psd, freqs)
-    return float(numerator / denominator)
+    numerator = float(simpson(np.abs(median_psd - true_psd), x=freqs))
+    denominator = float(simpson(true_psd, x=freqs))
+    return float(numerator / denominator) if denominator != 0 else float("nan")
 
 
 def _compute_matrix_riae(
@@ -750,7 +751,19 @@ def _compute_matrix_riae(
     true_psd_matrix: np.ndarray,
     freqs: np.ndarray,
 ) -> float:
-    """Compute RIAE for multivariate PSD matrix using Frobenius norm."""
+    """Compute RIAE for multivariate PSD matrix using the Frobenius norm.
+
+    The diagnostic integrates the relative deviation of the estimated PSD matrix
+    from the reference matrix using
+
+    .. math::
+
+        \operatorname{RIAE} = \frac{\int \! \lVert \widehat{S}(f) - S(f) \rVert_F \, \mathrm{d}f}{\int \! \lVert S(f) \rVert_F \, \mathrm{d}f},
+
+    where :math:`\lVert \cdot \rVert_F` is the matrix Frobenius norm and the
+    integrals are approximated numerically via Simpson's rule over the frequency
+    grid.
+    """
     # Compute Frobenius norm for each frequency
 
     diff_frobenius = np.array(
@@ -764,10 +777,10 @@ def _compute_matrix_riae(
     )
 
     # Integrate using trapezoidal rule (or sum for uniform freq spacing)
-    numerator = np.trapz(diff_frobenius, freqs)
-    denominator = np.trapz(true_frobenius, freqs)
+    numerator = float(simpson(diff_frobenius, x=freqs))
+    denominator = float(simpson(true_frobenius, x=freqs))
 
-    return float(numerator / denominator)
+    return float(numerator / denominator) if denominator != 0 else float("nan")
 
 
 def _compute_riae_errorbars(

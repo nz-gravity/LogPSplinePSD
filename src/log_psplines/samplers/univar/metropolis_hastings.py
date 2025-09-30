@@ -2,7 +2,6 @@
 Metropolis-Hastings sampler for univariate PSD estimation.
 """
 
-import tempfile
 import time
 from dataclasses import dataclass
 from functools import partial
@@ -345,34 +344,6 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
             )
 
         return self.to_arviz(samples, sample_stats)
-
-    def _get_lnz(
-        self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
-    ) -> Tuple[float, float]:
-        """Compute log normalizing constant using morphZ."""
-        if not self.config.compute_lnz:
-            return np.nan, np.nan
-
-        post_smp = np.concatenate(
-            [
-                samples["weights"],
-                samples["phi"][:, None],
-                samples["delta"][:, None],
-            ],
-            axis=1,
-        )
-        lp = sample_stats["lp"]
-
-        def lp_fn(sample):
-            weights = sample[: self.n_weights]
-            phi = sample[self.n_weights]
-            delta = sample[self.n_weights + 1]
-            return log_posterior(weights, phi, delta, **self._logp_kwargs)
-
-        lnz_res = morphZ.evidence(
-            post_smp, lp, lp_fn, output_path=tempfile.gettempdir()
-        )[0]
-        return float(lnz_res[0]), float(lnz_res[1])
 
     @property
     def _logp_kwargs(self) -> Dict[str, Any]:

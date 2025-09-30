@@ -7,11 +7,12 @@
 #SBATCH --mem=4G
 #SBATCH --cpus-per-task=1
 
-module load python/3.9
+
+module --force purge && ml gcc/12.3.0 python/3.11.3 && source /fred/oz303/avajpeyi/venvs/jax_cpu_venv/bin/activate
 
 # Set N values
-N_VALUES=(256 512 1024)
-K=10
+N_VALUES=(2048 1024 512 256)
+K=15
 NREP=10 # Number of replicates per array task
 
 OUTDIR="out_changing_n"

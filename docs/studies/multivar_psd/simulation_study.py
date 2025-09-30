@@ -15,7 +15,7 @@ from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def simulation_study(outdir: str, N=1024, K=7, SEED=42):
+def simulation_study(outdir: str = "out", N=1024, K=7, SEED=42):
     print(f">>>> Running simulation with N={N}, K={K}, SEED={SEED} <<<<")
     outdir = f"{HERE}/{outdir}/seed_{SEED}_N{N}_K{K}"
     os.makedirs(outdir, exist_ok=True)

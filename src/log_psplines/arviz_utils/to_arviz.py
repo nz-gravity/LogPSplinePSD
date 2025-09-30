@@ -676,6 +676,8 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
 
             diagnostics["riae"] = riae
             diagnostics["ci_coverage"] = ci_coverage
+            diagnostics["coverage"] = ci_coverage
+            coverage_recorded = True
             # Store errorbars as list/tuple instead of dict for netCDF serialization
             diagnostics["riae_errorbars"] = [
                 riae_errorbars["q05"],
@@ -724,6 +726,8 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
 
                 diagnostics["riae_matrix"] = riae_matrix
                 diagnostics["ci_coverage"] = ci_coverage_matrix
+                diagnostics["coverage"] = ci_coverage_matrix
+                coverage_recorded = True
                 diagnostics["riae_matrix_errorbars"] = [
                     riae_matrix_errorbars["q05"],
                     riae_matrix_errorbars["q25"],
@@ -733,6 +737,10 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
                 ]
 
         # Do not compute per-channel RIAE for multivariate - use matrix RIAE only
+
+    if coverage_recorded:
+        diagnostics["coverage_interval"] = list(coverage_interval)
+        diagnostics["coverage_level"] = coverage_level
 
     return diagnostics
 

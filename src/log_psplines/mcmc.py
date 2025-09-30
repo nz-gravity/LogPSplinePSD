@@ -107,15 +107,10 @@ def run_mcmc(
         ArviZ InferenceData object with MCMC results
     """
 
-    # Scale true_psd to match standardized data if necessary
+    # Keep true_psd on the original data scale. Any standardisation applied
+    # to the observed data is tracked separately via the scaling_factor and
+    # consistently undone inside ArviZ conversion before comparisons.
     scaled_true_psd = true_psd
-    if true_psd is not None and isinstance(
-        data, (Timeseries, MultivariateTimeseries)
-    ):
-        # Data will be standardized, so true_psd needs to be scaled to match
-        # First get the scaling factor that will be used
-        standardized_ts = data.standardise_for_psd()
-        scaled_true_psd = true_psd * standardized_ts.scaling_factor
 
     # Handle raw timeseries input - standardize automatically
     processed_data = None

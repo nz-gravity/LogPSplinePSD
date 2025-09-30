@@ -10,12 +10,16 @@ import arviz as az
 import jax
 import jax.numpy as jnp
 import numpyro
-import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
 from ..base_sampler import SamplerConfig
-from ..utils import build_log_density_fn, evaluate_log_density_batch
+from ..utils import (
+    build_log_density_fn,
+    evaluate_log_density_batch,
+    pspline_hyperparameter_initials,
+    sample_pspline_block,
+)
 from .multivar_base import MultivarBaseSampler
 
 
@@ -65,8 +69,8 @@ def multivariate_psplines_model(
     y_im: jnp.ndarray,  # FFT imaginary parts
     Z_re: jnp.ndarray,  # Design matrix real parts
     Z_im: jnp.ndarray,  # Design matrix imaginary parts
-    all_bases,  # List of basis matrices
-    all_penalties,  # List of penalty matrices
+    all_bases,
+    all_penalties,
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
     alpha_delta: float = 1e-4,
@@ -85,56 +89,61 @@ def multivariate_psplines_model(
     # Initialize total log prior accumulator
     log_prior_total = jnp.array(0.0)
 
-    def _sample_weight_block(
-        delta_name: str,
-        phi_name: str,
-        weights_name: str,
-    ) -> jnp.ndarray:
-        nonlocal component_idx, log_prior_total
-
-        penalty = all_penalties[component_idx]
-        basis = all_bases[component_idx]
-        k = penalty.shape[0]
-
-        delta_dist = dist.Gamma(alpha_delta, beta_delta)
-        delta = numpyro.sample(delta_name, delta_dist)
-        log_prior_total = log_prior_total + delta_dist.log_prob(delta)
-
-        phi_dist = dist.Gamma(alpha_phi, delta * beta_phi)
-        phi = numpyro.sample(phi_name, phi_dist)
-        log_prior_total = log_prior_total + phi_dist.log_prob(phi)
-
-        base_normal = dist.Normal(0, 1).expand((k,)).to_event(1)
-        weights = numpyro.sample(weights_name, base_normal)
-
-        wPw = jnp.dot(weights, jnp.dot(penalty, weights))
-        log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-        log_prior_adjustment = log_prior_w - base_normal.log_prob(weights)
-        numpyro.factor(f"weights_prior_{weights_name}", log_prior_adjustment)
-        log_prior_total = log_prior_total + log_prior_adjustment
-
-        component_idx += 1
-        return basis @ weights
-
     # Diagonal components (one per channel)
     for j in range(n_dim):  # Now n_dim is a concrete Python int
-        block_eval = _sample_weight_block(
-            f"delta_{j}", f"phi_delta_{j}", f"weights_delta_{j}"
+        penalty = all_penalties[component_idx]
+        basis = all_bases[component_idx]
+        block = sample_pspline_block(
+            delta_name=f"delta_{j}",
+            phi_name=f"phi_delta_{j}",
+            weights_name=f"weights_delta_{j}",
+            penalty_matrix=penalty,
+            alpha_phi=alpha_phi,
+            beta_phi=beta_phi,
+            alpha_delta=alpha_delta,
+            beta_delta=beta_delta,
         )
-        log_delta_components.append(block_eval)
+        component_eval = jnp.einsum("nk,k->n", basis, block["weights"])
+        log_delta_components.append(component_eval)
+        log_prior_total = log_prior_total + block["log_prior_total"]
+        component_idx += 1
 
     log_delta_sq = jnp.stack(log_delta_components, axis=1)
 
     # Off-diagonal components (if multivariate)
     if n_theta > 0:
-        theta_re_base = _sample_weight_block(
-            "delta_theta_re", "phi_theta_re", "weights_theta_re"
+        penalty = all_penalties[component_idx]
+        basis = all_bases[component_idx]
+        theta_re_block = sample_pspline_block(
+            delta_name="delta_theta_re",
+            phi_name="phi_theta_re",
+            weights_name="weights_theta_re",
+            penalty_matrix=penalty,
+            alpha_phi=alpha_phi,
+            beta_phi=beta_phi,
+            alpha_delta=alpha_delta,
+            beta_delta=beta_delta,
         )
+        theta_re_base = jnp.einsum("nk,k->n", basis, theta_re_block["weights"])
+        log_prior_total = log_prior_total + theta_re_block["log_prior_total"]
+        component_idx += 1
         theta_re = jnp.tile(theta_re_base[:, None], (1, max(1, n_theta)))
 
-        theta_im_base = _sample_weight_block(
-            "delta_theta_im", "phi_theta_im", "weights_theta_im"
+        penalty = all_penalties[component_idx]
+        basis = all_bases[component_idx]
+        theta_im_block = sample_pspline_block(
+            delta_name="delta_theta_im",
+            phi_name="phi_theta_im",
+            weights_name="weights_theta_im",
+            penalty_matrix=penalty,
+            alpha_phi=alpha_phi,
+            beta_phi=beta_phi,
+            alpha_delta=alpha_delta,
+            beta_delta=beta_delta,
         )
+        theta_im_base = jnp.einsum("nk,k->n", basis, theta_im_block["weights"])
+        log_prior_total = log_prior_total + theta_im_block["log_prior_total"]
+        component_idx += 1
         theta_im = jnp.tile(theta_im_base[:, None], (1, max(1, n_theta)))
     else:
         theta_re = jnp.zeros((n_freq, 0))
@@ -272,36 +281,31 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         """Get initial values for all parameters."""
         init_values = {}
 
+        delta_init, phi_init = pspline_hyperparameter_initials(
+            alpha_phi=self.config.alpha_phi,
+            beta_phi=self.config.beta_phi,
+            alpha_delta=self.config.alpha_delta,
+            beta_delta=self.config.beta_delta,
+        )
+
         # Initialize diagonal components
         for j in range(self.n_channels):
-            init_values[f"delta_{j}"] = (
-                self.config.alpha_delta / self.config.beta_delta
-            )
-            init_values[f"phi_delta_{j}"] = (
-                self.config.alpha_phi / self.config.beta_phi
-            )
+            init_values[f"delta_{j}"] = delta_init
+            init_values[f"phi_delta_{j}"] = phi_init
             init_values[f"weights_delta_{j}"] = (
                 self.spline_model.diagonal_models[j].weights
             )
 
         # Initialize off-diagonal components if needed
         if self.n_theta > 0:
-            init_values["delta_theta_re"] = (
-                self.config.alpha_delta / self.config.beta_delta
-            )
-            init_values["phi_theta_re"] = (
-                self.config.alpha_phi / self.config.beta_phi
-            )
+            init_values["delta_theta_re"] = delta_init
+            init_values["phi_theta_re"] = phi_init
             init_values["weights_theta_re"] = (
                 self.spline_model.offdiag_re_model.weights
             )
 
-            init_values["delta_theta_im"] = (
-                self.config.alpha_delta / self.config.beta_delta
-            )
-            init_values["phi_theta_im"] = (
-                self.config.alpha_phi / self.config.beta_phi
-            )
+            init_values["delta_theta_im"] = delta_init
+            init_values["phi_theta_im"] = phi_init
             init_values["weights_theta_im"] = (
                 self.spline_model.offdiag_im_model.weights
             )

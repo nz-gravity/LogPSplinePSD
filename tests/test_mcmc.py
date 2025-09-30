@@ -15,6 +15,7 @@ def test_multivar_mcmc(outdir, test_mode):
     """Test basic multivariate PSD analysis with VARMA data."""
     outdir = f"{outdir}/out_mcmc/multivar"
     os.makedirs(outdir, exist_ok=True)
+    print(f"++++ Running multivariate MCMC test {test_mode} ++++")
 
     n = 256
     n_knots = 10
@@ -123,10 +124,14 @@ def test_multivar_mcmc(outdir, test_mode):
         diag_yscale="log",
     )
 
+    print(f"++++ multivariate MCMC test {test_mode} COMPLETE ++++")
+
 
 def test_mcmc(outdir: str, test_mode: str):
     outdir = os.path.join(outdir, "out_mcmc/univar")
     os.makedirs(outdir, exist_ok=True)
+
+    print(f"++++ Running univariate MCMC test {test_mode} ++++")
 
     psd_scale = 1  # e-42
 
@@ -147,9 +152,6 @@ def test_mcmc(outdir: str, test_mode: str):
     print(f"{ar_data.ts}")
 
     for sampler in sampler_names:
-        # compute_lnz = (
-        #     sampler == "mh"
-        # )  # only compute Lnz for MH sampler (OTHER IS BROKEN)
         sampler_out = f"{outdir}/out_{sampler}"
         idata = run_mcmc(
             ar_data.ts,
@@ -212,3 +214,5 @@ def test_mcmc(outdir: str, test_mode: str):
 
     fig = plot_pdgrm(idata=idata, interactive=True)  # test interactive mode
     fig.write_html(os.path.join(outdir, "test_mcmc_interactive.html"))
+
+    print(f"++++ univariate MCMC test {test_mode} COMPLETE ++++")

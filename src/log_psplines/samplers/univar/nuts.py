@@ -10,12 +10,16 @@ import arviz as az
 import jax
 import jax.numpy as jnp
 import numpyro
-import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
 from ..base_sampler import SamplerConfig
-from ..utils import build_log_density_fn, evaluate_log_density_batch
+from ..utils import (
+    build_log_density_fn,
+    evaluate_log_density_batch,
+    pspline_hyperparameter_initials,
+    sample_pspline_block,
+)
 from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
 
@@ -38,34 +42,28 @@ def bayesian_model(
     beta_delta,
 ):
     """NumPyro model for univariate PSD estimation."""
-    delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
-    delta = numpyro.sample("delta", delta_dist)
-
-    phi_dist = dist.Gamma(concentration=alpha_phi, rate=delta * beta_phi)
-    phi = numpyro.sample("phi", phi_dist)
-
-    # Sample weights from standard Normal and adjust to desired MVN prior
-    k = penalty_matrix.shape[0]
-    base_normal = dist.Normal(0, 1).expand([k]).to_event(1)
-    w = numpyro.sample("weights", base_normal)
-
-    wPw = jnp.dot(w, jnp.dot(penalty_matrix, w))
-    log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-    base_log_prob = base_normal.log_prob(w)
-    log_prior_adjustment = log_prior_w - base_log_prob
-
-    lnl = log_likelihood(w, log_pdgrm, lnspline_basis, ln_parametric)
-
-    # Gamma prior contributions for phi and delta
-    log_prior_phi = phi_dist.log_prob(phi)
-    log_prior_delta = delta_dist.log_prob(delta)
-
-    numpyro.factor("ln_prior", log_prior_adjustment)
-    numpyro.factor("ln_likelihood", lnl)
-    numpyro.deterministic(
-        "lp",
-        log_prior_adjustment + log_prior_phi + log_prior_delta + lnl,
+    block = sample_pspline_block(
+        delta_name="delta",
+        phi_name="phi",
+        weights_name="weights",
+        penalty_matrix=penalty_matrix,
+        alpha_phi=alpha_phi,
+        beta_phi=beta_phi,
+        alpha_delta=alpha_delta,
+        beta_delta=beta_delta,
+        factor_name="ln_prior",
     )
+
+    weights = block["weights"]
+    log_prior_total = (
+        block["log_prior_adjustment"]
+        + block["log_prior_phi"]
+        + block["log_prior_delta"]
+    )
+
+    lnl = log_likelihood(weights, log_pdgrm, lnspline_basis, ln_parametric)
+    numpyro.factor("ln_likelihood", lnl)
+    numpyro.deterministic("lp", log_prior_total + lnl)
 
 
 class NUTSSampler(UnivarBaseSampler):
@@ -95,8 +93,13 @@ class NUTSSampler(UnivarBaseSampler):
     ) -> az.InferenceData:
         """Run NUTS sampling."""
         # Initialize starting values
-        delta_0 = self.config.alpha_delta / self.config.beta_delta
-        phi_0 = self.config.alpha_phi / (self.config.beta_phi * delta_0)
+        delta_0, phi_0 = pspline_hyperparameter_initials(
+            alpha_phi=self.config.alpha_phi,
+            beta_phi=self.config.beta_phi,
+            alpha_delta=self.config.alpha_delta,
+            beta_delta=self.config.beta_delta,
+            divide_phi_by_delta=True,
+        )
         init_strategy = init_to_value(
             values=dict(
                 delta=delta_0, phi=phi_0, weights=self.spline_model.weights
@@ -188,14 +191,21 @@ class NUTSSampler(UnivarBaseSampler):
                 print("Pre-compiling NumPyro model...")
 
             # Initialize model with dummy data to trigger compilation
+            delta_phi_default = pspline_hyperparameter_initials(
+                alpha_phi=self.config.alpha_phi,
+                beta_phi=self.config.beta_phi,
+                alpha_delta=self.config.alpha_delta,
+                beta_delta=self.config.beta_delta,
+            )
+
             init_params = initialize_model(
                 self.rng_key,
                 bayesian_model,
                 model_kwargs=self._logp_kwargs,
                 init_strategy=init_to_value(
                     values=dict(
-                        delta=self.config.alpha_delta / self.config.beta_delta,
-                        phi=self.config.alpha_phi / self.config.beta_phi,
+                        delta=delta_phi_default[0],
+                        phi=delta_phi_default[1],
                         weights=self.spline_model.weights,
                     )
                 ),

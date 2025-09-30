@@ -93,9 +93,13 @@ class MultivarBaseSampler(BaseSampler):
         self.n_theta = self.spline_model.n_theta
 
         # Get all bases and penalties for NumPyro model
-        self.all_bases, self.all_penalties = (
+        all_bases, all_penalties = (
             self.spline_model.get_all_bases_and_penalties()
         )
+        self.all_bases = tuple(
+            jnp.asarray(basis, dtype=jnp.float32) for basis in all_bases
+        )
+        self.all_penalties = all_penalties
 
         # FFT data arrays for JAX operations
         self.y_re = jnp.array(self.fft_data.y_re)

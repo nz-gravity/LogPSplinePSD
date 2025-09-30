@@ -54,7 +54,9 @@ class UnivarBaseSampler(BaseSampler):
         self.n_weights = len(self.spline_model.weights)
         self.log_pdgrm = jnp.log(self.periodogram.power)
         self.penalty_matrix = jnp.array(self.spline_model.penalty_matrix)
-        self.basis_matrix = jnp.array(self.spline_model.basis)
+        self.basis_matrix = jnp.asarray(
+            self.spline_model.basis, dtype=jnp.float32
+        )
         self.log_parametric = jnp.array(self.spline_model.log_parametric_model)
 
     @property

@@ -4,6 +4,7 @@ NUTS sampler for univariate PSD estimation.
 
 import time
 from dataclasses import dataclass
+from typing import Dict
 
 import arviz as az
 import jax
@@ -11,9 +12,10 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
-from numpyro.infer.util import init_to_value, log_density
+from numpyro.infer.util import init_to_value
 
 from ..base_sampler import SamplerConfig
+from ..utils import build_log_density_fn, evaluate_log_density_batch
 from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
 
@@ -76,7 +78,9 @@ class NUTSSampler(UnivarBaseSampler):
         self.config: NUTSConfig = config  # Type hint for IDE
 
         # Pre-build JIT-compiled log-posterior for morphZ evidence
-        self._logpost_fn = self._build_log_density_fn()
+        self._logpost_fn = build_log_density_fn(
+            bayesian_model, self._logp_kwargs
+        )
 
         # Pre-compile NumPyro model for faster warmup
         self._compile_model()
@@ -151,14 +155,13 @@ class NUTSSampler(UnivarBaseSampler):
 
         # Extract samples and convert to ArviZ
         samples = mcmc.get_samples()
+        samples.pop("lp", None)  # Drop deterministic version from NumPyro
         stats = mcmc.get_extra_fields()
 
-        logpost = jax.vmap(self._logpost_fn)(
-            jnp.asarray(samples["weights"]),
-            jnp.asarray(samples["phi"]),
-            jnp.asarray(samples["delta"]),
+        params_batch = self._prepare_logpost_params(samples)
+        stats["lp"] = evaluate_log_density_batch(
+            self._logpost_fn, params_batch
         )
-        stats["lp"] = jax.device_get(logpost)
 
         return self.to_arviz(samples, stats)
 
@@ -208,29 +211,17 @@ class NUTSSampler(UnivarBaseSampler):
         self, weights: jnp.ndarray, phi: float, delta: float
     ) -> float:
         """Compute log posterior for given parameters via the NumPyro model."""
-        w = jnp.asarray(weights)
-        phi = jnp.asarray(phi)
-        delta = jnp.asarray(delta)
-        return float(self._logpost_fn(w, phi, delta))
+        params = {
+            "weights": jnp.asarray(weights),
+            "phi": jnp.asarray(phi),
+            "delta": jnp.asarray(delta),
+        }
+        return float(self._logpost_fn(params))
 
-    def _build_log_density_fn(self):
-        """Create a jitted closure for evaluating the NumPyro log posterior."""
-
-        model_kwargs = jax.tree_util.tree_map(jnp.asarray, self._logp_kwargs)
-
-        @jax.jit
-        def _logpost(weights, phi, delta):
-            params = {
-                "weights": weights,
-                "phi": phi,
-                "delta": delta,
-            }
-            log_prob, _ = log_density(
-                bayesian_model,
-                (),
-                model_kwargs,
-                params,
-            )
-            return log_prob
-
-        return _logpost
+    def _prepare_logpost_params(self, samples: Dict[str, jnp.ndarray]):
+        """Stack posterior samples into a pytree for log-density evaluation."""
+        return {
+            "weights": jnp.asarray(samples["weights"]),
+            "phi": jnp.asarray(samples["phi"]),
+            "delta": jnp.asarray(samples["delta"]),
+        }

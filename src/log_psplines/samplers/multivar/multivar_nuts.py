@@ -9,13 +9,13 @@ from typing import Any, Dict
 import arviz as az
 import jax
 import jax.numpy as jnp
-import numpy as np
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
-from numpyro.infer.util import init_to_value, log_density
+from numpyro.infer.util import init_to_value
 
 from ..base_sampler import SamplerConfig
+from ..utils import build_log_density_fn, evaluate_log_density_batch
 from .multivar_base import MultivarBaseSampler
 
 
@@ -200,7 +200,9 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         self.config: MultivarNUTSConfig = config
 
         # Build JIT log posterior for evidence calculations
-        self._logpost_fn = self._build_log_density_fn()
+        self._logpost_fn = build_log_density_fn(
+            multivariate_psplines_model, self._logp_kwargs
+        )
 
         # Pre-compile NumPyro model for faster warmup
         self._compile_model()
@@ -276,6 +278,7 @@ class MultivarNUTSSampler(MultivarBaseSampler):
 
         # Extract samples and convert to ArviZ
         samples = mcmc.get_samples()
+        samples.pop("lp", None)
         stats = mcmc.get_extra_fields()
 
         # Move deterministic quantities from samples to stats
@@ -289,16 +292,10 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             if key in samples:
                 stats[key] = samples.pop(key)
 
-        # Compute full log posterior using cached NumPyro log_density
-        param_samples = {
-            name: jnp.asarray(array)
-            for name, array in samples.items()
-            if name.startswith(("weights_", "phi_", "delta_"))
-        }
-
-        if param_samples:
-            logpost = jax.vmap(self._logpost_fn)(param_samples)
-            stats["lp"] = np.asarray(jax.device_get(logpost), dtype=np.float64)
+        params_batch = self._prepare_logpost_params(samples)
+        stats["lp"] = evaluate_log_density_batch(
+            self._logpost_fn, params_batch
+        )
 
         return self.to_arviz(samples, stats)
 
@@ -382,10 +379,9 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         # Use the base class implementation which handles the multivariate case
         return super()._get_lnz(samples, sample_stats)
 
-    def _build_log_density_fn(self):
-        """Create a JIT-compiled log posterior evaluator for NumPyro model."""
-
-        model_kwargs = dict(
+    @property
+    def _logp_kwargs(self) -> Dict[str, Any]:
+        return dict(
             y_re=self.y_re,
             y_im=self.y_im,
             Z_re=self.Z_re,
@@ -398,18 +394,15 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             beta_delta=self.config.beta_delta,
         )
 
-        def _single_logpost(params: Dict[str, jnp.ndarray]) -> jnp.ndarray:
-            log_prob, _ = log_density(
-                multivariate_psplines_model,
-                (),
-                model_kwargs,
-                params,
-            )
-            return log_prob
-
-        return jax.jit(_single_logpost)
+    def _prepare_logpost_params(
+        self, samples: Dict[str, jnp.ndarray]
+    ) -> Dict[str, jnp.ndarray]:
+        return {
+            name: jnp.asarray(array)
+            for name, array in samples.items()
+            if name.startswith(("weights_", "phi_", "delta_"))
+        }
 
     def _compute_log_posterior(self, params: Dict[str, jnp.ndarray]) -> float:
-        """Compute log posterior for LnZ integration."""
         params = {k: jnp.asarray(v) for k, v in params.items()}
         return float(self._logpost_fn(params))

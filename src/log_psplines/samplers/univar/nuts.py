@@ -153,10 +153,6 @@ class NUTSSampler(UnivarBaseSampler):
         samples = mcmc.get_samples()
         stats = mcmc.get_extra_fields()
 
-        lp_component = samples.pop("lp", None)
-        if lp_component is not None:
-            stats["lp_pspline"] = jnp.asarray(lp_component)
-
         logpost = jax.vmap(self._logpost_fn)(
             jnp.asarray(samples["weights"]),
             jnp.asarray(samples["phi"]),

@@ -9,10 +9,11 @@ from typing import Any, Dict
 import arviz as az
 import jax
 import jax.numpy as jnp
+import numpy as np
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
-from numpyro.infer.util import init_to_value
+from numpyro.infer.util import init_to_value, log_density
 
 from ..base_sampler import SamplerConfig
 from .multivar_base import MultivarBaseSampler
@@ -86,23 +87,24 @@ def multivariate_psplines_model(
 
     # Diagonal components (one per channel)
     for j in range(n_dim):  # Now n_dim is a concrete Python int
-        delta = numpyro.sample(
-            f"delta_{j}", dist.Gamma(alpha_delta, beta_delta)
-        )
-        phi = numpyro.sample(
-            f"phi_delta_{j}", dist.Gamma(alpha_phi, delta * beta_phi)
-        )
+        delta_dist = dist.Gamma(alpha_delta, beta_delta)
+        delta = numpyro.sample(f"delta_{j}", delta_dist)
+        log_prior_total += delta_dist.log_prob(delta)
+
+        phi_dist = dist.Gamma(alpha_phi, delta * beta_phi)
+        phi = numpyro.sample(f"phi_delta_{j}", phi_dist)
+        log_prior_total += phi_dist.log_prob(phi)
 
         k = all_penalties[component_idx].shape[0]
-        weights = numpyro.sample(
-            f"weights_delta_{j}", dist.Normal(0, 1).expand((k,)).to_event(1)
-        )
+        base_normal = dist.Normal(0, 1).expand((k,)).to_event(1)
+        weights = numpyro.sample(f"weights_delta_{j}", base_normal)
 
-        # Prior factor for weights
         wPw = jnp.dot(weights, jnp.dot(all_penalties[component_idx], weights))
         log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-        numpyro.factor(f"weights_prior_delta_{j}", log_prior_w)
-        log_prior_total += log_prior_w
+        base_log_prob = base_normal.log_prob(weights)
+        log_prior_adjustment = log_prior_w - base_log_prob
+        numpyro.factor(f"weights_prior_delta_{j}", log_prior_adjustment)
+        log_prior_total += log_prior_adjustment
 
         # Compute log diagonal element
         log_delta_sq_j = all_bases[component_idx] @ weights
@@ -114,48 +116,54 @@ def multivariate_psplines_model(
     # Off-diagonal components (if multivariate)
     if n_theta > 0:
         # Real part of off-diagonal terms
-        delta_re = numpyro.sample(
-            "delta_theta_re", dist.Gamma(alpha_delta, beta_delta)
-        )
-        phi_re = numpyro.sample(
-            "phi_theta_re", dist.Gamma(alpha_phi, delta_re * beta_phi)
-        )
+        delta_re_dist = dist.Gamma(alpha_delta, beta_delta)
+        delta_re = numpyro.sample("delta_theta_re", delta_re_dist)
+        log_prior_total += delta_re_dist.log_prob(delta_re)
+
+        phi_re_dist = dist.Gamma(alpha_phi, delta_re * beta_phi)
+        phi_re = numpyro.sample("phi_theta_re", phi_re_dist)
+        log_prior_total += phi_re_dist.log_prob(phi_re)
 
         k = all_penalties[component_idx].shape[0]
-        weights_re = numpyro.sample(
-            "weights_theta_re", dist.Normal(0, 1).expand((k,)).to_event(1)
-        )
+        base_normal_re = dist.Normal(0, 1).expand((k,)).to_event(1)
+        weights_re = numpyro.sample("weights_theta_re", base_normal_re)
 
         wPw_re = jnp.dot(
             weights_re, jnp.dot(all_penalties[component_idx], weights_re)
         )
         log_prior_w_re = 0.5 * k * jnp.log(phi_re) - 0.5 * phi_re * wPw_re
-        numpyro.factor("weights_prior_theta_re", log_prior_w_re)
-        log_prior_total += log_prior_w_re
+        log_prior_adjustment_re = log_prior_w_re - base_normal_re.log_prob(
+            weights_re
+        )
+        numpyro.factor("weights_prior_theta_re", log_prior_adjustment_re)
+        log_prior_total += log_prior_adjustment_re
 
         theta_re_base = all_bases[component_idx] @ weights_re
         theta_re = jnp.tile(theta_re_base[:, None], (1, max(1, n_theta)))
         component_idx += 1
 
         # Imaginary part of off-diagonal terms
-        delta_im = numpyro.sample(
-            "delta_theta_im", dist.Gamma(alpha_delta, beta_delta)
-        )
-        phi_im = numpyro.sample(
-            "phi_theta_im", dist.Gamma(alpha_phi, delta_im * beta_phi)
-        )
+        delta_im_dist = dist.Gamma(alpha_delta, beta_delta)
+        delta_im = numpyro.sample("delta_theta_im", delta_im_dist)
+        log_prior_total += delta_im_dist.log_prob(delta_im)
+
+        phi_im_dist = dist.Gamma(alpha_phi, delta_im * beta_phi)
+        phi_im = numpyro.sample("phi_theta_im", phi_im_dist)
+        log_prior_total += phi_im_dist.log_prob(phi_im)
 
         k = all_penalties[component_idx].shape[0]
-        weights_im = numpyro.sample(
-            "weights_theta_im", dist.Normal(0, 1).expand((k,)).to_event(1)
-        )
+        base_normal_im = dist.Normal(0, 1).expand((k,)).to_event(1)
+        weights_im = numpyro.sample("weights_theta_im", base_normal_im)
 
         wPw_im = jnp.dot(
             weights_im, jnp.dot(all_penalties[component_idx], weights_im)
         )
         log_prior_w_im = 0.5 * k * jnp.log(phi_im) - 0.5 * phi_im * wPw_im
-        numpyro.factor("weights_prior_theta_im", log_prior_w_im)
-        log_prior_total += log_prior_w_im
+        log_prior_adjustment_im = log_prior_w_im - base_normal_im.log_prob(
+            weights_im
+        )
+        numpyro.factor("weights_prior_theta_im", log_prior_adjustment_im)
+        log_prior_total += log_prior_adjustment_im
 
         theta_im_base = all_bases[component_idx] @ weights_im
         theta_im = jnp.tile(theta_im_base[:, None], (1, max(1, n_theta)))
@@ -190,6 +198,9 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             config = MultivarNUTSConfig()
         super().__init__(fft_data, spline_model, config)
         self.config: MultivarNUTSConfig = config
+
+        # Build JIT log posterior for evidence calculations
+        self._logpost_fn = self._build_log_density_fn()
 
         # Pre-compile NumPyro model for faster warmup
         self._compile_model()
@@ -278,6 +289,17 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             if key in samples:
                 stats[key] = samples.pop(key)
 
+        # Compute full log posterior using cached NumPyro log_density
+        param_samples = {
+            name: jnp.asarray(array)
+            for name, array in samples.items()
+            if name.startswith(("weights_", "phi_", "delta_"))
+        }
+
+        if param_samples:
+            logpost = jax.vmap(self._logpost_fn)(param_samples)
+            stats["lp"] = np.asarray(jax.device_get(logpost), dtype=np.float64)
+
         return self.to_arviz(samples, stats)
 
     def _get_initial_values(self) -> Dict[str, jnp.ndarray]:
@@ -359,3 +381,35 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         """Compute log normalizing constant for multivariate case."""
         # Use the base class implementation which handles the multivariate case
         return super()._get_lnz(samples, sample_stats)
+
+    def _build_log_density_fn(self):
+        """Create a JIT-compiled log posterior evaluator for NumPyro model."""
+
+        model_kwargs = dict(
+            y_re=self.y_re,
+            y_im=self.y_im,
+            Z_re=self.Z_re,
+            Z_im=self.Z_im,
+            all_bases=self.all_bases,
+            all_penalties=self.all_penalties,
+            alpha_phi=self.config.alpha_phi,
+            beta_phi=self.config.beta_phi,
+            alpha_delta=self.config.alpha_delta,
+            beta_delta=self.config.beta_delta,
+        )
+
+        def _single_logpost(params: Dict[str, jnp.ndarray]) -> jnp.ndarray:
+            log_prob, _ = log_density(
+                multivariate_psplines_model,
+                (),
+                model_kwargs,
+                params,
+            )
+            return log_prob
+
+        return jax.jit(_single_logpost)
+
+    def _compute_log_posterior(self, params: Dict[str, jnp.ndarray]) -> float:
+        """Compute log posterior for LnZ integration."""
+        params = {k: jnp.asarray(v) for k, v in params.items()}
+        return float(self._logpost_fn(params))

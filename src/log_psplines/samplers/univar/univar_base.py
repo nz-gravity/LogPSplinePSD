@@ -91,7 +91,11 @@ class UnivarBaseSampler(BaseSampler):
             return self._compute_log_posterior(weights, phi, delta)
 
         lnz_res = morphZ.evidence(
-            post_smp, lp, lp_fn, output_path=tempfile.gettempdir()
+            post_smp,
+            lp,
+            lp_fn,
+            output_path=tempfile.gettempdir(),
+            kde_bw="scott",
         )[0]
         return float(lnz_res[0]), float(lnz_res[1])
 

@@ -74,15 +74,15 @@ class UnivarBaseSampler(BaseSampler):
             return np.nan, np.nan
 
         # Combine all parameters into single posterior sample array
+        weights = np.asarray(samples["weights"])
+        phi = np.asarray(samples["phi"])
+        delta = np.asarray(samples["delta"])
+        lp = np.asarray(sample_stats["lp"])
+
         post_smp = np.concatenate(
-            [
-                samples["weights"],
-                samples["phi"][:, None],
-                samples["delta"][:, None],
-            ],
+            [weights, phi[:, None], delta[:, None]],
             axis=1,
         )
-        lp = sample_stats["lp"]
 
         def lp_fn(sample):
             weights = sample[: self.n_weights]

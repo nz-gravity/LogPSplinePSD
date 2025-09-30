@@ -141,9 +141,9 @@ def test_mcmc(outdir: str, test_mode: str):
     print(f"{ar_data.ts}")
 
     for sampler in ["nuts", "mh"]:
-        compute_lnz = (
-            sampler == "mh"
-        )  # only compute Lnz for MH sampler (OTHER IS BROKEN)
+        # compute_lnz = (
+        #     sampler == "mh"
+        # )  # only compute Lnz for MH sampler (OTHER IS BROKEN)
         sampler_out = f"{outdir}/out_{sampler}"
         idata = run_mcmc(
             ar_data.ts,
@@ -153,7 +153,7 @@ def test_mcmc(outdir: str, test_mode: str):
             n_warmup=n_warmup,
             outdir=sampler_out,
             rng_key=42,
-            compute_lnz=compute_lnz,
+            compute_lnz=True,
             true_psd=ar_data.psd_theoretical,
         )
 

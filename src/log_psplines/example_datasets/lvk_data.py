@@ -4,6 +4,8 @@ from gwosc import datasets as gwosc_datasets
 from gwpy.frequencyseries import FrequencySeries
 from gwpy.timeseries import TimeSeries
 
+from .utils import PSD_FILE
+
 
 class LVKData:
     def __init__(self, strain: np.ndarray, psd: np.ndarray, freqs: np.ndarray):
@@ -13,20 +15,12 @@ class LVKData:
 
     @classmethod
     def from_simulation(cls, duration: int = 4, fs: int = 1024) -> "LVKData":
-        from io import StringIO
-
         import numpy as np
         import pycbc.noise
-        import requests
         from pycbc.types import FrequencySeries as PycbcFrequencySeries
 
-        # --- Download the ASD file from LIGO DCC ---
-        url = "https://dcc.ligo.org/public/0165/T2000012/002/aligo_O3actual_H1.txt"
-        response = requests.get(url)
-        response.raise_for_status()  # ensure it downloaded properly
-
         # --- Parse into numpy arrays ---
-        data = np.loadtxt(StringIO(response.text))
+        data = np.loadtxt(PSD_FILE)
         freq, asd = data[:, 0], data[:, 1]
 
         # --- Convert ASD → PSD ---

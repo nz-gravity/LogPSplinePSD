@@ -19,10 +19,12 @@ def test_multivar_mcmc(outdir, test_mode):
     n = 256
     n_knots = 10
     n_samples = n_warmup = 600
+    verbose = True
     if test_mode == "fast":
-        n_samples = n_warmup = 10
-        n = 256
-        n_knots = 5
+        n_samples = n_warmup = 4
+        n = 128
+        n_knots = 4
+        verbose = False
 
     # Generate test data
     np.random.seed(42)
@@ -48,7 +50,7 @@ def test_multivar_mcmc(outdir, test_mode):
         n_samples=n_samples,
         n_warmup=n_warmup,
         outdir=outdir,
-        verbose=True,
+        verbose=verbose,
         target_accept_prob=0.8,
         true_psd=varma.get_true_psd(),
     )
@@ -131,16 +133,20 @@ def test_mcmc(outdir: str, test_mode: str):
     n = 1024
     n_samples = n_warmup = 500
     n_knots = 10
+    compute_lnz = True
+    sampler_names = ["nuts", "mh"]
     if test_mode == "fast":
-        n_samples = n_warmup = 10
-        n = 256
-        n_knots = 4
+        n_samples = n_warmup = 4
+        n = 128
+        n_knots = 3
+        compute_lnz = False
+        sampler_names = ["nuts", "mh"]
     ar_data = ARData(
         order=4, duration=1.0, fs=n, seed=42, sigma=np.sqrt(psd_scale)
     )
     print(f"{ar_data.ts}")
 
-    for sampler in ["nuts", "mh"]:
+    for sampler in sampler_names:
         # compute_lnz = (
         #     sampler == "mh"
         # )  # only compute Lnz for MH sampler (OTHER IS BROKEN)
@@ -153,8 +159,9 @@ def test_mcmc(outdir: str, test_mode: str):
             n_warmup=n_warmup,
             outdir=sampler_out,
             rng_key=42,
-            compute_lnz=True,
+            compute_lnz=compute_lnz,
             true_psd=ar_data.psd_theoretical,
+            verbose=(test_mode != "fast"),
         )
 
         print(

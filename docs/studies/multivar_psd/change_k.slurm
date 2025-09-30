@@ -7,13 +7,13 @@
 #SBATCH --mem=4G
 #SBATCH --cpus-per-task=1
 
-module load python/3.9
+module --force purge && ml gcc/12.3.0 python/3.11.3 && source /fred/oz303/avajpeyi/venvs/jax_cpu_venv/bin/activate
 
 # Default SLURM_ARRAY_TASK_ID to 0 for local testing if not set
 SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 
 # Set K values
-K_VALUES=(5 10 15 20)
+K_VALUES=(32 24 16 10)
 N=512
 NREP=10
 OUTDIR="out_changing_k"

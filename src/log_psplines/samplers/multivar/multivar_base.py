@@ -145,51 +145,78 @@ class MultivarBaseSampler(BaseSampler):
         if not self.config.compute_lnz:
             return np.nan, np.nan
 
-        try:
-            # Flatten all samples into a single array
-            all_samples = []
-            param_sizes = []
-            param_names = []
-
-            for name, sample_array in samples.items():
-                if name.startswith(("weights_", "delta_", "phi_")):
-                    flat_samples = sample_array.reshape(
-                        sample_array.shape[0], -1
-                    )
-                    all_samples.append(flat_samples)
-                    param_sizes.append(flat_samples.shape[1])
-                    param_names.append(name)
-
-            if not all_samples:
-                return np.nan, np.nan
-
-            posterior_samples = np.concatenate(all_samples, axis=1)
-            lposterior = sample_stats.get(
-                "log_likelihood", sample_stats.get("lp", None)
+        # Temporarily disabled until multivariate morphZ path is stabilised.
+        if self.config.verbose:
+            print(
+                "Warning: LnZ computation is not yet supported for multivariate samplers; returning NaN."
             )
+        return np.nan, np.nan
 
-            if lposterior is None:
-                return np.nan, np.nan
+        # --- Previous implementation (kept for future reference) ---
+        # try:
+        #     parameter_items = [
+        #         (name, np.asarray(array, dtype=np.float64))
+        #         for name, array in samples.items()
+        #         if name.startswith(("weights_", "phi_", "delta_"))
+        #     ]
+        #
+        #     if not parameter_items:
+        #         return np.nan, np.nan
+        #
+        #     n_draws = parameter_items[0][1].shape[0]
+        #
+        #     flat_blocks = []
+        #     layout = []  # (name, shape)
+        #
+        #     for name, array in parameter_items:
+        #         if array.shape[0] != n_draws:
+        #             raise ValueError(
+        #                 f"Sample array {name} has inconsistent draw dimension."
+        #             )
+        #         shape = array.shape[1:]
+        #         layout.append((name, shape))
+        #         flat_blocks.append(array.reshape(n_draws, -1))
+        #
+        #     posterior_samples = np.concatenate(flat_blocks, axis=1)
+        #
+        #     lp = sample_stats.get("lp")
+        #     if lp is None:
+        #         raise ValueError("Sample stats missing 'lp' for LnZ computation.")
+        #
+        #     lp = np.asarray(lp, dtype=np.float64)
+        #     if lp.ndim > 1:
+        #         lp = lp.reshape(n_draws, -1)[:, 0]
+        #     else:
+        #         lp = lp.reshape(-1)
+        #
+        #     def log_posterior_fn(sample_vec: np.ndarray) -> float:
+        #         offset = 0
+        #         params: Dict[str, jnp.ndarray] = {}
+        #         for name, shape in layout:
+        #             size = int(np.prod(shape)) if shape else 1
+        #             segment = sample_vec[offset : offset + size]
+        #             offset += size
+        #             if shape:
+        #                 params[name] = jnp.asarray(segment.reshape(shape))
+        #             else:
+        #                 params[name] = jnp.asarray(segment.item())
+        #         return self._compute_log_posterior(params)
+        #
+        #     lnz_res = morphZ.evidence(
+        #         posterior_samples,
+        #         lp,
+        #         log_posterior_fn,
+        #         morph_type="pair",
+        #         kde_bw="scott",
+        #         output_path=tempfile.gettempdir(),
+        #     )[0]
+        #
+        #     return float(lnz_res.lnz), float(lnz_res.uncertainty)
+        # except Exception as e:
+        #     if self.config.verbose:
+        #         print(f"Warning: LnZ computation failed: {e}")
+        #     return np.nan, np.nan
 
-            def log_posterior_fn(params):
-                """Reconstruct log posterior from flattened parameters."""
-                # This is a simplified version - you'd need to implement the full
-                # multivariate log posterior computation here
-                return 0.0  # Placeholder
-
-            # Compute evidence using morphZ
-            lnz_res = morphZ.evidence(
-                posterior_samples,
-                lposterior,
-                log_posterior_fn,
-                morph_type="pair",
-                kde_bw="cv_iso",
-                output_path=tempfile.gettempdir(),
-            )[0]
-
-            return float(lnz_res.lnz), float(lnz_res.uncertainty)
-
-        except Exception as e:
-            if self.config.verbose:
-                print(f"Warning: LnZ computation failed: {e}")
-            return np.nan, np.nan
+    def _compute_log_posterior(self, params: Dict[str, jnp.ndarray]) -> float:
+        """Compute log posterior for LnZ calculation (implemented by subclasses)."""
+        raise NotImplementedError

@@ -74,15 +74,15 @@ class UnivarBaseSampler(BaseSampler):
             return np.nan, np.nan
 
         # Combine all parameters into single posterior sample array
+        weights = np.asarray(samples["weights"])
+        phi = np.asarray(samples["phi"])
+        delta = np.asarray(samples["delta"])
+        lp = np.asarray(sample_stats["lp"])
+
         post_smp = np.concatenate(
-            [
-                samples["weights"],
-                samples["phi"][:, None],
-                samples["delta"][:, None],
-            ],
+            [weights, phi[:, None], delta[:, None]],
             axis=1,
         )
-        lp = sample_stats["lp"]
 
         def lp_fn(sample):
             weights = sample[: self.n_weights]
@@ -91,7 +91,11 @@ class UnivarBaseSampler(BaseSampler):
             return self._compute_log_posterior(weights, phi, delta)
 
         lnz_res = morphZ.evidence(
-            post_smp, lp, lp_fn, output_path=tempfile.gettempdir()
+            post_smp,
+            lp,
+            lp_fn,
+            output_path=tempfile.gettempdir(),
+            kde_bw="scott",
         )[0]
         return float(lnz_res[0]), float(lnz_res[1])
 

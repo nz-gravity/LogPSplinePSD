@@ -9,50 +9,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
-import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
 from ..base_sampler import SamplerConfig
+from ..utils import pspline_hyperparameter_initials, sample_pspline_block
 from .multivar_base import MultivarBaseSampler
-
-
-def _sample_pspline_block(
-    delta_name: str,
-    phi_name: str,
-    weights_name: str,
-    basis: jnp.ndarray,
-    penalty: jnp.ndarray,
-    alpha_phi: float,
-    beta_phi: float,
-    alpha_delta: float,
-    beta_delta: float,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Sample a P-spline weight block with hierarchical Gamma-Normal prior."""
-
-    delta_dist = dist.Gamma(alpha_delta, beta_delta)
-    delta = numpyro.sample(delta_name, delta_dist)
-
-    phi_dist = dist.Gamma(alpha_phi, delta * beta_phi)
-    phi = numpyro.sample(phi_name, phi_dist)
-
-    k = basis.shape[1]
-    base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
-    weights = numpyro.sample(weights_name, base_normal)
-
-    wPw = jnp.dot(weights, jnp.dot(penalty, weights))
-    log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-    log_prior_adjustment = log_prior_w - base_normal.log_prob(weights)
-    numpyro.factor(f"weights_prior_{weights_name}", log_prior_adjustment)
-
-    log_prior_component = (
-        delta_dist.log_prob(delta)
-        + phi_dist.log_prob(phi)
-        + log_prior_adjustment
-    )
-
-    component_eval = basis @ weights
-    return component_eval, log_prior_component
 
 
 def _blocked_channel_model(
@@ -73,20 +35,20 @@ def _blocked_channel_model(
     """NumPyro model for a single Cholesky block."""
 
     channel_label = f"{channel_index}"
-    log_prior_total = 0.0
+    log_prior_total = jnp.asarray(0.0)
 
-    log_delta_sq, prior_delta = _sample_pspline_block(
+    delta_block = sample_pspline_block(
         delta_name=f"delta_{channel_label}",
         phi_name=f"phi_delta_{channel_label}",
         weights_name=f"weights_delta_{channel_label}",
-        basis=basis_delta,
-        penalty=penalty_delta,
+        penalty_matrix=penalty_delta,
         alpha_phi=alpha_phi,
         beta_phi=beta_phi,
         alpha_delta=alpha_delta,
         beta_delta=beta_delta,
     )
-    log_prior_total = log_prior_total + prior_delta
+    log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
+    log_prior_total = log_prior_total + delta_block["log_prior_total"]
 
     n_freq = y_re.shape[0]
     n_theta_block = Z_re.shape[1]
@@ -97,33 +59,41 @@ def _blocked_channel_model(
 
         for theta_idx in range(n_theta_block):
             theta_prefix = f"theta_re_{channel_label}_{theta_idx}"
-            theta_re_eval, theta_re_prior = _sample_pspline_block(
+            theta_re_block = sample_pspline_block(
                 delta_name=f"delta_{theta_prefix}",
                 phi_name=f"phi_{theta_prefix}",
                 weights_name=f"weights_{theta_prefix}",
-                basis=basis_theta,
-                penalty=penalty_theta,
+                penalty_matrix=penalty_theta,
                 alpha_phi=alpha_phi,
                 beta_phi=beta_phi,
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
             )
-            log_prior_total = log_prior_total + theta_re_prior
+            log_prior_total = (
+                log_prior_total + theta_re_block["log_prior_total"]
+            )
+            theta_re_eval = jnp.einsum(
+                "nk,k->n", basis_theta, theta_re_block["weights"]
+            )
             theta_re_components.append(theta_re_eval)
 
             theta_im_prefix = f"theta_im_{channel_label}_{theta_idx}"
-            theta_im_eval, theta_im_prior = _sample_pspline_block(
+            theta_im_block = sample_pspline_block(
                 delta_name=f"delta_{theta_im_prefix}",
                 phi_name=f"phi_{theta_im_prefix}",
                 weights_name=f"weights_{theta_im_prefix}",
-                basis=basis_theta,
-                penalty=penalty_theta,
+                penalty_matrix=penalty_theta,
                 alpha_phi=alpha_phi,
                 beta_phi=beta_phi,
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
             )
-            log_prior_total = log_prior_total + theta_im_prior
+            log_prior_total = (
+                log_prior_total + theta_im_block["log_prior_total"]
+            )
+            theta_im_eval = jnp.einsum(
+                "nk,k->n", basis_theta, theta_im_block["weights"]
+            )
             theta_im_components.append(theta_im_eval)
 
         theta_re = jnp.stack(theta_re_components, axis=1)
@@ -193,7 +163,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         self._theta_basis = (
             self.all_bases[theta_basis_idx]
             if self.n_theta > 0
-            else jnp.zeros((self.n_freq, 0))
+            else jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
         )
         self._theta_penalty = (
             self.all_penalties[theta_basis_idx]
@@ -395,13 +365,16 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     def _get_block_initial_values(
         self, channel_index: int, theta_count: int
     ) -> Dict[str, jnp.ndarray]:
+        delta_init, phi_init = pspline_hyperparameter_initials(
+            alpha_phi=self.config.alpha_phi,
+            beta_phi=self.config.beta_phi,
+            alpha_delta=self.config.alpha_delta,
+            beta_delta=self.config.beta_delta,
+        )
+
         init_values: Dict[str, jnp.ndarray] = {
-            f"delta_{channel_index}": jnp.asarray(
-                self.config.alpha_delta / self.config.beta_delta
-            ),
-            f"phi_delta_{channel_index}": jnp.asarray(
-                self.config.alpha_phi / self.config.beta_phi
-            ),
+            f"delta_{channel_index}": delta_init,
+            f"phi_delta_{channel_index}": phi_init,
             f"weights_delta_{channel_index}": self.spline_model.diagonal_models[
                 channel_index
             ].weights,
@@ -413,24 +386,20 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
             for theta_idx in range(theta_count):
                 init_values[f"delta_theta_re_{channel_index}_{theta_idx}"] = (
-                    jnp.asarray(
-                        self.config.alpha_delta / self.config.beta_delta
-                    )
+                    delta_init
                 )
                 init_values[f"phi_theta_re_{channel_index}_{theta_idx}"] = (
-                    jnp.asarray(self.config.alpha_phi / self.config.beta_phi)
+                    phi_init
                 )
                 init_values[
                     f"weights_theta_re_{channel_index}_{theta_idx}"
                 ] = offdiag_re_weights
 
                 init_values[f"delta_theta_im_{channel_index}_{theta_idx}"] = (
-                    jnp.asarray(
-                        self.config.alpha_delta / self.config.beta_delta
-                    )
+                    delta_init
                 )
                 init_values[f"phi_theta_im_{channel_index}_{theta_idx}"] = (
-                    jnp.asarray(self.config.alpha_phi / self.config.beta_phi)
+                    phi_init
                 )
                 init_values[
                     f"weights_theta_im_{channel_index}_{theta_idx}"

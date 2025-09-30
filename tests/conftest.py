@@ -2,30 +2,21 @@ import os
 
 import pytest
 
+# HARDCODE TO SLOW FOR MORE ACCURATE TESTS
+os.environ["LOG_PSPLINES_SLOW_TESTS"] = "1"
+
 
 def _compute_test_mode() -> str:
-    env_mode = os.getenv("LOG_PSPLINES_TEST_MODE")
-    if env_mode:
-        env_mode = env_mode.lower()
-        if env_mode in {"fast", "slow"}:
-            return env_mode
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        return "fast"
 
     if os.getenv("LOG_PSPLINES_SLOW_TESTS") == "1":
         return "slow"
-
-    if os.getenv("GITHUB_ACTIONS") == "true":
-        return "fast"
 
     return "fast"
 
 
 TEST_MODE = _compute_test_mode()
-
-# os.environ.setdefault("JAX_PLATFORM_NAME", "cpu")
-# if TEST_MODE == "fast":
-#     os.environ.setdefault("JAX_DISABLE_JIT", "1")
-# else:
-#     os.environ.pop("JAX_DISABLE_JIT", None)
 
 
 @pytest.fixture(scope="session")

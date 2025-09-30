@@ -2,12 +2,12 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+from examples.plot_dcov_test import n_samples
 from lisa_data import TEN_DAYS, LISAData, download
 
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting.psd_matrix import (
-    compute_empirical_psd,
     plot_psd_matrix,
 )
 from log_psplines.psplines.multivar_psplines import MultivariateLogPSplines
@@ -30,10 +30,6 @@ print(timeseries)
 
 FMIN, FMAX = 5**-5, 6**-2
 
-timeseries = timeseries.standardise()
-fft_data = timeseries.to_cross_spectral_density(fmin=FMIN, fmax=FMAX)
-print(fft_data)
-
 
 if os.path.exists(RESULT_FN):
     print(f"Found existing results at {RESULT_FN}, loading...")
@@ -43,34 +39,18 @@ if os.path.exists(RESULT_FN):
 
 else:
 
-    sampler = MultivarNUTSSampler(
-        fft_data,
-        MultivariateLogPSplines.from_multivar_fft(
-            fft_data,
-            n_knots=10,
-            degree=3,
-            diffMatrixOrder=2,
-            knot_kwargs=dict(method="log"),
-        ),
-        MultivarNUTSConfig(
-            verbose=True,
-            outdir="results/lisa",
-        ),
+    idata = run_mcmc(
+        data=timeseries,
+        sampler="nuts",
+        n_samples=100,
+        n_warmup=100,
+        n_knots=10,
+        degree=3,
+        diffMatrixOrder=2,
+        knot_kwargs=dict(strategy="log"),
+        outdir="results/lisa",
+        verbose=True,
     )
-    idata = sampler.sample(n_samples=200, n_warmup=200)
 
 
 print(idata)
-
-plot_psd_matrix(
-    idata=idata,
-    n_channels=3,
-    freq=fft_data.freq,
-    empirical_psd=compute_empirical_psd(
-        fft_data.y_re, fft_data.y_im, n_channels=3
-    ),
-    outdir="results/lisa",
-    filename="psd_matrix_posterior.png",
-    diag_yscale="log",
-    xscale="log",
-)

@@ -30,7 +30,7 @@ from tqdm.auto import tqdm
 
 RESULTS_DIRS = ["out_changing_n/", "out_changing_k/"]
 CSV_FILES = ["summary_metrics_n.csv", "summary_metrics_k.csv"]
-CLEAN = True  # If True, re-extract metrics even if CSV exists
+CLEAN = False  # If True, re-extract metrics even if CSV exists
 
 
 def extract_data(idata: az.InferenceData):
@@ -95,23 +95,22 @@ def read_or_create_summary(results_dir: str, csv_file: str) -> pd.DataFrame:
         return df
 
 
-def plot_with_errorbars(
+def plot_with_errorbars_no_line(
     df: pd.DataFrame,
     x_col: str,
     y_col: str,
-    group_col: str,
     xlabel: str,
     ylabel: str,
     save_path: Optional[str] = None,
 ) -> None:
     """
-    Create errorbar plot with mean and standard deviation.
+    Create errorbar plot with mean and standard deviation, but no connecting line between points.
+    This preserves the correct x-axis spacing.
 
     Args:
         df: DataFrame containing the data
         x_col: Column name for x-axis
         y_col: Column name for y-axis
-        group_col: Column name to group by for error bars
         xlabel: X-axis label
         ylabel: Y-axis label
         save_path: Optional path to save the plot
@@ -127,13 +126,23 @@ def plot_with_errorbars(
         y_means.append(group[y_col].mean())
         y_stds.append(group[y_col].std())
 
-    plt.figure(figsize=(5, 3.5))
+    plt.figure(figsize=(6, 4))
     plt.errorbar(
-        x_values, y_means, yerr=y_stds, fmt="o-", capsize=4, markersize=6
+        x_values,
+        y_means,
+        yerr=y_stds,
+        fmt="o",
+        capsize=4,
+        markersize=8,
+        color="black",
+        ecolor="black",
+        elinewidth=2,
+        capthick=2,
+        alpha=0.8,
     )
     plt.xlabel(xlabel, fontsize=14)
     plt.ylabel(ylabel, fontsize=14)
-    # Removed grid for PhysRevD style
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
     if save_path:
@@ -145,16 +154,31 @@ def plot_with_errorbars(
         plt.show()
 
 
-def create_all_plots(df: pd.DataFrame, output_dir: str = "plots") -> None:
+def create_n_study_plots(
+    csv_file: str = "docs/studies/multivar_psd/summary_metrics_n.csv",
+    output_dir: str = "docs/studies/multivar_psd/plots_n",
+) -> None:
     """
-    Create all performance plots for the simulation study.
+    Create plots for the changing N study.
 
     Args:
-        df: DataFrame with extracted metrics
+        csv_file: CSV file containing metrics for N study
         output_dir: Directory to save plots
     """
+    if not os.path.exists(csv_file):
+        print(f"CSV file {csv_file} not found")
+        return
+
+    df = pd.read_csv(csv_file)
+
+    if df.empty:
+        print("No data for N study")
+        return
+
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+
+    print(f"Creating N study plots ({len(df)} data points)...")
 
     # Filter out any rows with missing data for plotting
     plot_df = df.dropna(
@@ -162,134 +186,139 @@ def create_all_plots(df: pd.DataFrame, output_dir: str = "plots") -> None:
     )
 
     if plot_df.empty:
-        print("No valid data for plotting")
+        print("No valid data for N study plotting")
         return
 
-    print(f"Creating plots for {len(plot_df)} data points...")
-
-    # ESS vs N (log-log)
-    plot_with_errorbars(
+    # ESS vs N
+    plot_with_errorbars_no_line(
         plot_df,
         x_col="N",
         y_col="ess",
-        group_col="K",
         xlabel="N (Data Size)",
         ylabel="Effective Sample Size (ESS)",
         save_path=os.path.join(output_dir, "ess_vs_N.png"),
     )
 
-    # RIAE vs N (log-log)
-    plot_with_errorbars(
+    # RIAE vs N
+    plot_with_errorbars_no_line(
         plot_df,
         x_col="N",
         y_col="riae",
-        group_col="K",
         xlabel="N (Data Size)",
         ylabel="RIAE",
         save_path=os.path.join(output_dir, "riae_vs_N.png"),
     )
 
-    # Coverage vs N (linear)
-    plot_with_errorbars(
+    # Coverage vs N
+    plot_with_errorbars_no_line(
         plot_df,
         x_col="N",
         y_col="coverage",
-        group_col="K",
         xlabel="N (Data Size)",
         ylabel="Coverage Probability",
         save_path=os.path.join(output_dir, "coverage_vs_N.png"),
     )
 
-    # ESS vs K (log-log)
-    plot_with_errorbars(
+    # Runtime vs N
+    plot_with_errorbars_no_line(
+        plot_df,
+        x_col="N",
+        y_col="runtime",
+        xlabel="N (Data Size)",
+        ylabel="Runtime (seconds)",
+        save_path=os.path.join(output_dir, "runtime_vs_N.png"),
+    )
+
+
+def create_k_study_plots(
+    csv_file: str = "docs/studies/multivar_psd/summary_metrics_k.csv",
+    output_dir: str = "docs/studies/multivar_psd/plots_k",
+) -> None:
+    """
+    Create plots for the changing K study.
+
+    Args:
+        csv_file: CSV file containing metrics for K study
+        output_dir: Directory to save plots
+    """
+    if not os.path.exists(csv_file):
+        print(f"CSV file {csv_file} not found")
+        return
+
+    df = pd.read_csv(csv_file)
+
+    if df.empty:
+        print("No data for K study")
+        return
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    print(f"Creating K study plots ({len(df)} data points)...")
+
+    # Filter out any rows with missing data for plotting
+    plot_df = df.dropna(
+        subset=["N", "K", "runtime", "ess", "riae", "coverage"]
+    )
+
+    if plot_df.empty:
+        print("No valid data for K study plotting")
+        return
+
+    # ESS vs K
+    plot_with_errorbars_no_line(
         plot_df,
         x_col="K",
         y_col="ess",
-        group_col="N",
         xlabel="K (Number of Knots)",
         ylabel="Effective Sample Size (ESS)",
         save_path=os.path.join(output_dir, "ess_vs_K.png"),
     )
 
-    # RIAE vs K (log-log)
-    plot_with_errorbars(
+    # RIAE vs K
+    plot_with_errorbars_no_line(
         plot_df,
         x_col="K",
         y_col="riae",
-        group_col="N",
         xlabel="K (Number of Knots)",
         ylabel="RIAE",
         save_path=os.path.join(output_dir, "riae_vs_K.png"),
     )
 
-    # Coverage vs K (linear)
-    plot_with_errorbars(
+    # Coverage vs K
+    plot_with_errorbars_no_line(
         plot_df,
         x_col="K",
         y_col="coverage",
-        group_col="N",
         xlabel="K (Number of Knots)",
         ylabel="Coverage Probability",
         save_path=os.path.join(output_dir, "coverage_vs_K.png"),
     )
 
+    # Runtime vs K
+    plot_with_errorbars_no_line(
+        plot_df,
+        x_col="K",
+        y_col="runtime",
+        xlabel="K (Number of Knots)",
+        ylabel="Runtime (seconds)",
+        save_path=os.path.join(output_dir, "runtime_vs_K.png"),
+    )
 
-def main(
-    results_dirs: list = RESULTS_DIRS,
-    csv_files: list = CSV_FILES,
-    create_plots: bool = True,
-    output_dir: str = "plots",
-    combine_studies: bool = True,
-) -> pd.DataFrame:
+
+def main() -> None:
     """
-    Main function to extract metrics and optionally create plots.
-
-    Args:
-        results_dirs: List of directories containing .nc files (change_n and change_k studies)
-        csv_files: List of paths to save/load CSV files
-        create_plots: Whether to create plots
-        output_dir: Directory to save plots
-        combine_studies: Whether to combine results from all directories
-
-    Returns:
-        DataFrame with extracted metrics
+    Main function to create plots for both N and K studies.
     """
-    dfs = []
-    for results_dir, csv_file in zip(results_dirs, csv_files):
-        df = read_or_create_summary(results_dir, csv_file)
-        dfs.append(df)
+    print("Creating plots for changing N study...")
+    create_n_study_plots()
 
-    if combine_studies:
-        df = pd.concat(dfs, ignore_index=True)
-    else:
-        if not dfs:
-            df = pd.DataFrame()
-        else:
-            df = dfs[0]
-
-    if df.empty:
-        print("No data to process")
-        return df
-
-    print(f"\nSummary statistics:")
-    print(f"Total files processed: {len(df)}")
-    print(f"N values: {sorted(df['N'].dropna().unique())}")
-    print(f"K values: {sorted(df['K'].dropna().unique())}")
-
-    print("\nDataFrame info:")
-    print(df.info())
-
-    print("\nFirst few rows:")
-    print(df.head())
-
-    if create_plots:
-        create_all_plots(df, output_dir)
-
-    return df
+    print("\nCreating plots for changing K study...")
+    create_k_study_plots()
 
 
 if __name__ == "__main__":
     # Run the analysis
-    df = main()
+    main()
 
     print("\nAnalysis complete!")

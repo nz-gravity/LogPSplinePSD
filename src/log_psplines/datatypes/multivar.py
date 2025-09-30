@@ -92,6 +92,10 @@ class MultivarFFT:
 
     def cut(self, fmin: float, fmax: float) -> "MultivarFFT":
         """Return a new MultivarFFT within frequency range [fmin, fmax]."""
+        if fmax < fmin:
+            raise ValueError(
+                f"Invalid frequency bounds supplied: fmin={fmin}, fmax={fmax}."
+            )
         mask = (self.freq >= fmin) & (self.freq <= fmax)
         return MultivarFFT(
             y_re=self.y_re[mask],
@@ -101,6 +105,7 @@ class MultivarFFT:
             freq=self.freq[mask],
             n_freq=int(np.sum(mask)),
             n_dim=self.n_dim,
+            scaling_factor=self.scaling_factor,
         )
 
     @staticmethod

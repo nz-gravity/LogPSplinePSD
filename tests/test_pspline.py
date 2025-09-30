@@ -8,7 +8,7 @@ import pytest
 import scipy
 from scipy.interpolate import BSpline
 
-from log_psplines.datatypes import Periodogram, Timeseries
+from log_psplines.datatypes import MultivarFFT, Periodogram, Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
@@ -253,3 +253,40 @@ def test_basis_log_vs_linear(mock_pdgrm: Periodogram, outdir):
 
     plt.tight_layout()
     plt.savefig(f"{outdir}/test_basis_log_vs_linear.png")
+
+
+def test_timeseries_to_periodogram_frequency_bounds():
+    fs = 64
+    t = np.arange(0, 1, 1 / fs)
+    y = np.sin(2 * np.pi * 5 * t)
+    ts = Timeseries(t=t, y=y, scaling_factor=3.0)
+
+    pdgrm = ts.to_periodogram(fmin=3.0, fmax=7.0)
+
+    assert len(pdgrm.freqs) == 5
+    assert np.all(pdgrm.freqs >= 3.0)
+    assert np.all(pdgrm.freqs <= 7.0)
+    assert pdgrm.scaling_factor == pytest.approx(3.0)
+
+    with pytest.raises(ValueError):
+        ts.to_periodogram(fmin=10.0, fmax=5.0)
+
+
+def test_multivar_fft_cut_preserves_scaling():
+    rng = np.random.default_rng(0)
+    x = rng.normal(size=(32, 3))
+    scaling = 5.0
+    fft = MultivarFFT.compute_fft(x, fs=32.0, scaling_factor=scaling)
+
+    # Skip the first available frequency to ensure truncation happens
+    fmin = float(fft.freq[1])
+    fmax = float(fft.freq[-2])
+    trimmed = fft.cut(fmin, fmax)
+
+    assert trimmed.n_freq < fft.n_freq
+    assert np.all(trimmed.freq >= fmin)
+    assert np.all(trimmed.freq <= fmax)
+    assert trimmed.scaling_factor == pytest.approx(scaling)
+
+    with pytest.raises(ValueError):
+        fft.cut(10.0, 5.0)

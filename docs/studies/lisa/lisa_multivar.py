@@ -2,36 +2,44 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-from examples.plot_dcov_test import n_samples
 from lisa_data import TEN_DAYS, LISAData, download
 
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.mcmc import run_mcmc
-from log_psplines.plotting.psd_matrix import (
-    plot_psd_matrix,
-)
+from log_psplines.plotting.psd_matrix import plot_psd_matrix
 from log_psplines.psplines.multivar_psplines import MultivariateLogPSplines
-from log_psplines.samplers.multivar.multivar_nuts import (
-    MultivarNUTSConfig,
-    MultivarNUTSSampler,
-)
 
-RESULT_FN = "results/lisa/inference_data.nc"
-DATA_FPATH = "data/tdi.h5"
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+RESULT_FN = f"{HERE}/results/lisa/inference_data.nc"
+DATA_FPATH = f"{HERE}/data/tdi.h5"
 if not os.path.exists(DATA_FPATH):
     download(TEN_DAYS, dest_folder="data")
 lisa_data = LISAData.from_hdf5(DATA_FPATH)
 
-timeseries = MultivariateTimeseries(
-    t=lisa_data.t,
-    y=lisa_data.data,
-)
+
+# lets also only save every 2 datapoint to reduce size
+t = lisa_data.t[::2]
+y = lisa_data.data[::2]
+
+# lets truncate to only first 10% of data to reduce size
+n_trunc = int(0.1 * len(t))
+t = t[:n_trunc]
+y = y[:n_trunc, :]
+
+# standardise y
+y = (y - np.mean(y, axis=0)) / np.std(y, axis=0)
+
+timeseries = MultivariateTimeseries(y=y, t=t)
 print(timeseries)
 
 FMIN, FMAX = 5**-5, 6**-2
 
+fft_data = timeseries.to_cross_spectral_density()  # fmin=FMIN, fmax=FMAX)
+print(fft_data)
 
-if os.path.exists(RESULT_FN):
+
+if os.path.exists(RESULT_FN) and False:
     print(f"Found existing results at {RESULT_FN}, loading...")
     import arviz as az
 
@@ -40,7 +48,7 @@ if os.path.exists(RESULT_FN):
 else:
 
     idata = run_mcmc(
-        data=timeseries,
+        data=fft_data,
         sampler="nuts",
         n_samples=100,
         n_warmup=100,
@@ -48,9 +56,21 @@ else:
         degree=3,
         diffMatrixOrder=2,
         knot_kwargs=dict(strategy="log"),
-        outdir="results/lisa",
+        outdir=f"{HERE}/results/lisa",
         verbose=True,
+        dense_massl=False,
     )
 
-
 print(idata)
+
+
+plot_psd_matrix(
+    idata=idata,
+    n_channels=3,
+    freq=fft_data.freq,
+    empirical_psd=fft_data.empirical_psd,
+    outdir=f"{HERE}/results/lisa",
+    filename=f"psd_matrix.png",
+    diag_yscale="log",
+    xscale="log",
+)

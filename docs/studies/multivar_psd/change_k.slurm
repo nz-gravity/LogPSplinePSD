@@ -3,8 +3,8 @@
 #SBATCH --output=sim_study_%A_%a.out
 #SBATCH --error=sim_study_%A_%a.err
 #SBATCH --array=1-10
-#SBATCH --time=02:00:00
-#SBATCH --mem=4G
+#SBATCH --time=00:20:00
+#SBATCH --mem=1G
 #SBATCH --cpus-per-task=1
 
 module --force purge && ml gcc/12.3.0 python/3.11.3 && source /fred/oz303/avajpeyi/venvs/jax_cpu_venv/bin/activate

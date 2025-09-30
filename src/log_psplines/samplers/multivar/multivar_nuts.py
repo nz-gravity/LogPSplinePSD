@@ -85,87 +85,56 @@ def multivariate_psplines_model(
     # Initialize total log prior accumulator
     log_prior_total = jnp.array(0.0)
 
-    # Diagonal components (one per channel)
-    for j in range(n_dim):  # Now n_dim is a concrete Python int
+    def _sample_weight_block(
+        delta_name: str,
+        phi_name: str,
+        weights_name: str,
+    ) -> jnp.ndarray:
+        nonlocal component_idx, log_prior_total
+
+        penalty = all_penalties[component_idx]
+        basis = all_bases[component_idx]
+        k = penalty.shape[0]
+
         delta_dist = dist.Gamma(alpha_delta, beta_delta)
-        delta = numpyro.sample(f"delta_{j}", delta_dist)
-        log_prior_total += delta_dist.log_prob(delta)
+        delta = numpyro.sample(delta_name, delta_dist)
+        log_prior_total = log_prior_total + delta_dist.log_prob(delta)
 
         phi_dist = dist.Gamma(alpha_phi, delta * beta_phi)
-        phi = numpyro.sample(f"phi_delta_{j}", phi_dist)
-        log_prior_total += phi_dist.log_prob(phi)
+        phi = numpyro.sample(phi_name, phi_dist)
+        log_prior_total = log_prior_total + phi_dist.log_prob(phi)
 
-        k = all_penalties[component_idx].shape[0]
         base_normal = dist.Normal(0, 1).expand((k,)).to_event(1)
-        weights = numpyro.sample(f"weights_delta_{j}", base_normal)
+        weights = numpyro.sample(weights_name, base_normal)
 
-        wPw = jnp.dot(weights, jnp.dot(all_penalties[component_idx], weights))
+        wPw = jnp.dot(weights, jnp.dot(penalty, weights))
         log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-        base_log_prob = base_normal.log_prob(weights)
-        log_prior_adjustment = log_prior_w - base_log_prob
-        numpyro.factor(f"weights_prior_delta_{j}", log_prior_adjustment)
-        log_prior_total += log_prior_adjustment
+        log_prior_adjustment = log_prior_w - base_normal.log_prob(weights)
+        numpyro.factor(f"weights_prior_{weights_name}", log_prior_adjustment)
+        log_prior_total = log_prior_total + log_prior_adjustment
 
-        # Compute log diagonal element
-        log_delta_sq_j = all_bases[component_idx] @ weights
-        log_delta_components.append(log_delta_sq_j)
         component_idx += 1
+        return basis @ weights
+
+    # Diagonal components (one per channel)
+    for j in range(n_dim):  # Now n_dim is a concrete Python int
+        block_eval = _sample_weight_block(
+            f"delta_{j}", f"phi_delta_{j}", f"weights_delta_{j}"
+        )
+        log_delta_components.append(block_eval)
 
     log_delta_sq = jnp.stack(log_delta_components, axis=1)
 
     # Off-diagonal components (if multivariate)
     if n_theta > 0:
-        # Real part of off-diagonal terms
-        delta_re_dist = dist.Gamma(alpha_delta, beta_delta)
-        delta_re = numpyro.sample("delta_theta_re", delta_re_dist)
-        log_prior_total += delta_re_dist.log_prob(delta_re)
-
-        phi_re_dist = dist.Gamma(alpha_phi, delta_re * beta_phi)
-        phi_re = numpyro.sample("phi_theta_re", phi_re_dist)
-        log_prior_total += phi_re_dist.log_prob(phi_re)
-
-        k = all_penalties[component_idx].shape[0]
-        base_normal_re = dist.Normal(0, 1).expand((k,)).to_event(1)
-        weights_re = numpyro.sample("weights_theta_re", base_normal_re)
-
-        wPw_re = jnp.dot(
-            weights_re, jnp.dot(all_penalties[component_idx], weights_re)
+        theta_re_base = _sample_weight_block(
+            "delta_theta_re", "phi_theta_re", "weights_theta_re"
         )
-        log_prior_w_re = 0.5 * k * jnp.log(phi_re) - 0.5 * phi_re * wPw_re
-        log_prior_adjustment_re = log_prior_w_re - base_normal_re.log_prob(
-            weights_re
-        )
-        numpyro.factor("weights_prior_theta_re", log_prior_adjustment_re)
-        log_prior_total += log_prior_adjustment_re
-
-        theta_re_base = all_bases[component_idx] @ weights_re
         theta_re = jnp.tile(theta_re_base[:, None], (1, max(1, n_theta)))
-        component_idx += 1
 
-        # Imaginary part of off-diagonal terms
-        delta_im_dist = dist.Gamma(alpha_delta, beta_delta)
-        delta_im = numpyro.sample("delta_theta_im", delta_im_dist)
-        log_prior_total += delta_im_dist.log_prob(delta_im)
-
-        phi_im_dist = dist.Gamma(alpha_phi, delta_im * beta_phi)
-        phi_im = numpyro.sample("phi_theta_im", phi_im_dist)
-        log_prior_total += phi_im_dist.log_prob(phi_im)
-
-        k = all_penalties[component_idx].shape[0]
-        base_normal_im = dist.Normal(0, 1).expand((k,)).to_event(1)
-        weights_im = numpyro.sample("weights_theta_im", base_normal_im)
-
-        wPw_im = jnp.dot(
-            weights_im, jnp.dot(all_penalties[component_idx], weights_im)
+        theta_im_base = _sample_weight_block(
+            "delta_theta_im", "phi_theta_im", "weights_theta_im"
         )
-        log_prior_w_im = 0.5 * k * jnp.log(phi_im) - 0.5 * phi_im * wPw_im
-        log_prior_adjustment_im = log_prior_w_im - base_normal_im.log_prob(
-            weights_im
-        )
-        numpyro.factor("weights_prior_theta_im", log_prior_adjustment_im)
-        log_prior_total += log_prior_adjustment_im
-
-        theta_im_base = all_bases[component_idx] @ weights_im
         theta_im = jnp.tile(theta_im_base[:, None], (1, max(1, n_theta)))
     else:
         theta_re = jnp.zeros((n_freq, 0))

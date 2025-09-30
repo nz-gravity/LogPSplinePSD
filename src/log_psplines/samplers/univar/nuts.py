@@ -6,14 +6,14 @@ import time
 from dataclasses import dataclass
 
 import arviz as az
+import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
-from numpyro.infer.util import init_to_value
+from numpyro.infer.util import init_to_value, log_density
 
 from ..base_sampler import SamplerConfig
-from .metropolis_hastings import log_posterior as mh_log_posterior
 from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
 
@@ -42,18 +42,28 @@ def bayesian_model(
     phi_dist = dist.Gamma(concentration=alpha_phi, rate=delta * beta_phi)
     phi = numpyro.sample("phi", phi_dist)
 
-    # Sample weights from unregularized Normal(0,1)
+    # Sample weights from standard Normal and adjust to desired MVN prior
     k = penalty_matrix.shape[0]
-    w = numpyro.sample("weights", dist.Normal(0, 1).expand([k]).to_event(1))
+    base_normal = dist.Normal(0, 1).expand([k]).to_event(1)
+    w = numpyro.sample("weights", base_normal)
 
-    # Add custom factor for the prior p(w | phi, delta) ~ MVN(0, (phi*P)^-1)
     wPw = jnp.dot(w, jnp.dot(penalty_matrix, w))
     log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
+    base_log_prob = base_normal.log_prob(w)
+    log_prior_adjustment = log_prior_w - base_log_prob
+
     lnl = log_likelihood(w, log_pdgrm, lnspline_basis, ln_parametric)
 
-    numpyro.factor("ln_prior", log_prior_w)
+    # Gamma prior contributions for phi and delta
+    log_prior_phi = phi_dist.log_prob(phi)
+    log_prior_delta = delta_dist.log_prob(delta)
+
+    numpyro.factor("ln_prior", log_prior_adjustment)
     numpyro.factor("ln_likelihood", lnl)
-    numpyro.deterministic("lp", log_prior_w + lnl)
+    numpyro.deterministic(
+        "lp",
+        log_prior_adjustment + log_prior_phi + log_prior_delta + lnl,
+    )
 
 
 class NUTSSampler(UnivarBaseSampler):
@@ -64,6 +74,9 @@ class NUTSSampler(UnivarBaseSampler):
             config = NUTSConfig()
         super().__init__(periodogram, spline_model, config)
         self.config: NUTSConfig = config  # Type hint for IDE
+
+        # Pre-build JIT-compiled log-posterior for morphZ evidence
+        self._logpost_fn = self._build_log_density_fn()
 
         # Pre-compile NumPyro model for faster warmup
         self._compile_model()
@@ -139,7 +152,17 @@ class NUTSSampler(UnivarBaseSampler):
         # Extract samples and convert to ArviZ
         samples = mcmc.get_samples()
         stats = mcmc.get_extra_fields()
-        stats["lp"] = samples.pop("lp")
+
+        lp_component = samples.pop("lp", None)
+        if lp_component is not None:
+            stats["lp_pspline"] = jnp.asarray(lp_component)
+
+        logpost = jax.vmap(self._logpost_fn)(
+            jnp.asarray(samples["weights"]),
+            jnp.asarray(samples["phi"]),
+            jnp.asarray(samples["delta"]),
+        )
+        stats["lp"] = jax.device_get(logpost)
 
         return self.to_arviz(samples, stats)
 
@@ -188,25 +211,30 @@ class NUTSSampler(UnivarBaseSampler):
     def _compute_log_posterior(
         self, weights: jnp.ndarray, phi: float, delta: float
     ) -> float:
-        """
-        Compute log posterior for given parameters.
+        """Compute log posterior for given parameters via the NumPyro model."""
+        w = jnp.asarray(weights)
+        phi = jnp.asarray(phi)
+        delta = jnp.asarray(delta)
+        return float(self._logpost_fn(w, phi, delta))
 
-        This implements the log posterior computation that was in your MH sampler.
-        Could be used instead of numpyro's log_density if needed.
-        """
-        # You could move the log_posterior function from your MH sampler here
-        return float(
-            mh_log_posterior(
-                weights,
-                phi,
-                delta,
-                log_pdgrm=self.log_pdgrm,
-                basis_matrix=self.basis_matrix,
-                log_parametric=self.log_parametric,
-                penalty_matrix=self.penalty_matrix,
-                alpha_phi=self.config.alpha_phi,
-                beta_phi=self.config.beta_phi,
-                alpha_delta=self.config.alpha_delta,
-                beta_delta=self.config.beta_delta,
+    def _build_log_density_fn(self):
+        """Create a jitted closure for evaluating the NumPyro log posterior."""
+
+        model_kwargs = jax.tree_util.tree_map(jnp.asarray, self._logp_kwargs)
+
+        @jax.jit
+        def _logpost(weights, phi, delta):
+            params = {
+                "weights": weights,
+                "phi": phi,
+                "delta": delta,
+            }
+            log_prob, _ = log_density(
+                bayesian_model,
+                (),
+                model_kwargs,
+                params,
             )
-        )
+            return log_prob
+
+        return _logpost

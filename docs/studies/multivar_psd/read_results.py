@@ -20,7 +20,7 @@ The plots generated are:
 
 import glob
 import os
-from typing import Optional, Tuple
+from typing import Optional
 
 import arviz as az
 import matplotlib.pyplot as plt
@@ -28,118 +28,23 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-RESULTS_DIR = "out_changing_n/"
-CSV_FILE = "summary_metrics.csv"
+RESULTS_DIRS = ["out_changing_n/", "out_changing_k/"]
+CSV_FILES = ["summary_metrics_n.csv", "summary_metrics_k.csv"]
 CLEAN = True  # If True, re-extract metrics even if CSV exists
 
 
-def extract_metrics_from_inferencedata(
-    idata: az.InferenceData,
-) -> Tuple[float, float, float, float]:
-    """
-    Extract performance metrics from InferenceData object.
-
-    Uses the attributes stored in the InferenceData object to extract:
-    - runtime: Total sampling time
-    - ess: Effective sample size (bulk method)
-    - riae: Relative integrated absolute error
-    - coverage: Coverage probability of true PSD values (ci_coverage)
-
-    Args:
-        idata: InferenceData object containing posterior samples and attributes
-
-    Returns:
-        Tuple of (runtime, ess, riae, coverage)
-    """
-    # Extract runtime directly from attributes
-    runtime = idata.attrs.get("runtime", np.nan)
-    ess = np.median(idata.attrs.get("ess", [np.nan]))
-
-    # Extract RIAE (check both multiar and univar attribute names)
-    riae = idata.attrs.get("riae_matrix", idata.attrs.get("riae", np.nan))
-
-    # Extract CI coverage from attributes if available (computed during MCMC runs)
-    ci_coverage = idata.attrs.get("ci_coverage", np.nan)
-
-    # If ci_coverage not found in attributes, compute it (for backward compatibility)
-    if np.isnan(ci_coverage):
-        print(
-            "Warning: ci_coverage not found in attributes, computing on-the-fly"
-        )
-        # Get true PSD from attributes
-        true_psd = idata.attrs.get("true_psd", None)
-        if true_psd is None:
-            print("Warning: true_psd not found in attributes")
-            return runtime, ess, riae, np.nan
-
-        try:
-            # Compute coverage for multivariate case
-            if "psd_matrix" in idata.posterior:
-                posterior_psds = idata.posterior["psd_matrix"].values
-                n_samples, n_freq = posterior_psds.shape[:2]
-                posterior_psds_real = np.zeros(
-                    (n_samples, n_freq, *posterior_psds.shape[2:]), dtype=float
-                )
-                for i in range(n_samples):
-                    for j in range(n_freq):
-                        posterior_psds_real[i, j] = _complex_to_real(
-                            posterior_psds[i, j]
-                        )
-                posterior_lower = np.percentile(
-                    posterior_psds_real, 2.5, axis=0
-                )
-                posterior_upper = np.percentile(
-                    posterior_psds_real, 97.5, axis=0
-                )
-                true_psd_real = np.zeros_like(true_psd, dtype=float)
-                for j in range(n_freq):
-                    true_psd_real[j] = _complex_to_real(true_psd[j])
-                ci_coverage = np.mean(
-                    (true_psd_real >= posterior_lower)
-                    & (true_psd_real <= posterior_upper)
-                )
-            # Compute coverage for univariate case
-            elif "psd" in idata.posterior_psd:
-                psd_samples = idata.posterior_psd[
-                    "psd"
-                ].values  # (pp_draw, freq)
-                posterior_lower = np.percentile(psd_samples, 2.5, axis=0)
-                posterior_upper = np.percentile(psd_samples, 97.5, axis=0)
-                ci_coverage = np.mean(
-                    (true_psd >= posterior_lower)
-                    & (true_psd <= posterior_upper)
-                )
-            else:
-                print(
-                    "Warning: PSD data not found in posterior for coverage calculation"
-                )
-                ci_coverage = np.nan
-        except Exception as e:
-            print(f"Warning: Could not calculate coverage: {e}")
-            ci_coverage = np.nan
-
-    return runtime, ess, riae, ci_coverage
+def extract_data(idata: az.InferenceData):
+    return dict(
+        runtime=idata.attrs.get("runtime", np.nan),
+        ess=np.median(idata.attrs.get("ess", [np.nan])),
+        riae=idata.attrs.get("riae_matrix", idata.attrs.get("riae", np.nan)),
+        coverage=idata.attrs.get("ci_coverage", np.nan),
+        N=idata.attrs["n_freq"] + 1 * 2,
+        K=idata.spline_model["diag_0_knots"].shape[0],
+    )
 
 
-def extract_study_parameters(
-    idata: az.InferenceData,
-) -> Tuple[Optional[int], Optional[int]]:
-    """
-    Extract study parameters (N, K) from InferenceData attributes.
-
-    Args:
-        idata: InferenceData object containing study parameters in attributes
-
-    Returns:
-    """
-    N = idata.attrs["n_freq"] + 1 * 2
-    K = idata.spline_model["diag_0_knots"].shape[0]
-    return N, K
-
-
-def read_or_create_summary(
-    results_dir: str = RESULTS_DIR, csv_file: str = CSV_FILE
-) -> pd.DataFrame:
+def read_or_create_summary(results_dir: str, csv_file: str) -> pd.DataFrame:
     """
     Read summary metrics from CSV or create from InferenceData files.
 
@@ -169,32 +74,10 @@ def read_or_create_summary(
             try:
                 print(f"Processing {os.path.basename(fname)}...")
                 idata = az.from_netcdf(fname)
-
-                # Extract metrics
-                runtime, ess, riae, coverage = (
-                    extract_metrics_from_inferencedata(idata)
-                )
-
-                # Extract study parameters
-                N, K = extract_study_parameters(idata)
-
-                # Extract additional useful attributes
-                sampler_type = idata.attrs.get("sampler_type", "unknown")
-                n_channels = idata.attrs.get("n_channels", np.nan)
-                n_freq = idata.attrs.get("n_freq", np.nan)
-
                 rows.append(
                     {
                         "filename": os.path.basename(fname),
-                        "N": N,
-                        "K": K,
-                        "runtime": runtime,
-                        "ess": ess,
-                        "riae": riae,
-                        "coverage": coverage,
-                        "sampler_type": sampler_type,
-                        "n_channels": n_channels,
-                        "n_freq": n_freq,
+                        **extract_data(idata),
                     }
                 )
 
@@ -352,24 +235,37 @@ def create_all_plots(df: pd.DataFrame, output_dir: str = "plots") -> None:
 
 
 def main(
-    results_dir: str = RESULTS_DIR,
-    csv_file: str = CSV_FILE,
+    results_dirs: list = RESULTS_DIRS,
+    csv_files: list = CSV_FILES,
     create_plots: bool = True,
     output_dir: str = "plots",
+    combine_studies: bool = True,
 ) -> pd.DataFrame:
     """
     Main function to extract metrics and optionally create plots.
 
     Args:
-        results_dir: Directory containing .nc files
-        csv_file: Path to save/load CSV file
+        results_dirs: List of directories containing .nc files (change_n and change_k studies)
+        csv_files: List of paths to save/load CSV files
         create_plots: Whether to create plots
         output_dir: Directory to save plots
+        combine_studies: Whether to combine results from all directories
 
     Returns:
         DataFrame with extracted metrics
     """
-    df = read_or_create_summary(results_dir, csv_file)
+    dfs = []
+    for results_dir, csv_file in zip(results_dirs, csv_files):
+        df = read_or_create_summary(results_dir, csv_file)
+        dfs.append(df)
+
+    if combine_studies:
+        df = pd.concat(dfs, ignore_index=True)
+    else:
+        if not dfs:
+            df = pd.DataFrame()
+        else:
+            df = dfs[0]
 
     if df.empty:
         print("No data to process")

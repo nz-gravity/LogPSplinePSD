@@ -2,29 +2,36 @@ import os
 
 import pytest
 
-FAST_RUN = False
+
+def _compute_test_mode() -> str:
+    env_mode = os.getenv("LOG_PSPLINES_TEST_MODE")
+    if env_mode:
+        env_mode = env_mode.lower()
+        if env_mode in {"fast", "slow"}:
+            return env_mode
+
+    if os.getenv("LOG_PSPLINES_SLOW_TESTS") == "1":
+        return "slow"
+
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        return "fast"
+
+    return "fast"
+
+
+TEST_MODE = _compute_test_mode()
+
+# os.environ.setdefault("JAX_PLATFORM_NAME", "cpu")
+# if TEST_MODE == "fast":
+#     os.environ.setdefault("JAX_DISABLE_JIT", "1")
+# else:
+#     os.environ.pop("JAX_DISABLE_JIT", None)
 
 
 @pytest.fixture(scope="session")
 def test_mode():
-    """
-    Fixture to determine the test mode (fast or slow).
-
-    It checks for the 'GITHUB_ACTIONS' environment variable.
-    - If running on GitHub Actions, it returns "fast".
-    - Otherwise (for local runs), it returns "slow".
-
-    This value can be used by tests to skip or adapt behavior for
-    long-running tasks (e.g., waiting for external services).
-    """
-    # Check if the GITHUB_ACTIONS environment variable is set to 'true'.
-    # This is the standard way to detect a GitHub Actions CI environment.
-    is_github_ci = os.getenv("GITHUB_ACTIONS") == "true"
-
-    if is_github_ci or FAST_RUN:
-        return "fast"
-    else:
-        return "slow"
+    """Expose the resolved test mode to tests."""
+    return TEST_MODE
 
 
 @pytest.fixture

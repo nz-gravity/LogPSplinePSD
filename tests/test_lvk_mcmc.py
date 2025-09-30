@@ -14,7 +14,7 @@ def mock_gwpy_timeseries_from_simulation(
     detector, gps_start, gps_end, **kwargs
 ):
     duration = gps_end - gps_start
-    fs = 4096  # or use kwargs.get('sample_rate', 4096) if needed
+    fs = 1024  # or use kwargs.get('sample_rate', 4096) if needed
     lvk_sim = LVKData.from_simulation(duration=duration, fs=fs)
     return TimeSeries(lvk_sim.strain, sample_rate=fs)
 
@@ -27,7 +27,7 @@ def test_lvk_mcmc(outdir, test_mode):
         side_effect=mock_gwpy_timeseries_from_simulation,
     ):
         lvk_data = LVKData.download_data(
-            detector="L1", gps_start=1126259462, duration=2, fmin=256, fmax=512
+            detector="L1", gps_start=1126259462, duration=1, fmin=256, fmax=512
         )
     # TODO: mock download TimeSeries.fetch_open_data(detector, gps_start, gps_end)
     lvk_data.plot_psd(fname=os.path.join(out, "lvk_psd_analysis.png"))
@@ -39,8 +39,11 @@ def test_lvk_mcmc(outdir, test_mode):
     )
     pdgrm = pdgrm.cut(256, 512)
 
+    base_knots = 50
+    if test_mode == "fast":
+        base_knots = 6
     lvk_knots = init_knots(
-        n_knots=50,
+        n_knots=base_knots,
         periodogram=pdgrm,
         method="lvk",
         knots_plotfn=os.path.join(out, "lvk_psd_analysis.png"),

@@ -21,13 +21,36 @@ class Timeseries:
         """Sampling frequency computed from the time array."""
         return float(1 / (self.t[1] - self.t[0]))
 
-    def to_periodogram(self) -> "Periodogram":
-        """Compute the one-sided periodogram of the timeseries."""
+    def to_periodogram(
+        self, fmin: float = None, fmax: float = None
+    ) -> "Periodogram":
+        """Compute the one-sided periodogram of the timeseries.
+
+        Parameters
+        ----------
+        fmin, fmax : float, optional
+            Frequency bounds to retain. When provided, the resulting
+            periodogram is truncated to the inclusive range ``[fmin, fmax]``.
+        """
         freq = np.fft.rfftfreq(len(self.y), d=1 / self.fs)
         power = 2 * np.abs(np.fft.rfft(self.y)) ** 2 / len(self.y) / self.fs
-        return Periodogram(
-            freq[1:], power[1:], scaling_factor=self.scaling_factor
-        )
+
+        # Skip the zero-frequency component for numerical stability
+        freq = freq[1:]
+        power = power[1:]
+
+        if fmin is not None or fmax is not None:
+            lower = freq[0] if fmin is None else fmin
+            upper = freq[-1] if fmax is None else fmax
+            if upper < lower:
+                raise ValueError(
+                    f"Invalid frequency bounds: fmin={lower}, fmax={upper}."
+                )
+            mask = (freq >= lower) & (freq <= upper)
+            freq = freq[mask]
+            power = power[mask]
+
+        return Periodogram(freq, power, scaling_factor=self.scaling_factor)
 
     def standardise(self):
         """Standardise the timeseries to have zero mean and unit variance."""

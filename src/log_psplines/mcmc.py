@@ -30,6 +30,8 @@ def run_mcmc(
     knot_kwargs: dict = {},
     parametric_model: Optional[jnp.ndarray] = None,
     true_psd: Optional[jnp.ndarray] = None,
+    fmin: Optional[float] = None,
+    fmax: Optional[float] = None,
     # Sampler parameters
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
@@ -82,6 +84,10 @@ def run_mcmc(
         Alpha parameter for smoothing prior
     beta_delta : float, default=1e-4
         Beta parameter for smoothing prior
+    fmin, fmax : float, optional
+        Lower/upper frequency bounds to retain. Only frequencies within the
+        inclusive range ``[fmin, fmax]`` are used for inference. When either
+        bound is ``None`` the full available range is kept on that side.
     rng_key : int, default=42
         Random number generator key
     verbose : bool, default=True
@@ -121,9 +127,13 @@ def run_mcmc(
 
         # Convert to processed format for existing pipeline
         if isinstance(data, Timeseries):
-            processed_data = standardized_ts.to_periodogram()
+            processed_data = standardized_ts.to_periodogram(
+                fmin=fmin, fmax=fmax
+            )
         else:  # MultivariateTimeseries
-            processed_data = standardized_ts.to_cross_spectral_density()
+            processed_data = standardized_ts.to_cross_spectral_density(
+                fmin=fmin, fmax=fmax
+            )
 
         if verbose:
             print(
@@ -140,6 +150,33 @@ def run_mcmc(
 
     if isinstance(data, (Periodogram, MultivarFFT)):
         processed_data = data  # Use as is
+
+    # Apply frequency truncation when raw processed data is provided
+    if processed_data is not None and (fmin is not None or fmax is not None):
+        freq_attr = (
+            "freqs" if isinstance(processed_data, Periodogram) else "freq"
+        )
+        freqs = getattr(processed_data, freq_attr)
+        lower = freqs[0] if fmin is None else fmin
+        upper = freqs[-1] if fmax is None else fmax
+        if upper < lower:
+            raise ValueError(
+                f"Invalid frequency bounds supplied: fmin={lower}, fmax={upper}."
+            )
+        if isinstance(processed_data, Periodogram):
+            processed_data = processed_data.cut(lower, upper)
+        else:  # MultivarFFT
+            processed_data = processed_data.cut(lower, upper)
+
+        n_points = (
+            processed_data.n
+            if isinstance(processed_data, Periodogram)
+            else processed_data.n_freq
+        )
+        if n_points == 0:
+            raise ValueError(
+                "Frequency truncation removed all data points. Check fmin/fmax."
+            )
 
     # Create model based on processed data type
     if isinstance(processed_data, Periodogram):

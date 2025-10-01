@@ -275,6 +275,10 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             self._logpost_fn, params_batch
         )
 
+        for key in list(samples):
+            if key.startswith("phi"):
+                samples[key] = jnp.exp(samples[key])
+
         return self.to_arviz(samples, stats)
 
     def _get_initial_values(self) -> Dict[str, jnp.ndarray]:
@@ -291,7 +295,7 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         # Initialize diagonal components
         for j in range(self.n_channels):
             init_values[f"delta_{j}"] = delta_init
-            init_values[f"phi_delta_{j}"] = phi_init
+            init_values[f"phi_delta_{j}"] = jnp.log(phi_init)
             init_values[f"weights_delta_{j}"] = (
                 self.spline_model.diagonal_models[j].weights
             )
@@ -299,13 +303,13 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         # Initialize off-diagonal components if needed
         if self.n_theta > 0:
             init_values["delta_theta_re"] = delta_init
-            init_values["phi_theta_re"] = phi_init
+            init_values["phi_theta_re"] = jnp.log(phi_init)
             init_values["weights_theta_re"] = (
                 self.spline_model.offdiag_re_model.weights
             )
 
             init_values["delta_theta_im"] = delta_init
-            init_values["phi_theta_im"] = phi_init
+            init_values["phi_theta_im"] = jnp.log(phi_init)
             init_values["weights_theta_im"] = (
                 self.spline_model.offdiag_im_model.weights
             )
@@ -377,5 +381,11 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         }
 
     def _compute_log_posterior(self, params: Dict[str, jnp.ndarray]) -> float:
-        params = {k: jnp.asarray(v) for k, v in params.items()}
-        return float(self._logpost_fn(params))
+        transformed = {}
+        for name, value in params.items():
+            array = jnp.asarray(value)
+            if name.startswith("phi"):
+                transformed[name] = jnp.log(array)
+            else:
+                transformed[name] = array
+        return float(self._logpost_fn(transformed))

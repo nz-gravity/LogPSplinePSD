@@ -2,7 +2,7 @@
 
 import warnings
 from dataclasses import asdict
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import arviz as az
 import jax
@@ -283,7 +283,7 @@ def _create_multivar_inference_data(
 
     # Create posterior predictive samples
     psd_samples = _compute_posterior_predictive_multivar(
-        samples, spline_model, fft_data
+        samples, sample_stats, spline_model, fft_data
     )
     n_pp = psd_samples.shape[0]
 
@@ -538,43 +538,72 @@ def _pack_spline_model_multivar(spline_model) -> Dataset:
 
 
 def _compute_posterior_predictive_multivar(
-    samples: Dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT
+    samples: Dict[str, jnp.ndarray],
+    sample_stats: Dict[str, jnp.ndarray],
+    spline_model,
+    fft_data: MultivarFFT,
 ) -> jnp.ndarray:
     """Compute posterior predictive PSD matrices from samples."""
-    # Extract samples - handle different possible sample structures
-    if "log_delta_sq" in samples:
-        log_delta_sq = samples["log_delta_sq"]
-        # Remove chain dimension if present (take first chain only for posterior predictive)
-        if log_delta_sq.ndim == 4:  # (n_chains, n_draws, n_freq, n_channels)
-            log_delta_sq = log_delta_sq[
-                0
-            ]  # Take first chain: (n_draws, n_freq, n_channels)
-        theta_re = samples.get("theta_re")
-        theta_im = samples.get("theta_im")
-        # Default to zeros if not present
-        if theta_re is None:
-            theta_re = jnp.zeros((log_delta_sq.shape[0], fft_data.n_freq, 0))
-        else:
-            if theta_re.ndim == 4:
-                theta_re = theta_re[0]
-        if theta_im is None:
-            theta_im = jnp.zeros((log_delta_sq.shape[0], fft_data.n_freq, 0))
-        else:
-            if theta_im.ndim == 4:
-                theta_im = theta_im[0]
-    else:
-        # Reconstruct from individual component samples
+
+    def _flatten_chain_dim(
+        array: Optional[jnp.ndarray],
+    ) -> Optional[jnp.ndarray]:
+        """Flatten chain dimension (if present) into the draw dimension."""
+        if array is None:
+            return None
+        arr = jnp.asarray(array)
+        if arr.ndim == 0:
+            return arr
+        if arr.ndim >= 3:
+            # Handle arrays with explicit chain dimension inserted by _prepare_samples_and_stats
+            if arr.shape[1] == fft_data.n_freq:
+                return arr  # Already (draw, freq, ...)
+            if arr.shape[0] == 1:
+                arr = arr[0]
+            else:
+                arr = arr.reshape((-1,) + tuple(arr.shape[2:]))
+        elif arr.ndim == 2 and arr.shape[0] == 1:
+            arr = arr[0]
+        return arr
+
+    log_delta_sq = _flatten_chain_dim(sample_stats.get("log_delta_sq"))
+    theta_re = _flatten_chain_dim(sample_stats.get("theta_re"))
+    theta_im = _flatten_chain_dim(sample_stats.get("theta_im"))
+
+    if log_delta_sq is None:
+        # Reconstruct from individual component samples (fallback for samplers that
+        # expose per-component weights only)
         log_delta_sq = _reconstruct_log_delta_sq(
             samples, spline_model, fft_data
         )
+
+    if theta_re is None:
         theta_re = _reconstruct_theta_params(
             samples, spline_model, fft_data, "re"
         )
+
+    if theta_im is None:
         theta_im = _reconstruct_theta_params(
             samples, spline_model, fft_data, "im"
         )
 
-    # Use spline model's reconstruction method
+    if (
+        theta_re is not None
+        and theta_re.shape[-1] == 0
+        and spline_model.n_theta > 0
+    ):
+        theta_re = jnp.zeros(
+            (log_delta_sq.shape[0], fft_data.n_freq, spline_model.n_theta)
+        )
+    if (
+        theta_im is not None
+        and theta_im.shape[-1] == 0
+        and spline_model.n_theta > 0
+    ):
+        theta_im = jnp.zeros(
+            (log_delta_sq.shape[0], fft_data.n_freq, spline_model.n_theta)
+        )
+
     return spline_model.reconstruct_psd_matrix(
         log_delta_sq, theta_re, theta_im, n_samples_max=50
     )

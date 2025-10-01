@@ -111,6 +111,7 @@ line_length = 79
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--durations=20 -s"
 
 [tool.coverage.run]
 branch = true

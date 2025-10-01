@@ -126,6 +126,7 @@ class UnivarBaseSampler(BaseSampler):
             ln_parametric=self.log_parametric,
             penalty_matrix=self.penalty_matrix,
             penalty_whiten=self.penalty_whiten,
+            penalty_unwhiten_T=self.penalty_unwhiten_T,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,
             alpha_delta=self.config.alpha_delta,

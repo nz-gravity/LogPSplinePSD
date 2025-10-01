@@ -1,4 +1,30 @@
-"""Blocked NUTS sampler that factorises the multivariate Whittle likelihood."""
+"""Blocked NUTS sampler for multivariate PSD (Cholesky parameterisation).
+
+This module implements the factorised form of the multivariate Whittle
+likelihood when the inverse spectral density is parameterised via a unit lower
+triangular Cholesky factor ``T(f)`` and diagonal matrix ``D(f)``:
+
+    S(f)^{-1} = T(f)^H D(f)^{-1} T(f).
+
+With this parameterisation the Whittle likelihood decouples across the rows of
+``T``. Writing the j-th row parameters as
+
+    - diagonal log-variances:  log_delta_sq_j(f) = log(δ_j(f)^2)
+    - off–diagonal complex coefficients: θ_{j1}(f), …, θ_{j,j-1}(f)
+
+the joint likelihood factorises as a product of p independent likelihoods
+L_j(δ_j, θ_{j,<j}). Each factor has the form
+
+    L_j ∝ ∏_k exp{-|d_j(f_k) - Σ_{l<j} θ_{jl}(f_k) d_l(f_k)|^2 / δ_j(f_k)^2}
+           × δ_j(f_k)^{-2}.
+
+The class :class:`MultivarBlockedNUTSSampler` exploits this by running a
+separate NUTS chain for each block ``j = 0,…,p-1`` (0‑based indexing). Each
+chain samples only the parameters that affect the j‑th likelihood factor and is
+therefore independent of the other chains. The per‑block results are then
+assembled into global arrays ``log_delta_sq`` with shape (draw, freq, p) and
+``theta_re|im`` with shape (draw, freq, n_theta) matching the unified sampler.
+"""
 
 import time
 from dataclasses import dataclass
@@ -31,7 +57,35 @@ def _blocked_channel_model(
     alpha_delta: float,
     beta_delta: float,
 ) -> None:
-    """NumPyro model for a single Cholesky block."""
+    """NumPyro model for a single Cholesky block (row of ``T``).
+
+    Parameters
+    ----------
+    channel_index
+        0‑based row index ``j`` in the Cholesky factor (channel in the data).
+    y_re, y_im
+        Real/imaginary parts of the DFT for the j‑th channel, shape ``(n_freq,)``.
+    Z_re, Z_im
+        Real/imaginary parts of the design matrix for the off‑diagonal terms of
+        row ``j``. Shape ``(n_freq, j)``. Column ``l`` corresponds to
+        ``d_l(f)`` with ``l < j``.
+    basis_delta, penalty_delta
+        P‑spline basis/penalty for ``log δ_j(f)^2``.
+    basis_theta, penalty_theta
+        P‑spline basis/penalty shared by all θ_{jl}(f) in this row.
+    alpha_phi, beta_phi, alpha_delta, beta_delta
+        Hyperparameters for the hierarchical priors used in
+        :func:`sample_pspline_block`.
+
+    Notes
+    -----
+    - The likelihood implemented here corresponds to Eq. (likelihood_j) in your
+      draft: the residual is ``u_j(f) = d_j(f) − Σ_{l<j} θ_{jl}(f) d_l(f)`` and
+      the contribution to the log-likelihood is
+      ``−Σ_k log δ_j(f_k)^2 − Σ_k |u_j(f_k)|^2 / δ_j(f_k)^2`` up to constants.
+    - Deterministic nodes record the evaluated spline fields so downstream code
+      can reconstruct the PSD matrix without re-evaluating the splines.
+    """
 
     channel_label = f"{channel_index}"
 
@@ -127,6 +181,17 @@ def _blocked_channel_model(
 
 @dataclass
 class MultivarBlockedNUTSConfig(SamplerConfig):
+    """Configuration for the blocked multivariate NUTS sampler.
+
+    Attributes
+    ----------
+    target_accept_prob, max_tree_depth, dense_mass
+        Standard NUTS controls forwarded to NumPyro.
+    save_nuts_diagnostics
+        When ``True``, store per‑block NUTS diagnostics (accept_prob, num_steps,
+        etc.) under names like ``accept_prob_channel_j``.
+    """
+
     target_accept_prob: float = 0.8
     max_tree_depth: int = 10
     dense_mass: bool = True
@@ -134,7 +199,20 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
 
 
 class MultivarBlockedNUTSSampler(MultivarBaseSampler):
-    """Run independent NUTS chains per Cholesky block."""
+    """Run independent NUTS chains for each row of the Cholesky factor.
+
+    For ``p`` channels the sampler iterates ``j = 0,…,p-1`` and runs a separate
+    NumPyro/NUTS inference for the j‑th block using :func:`_blocked_channel_model`.
+    The block observes ``(y_re[:, j], y_im[:, j])`` and uses as regressors the
+    previous channels' Fourier coefficients encoded in ``Z_{·, j, :j}``.
+
+    The per‑block posterior draws are merged into global deterministic arrays:
+    - ``log_delta_sq`` with shape ``(draw, freq, p)``
+    - ``theta_re`` / ``theta_im`` with shape ``(draw, freq, n_theta)``
+
+    These arrays match what the unified multivariate sampler produces, so all
+    downstream plotting and diagnostics work identically.
+    """
 
     def __init__(
         self,
@@ -166,6 +244,21 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     def sample(
         self, n_samples: int, n_warmup: int = 500, **kwargs
     ) -> az.InferenceData:
+        """Run the blocked inference and assemble results.
+
+        Steps
+        -----
+        1. For each channel ``j`` build the design slice ``Z[:, j, :j]``
+           (consistent with the triangular ordering used by
+           :class:`~log_psplines.datatypes.MultivarFFT`), and run NUTS on the
+           corresponding block model.
+        2. Move per‑block deterministics out of the ``samples`` dict into
+           ``sample_stats`` and, for diagnostics, optionally rename NumPyro’s
+           NUTS fields with ``_channel_{j}`` suffixes.
+        3. Stack ``log_delta_sq_j`` across channels and place the θ blocks into
+           the correct positions of the global ``theta_re|im`` arrays.
+        4. Sum the block log‑likelihoods to obtain the joint log‑likelihood.
+        """
         if self.config.verbose:
             print(
                 f"Blocked multivariate NUTS sampler [{self.device}] - {self.n_channels} channels"
@@ -348,4 +441,5 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     def _get_lnz(
         self, samples: Dict[str, jnp.ndarray], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
+        """LnZ is currently not computed for the multivariate samplers."""
         return super()._get_lnz(samples, sample_stats)

@@ -191,7 +191,7 @@ def _create_essential_diagnostics(
     # 4. Acceptance rate diagnostics
     @safe_plot(f"{diag_dir}/acceptance_diagnostics.png", config.dpi)
     def plot_acceptance():
-        _plot_acceptance_diagnostics(idata, config)
+        _plot_acceptance_diagnostics_blockaware(idata, config)
 
     plot_acceptance()
 
@@ -841,6 +841,331 @@ def _plot_acceptance_diagnostics(idata, config):
     plt.tight_layout()
 
 
+def _plot_acceptance_diagnostics_blockaware(idata, config):
+    """Acceptance diagnostics that also handle per‑channel series from blocked NUTS.
+
+    If keys like ``accept_prob_channel_0`` are found in ``idata.sample_stats``,
+    they are overlaid on the overall trace and included in the summary.
+    """
+    # Detect overall series
+    accept_key = None
+    if "accept_prob" in idata.sample_stats:
+        accept_key = "accept_prob"
+    elif "acceptance_rate" in idata.sample_stats:
+        accept_key = "acceptance_rate"
+
+    # Collect per-channel series
+    channel_series = {}
+    for key in idata.sample_stats:
+        if isinstance(key, str) and key.startswith("accept_prob_channel_"):
+            try:
+                ch = int(key.rsplit("_", 1)[-1])
+                channel_series[ch] = idata.sample_stats[key].values.flatten()
+            except Exception:
+                pass
+
+    if accept_key is None and not channel_series:
+        fig, ax = plt.subplots(figsize=config.figsize)
+        ax.text(
+            0.5,
+            0.5,
+            "Acceptance rate data unavailable",
+            ha="center",
+            va="center",
+        )
+        ax.set_title("Acceptance Rate Diagnostics")
+        return
+
+    fig, axes = plt.subplots(2, 2, figsize=config.figsize)
+
+    # Overall or concatenated series
+    if accept_key is not None:
+        accept_rates = idata.sample_stats[accept_key].values.flatten()
+    else:
+        accept_rates = np.concatenate(list(channel_series.values()))
+
+    sampler_type_attr = idata.attrs.get("sampler_type", "").lower()
+    is_nuts = "nuts" in sampler_type_attr
+    target_rate = idata.attrs.get(
+        "target_accept_rate",
+        idata.attrs.get("target_accept_prob", 0.8 if is_nuts else 0.44),
+    )
+    sampler_type = "NUTS" if is_nuts else "MH"
+
+    # Ranges
+    if is_nuts:
+        good_range = (0.7, 0.9)
+        low_range = (0.0, 0.6)
+        high_range = (0.9, 1.0)
+        concerning_range = (0.6, 0.7)
+    else:
+        good_range = (0.2, 0.5)
+        low_range = (0.0, 0.2)
+        high_range = (0.5, 1.0)
+        concerning_range = (0.1, 0.2)
+
+    # Background zones
+    axes[0, 0].axhspan(good_range[0], good_range[1], alpha=0.1, color="green")
+    axes[0, 0].axhspan(low_range[0], low_range[1], alpha=0.1, color="red")
+    axes[0, 0].axhspan(high_range[0], high_range[1], alpha=0.1, color="orange")
+    if concerning_range[1] > concerning_range[0]:
+        axes[0, 0].axhspan(
+            concerning_range[0], concerning_range[1], alpha=0.1, color="yellow"
+        )
+
+    # Plot traces: overall + per-channel overlays
+    if accept_key is not None:
+        axes[0, 0].plot(
+            accept_rates, alpha=0.8, linewidth=1, color="blue", label="overall"
+        )
+    for ch in sorted(channel_series):
+        axes[0, 0].plot(
+            channel_series[ch], alpha=0.6, linewidth=1, label=f"ch {ch}"
+        )
+    axes[0, 0].axhline(
+        target_rate,
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Target ({target_rate})",
+    )
+
+    # Running mean for overall
+    window_size = max(10, len(accept_rates) // 50)
+    if len(accept_rates) > window_size:
+        running_mean = np.convolve(
+            accept_rates, np.ones(window_size) / window_size, mode="valid"
+        )
+        axes[0, 0].plot(
+            range(window_size // 2, window_size // 2 + len(running_mean)),
+            running_mean,
+            alpha=0.9,
+            linewidth=3,
+            color="purple",
+            label=f"Running mean (w={window_size})",
+        )
+
+    axes[0, 0].set_xlabel("Iteration")
+    axes[0, 0].set_ylabel("Acceptance Rate")
+    axes[0, 0].set_title(f"{sampler_type} Acceptance Rate Trace")
+    axes[0, 0].legend(loc="best", fontsize="small")
+    axes[0, 0].grid(True, alpha=0.3)
+
+    # Histogram and summary
+    axes[0, 1].hist(
+        accept_rates, bins=30, alpha=0.7, density=True, edgecolor="black"
+    )
+    axes[0, 1].axvline(
+        target_rate,
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Target ({target_rate})",
+    )
+    axes[0, 1].set_xlabel("Acceptance Rate")
+    axes[0, 1].set_ylabel("Density")
+    axes[0, 1].set_title("Acceptance Rate Distribution")
+    axes[0, 1].legend()
+    axes[0, 1].grid(True, alpha=0.3)
+
+    if len(accept_rates) > 10:
+        window_std = np.array(
+            [
+                np.std(accept_rates[max(0, i - 20) : i + 1])
+                for i in range(len(accept_rates))
+            ]
+        )
+        axes[1, 0].plot(window_std, alpha=0.7, color="green")
+        axes[1, 0].set_xlabel("Iteration")
+        axes[1, 0].set_ylabel("Rolling Std")
+        axes[1, 0].set_title("Rolling Standard Deviation")
+        axes[1, 0].grid(True, alpha=0.3)
+    else:
+        axes[1, 0].text(
+            0.5,
+            0.5,
+            "Acceptance variability\nanalysis unavailable",
+            ha="center",
+            va="center",
+        )
+        axes[1, 0].set_title("Acceptance Stability")
+
+    # Summary text
+    stats_text = [
+        f"Sampler: {sampler_type}",
+        f"Target: {target_rate:.3f}",
+        f"Mean: {np.mean(accept_rates):.3f}",
+        f"Std: {np.std(accept_rates):.3f}",
+        f"CV: {np.std(accept_rates)/np.mean(accept_rates):.3f}",
+        f"Min: {np.min(accept_rates):.3f}",
+        f"Max: {np.max(accept_rates):.3f}",
+    ]
+    if channel_series:
+        stats_text.append("")
+        stats_text.append("Per-channel means:")
+        for ch in sorted(channel_series):
+            stats_text.append(f"  ch {ch}: {np.mean(channel_series[ch]):.3f}")
+
+    axes[1, 1].text(
+        0.05,
+        0.95,
+        "\n".join(stats_text),
+        transform=axes[1, 1].transAxes,
+        fontsize=9,
+        va="top",
+        family="monospace",
+    )
+    axes[1, 1].set_title("Acceptance Analysis")
+    axes[1, 1].axis("off")
+
+    plt.tight_layout()
+
+
+def _plot_nuts_diagnostics_blockaware(idata, config):
+    """NUTS diagnostics supporting per‑channel (blocked) diagnostics fields.
+
+    Overlays per‑channel series when keys like ``energy_channel_{j}`` or
+    ``num_steps_channel_{j}`` are present.
+    """
+    # Presence of overall arrays
+    has_energy = "energy" in idata.sample_stats
+    has_potential = "potential_energy" in idata.sample_stats
+    has_steps = "num_steps" in idata.sample_stats
+    has_accept = "accept_prob" in idata.sample_stats
+
+    # Collect per-channel data
+    def _collect(base):
+        out = {}
+        prefix = f"{base}_channel_"
+        for key in idata.sample_stats:
+            if isinstance(key, str) and key.startswith(prefix):
+                try:
+                    ch = int(key.replace(prefix, ""))
+                    out[ch] = idata.sample_stats[key].values.flatten()
+                except Exception:
+                    pass
+        return out
+
+    energy_ch = _collect("energy")
+    potential_ch = _collect("potential_energy")
+    steps_ch = _collect("num_steps")
+    accept_ch = _collect("accept_prob")
+
+    fig, axes = plt.subplots(2, 2, figsize=config.figsize)
+
+    # Energy / potential
+    ax = axes[0, 0]
+    plotted = False
+    if has_energy:
+        ax.plot(
+            idata.sample_stats.energy.values.flatten(),
+            alpha=0.7,
+            lw=1,
+            label="H",
+        )
+        plotted = True
+    if has_potential:
+        ax.plot(
+            idata.sample_stats.potential_energy.values.flatten(),
+            alpha=0.7,
+            lw=1,
+            label="P",
+        )
+        plotted = True
+    for ch in sorted(energy_ch):
+        ax.plot(energy_ch[ch], alpha=0.5, lw=1, label=f"H ch {ch}")
+        plotted = True
+    for ch in sorted(potential_ch):
+        ax.plot(potential_ch[ch], alpha=0.5, lw=1, label=f"P ch {ch}")
+        plotted = True
+    if not plotted:
+        ax.text(0.5, 0.5, "Energy data\nunavailable", ha="center", va="center")
+    ax.set_title("Energy Diagnostics")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Energy")
+    ax.grid(True, alpha=0.3)
+    if plotted:
+        ax.legend(loc="best", fontsize="small")
+
+    # Steps histogram
+    ax = axes[0, 1]
+    if has_steps:
+        vals = idata.sample_stats.num_steps.values.flatten()
+    else:
+        vals = (
+            np.concatenate(list(steps_ch.values()))
+            if steps_ch
+            else np.array([])
+        )
+    if vals.size:
+        ax.hist(vals, bins=20, alpha=0.7, edgecolor="black")
+        ax.set_title("Leapfrog Steps Distribution")
+        ax.set_xlabel("Steps")
+        ax.set_ylabel("Trajectories")
+        ax.grid(True, alpha=0.3)
+    else:
+        ax.text(0.5, 0.5, "Steps data\nunavailable", ha="center", va="center")
+
+    # Acceptance (overlay per-channel)
+    ax = axes[1, 0]
+    plotted = False
+    if has_accept:
+        ax.plot(
+            idata.sample_stats.accept_prob.values.flatten(),
+            alpha=0.8,
+            lw=1,
+            label="overall",
+        )
+        plotted = True
+    for ch in sorted(accept_ch):
+        ax.plot(accept_ch[ch], alpha=0.6, lw=1, label=f"ch {ch}")
+        plotted = True
+    if not plotted:
+        ax.text(
+            0.5, 0.5, "Acceptance data\nunavailable", ha="center", va="center"
+        )
+    ax.set_title("Acceptance Trace")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("accept_prob")
+    ax.grid(True, alpha=0.3)
+    if plotted:
+        ax.legend(loc="best", fontsize="small")
+
+    # Summary text
+    ax = axes[1, 1]
+    lines = []
+    if has_steps or steps_ch:
+        lines.append("Steps summary:")
+        if has_steps:
+            s = idata.sample_stats.num_steps.values.flatten()
+            lines.append(f"  overall μ={np.mean(s):.1f}, max={np.max(s):.0f}")
+        for ch in sorted(steps_ch):
+            s = steps_ch[ch]
+            lines.append(f"  ch {ch} μ={np.mean(s):.1f}, max={np.max(s):.0f}")
+        lines.append("")
+    if has_accept or accept_ch:
+        lines.append("Acceptance summary:")
+        if has_accept:
+            a = idata.sample_stats.accept_prob.values.flatten()
+            lines.append(f"  overall μ={np.mean(a):.3f}")
+        for ch in sorted(accept_ch):
+            a = accept_ch[ch]
+            lines.append(f"  ch {ch} μ={np.mean(a):.3f}")
+    if lines:
+        ax.text(
+            0.05,
+            0.95,
+            "\n".join(lines),
+            transform=ax.transAxes,
+            va="top",
+            family="monospace",
+        )
+    ax.set_title("NUTS Diagnostics Summary")
+    ax.axis("off")
+
+    plt.tight_layout()
+
+
 def _create_sampler_diagnostics(idata, diag_dir, config):
     """Create sampler-specific diagnostics."""
 
@@ -872,7 +1197,7 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
 
         @safe_plot(f"{diag_dir}/nuts_diagnostics.png", config.dpi)
         def plot_nuts():
-            _plot_nuts_diagnostics(idata, config)
+            _plot_nuts_diagnostics_blockaware(idata, config)
 
         plot_nuts()
     elif has_mh:
@@ -1721,6 +2046,24 @@ def generate_diagnostics_summary(idata, outdir):
         summary.append(
             f"Acceptance rate: {accept_rate:.3f} (target: {target_rate:.3f})"
         )
+    else:
+        # Blocked NUTS: compute a combined mean from per‑channel keys if present
+        channel_means = []
+        for key in idata.sample_stats:
+            if isinstance(key, str) and key.startswith("accept_prob_channel_"):
+                try:
+                    channel_means.append(
+                        float(idata.sample_stats[key].values.mean())
+                    )
+                except Exception:
+                    pass
+        if channel_means:
+            target_rate = attrs.get(
+                "target_accept_rate", attrs.get("target_accept_prob", 0.8)
+            )
+            summary.append(
+                f"Acceptance rate (per-channel mean): {np.mean(channel_means):.3f} (target: {target_rate:.3f})"
+            )
 
     # PSD accuracy diagnostics (requires true_psd in attrs)
     has_true_psd = "true_psd" in attrs

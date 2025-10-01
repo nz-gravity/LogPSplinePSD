@@ -53,11 +53,27 @@ class UnivarBaseSampler(BaseSampler):
         """Setup univariate-specific data attributes."""
         self.n_weights = len(self.spline_model.weights)
         self.log_pdgrm = jnp.log(self.periodogram.power)
-        self.penalty_matrix = jnp.array(self.spline_model.penalty_matrix)
+        penalty_matrix = jnp.array(self.spline_model.penalty_matrix)
+        eigvals, eigvecs = jnp.linalg.eigh(penalty_matrix)
+        tol = 1e-4
+        inv_sqrt = jnp.where(eigvals > tol, 1.0 / jnp.sqrt(eigvals), 1.0)
+        sqrt_vals = jnp.where(eigvals > tol, jnp.sqrt(eigvals), 1.0)
+        self.penalty_matrix = penalty_matrix
+        self.penalty_eigvals = eigvals
+        self.penalty_whiten = eigvecs * inv_sqrt
+        self.penalty_unwhiten_T = (eigvecs * sqrt_vals).T
         self.basis_matrix = jnp.asarray(
             self.spline_model.basis, dtype=jnp.float32
         )
         self.log_parametric = jnp.array(self.spline_model.log_parametric_model)
+
+        if self.config.verbose:
+            min_eig = float(jnp.min(eigvals))
+            max_eig = float(jnp.max(eigvals))
+            clipped = int(jnp.sum(eigvals <= tol))
+            print(
+                f"Univar penalty eig spectrum: min={min_eig:.3e}, max={max_eig:.3e}, clipped={clipped}"
+            )
 
     @property
     def data_type(self) -> str:
@@ -109,6 +125,8 @@ class UnivarBaseSampler(BaseSampler):
             basis_matrix=self.basis_matrix,
             log_parametric=self.log_parametric,
             penalty_matrix=self.penalty_matrix,
+            penalty_whiten=self.penalty_whiten,
+            penalty_unwhiten_T=self.penalty_unwhiten_T,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,
             alpha_delta=self.config.alpha_delta,

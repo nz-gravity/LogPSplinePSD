@@ -10,6 +10,8 @@ from .psplines import LogPSplines, MultivariateLogPSplines
 from .samplers import (
     MetropolisHastingsConfig,
     MetropolisHastingsSampler,
+    MultivarBlockedNUTSConfig,
+    MultivarBlockedNUTSSampler,
     MultivarNUTSConfig,
     MultivarNUTSSampler,
     NUTSConfig,
@@ -19,7 +21,12 @@ from .samplers import (
 
 def run_mcmc(
     data: Union[Timeseries, MultivariateTimeseries, Periodogram, MultivarFFT],
-    sampler: Literal["nuts", "mh"] = "nuts",
+    sampler: Literal[
+        "nuts",
+        "mh",
+        "multivar_blocked_nuts",
+        "multivar-blocked-nuts",
+    ] = "nuts",
     n_samples: int = 1000,
     n_warmup: int = 500,
     num_chains: int = 1,
@@ -58,8 +65,9 @@ def run_mcmc(
         Input data for analysis. When timeseries data is provided, it will be
         automatically standardized for numerical stability, and posterior samples
         will be rescaled to original units.
-    sampler : {"nuts", "mh"}
-        MCMC sampler type (note: multivariate only supports "nuts")
+    sampler : {"nuts", "mh", "multivar_blocked_nuts"}
+        MCMC sampler type. Multivariate analysis supports "nuts" and
+        "multivar_blocked_nuts".
     n_samples : int, default=1000
         Number of posterior samples to collect
     n_warmup : int, default=500
@@ -113,6 +121,12 @@ def run_mcmc(
         ArviZ InferenceData object with MCMC results
     """
 
+    # Map any supported aliases onto canonical sampler names
+    sampler_aliases = {
+        "multivar-blocked-nuts": "multivar_blocked_nuts",
+    }
+    sampler = sampler_aliases.get(sampler, sampler)
+
     # Keep true_psd on the original data scale. Any standardisation applied
     # to the observed data is tracked separately via the scaling_factor and
     # consistently undone inside ArviZ conversion before comparisons.
@@ -141,12 +155,15 @@ def run_mcmc(
             )
 
         # Validate sampler for standardized data
-        if isinstance(processed_data, MultivarFFT) and sampler != "nuts":
-            if verbose:
-                print(
-                    f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler}"
-                )
-            sampler = "nuts"
+        if isinstance(processed_data, MultivarFFT):
+            allowed_multivar_samplers = {"nuts", "multivar_blocked_nuts"}
+            if sampler not in allowed_multivar_samplers:
+                if verbose:
+                    allowed = ", ".join(sorted(allowed_multivar_samplers))
+                    print(
+                        f"Warning: Multivariate analysis supports {allowed}. Using NUTS instead of {sampler}"
+                    )
+                sampler = "nuts"
 
     if isinstance(data, (Periodogram, MultivarFFT)):
         processed_data = data  # Use as is
@@ -239,7 +256,12 @@ def run_mcmc(
 def create_sampler(
     data: Union[Periodogram, MultivarFFT],
     model,
-    sampler_type: Literal["nuts", "mh"] = "nuts",
+    sampler_type: Literal[
+        "nuts",
+        "mh",
+        "multivar_blocked_nuts",
+        "multivar-blocked-nuts",
+    ] = "nuts",
     num_chains: int = 1,
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
@@ -258,6 +280,11 @@ def create_sampler(
     **kwargs,
 ):
     """Factory function to create appropriate sampler."""
+
+    sampler_aliases = {
+        "multivar-blocked-nuts": "multivar_blocked_nuts",
+    }
+    sampler_type = sampler_aliases.get(sampler_type, sampler_type)
 
     common_config_kwargs = {
         "alpha_phi": alpha_phi,
@@ -300,11 +327,23 @@ def create_sampler(
 
     elif isinstance(data, MultivarFFT):
         # Multivariate case (NUTS only for now)
-        if sampler_type != "nuts":
+        allowed_types = {"nuts", "multivar_blocked_nuts"}
+        if sampler_type not in allowed_types:
             if verbose:
+                allowed = ", ".join(sorted(allowed_types))
                 print(
-                    f"Warning: Multivariate analysis only supports NUTS. Using NUTS instead of {sampler_type}"
+                    f"Warning: Multivariate analysis supports {allowed}. Using NUTS instead of {sampler_type}"
                 )
+            sampler_type = "nuts"
+
+        if sampler_type == "multivar_blocked_nuts":
+            config = MultivarBlockedNUTSConfig(
+                **common_config_kwargs,
+                target_accept_prob=target_accept_prob,
+                max_tree_depth=max_tree_depth,
+            )
+            return MultivarBlockedNUTSSampler(data, model, config)
+
         config = MultivarNUTSConfig(
             **common_config_kwargs,
             target_accept_prob=target_accept_prob,

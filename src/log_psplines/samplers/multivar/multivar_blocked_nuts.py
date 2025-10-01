@@ -10,10 +10,9 @@ import jax.numpy as jnp
 import numpy as np
 import numpyro
 from numpyro.infer import MCMC, NUTS
-from numpyro.infer.util import init_to_value
 
 from ..base_sampler import SamplerConfig
-from ..utils import pspline_hyperparameter_initials, sample_pspline_block
+from ..utils import sample_pspline_block
 from .multivar_base import MultivarBaseSampler
 
 
@@ -35,7 +34,6 @@ def _blocked_channel_model(
     """NumPyro model for a single Cholesky block."""
 
     channel_label = f"{channel_index}"
-    log_prior_total = jnp.asarray(0.0)
 
     delta_block = sample_pspline_block(
         delta_name=f"delta_{channel_label}",
@@ -48,7 +46,6 @@ def _blocked_channel_model(
         beta_delta=beta_delta,
     )
     log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
-    log_prior_total = log_prior_total + delta_block["log_prior_total"]
 
     n_freq = y_re.shape[0]
     n_theta_block = Z_re.shape[1]
@@ -69,9 +66,6 @@ def _blocked_channel_model(
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
             )
-            log_prior_total = (
-                log_prior_total + theta_re_block["log_prior_total"]
-            )
             theta_re_eval = jnp.einsum(
                 "nk,k->n", basis_theta, theta_re_block["weights"]
             )
@@ -88,9 +82,7 @@ def _blocked_channel_model(
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
             )
-            log_prior_total = (
-                log_prior_total + theta_im_block["log_prior_total"]
-            )
+
             theta_im_eval = jnp.einsum(
                 "nk,k->n", basis_theta, theta_im_block["weights"]
             )
@@ -130,10 +122,6 @@ def _blocked_channel_model(
 
     numpyro.deterministic(
         f"log_likelihood_block_{channel_label}", log_likelihood
-    )
-    numpyro.deterministic(f"log_prior_block_{channel_label}", log_prior_total)
-    numpyro.deterministic(
-        f"lp_block_{channel_label}", log_prior_total + log_likelihood
     )
 
 
@@ -190,7 +178,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         theta_re_total = None
         theta_im_total = None
         log_likelihood_total = None
-        log_prior_total = None
 
         rng_key = self.rng_key
         total_runtime = 0.0
@@ -219,14 +206,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 else jnp.zeros((self.n_freq, 0))
             )
 
-            init_values = self._get_block_initial_values(
-                channel_index, theta_count
-            )
-            init_strategy = init_to_value(values=init_values)
-
             kernel = NUTS(
                 _blocked_channel_model,
-                init_strategy=init_strategy,
                 target_accept_prob=self.config.target_accept_prob,
                 max_tree_depth=self.config.max_tree_depth,
                 dense_mass=self.config.dense_mass,
@@ -238,7 +219,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 num_samples=n_samples,
                 num_chains=self.config.num_chains,
                 progress_bar=self.config.verbose,
-                jit_model_args=True,
+                jit_model_args=False,
             )
 
             start_time = time.time()
@@ -284,8 +265,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 f"theta_re_{channel_index}",
                 f"theta_im_{channel_index}",
                 f"log_likelihood_block_{channel_index}",
-                f"log_prior_block_{channel_index}",
-                f"lp_block_{channel_index}",
             ]
 
             for det_key in deterministic_keys:
@@ -338,23 +317,12 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             block_log_likelihood = block_stats.pop(
                 f"log_likelihood_block_{channel_index}"
             )
-            block_log_prior = block_stats.pop(
-                f"log_prior_block_{channel_index}"
-            )
 
             log_likelihood_total = (
                 block_log_likelihood
                 if log_likelihood_total is None
                 else log_likelihood_total + block_log_likelihood
             )
-            log_prior_total = (
-                block_log_prior
-                if log_prior_total is None
-                else log_prior_total + block_log_prior
-            )
-
-            if f"lp_block_{channel_index}" in block_stats:
-                block_stats.pop(f"lp_block_{channel_index}")
 
             combined_stats.update(block_stats)
 
@@ -372,57 +340,10 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 "theta_re": np.asarray(theta_re_total),
                 "theta_im": np.asarray(theta_im_total),
                 "log_likelihood": np.asarray(log_likelihood_total),
-                "log_prior": np.asarray(log_prior_total),
-                "lp": np.asarray(log_likelihood_total + log_prior_total),
             }
         )
 
         return self.to_arviz(combined_samples, combined_stats)
-
-    def _get_block_initial_values(
-        self, channel_index: int, theta_count: int
-    ) -> Dict[str, jnp.ndarray]:
-        delta_init, phi_init = pspline_hyperparameter_initials(
-            alpha_phi=self.config.alpha_phi,
-            beta_phi=self.config.beta_phi,
-            alpha_delta=self.config.alpha_delta,
-            beta_delta=self.config.beta_delta,
-        )
-
-        init_values: Dict[str, jnp.ndarray] = {
-            f"delta_{channel_index}": delta_init,
-            f"phi_delta_{channel_index}": jnp.log(phi_init),
-            f"weights_delta_{channel_index}": self.spline_model.diagonal_models[
-                channel_index
-            ].weights,
-        }
-
-        if theta_count > 0 and self.n_theta > 0:
-            offdiag_re_weights = self.spline_model.offdiag_re_model.weights
-            offdiag_im_weights = self.spline_model.offdiag_im_model.weights
-
-            for theta_idx in range(theta_count):
-                init_values[f"delta_theta_re_{channel_index}_{theta_idx}"] = (
-                    delta_init
-                )
-                init_values[f"phi_theta_re_{channel_index}_{theta_idx}"] = (
-                    jnp.log(phi_init)
-                )
-                init_values[
-                    f"weights_theta_re_{channel_index}_{theta_idx}"
-                ] = offdiag_re_weights
-
-                init_values[f"delta_theta_im_{channel_index}_{theta_idx}"] = (
-                    delta_init
-                )
-                init_values[f"phi_theta_im_{channel_index}_{theta_idx}"] = (
-                    jnp.log(phi_init)
-                )
-                init_values[
-                    f"weights_theta_im_{channel_index}_{theta_idx}"
-                ] = offdiag_im_weights
-
-        return init_values
 
     def _get_lnz(
         self, samples: Dict[str, jnp.ndarray], sample_stats: Dict[str, Any]

@@ -41,88 +41,111 @@ def test_multivar_mcmc(outdir, test_mode):
     )
     print(f"Timeseries: {timeseries}")
 
-    # Run unified MCMC (multivariate NUTS)
-    idata = run_mcmc(
-        data=timeseries,
-        sampler="nuts",
-        n_knots=n_knots,  # Small for fast testing
-        degree=3,
-        diffMatrixOrder=2,
-        n_samples=n_samples,
-        n_warmup=n_warmup,
-        outdir=outdir,
-        verbose=verbose,
-        target_accept_prob=0.8,
-        true_psd=varma.get_true_psd(),
-    )
+    true_psd = varma.get_true_psd()
+    empirical_psd = varma.get_periodogram()
 
-    # Basic checks
-    assert idata is not None
-    assert "posterior" in idata.groups()
-    assert idata.posterior.sizes["draw"] == n_samples
-    print(
-        f"Inference data posterior variables: {idata.posterior}",
-    )
+    samplers = [
+        ("nuts", "multivariate_nuts"),
+        ("multivar_blocked_nuts", "multivariate_blocked_nuts"),
+    ]
 
-    # check sampler type in attributes
-    assert (
-        hasattr(idata, "attrs") and "sampler_type" in idata.attrs
-    ), "Sampler type not found in InferenceData attributes."
-    assert (
-        idata.attrs["sampler_type"] == "multivariate_nuts"
-    ), f"Unexpected sampler type: {idata.attrs['sampler_type']}"
+    for sampler_name, expected_sampler_attr in samplers:
+        sampler_outdir = os.path.join(outdir, sampler_name)
+        # Run unified MCMC (multivariate sampler)
+        idata = run_mcmc(
+            data=timeseries,
+            sampler=sampler_name,
+            n_knots=n_knots,  # Small for fast testing
+            degree=3,
+            diffMatrixOrder=2,
+            n_samples=n_samples,
+            n_warmup=n_warmup,
+            outdir=sampler_outdir,
+            verbose=verbose,
+            target_accept_prob=0.8,
+            true_psd=true_psd,
+        )
 
-    # Check key parameters exist
-    assert "log_likelihood" in idata.sample_stats.data_vars
-    assert "lp" in idata.sample_stats.data_vars
-    print(
-        f"log_likelihood shape: {idata.sample_stats['log_likelihood'].shape}"
-    )
-    print(f"lp shape: {idata.sample_stats['lp'].shape}")
+        # Basic checks
+        assert idata is not None
+        assert "posterior" in idata.groups()
+        assert idata.posterior.sizes["draw"] == n_samples
+        print(
+            f"[{sampler_name}] posterior variables: {idata.posterior}",
+        )
 
-    # Check diagonal parameters
-    for j in range(n_dim):
-        assert f"delta_{j}" in idata.posterior.data_vars
-        assert f"phi_delta_{j}" in idata.posterior.data_vars
-        assert f"weights_delta_{j}" in idata.posterior.data_vars
+        # check sampler type in attributes
+        assert (
+            hasattr(idata, "attrs") and "sampler_type" in idata.attrs
+        ), "Sampler type not found in InferenceData attributes."
+        assert (
+            idata.attrs["sampler_type"] == expected_sampler_attr
+        ), f"Unexpected sampler type for {sampler_name}: {idata.attrs['sampler_type']}"
 
-    # Print some results
-    ll_samples = idata.sample_stats["log_likelihood"].values.flatten()
-    print(
-        f"Log likelihood range: {ll_samples.min():.2f} to {ll_samples.max():.2f}"
-    )
+        # Check key parameters exist
+        assert "log_likelihood" in idata.sample_stats.data_vars
+        if sampler_name == "nuts":
+            assert "lp" in idata.sample_stats.data_vars
+        else:
+            assert "lp" not in idata.sample_stats.data_vars
+        print(
+            f"[{sampler_name}] log_likelihood shape: {idata.sample_stats['log_likelihood'].shape}"
+        )
+        if "lp" in idata.sample_stats.data_vars:
+            print(
+                f"[{sampler_name}] lp shape: {idata.sample_stats['lp'].shape}"
+            )
 
-    # check the posterior psd matrix shape
-    psd_matrix = idata.posterior_psd["psd_matrix"].values
-    psd_matrix_shape = psd_matrix.shape
-    expected_shape = (n_samples, varma.freq.shape[0], n_dim, n_dim)
-    assert (
-        psd_matrix_shape[1:] == expected_shape[1:]
-    ), f"Posterior PSD matrix shape mismatch (excluding 0th dim)! Expected {expected_shape[1:]}, got {psd_matrix_shape[1:]}"
+        # Check diagonal parameters
+        for j in range(n_dim):
+            assert f"delta_{j}" in idata.posterior.data_vars
+            assert f"phi_delta_{j}" in idata.posterior.data_vars
+            assert f"weights_delta_{j}" in idata.posterior.data_vars
 
-    # Check RIAE and CI coverage computation for multivariate
-    print(f"InferenceData attributes: {list(idata.attrs.keys())}")
-    if "riae_matrix" in idata.attrs:
-        print(f"RIAE Matrix: {idata.attrs['riae_matrix']:.3f}")
-    if "ci_coverage" in idata.attrs:
-        print(f"CI Coverage: {idata.attrs['ci_coverage']:.3f}")
+        # Print some results
+        ll_samples = idata.sample_stats["log_likelihood"].values.flatten()
+        print(
+            f"[{sampler_name}] Log likelihood range: {ll_samples.min():.2f} to {ll_samples.max():.2f}"
+        )
 
-    # check that results saved, and plots created
-    result_fn = os.path.join(outdir, "inference_data.nc")
-    plot_fn = os.path.join(outdir, "psd_matrix_posterior.png")
-    assert os.path.exists(result_fn), "InferenceData file not found!"
-    assert os.path.exists(plot_fn), "PSD matrix plot file not found!"
+        # check the posterior psd matrix shape
+        psd_matrix = idata.posterior_psd["psd_matrix"].values
+        psd_matrix_shape = psd_matrix.shape
+        expected_shape = (n_samples, varma.freq.shape[0], n_dim, n_dim)
+        assert psd_matrix_shape[1:] == expected_shape[1:], (
+            "Posterior PSD matrix shape mismatch (excluding 0th dim)! "
+            f"Expected {expected_shape[1:]}, got {psd_matrix_shape[1:]}"
+        )
 
-    plot_psd_matrix(
-        idata=idata,
-        n_channels=n_dim,
-        freq=varma.freq,
-        empirical_psd=varma.get_periodogram(),
-        outdir=outdir,
-        filename="psd_matrix_posterior_check.png",
-        xscale="linear",
-        diag_yscale="log",
-    )
+        # Check RIAE and CI coverage computation for multivariate
+        print(
+            f"[{sampler_name}] InferenceData attributes: {list(idata.attrs.keys())}"
+        )
+        if "riae_matrix" in idata.attrs:
+            print(
+                f"[{sampler_name}] RIAE Matrix: {idata.attrs['riae_matrix']:.3f}"
+            )
+        if "ci_coverage" in idata.attrs:
+            print(
+                f"[{sampler_name}] CI Coverage: {idata.attrs['ci_coverage']:.3f}"
+            )
+
+        # check that results saved, and plots created
+        result_fn = os.path.join(sampler_outdir, "inference_data.nc")
+        plot_fn = os.path.join(sampler_outdir, "psd_matrix_posterior.png")
+        assert os.path.exists(result_fn), "InferenceData file not found!"
+        assert os.path.exists(plot_fn), "PSD matrix plot file not found!"
+
+        plot_psd_matrix(
+            idata=idata,
+            n_channels=n_dim,
+            freq=varma.freq,
+            empirical_psd=empirical_psd,
+            outdir=sampler_outdir,
+            filename=f"psd_matrix_posterior_check_{sampler_name}.png",
+            xscale="linear",
+            diag_yscale="log",
+        )
 
     print(f"++++ multivariate MCMC test {test_mode} COMPLETE ++++")
 

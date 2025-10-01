@@ -82,6 +82,29 @@ def _prepare_samples_and_stats(
     return samples, sample_stats
 
 
+def _thin_draws(
+    data_dict: Dict[str, np.ndarray], indices: np.ndarray
+) -> Dict[str, np.ndarray]:
+    """Thin draw dimension (axis=1) for all arrays in the dictionary."""
+    thinned = {}
+    for key, value in data_dict.items():
+        arr = np.asarray(value)
+        if arr.ndim >= 2:
+            thinned[key] = arr[:, indices, ...]
+        else:
+            thinned[key] = arr
+    return thinned
+
+
+def _to_numpy_float32(array: Any) -> np.ndarray:
+    arr = np.asarray(array)
+    if np.issubdtype(arr.dtype, np.bool_):
+        return arr
+    if np.issubdtype(arr.dtype, np.integer):
+        return arr.astype(np.int32, copy=False)
+    return arr.astype(np.float32, copy=False)
+
+
 def _handle_log_posterior(sample_stats: Dict[str, Any]) -> None:
     """Add log posterior to sample_stats if likelihood and prior exist."""
     if {"log_likelihood", "log_prior"}.issubset(sample_stats.keys()):
@@ -211,6 +234,10 @@ def _create_univar_inference_data(
     # Handle log posterior
     _handle_log_posterior(sample_stats)
 
+    # Drop heavy deterministic arrays that have dedicated outputs
+    for heavy_key in ["log_delta_sq", "theta_re", "theta_im"]:
+        sample_stats.pop(heavy_key, None)
+
     # Setup coordinates and dimensions
     coords = {
         "pp_draw": range(n_pp),
@@ -283,6 +310,32 @@ def _create_multivar_inference_data(
     sample_shape = samples[first_sample_key].shape
     n_chains, n_draws = sample_shape[:2]
 
+    # Optionally thin draws before heavy processing
+    n_total_draws = sample_shape[1]
+    max_draws_retained = 400
+    if n_total_draws > max_draws_retained:
+        store_idx = np.linspace(
+            0, n_total_draws - 1, max_draws_retained, dtype=int
+        )
+        if config.verbose:
+            print(
+                f"Thinning posterior draws from {n_total_draws} to {len(store_idx)} before ArviZ conversion"
+            )
+        samples = _thin_draws(samples, store_idx)
+        sample_stats = _thin_draws(sample_stats, store_idx)
+        first_sample_key = next(
+            (k for k, v in samples.items() if "weights_" in k),
+            next(iter(samples.keys())),
+        )
+        sample_shape = samples[first_sample_key].shape
+        n_chains, n_draws = sample_shape[:2]
+    else:
+        store_idx = None
+
+    # Convert to numpy float32/int32 to reduce memory footprint
+    samples = {k: _to_numpy_float32(v) for k, v in samples.items()}
+    sample_stats = {k: _to_numpy_float32(v) for k, v in sample_stats.items()}
+
     # Create posterior predictive samples
     if config.verbose:
         print("Reconstructing multivariate posterior PSD samples (subsampled)")
@@ -348,6 +401,9 @@ def _create_multivar_inference_data(
 
     dims = {}
 
+    if config.verbose:
+        t_dims_start = time.perf_counter()
+
     # Posterior samples - handle weights with proper dimensions
     for key, array in samples.items():
         array_shape = array.shape
@@ -376,6 +432,11 @@ def _create_multivar_inference_data(
             ]
             for i in range(2, len(array_shape)):
                 coords[f"{key}_dim_{i-2}"] = range(array_shape[i])
+
+    if config.verbose:
+        print(
+            f"  Prepared dims/coords in {time.perf_counter() - t_dims_start:.2f}s"
+        )
 
     # Observed data and posterior predictive
     dims.update(
@@ -417,6 +478,9 @@ def _create_multivar_inference_data(
     )
 
     # Create base InferenceData
+    if config.verbose:
+        t_from_dict_start = time.perf_counter()
+
     idata = az.from_dict(
         posterior=samples,
         sample_stats=sample_stats,
@@ -431,9 +495,13 @@ def _create_multivar_inference_data(
         attrs=attributes,
     )
     if config.verbose:
-        print("Completed ArviZ conversion")
+        print(
+            f"  ArviZ from_dict completed in {time.perf_counter() - t_from_dict_start:.2f}s"
+        )
 
     # Add posterior predictive samples
+    if config.verbose:
+        t_add_pp_start = time.perf_counter()
     idata.add_groups(
         posterior_psd=Dataset(
             {
@@ -450,9 +518,19 @@ def _create_multivar_inference_data(
             },
         )
     )
+    if config.verbose:
+        print(
+            f"  Added posterior_psd group in {time.perf_counter() - t_add_pp_start:.2f}s"
+        )
 
     # Add spline model info
+    if config.verbose:
+        t_add_model_start = time.perf_counter()
     idata.add_groups(spline_model=_pack_spline_model_multivar(spline_model))
+    if config.verbose:
+        print(
+            f"  Added spline_model group in {time.perf_counter() - t_add_model_start:.2f}s"
+        )
     return idata
 
 
@@ -724,24 +802,24 @@ def _reconstruct_psd_numpy(
     )
 
     eye_c = np.eye(n_channels, dtype=np.complex128)
+    tril_row, tril_col = np.tril_indices(n_channels, k=-1)
+    n_lower = len(tril_row)
 
     for s in range(n_samples):
         for f in range(n_freq):
-            D = np.diag(np.exp(log_delta_sq[s, f]))
+            diag_vals = np.exp(log_delta_sq[s, f])
             T = eye_c.copy()
             if n_theta > 0 and n_channels > 1:
                 theta_complex = theta_re[s, f] + 1j * theta_im[s, f]
-                tril_row, tril_col = np.tril_indices(n_channels, k=-1)
-                n_lower = len(tril_row)
-                n_use = min(n_theta, n_lower)
+                n_use = min(theta_complex.shape[0], n_lower)
                 if n_use > 0:
                     T[tril_row[:n_use], tril_col[:n_use]] -= theta_complex[
                         :n_use
                     ]
 
-            temp = solve_triangular(T, D, lower=True)
-            T_inv_H = solve_triangular(T, eye_c, lower=True).conj().T
-            psd_mat = temp @ T_inv_H
+            temp = solve_triangular(T, np.diag(diag_vals), lower=True)
+            T_inv = solve_triangular(T, eye_c, lower=True)
+            psd_mat = temp @ T_inv.conj().T
             psd[s, f] = psd_mat.real / (2 * np.pi)
 
     return psd

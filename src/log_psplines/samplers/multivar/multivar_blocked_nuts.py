@@ -261,6 +261,11 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             total_runtime += time.time() - start_time
 
             block_samples = mcmc.get_samples()
+            for sample_key in list(block_samples):
+                if sample_key.startswith("phi"):
+                    block_samples[sample_key] = jnp.exp(
+                        block_samples[sample_key]
+                    )
             block_stats = mcmc.get_extra_fields()
 
             deterministic_keys = [
@@ -374,7 +379,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         init_values: Dict[str, jnp.ndarray] = {
             f"delta_{channel_index}": delta_init,
-            f"phi_delta_{channel_index}": phi_init,
+            f"phi_delta_{channel_index}": jnp.log(phi_init),
             f"weights_delta_{channel_index}": self.spline_model.diagonal_models[
                 channel_index
             ].weights,
@@ -389,7 +394,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                     delta_init
                 )
                 init_values[f"phi_theta_re_{channel_index}_{theta_idx}"] = (
-                    phi_init
+                    jnp.log(phi_init)
                 )
                 init_values[
                     f"weights_theta_re_{channel_index}_{theta_idx}"
@@ -399,7 +404,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                     delta_init
                 )
                 init_values[f"phi_theta_im_{channel_index}_{theta_idx}"] = (
-                    phi_init
+                    jnp.log(phi_init)
                 )
                 init_values[
                     f"weights_theta_im_{channel_index}_{theta_idx}"

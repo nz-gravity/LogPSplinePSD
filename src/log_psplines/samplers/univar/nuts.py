@@ -102,7 +102,9 @@ class NUTSSampler(UnivarBaseSampler):
         )
         init_strategy = init_to_value(
             values=dict(
-                delta=delta_0, phi=phi_0, weights=self.spline_model.weights
+                delta=delta_0,
+                phi=jnp.log(phi_0),
+                weights=self.spline_model.weights,
             )
         )
 
@@ -166,6 +168,9 @@ class NUTSSampler(UnivarBaseSampler):
             self._logpost_fn, params_batch
         )
 
+        if "phi" in samples:
+            samples["phi"] = jnp.exp(samples["phi"])
+
         return self.to_arviz(samples, stats)
 
     @property
@@ -205,7 +210,7 @@ class NUTSSampler(UnivarBaseSampler):
                 init_strategy=init_to_value(
                     values=dict(
                         delta=delta_phi_default[0],
-                        phi=delta_phi_default[1],
+                        phi=jnp.log(delta_phi_default[1]),
                         weights=self.spline_model.weights,
                     )
                 ),
@@ -223,7 +228,7 @@ class NUTSSampler(UnivarBaseSampler):
         """Compute log posterior for given parameters via the NumPyro model."""
         params = {
             "weights": jnp.asarray(weights),
-            "phi": jnp.asarray(phi),
+            "phi": jnp.log(jnp.asarray(phi)),
             "delta": jnp.asarray(delta),
         }
         return float(self._logpost_fn(params))

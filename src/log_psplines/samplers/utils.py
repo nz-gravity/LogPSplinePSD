@@ -60,9 +60,23 @@ def sample_pspline_block(
     delta = numpyro.sample(delta_name, delta_dist)
     log_prior_delta = delta_dist.log_prob(delta)
 
-    phi_dist = dist.Gamma(concentration=alpha_phi, rate=delta * beta_phi)
-    phi = numpyro.sample(phi_name, phi_dist)
-    log_prior_phi = phi_dist.log_prob(phi)
+    # Moment-match the original Gamma prior with a log-normal and sample log(phi)
+    # to reduce the funnel geometry seen by NUTS.
+    sigma_sq = jnp.log1p(1.0 / alpha_phi)
+    sigma = jnp.sqrt(sigma_sq)
+    mu = (
+        jnp.log(alpha_phi)
+        - jnp.log(beta_phi)
+        - jnp.log(delta)
+        - 0.5 * sigma_sq
+    )
+    phi_normal = dist.Normal(loc=mu, scale=sigma)
+    log_phi = numpyro.sample(
+        phi_name,
+        phi_normal,
+    )
+    phi = jnp.exp(log_phi)
+    log_prior_phi = phi_normal.log_prob(log_phi) - log_phi
 
     k = penalty_matrix.shape[0]
     base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)

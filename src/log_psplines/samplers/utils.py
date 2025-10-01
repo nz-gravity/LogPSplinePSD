@@ -97,10 +97,6 @@ def sample_pspline_block(
         "weights": weights,
         "delta": delta,
         "phi": phi,
-        "log_prior_adjustment": log_prior_adjustment,
-        "log_prior_delta": log_prior_delta,
-        "log_prior_phi": log_prior_phi,
-        "log_prior_total": log_prior_total,
     }
 
 

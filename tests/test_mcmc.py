@@ -19,7 +19,7 @@ def test_multivar_mcmc(outdir, test_mode):
 
     n = 256
     n_knots = 10
-    n_samples = n_warmup = 600
+    n_samples = n_warmup = 1200
     verbose = True
     if test_mode == "fast":
         n_samples = n_warmup = 4

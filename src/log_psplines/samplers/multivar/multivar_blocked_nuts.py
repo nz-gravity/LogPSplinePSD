@@ -257,6 +257,17 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.config.beta_phi,
                 self.config.alpha_delta,
                 self.config.beta_delta,
+                extra_fields=(
+                    (
+                        "potential_energy",
+                        "energy",
+                        "num_steps",
+                        "accept_prob",
+                        "diverging",
+                    )
+                    if self.config.save_nuts_diagnostics
+                    else ()
+                ),
             )
             total_runtime += time.time() - start_time
 
@@ -287,6 +298,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                     "energy",
                     "num_steps",
                     "accept_prob",
+                    "diverging",
                 ]:
                     if diag_key in block_stats:
                         renamed = (

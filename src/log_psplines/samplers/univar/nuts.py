@@ -35,6 +35,7 @@ def bayesian_model(
     log_pdgrm: jnp.ndarray,
     lnspline_basis: jnp.ndarray,
     penalty_matrix: jnp.ndarray,
+    penalty_whiten: jnp.ndarray | None,
     ln_parametric: jnp.ndarray,
     alpha_phi,
     beta_phi,
@@ -42,16 +43,19 @@ def bayesian_model(
     beta_delta,
 ):
     """NumPyro model for univariate PSD estimation."""
+    if penalty_whiten is None:
+        penalty_whiten = jnp.linalg.cholesky(
+            penalty_matrix + 1e-6 * jnp.eye(penalty_matrix.shape[0])
+        )
     block = sample_pspline_block(
         delta_name="delta",
         phi_name="phi",
         weights_name="weights",
-        penalty_matrix=penalty_matrix,
+        penalty_whiten=penalty_whiten,
         alpha_phi=alpha_phi,
         beta_phi=beta_phi,
         alpha_delta=alpha_delta,
         beta_delta=beta_delta,
-        factor_name="ln_prior",
     )
 
     weights = block["weights"]
@@ -93,11 +97,15 @@ class NUTSSampler(UnivarBaseSampler):
             beta_delta=self.config.beta_delta,
             divide_phi_by_delta=True,
         )
+        weights_latent_0 = self.penalty_unwhiten_T @ (
+            self.spline_model.weights * jnp.sqrt(phi_0)
+        )
         init_strategy = init_to_value(
             values=dict(
                 delta=delta_0,
                 phi=jnp.log(phi_0),
                 weights=self.spline_model.weights,
+                weights_latent=weights_latent_0,
             )
         )
 
@@ -130,6 +138,7 @@ class NUTSSampler(UnivarBaseSampler):
             self.log_pdgrm,
             self.basis_matrix,
             self.penalty_matrix,
+            self.penalty_whiten,
             self.log_parametric,
             self.config.alpha_phi,
             self.config.beta_phi,
@@ -164,21 +173,10 @@ class NUTSSampler(UnivarBaseSampler):
         if "phi" in samples:
             samples["phi"] = jnp.exp(samples["phi"])
 
-        return self.to_arviz(samples, stats)
+        # Drop auxiliary whitening latents before exporting results.
+        samples.pop("weights_latent", None)
 
-    @property
-    def _logp_kwargs(self):
-        """Arguments passed to the NumPyro model / log-density helpers."""
-        return dict(
-            log_pdgrm=self.log_pdgrm,
-            lnspline_basis=self.basis_matrix,
-            penalty_matrix=self.penalty_matrix,
-            ln_parametric=self.log_parametric,
-            alpha_phi=self.config.alpha_phi,
-            beta_phi=self.config.beta_phi,
-            alpha_delta=self.config.alpha_delta,
-            beta_delta=self.config.beta_delta,
-        )
+        return self.to_arviz(samples, stats)
 
     def _compile_model(self) -> None:
         """Pre-compile the NumPyro model to speed up warmup."""
@@ -219,17 +217,40 @@ class NUTSSampler(UnivarBaseSampler):
         self, weights: jnp.ndarray, phi: float, delta: float
     ) -> float:
         """Compute log posterior for given parameters via the NumPyro model."""
+        weights_arr = jnp.asarray(weights)
+        phi_arr = jnp.asarray(phi)
+        delta_arr = jnp.asarray(delta)
+        latent = self.penalty_unwhiten_T @ (weights_arr * jnp.sqrt(phi_arr))
         params = {
-            "weights": jnp.asarray(weights),
-            "phi": jnp.log(jnp.asarray(phi)),
-            "delta": jnp.asarray(delta),
+            "weights": weights_arr,
+            "weights_latent": latent,
+            "phi": jnp.log(phi_arr),
+            "delta": delta_arr,
         }
         return float(self._logpost_fn(params))
 
     def _prepare_logpost_params(self, samples: Dict[str, jnp.ndarray]):
         """Stack posterior samples into a pytree for log-density evaluation."""
-        return {
-            "weights": jnp.asarray(samples["weights"]),
-            "phi": jnp.asarray(samples["phi"]),
-            "delta": jnp.asarray(samples["delta"]),
+        weights = jnp.asarray(samples["weights"])
+        phi_log = jnp.asarray(samples["phi"])
+        delta = jnp.asarray(samples["delta"])
+        params: Dict[str, jnp.ndarray] = {
+            "weights": weights,
+            "phi": phi_log,
+            "delta": delta,
         }
+
+        latent_key = "weights_latent"
+        if latent_key in samples:
+            params[latent_key] = jnp.asarray(samples[latent_key])
+        else:
+            sqrt_phi = jnp.exp(0.5 * phi_log)
+            if weights.ndim == 1:
+                latent = self.penalty_unwhiten_T @ (weights * sqrt_phi)
+            else:
+                latent = (
+                    weights * sqrt_phi[:, None]
+                ) @ self.penalty_unwhiten_T.T
+            params[latent_key] = latent
+
+        return params

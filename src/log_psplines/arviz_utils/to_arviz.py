@@ -1,5 +1,6 @@
 """Convert inference results to ArviZ InferenceData format."""
 
+import time
 import warnings
 from dataclasses import asdict
 from typing import Any, Dict, Tuple, Union
@@ -9,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from scipy.integrate import simpson
+from scipy.linalg import solve_triangular
 from xarray import DataArray, Dataset
 
 from log_psplines.datatypes import MultivarFFT, Periodogram
@@ -282,9 +284,17 @@ def _create_multivar_inference_data(
     n_chains, n_draws = sample_shape[:2]
 
     # Create posterior predictive samples
+    if config.verbose:
+        print("Reconstructing multivariate posterior PSD samples (subsampled)")
+        t_reconstruct_start = time.perf_counter()
+
     psd_samples = _compute_posterior_predictive_multivar(
-        samples, spline_model, fft_data
+        samples, spline_model, fft_data, verbose=config.verbose
     )
+    if config.verbose:
+        print(
+            f"  PSD reconstruction completed in {time.perf_counter() - t_reconstruct_start:.2f}s"
+        )
     n_pp = psd_samples.shape[0]
 
     # Ensure arrays are numpy before rescaling
@@ -293,12 +303,9 @@ def _create_multivar_inference_data(
     fft_y_im = np.array(fft_data.y_im)
 
     # Rescale each cross-spectral component
-    psd_samples_rescaled = np.zeros_like(psd_samples)
-    for i in range(fft_data.n_dim):
-        for j in range(fft_data.n_dim):
-            psd_samples_rescaled[:, :, i, j] = (
-                psd_samples[:, :, i, j] * config.scaling_factor
-            )
+    if config.verbose:
+        t_rescale_start = time.perf_counter()
+    psd_samples_rescaled = psd_samples * config.scaling_factor
     # Also rescale observed FFT data
     observed_fft_re_rescaled = fft_y_re * np.sqrt(config.scaling_factor)
     observed_fft_im_rescaled = fft_y_im * np.sqrt(config.scaling_factor)
@@ -314,6 +321,10 @@ def _create_multivar_inference_data(
             )
             observed_csd[:, i, j] *= config.scaling_factor
     observed_csd = np.real(observed_csd)
+    if config.verbose:
+        print(
+            f"  Rescaling completed in {time.perf_counter() - t_rescale_start:.2f}s"
+        )
     if config.verbose:
         print(
             f"Rescaling multivariate posterior samples: max scaling ~{config.scaling_factor:.2e}"
@@ -419,6 +430,8 @@ def _create_multivar_inference_data(
         coords=coords,
         attrs=attributes,
     )
+    if config.verbose:
+        print("Completed ArviZ conversion")
 
     # Add posterior predictive samples
     idata.add_groups(
@@ -538,8 +551,11 @@ def _pack_spline_model_multivar(spline_model) -> Dataset:
 
 
 def _compute_posterior_predictive_multivar(
-    samples: Dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT
-) -> jnp.ndarray:
+    samples: Dict[str, jnp.ndarray],
+    spline_model,
+    fft_data: MultivarFFT,
+    verbose: bool = False,
+) -> np.ndarray:
     """Compute posterior predictive PSD matrices from samples."""
     # Extract samples - handle different possible sample structures
     if "log_delta_sq" in samples:
@@ -562,36 +578,78 @@ def _compute_posterior_predictive_multivar(
         else:
             if theta_im.ndim == 4:
                 theta_im = theta_im[0]
+        n_draws = log_delta_sq.shape[0]
     else:
         # Reconstruct from individual component samples
-        log_delta_sq = _reconstruct_log_delta_sq(
-            samples, spline_model, fft_data
-        )
-        theta_re = _reconstruct_theta_params(
-            samples, spline_model, fft_data, "re"
-        )
-        theta_im = _reconstruct_theta_params(
-            samples, spline_model, fft_data, "im"
+        first_sample = next(iter(samples.values()))
+        n_draws = first_sample.shape[1]
+        log_delta_sq = None
+        theta_re = None
+        theta_im = None
+
+    # Subsample draws for posterior predictive to limit cost
+    n_pp = min(25, n_draws)
+    if n_draws > n_pp:
+        pp_idx = np.random.choice(n_draws, n_pp, replace=False)
+    else:
+        pp_idx = np.arange(n_draws)
+
+    if verbose:
+        print(
+            f"  Subsampling {len(pp_idx)} draws (from {n_draws}) for PSD reconstruction"
         )
 
-    # Use spline model's reconstruction method
-    return spline_model.reconstruct_psd_matrix(
-        log_delta_sq, theta_re, theta_im, n_samples_max=50
-    )
+    if log_delta_sq is None:
+        if verbose:
+            print("  Reconstructing log_delta_sq from weights")
+        log_delta_sq = _reconstruct_log_delta_sq(
+            samples, spline_model, fft_data, draw_indices=pp_idx
+        )
+    else:
+        log_delta_sq = log_delta_sq[pp_idx]
+
+    if theta_re is None:
+        if verbose:
+            print("  Reconstructing theta_re from weights")
+        theta_re = _reconstruct_theta_params(
+            samples, spline_model, fft_data, "re", draw_indices=pp_idx
+        )
+    else:
+        theta_re = theta_re[pp_idx]
+
+    if theta_im is None:
+        if verbose:
+            print("  Reconstructing theta_im from weights")
+        theta_im = _reconstruct_theta_params(
+            samples, spline_model, fft_data, "im", draw_indices=pp_idx
+        )
+    else:
+        theta_im = theta_im[pp_idx]
+
+    log_delta_sq = np.asarray(log_delta_sq)
+    theta_re = np.asarray(theta_re)
+    theta_im = np.asarray(theta_im)
+
+    if verbose:
+        print("  Building PSD matrices via numpy")
+    return _reconstruct_psd_numpy(log_delta_sq, theta_re, theta_im)
 
 
 def _reconstruct_log_delta_sq(
-    samples: Dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT
+    samples: Dict[str, jnp.ndarray],
+    spline_model,
+    fft_data: MultivarFFT,
+    draw_indices: np.ndarray | None,
 ) -> jnp.ndarray:
     """Reconstruct log_delta_sq from individual diagonal component samples."""
     # Get all bases once
     all_bases, _ = spline_model.get_all_bases_and_penalties()
 
     first_sample = next(iter(samples.values()))
-    n_chains = first_sample.shape[0]  # Assume chain dim added
-    n_samples = (
-        first_sample.shape[0] * first_sample.shape[1]
-    )  # Total draws across chains
+    total_draws = first_sample.shape[1]
+    if draw_indices is None:
+        draw_indices = np.arange(total_draws)
+    n_samples = len(draw_indices)
     log_delta_components = []
 
     for j in range(fft_data.n_dim):
@@ -602,6 +660,7 @@ def _reconstruct_log_delta_sq(
             ]  # Shape: (n_chains, n_draws, n_weights)
             # For posterior predictive, use first chain only
             weights = weights_full[0]  # Shape: (n_draws, n_weights)
+            weights = weights[draw_indices]
             # Vectorized spline evaluation using JAX
             log_delta_j = batch_spline_eval(all_bases[j], weights)
             log_delta_components.append(log_delta_j)
@@ -620,6 +679,7 @@ def _reconstruct_theta_params(
     spline_model,
     fft_data: MultivarFFT,
     param_type: str,
+    draw_indices: np.ndarray | None,
 ) -> jnp.ndarray:
     """Reconstruct theta parameters from samples."""
     # Get all bases once
@@ -630,6 +690,8 @@ def _reconstruct_theta_params(
         weights_full = samples[key]  # Shape: (n_chains, n_draws, n_weights)
         # For posterior predictive, use first chain only
         weights = weights_full[0]  # Shape: (n_draws, n_weights)
+        if draw_indices is not None and len(draw_indices) < weights.shape[0]:
+            weights = weights[draw_indices]
         basis_idx = fft_data.n_dim + (0 if param_type == "re" else 1)
         # Vectorized spline evaluation using JAX
         theta_base = batch_spline_eval(all_bases[basis_idx], weights)
@@ -639,10 +701,50 @@ def _reconstruct_theta_params(
         )
     else:
         first_sample = next(iter(samples.values()))
-        n_samples = first_sample.shape[1]  # n_draws
+        n_samples = (
+            len(draw_indices)
+            if draw_indices is not None
+            else first_sample.shape[1]
+        )
         return jnp.zeros(
             (n_samples, fft_data.n_freq, max(1, spline_model.n_theta))
         )
+
+
+def _reconstruct_psd_numpy(
+    log_delta_sq: np.ndarray,
+    theta_re: np.ndarray,
+    theta_im: np.ndarray,
+) -> np.ndarray:
+    n_samples, n_freq, n_channels = log_delta_sq.shape
+    n_theta = theta_re.shape[2] if theta_re.ndim > 2 else 0
+
+    psd = np.zeros(
+        (n_samples, n_freq, n_channels, n_channels), dtype=np.float64
+    )
+
+    eye_c = np.eye(n_channels, dtype=np.complex128)
+
+    for s in range(n_samples):
+        for f in range(n_freq):
+            D = np.diag(np.exp(log_delta_sq[s, f]))
+            T = eye_c.copy()
+            if n_theta > 0 and n_channels > 1:
+                theta_complex = theta_re[s, f] + 1j * theta_im[s, f]
+                tril_row, tril_col = np.tril_indices(n_channels, k=-1)
+                n_lower = len(tril_row)
+                n_use = min(n_theta, n_lower)
+                if n_use > 0:
+                    T[tril_row[:n_use], tril_col[:n_use]] -= theta_complex[
+                        :n_use
+                    ]
+
+            temp = solve_triangular(T, D, lower=True)
+            T_inv_H = solve_triangular(T, eye_c, lower=True).conj().T
+            psd_mat = temp @ T_inv_H
+            psd[s, f] = psd_mat.real / (2 * np.pi)
+
+    return psd
 
 
 def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:

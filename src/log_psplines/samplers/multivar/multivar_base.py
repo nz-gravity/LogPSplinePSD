@@ -99,7 +99,31 @@ class MultivarBaseSampler(BaseSampler):
         self.all_bases = tuple(
             jnp.asarray(basis, dtype=jnp.float32) for basis in all_bases
         )
-        self.all_penalties = all_penalties
+        penalties = [jnp.asarray(penalty) for penalty in all_penalties]
+        tol = 1e-4
+        whiten_mats = []
+        unwhiten_mats_T = []
+        eigvals_all = []
+        for penalty in penalties:
+            eigvals, eigvecs = jnp.linalg.eigh(penalty)
+            inv_sqrt = jnp.where(eigvals > tol, 1.0 / jnp.sqrt(eigvals), 1.0)
+            sqrt_vals = jnp.where(eigvals > tol, jnp.sqrt(eigvals), 1.0)
+            whiten_mats.append(eigvecs * inv_sqrt)
+            unwhiten_mats_T.append((eigvecs * sqrt_vals).T)
+            eigvals_all.append(eigvals)
+        self.all_penalties = tuple(penalties)
+        self.all_penalty_whiten = tuple(whiten_mats)
+        self.all_penalty_unwhiten_T = tuple(unwhiten_mats_T)
+        self.all_penalty_eigvals = tuple(eigvals_all)
+
+        if self.config.verbose:
+            for idx, eigvals in enumerate(self.all_penalty_eigvals):
+                min_eig = float(jnp.min(eigvals))
+                max_eig = float(jnp.max(eigvals))
+                clipped = int(jnp.sum(eigvals <= tol))
+                print(
+                    f"Penalty[{idx}] eig spectrum: min={min_eig:.3e}, max={max_eig:.3e}, clipped={clipped}"
+                )
 
         # FFT data arrays for JAX operations
         self.y_re = jnp.array(self.fft_data.y_re)

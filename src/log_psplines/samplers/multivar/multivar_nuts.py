@@ -71,6 +71,8 @@ def multivariate_psplines_model(
     Z_im: jnp.ndarray,  # Design matrix imaginary parts
     all_bases,
     all_penalties,
+    all_penalty_whiten,
+    all_penalty_unwhiten_T,
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
     alpha_delta: float = 1e-4,
@@ -90,11 +92,12 @@ def multivariate_psplines_model(
     for j in range(n_dim):  # Now n_dim is a concrete Python int
         penalty = all_penalties[component_idx]
         basis = all_bases[component_idx]
+        penalty_whiten = all_penalty_whiten[component_idx]
         block = sample_pspline_block(
             delta_name=f"delta_{j}",
             phi_name=f"phi_delta_{j}",
             weights_name=f"weights_delta_{j}",
-            penalty_matrix=penalty,
+            penalty_whiten=penalty_whiten,
             alpha_phi=alpha_phi,
             beta_phi=beta_phi,
             alpha_delta=alpha_delta,
@@ -110,11 +113,12 @@ def multivariate_psplines_model(
     if n_theta > 0:
         penalty = all_penalties[component_idx]
         basis = all_bases[component_idx]
+        penalty_whiten = all_penalty_whiten[component_idx]
         theta_re_block = sample_pspline_block(
             delta_name="delta_theta_re",
             phi_name="phi_theta_re",
             weights_name="weights_theta_re",
-            penalty_matrix=penalty,
+            penalty_whiten=penalty_whiten,
             alpha_phi=alpha_phi,
             beta_phi=beta_phi,
             alpha_delta=alpha_delta,
@@ -126,11 +130,12 @@ def multivariate_psplines_model(
 
         penalty = all_penalties[component_idx]
         basis = all_bases[component_idx]
+        penalty_whiten = all_penalty_whiten[component_idx]
         theta_im_block = sample_pspline_block(
             delta_name="delta_theta_im",
             phi_name="phi_theta_im",
             weights_name="weights_theta_im",
-            penalty_matrix=penalty,
+            penalty_whiten=penalty_whiten,
             alpha_phi=alpha_phi,
             beta_phi=beta_phi,
             alpha_delta=alpha_delta,
@@ -227,6 +232,8 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             # self.n_channels,
             self.all_bases,
             self.all_penalties,
+            self.all_penalty_whiten,
+            self.all_penalty_unwhiten_T,
             self.config.alpha_phi,
             self.config.beta_phi,
             self.config.alpha_delta,
@@ -293,6 +300,12 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             init_values[f"weights_delta_{j}"] = (
                 self.spline_model.diagonal_models[j].weights
             )
+            init_values[
+                f"weights_delta_{j}_latent"
+            ] = self.all_penalty_unwhiten_T[j] @ (
+                self.spline_model.diagonal_models[j].weights
+                * jnp.sqrt(phi_init)
+            )
 
         # Initialize off-diagonal components if needed
         if self.n_theta > 0:
@@ -301,11 +314,26 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             init_values["weights_theta_re"] = (
                 self.spline_model.offdiag_re_model.weights
             )
+            latent_re_idx = self.n_channels
+            init_values[
+                "weights_theta_re_latent"
+            ] = self.all_penalty_unwhiten_T[latent_re_idx] @ (
+                self.spline_model.offdiag_re_model.weights * jnp.sqrt(phi_init)
+            )
 
             init_values["delta_theta_im"] = delta_init
             init_values["phi_theta_im"] = jnp.log(phi_init)
             init_values["weights_theta_im"] = (
                 self.spline_model.offdiag_im_model.weights
+            )
+            theta_im_idx = self.n_channels + 1
+            theta_im_unwhiten_T = (
+                self.all_penalty_unwhiten_T[theta_im_idx]
+                if len(self.all_penalty_unwhiten_T) > theta_im_idx
+                else self.all_penalty_unwhiten_T[self.n_channels]
+            )
+            init_values["weights_theta_im_latent"] = theta_im_unwhiten_T @ (
+                self.spline_model.offdiag_im_model.weights * jnp.sqrt(phi_init)
             )
 
         return init_values
@@ -329,6 +357,8 @@ class MultivarNUTSSampler(MultivarBaseSampler):
                     Z_im=self.Z_im,
                     all_bases=self.all_bases,
                     all_penalties=self.all_penalties,
+                    all_penalty_whiten=self.all_penalty_whiten,
+                    all_penalty_unwhiten_T=self.all_penalty_unwhiten_T,
                     alpha_phi=self.config.alpha_phi,
                     beta_phi=self.config.beta_phi,
                     alpha_delta=self.config.alpha_delta,
@@ -359,6 +389,8 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             Z_im=self.Z_im,
             all_bases=self.all_bases,
             all_penalties=self.all_penalties,
+            all_penalty_whiten=self.all_penalty_whiten,
+            all_penalty_unwhiten_T=self.all_penalty_unwhiten_T,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,
             alpha_delta=self.config.alpha_delta,
@@ -368,18 +400,108 @@ class MultivarNUTSSampler(MultivarBaseSampler):
     def _prepare_logpost_params(
         self, samples: Dict[str, jnp.ndarray]
     ) -> Dict[str, jnp.ndarray]:
-        return {
-            name: jnp.asarray(array)
-            for name, array in samples.items()
-            if name.startswith(("weights_", "phi_", "delta_"))
-        }
+        params: Dict[str, jnp.ndarray] = {}
+        for name, array in samples.items():
+            if name.startswith(
+                ("weights_", "phi_", "delta_")
+            ) or name.endswith("_latent"):
+                params[name] = jnp.asarray(array)
+
+        def ensure_latent(
+            weight_name: str, phi_name: str, unwhiten_T: jnp.ndarray
+        ):
+            latent_name = f"{weight_name}_latent"
+            if latent_name in params:
+                return
+            if weight_name not in params or phi_name not in params:
+                return
+            weights_val = params[weight_name]
+            phi_log = params[phi_name]
+            sqrt_phi = jnp.exp(0.5 * phi_log)
+            if weights_val.ndim == 1:
+                latent = unwhiten_T @ (weights_val * sqrt_phi)
+            else:
+                latent = (weights_val * sqrt_phi[:, None]) @ unwhiten_T.T
+            params[latent_name] = latent
+
+        for j in range(self.n_channels):
+            ensure_latent(
+                f"weights_delta_{j}",
+                f"phi_delta_{j}",
+                self.all_penalty_unwhiten_T[j],
+            )
+
+        if self.n_theta > 0:
+            ensure_latent(
+                "weights_theta_re",
+                "phi_theta_re",
+                self.all_penalty_unwhiten_T[self.n_channels],
+            )
+            theta_im_idx = self.n_channels + 1
+            theta_im_unwhiten_T = (
+                self.all_penalty_unwhiten_T[theta_im_idx]
+                if len(self.all_penalty_unwhiten_T) > theta_im_idx
+                else self.all_penalty_unwhiten_T[self.n_channels]
+            )
+            ensure_latent(
+                "weights_theta_im",
+                "phi_theta_im",
+                theta_im_unwhiten_T,
+            )
+
+        return params
 
     def _compute_log_posterior(self, params: Dict[str, jnp.ndarray]) -> float:
-        transformed = {}
+        working: Dict[str, jnp.ndarray] = {}
         for name, value in params.items():
-            array = jnp.asarray(value)
-            if name.startswith("phi"):
-                transformed[name] = jnp.log(array)
+            working[name] = jnp.asarray(value)
+
+        def ensure_latent(
+            weight_name: str, phi_name: str, unwhiten_T: jnp.ndarray
+        ):
+            latent_name = f"{weight_name}_latent"
+            if latent_name in working and weight_name in working:
+                return
+            if weight_name not in working or phi_name not in working:
+                return
+            weights_val = working[weight_name]
+            phi_val = working[phi_name]
+            sqrt_phi = jnp.sqrt(phi_val)
+            if weights_val.ndim == 1:
+                latent = unwhiten_T @ (weights_val * sqrt_phi)
             else:
-                transformed[name] = array
+                latent = (weights_val * sqrt_phi[:, None]) @ unwhiten_T.T
+            working[latent_name] = latent
+
+        for j in range(self.n_channels):
+            ensure_latent(
+                f"weights_delta_{j}",
+                f"phi_delta_{j}",
+                self.all_penalty_unwhiten_T[j],
+            )
+
+        if self.n_theta > 0:
+            ensure_latent(
+                "weights_theta_re",
+                "phi_theta_re",
+                self.all_penalty_unwhiten_T[self.n_channels],
+            )
+            theta_im_idx = self.n_channels + 1
+            theta_im_unwhiten_T = (
+                self.all_penalty_unwhiten_T[theta_im_idx]
+                if len(self.all_penalty_unwhiten_T) > theta_im_idx
+                else self.all_penalty_unwhiten_T[self.n_channels]
+            )
+            ensure_latent(
+                "weights_theta_im",
+                "phi_theta_im",
+                theta_im_unwhiten_T,
+            )
+
+        transformed = {}
+        for name, value in working.items():
+            if name.startswith("phi"):
+                transformed[name] = jnp.log(value)
+            else:
+                transformed[name] = value
         return float(self._logpost_fn(transformed))

@@ -74,7 +74,7 @@ def init_basis_and_penalty(
     degree: int,
     n_grid_points: int,
     diff_matrix_order: int,
-    epsilon: float = 1e-6,
+    epsilon: float = 1e-3,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     Generate B-spline basis matrix and penalty matrix.
@@ -89,7 +89,7 @@ def init_basis_and_penalty(
         Number of grid points
     diff_matrix_order : int
         Order of the differential operator for regularization
-    epsilon : float, default=1e-6
+    epsilon : float, default=1e-3
         Small constant for numerical stability
 
     Returns

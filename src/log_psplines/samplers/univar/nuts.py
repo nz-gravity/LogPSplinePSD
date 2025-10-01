@@ -55,15 +55,8 @@ def bayesian_model(
     )
 
     weights = block["weights"]
-    log_prior_total = (
-        block["log_prior_adjustment"]
-        + block["log_prior_phi"]
-        + block["log_prior_delta"]
-    )
-
     lnl = log_likelihood(weights, log_pdgrm, lnspline_basis, ln_parametric)
     numpyro.factor("ln_likelihood", lnl)
-    numpyro.deterministic("lp", log_prior_total + lnl)
 
 
 class NUTSSampler(UnivarBaseSampler):
@@ -148,6 +141,7 @@ class NUTSSampler(UnivarBaseSampler):
                     "energy",
                     "num_steps",
                     "accept_prob",
+                    "diverging",
                 )
                 if self.config.save_nuts_diagnostics
                 else ()
@@ -160,7 +154,6 @@ class NUTSSampler(UnivarBaseSampler):
 
         # Extract samples and convert to ArviZ
         samples = mcmc.get_samples()
-        samples.pop("lp", None)  # Drop deterministic version from NumPyro
         stats = mcmc.get_extra_fields()
 
         params_batch = self._prepare_logpost_params(samples)

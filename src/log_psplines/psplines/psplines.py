@@ -389,4 +389,4 @@ def build_spline(
     weights: jnp.ndarray,
     log_parametric: jnp.ndarray,
 ) -> jnp.ndarray:
-    return (ln_spline_basis @ weights) + log_parametric
+    return jnp.einsum("ij,j->i", ln_spline_basis, weights) + log_parametric

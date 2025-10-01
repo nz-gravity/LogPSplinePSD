@@ -86,9 +86,6 @@ def multivariate_psplines_model(
     component_idx = 0
     log_delta_components = []
 
-    # Initialize total log prior accumulator
-    log_prior_total = jnp.array(0.0)
-
     # Diagonal components (one per channel)
     for j in range(n_dim):  # Now n_dim is a concrete Python int
         penalty = all_penalties[component_idx]
@@ -105,7 +102,6 @@ def multivariate_psplines_model(
         )
         component_eval = jnp.einsum("nk,k->n", basis, block["weights"])
         log_delta_components.append(component_eval)
-        log_prior_total = log_prior_total + block["log_prior_total"]
         component_idx += 1
 
     log_delta_sq = jnp.stack(log_delta_components, axis=1)
@@ -125,7 +121,6 @@ def multivariate_psplines_model(
             beta_delta=beta_delta,
         )
         theta_re_base = jnp.einsum("nk,k->n", basis, theta_re_block["weights"])
-        log_prior_total = log_prior_total + theta_re_block["log_prior_total"]
         component_idx += 1
         theta_re = jnp.tile(theta_re_base[:, None], (1, max(1, n_theta)))
 
@@ -142,7 +137,6 @@ def multivariate_psplines_model(
             beta_delta=beta_delta,
         )
         theta_im_base = jnp.einsum("nk,k->n", basis, theta_im_block["weights"])
-        log_prior_total = log_prior_total + theta_im_block["log_prior_total"]
         component_idx += 1
         theta_im = jnp.tile(theta_im_base[:, None], (1, max(1, n_theta)))
     else:
@@ -156,7 +150,6 @@ def multivariate_psplines_model(
     numpyro.factor("likelihood", log_likelihood)
 
     # Store deterministic quantities for diagnostics
-    numpyro.deterministic("lp", log_prior_total + log_likelihood)
     numpyro.deterministic("log_delta_sq", log_delta_sq)
     numpyro.deterministic("theta_re", theta_re)
     numpyro.deterministic("theta_im", theta_im)
@@ -244,6 +237,7 @@ class MultivarNUTSSampler(MultivarBaseSampler):
                     "energy",
                     "num_steps",
                     "accept_prob",
+                    "diverging",
                 )
                 if self.config.save_nuts_diagnostics
                 else ()

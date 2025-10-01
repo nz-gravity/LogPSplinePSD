@@ -39,6 +39,95 @@ def safe_plot(filename: str, dpi: int = 150):
     return decorator
 
 
+def plot_trace(idata: az.InferenceData, compact=True) -> plt.Figure:
+    groups = {
+        "delta": [
+            v for v in idata.posterior.data_vars if v.startswith("delta")
+        ],
+        "phi": [v for v in idata.posterior.data_vars if v.startswith("phi")],
+        "weights": [
+            v for v in idata.posterior.data_vars if v.startswith("weights")
+        ],
+    }
+
+    if compact:
+        nrows = 3
+    else:
+        nrows = len(groups)
+    fig, axes = plt.subplots(nrows, 2, figsize=(7, 3 * nrows))
+
+    for row, (group_name, vars) in enumerate(groups.items()):
+
+        # if vars are more than 1, and compact, then we need to repeat the axes
+        if compact:
+            group_axes = axes[row, :].reshape(1, 2)
+            group_axes = np.repeat(group_axes, len(vars), axis=0)
+        else:
+            group_axes = axes[row, :]
+
+        group_axes[0, 0].set_title(
+            f"{group_name.capitalize()} Parameters", fontsize=14
+        )
+
+        for i, var in enumerate(vars):
+            data = idata.posterior[
+                var
+            ].values  # shape is (nchain, nsamples, ndim) if ndim>1 else (nchain, nsamples)
+            if data.ndim == 3:
+                data = data[0].T  # shape is now (ndim, nsamples)
+
+            ax_trace = group_axes[i, 0] if compact else group_axes[0]
+            ax_hist = group_axes[i, 1] if compact else group_axes[1]
+            ax_trace.set_ylabel(group_name, fontsize=8)
+            ax_trace.set_xlabel("MCMC Step", fontsize=8)
+            ax_hist.set_xlabel(group_name, fontsize=8)
+            # place ylabel on right side of hist
+            ax_hist.yaxis.set_label_position("right")
+            ax_hist.set_ylabel("Density", fontsize=8, rotation=270, labelpad=0)
+
+            # remove axes yspine for hist
+            ax_hist.spines["left"].set_visible(False)
+            ax_hist.spines["right"].set_visible(False)
+            ax_hist.spines["top"].set_visible(False)
+            ax_hist.set_yticks([])  # remove y ticks
+            ax_hist.yaxis.set_ticks_position("none")
+
+            ax_trace.spines["right"].set_visible(False)
+            ax_trace.spines["top"].set_visible(False)
+
+            color = f"C{i}"
+            label = f"{var}"
+            if group_name in ["phi", "delta"]:
+                ax_trace.set_yscale("log")
+                ax_hist.set_xscale("log")
+
+            for p in data:
+                ax_trace.plot(p, color=color, alpha=0.7, label=label)
+
+                # if phi or delta, use log scale for hist-x, log for trace y
+                if group_name in ["phi", "delta"]:
+                    bins = np.logspace(
+                        np.log10(np.min(p)), np.log10(np.max(p)), 30
+                    )
+                    logp = np.log(p)
+                    log_grid, log_pdf = az.kde(logp)
+                    grid = np.exp(log_grid)
+                    pdf = log_pdf / grid  # change of variables
+                else:
+                    bins = 30
+                    grid, pdf = az.kde(p)
+                ax_hist.plot(grid, pdf, color=color, label=label)
+                ax_hist.hist(
+                    p, bins=bins, density=True, color=color, alpha=0.3
+                )
+
+                # KDE plot instead of histogram
+
+    plt.suptitle("Parameter Traces", fontsize=16)
+    plt.tight_layout()
+    return fig
+
+
 def plot_diagnostics(
     idata: az.InferenceData,
     outdir: str,
@@ -80,19 +169,10 @@ def _create_essential_diagnostics(
 
     # 1. ArviZ trace plots
     @safe_plot(f"{diag_dir}/trace_plots.png", config.dpi)
-    def plot_trace():
-        # Scale figure height based on number of parameters for better readability
-        n_params = len(list(idata.posterior.data_vars))
-        base_height = config.figsize[1]
-        # Add ~1 inch of height per 5 parameters, but cap at reasonable maximum
-        scaled_height = min(base_height + (n_params // 5), base_height * 3)
-        trace_figsize = (config.figsize[0], scaled_height)
+    def create_trace_plots():
+        return plot_trace(idata)
 
-        az.plot_trace(idata, figsize=trace_figsize)
-        plt.suptitle("Parameter Traces", fontsize=14)
-        plt.tight_layout()
-
-    plot_trace()
+    create_trace_plots()
 
     # 2. Summary dashboard with key convergence metrics
     @safe_plot(f"{diag_dir}/summary_dashboard.png", config.dpi)
@@ -117,6 +197,9 @@ def _create_essential_diagnostics(
 
     # 5. Sampler-specific diagnostics
     _create_sampler_diagnostics(idata, diag_dir, config)
+
+    # 6. Divergences diagnostics (for NUTS only)
+    _create_divergences_diagnostics(idata, diag_dir, config)
 
 
 def _plot_summary_dashboard(idata, config, n_channels, n_freq, runtime):
@@ -1158,6 +1241,228 @@ def _plot_mh_step_sizes(idata, config):
     axes[1, 1].axis("off")
 
     plt.tight_layout()
+
+
+def _create_divergences_diagnostics(idata, diag_dir, config):
+    """Create divergences diagnostics for NUTS samplers."""
+    # Check if divergences data exists
+    has_divergences = "diverging" in idata.sample_stats
+    has_channel_divergences = any(
+        key.startswith("diverging_channel_") for key in idata.sample_stats
+    )
+
+    if not has_divergences and not has_channel_divergences:
+        return  # Nothing to plot
+
+    @safe_plot(f"{diag_dir}/divergences.png", config.dpi)
+    def plot_divergences():
+        _plot_divergences(idata, config)
+
+    plot_divergences()
+
+
+def _plot_divergences(idata, config):
+    """Plot divergences diagnostics."""
+    # Collect all divergence data
+    divergences_data = {}
+
+    # Check for main divergences (single chain NUTS)
+    if "diverging" in idata.sample_stats:
+        divergences_data["main"] = (
+            idata.sample_stats.diverging.values.flatten()
+        )
+
+    # Check for channel-specific divergences (blocked NUTS)
+    channel_divergences = {}
+    for key in idata.sample_stats:
+        if key.startswith("diverging_channel_"):
+            channel_idx = key.replace("diverging_channel_", "")
+            channel_divergences[int(channel_idx)] = idata.sample_stats[
+                key
+            ].values.flatten()
+
+    if channel_divergences:
+        divergences_data.update(channel_divergences)
+
+    if not divergences_data:
+        fig, ax = plt.subplots(figsize=config.figsize)
+        ax.text(
+            0.5, 0.5, "No divergence data available", ha="center", va="center"
+        )
+        ax.set_title("Divergences Diagnostics")
+        return
+
+    # Create subplot layout
+    n_plots = len(divergences_data)
+    if n_plots == 1:
+        fig, axes = plt.subplots(1, 2, figsize=config.figsize)
+        trace_ax, summary_ax = axes
+    else:
+        # Multiple plots - arrange in grid
+        cols = 2
+        rows = (n_plots + 1) // cols  # Ceiling division
+        fig, axes = plt.subplots(rows, cols, figsize=config.figsize)
+        if rows == 1:
+            axes = axes.reshape(1, -1)
+        axes = axes.flatten()
+
+        # Last plot goes in summary_ax if odd number
+        if n_plots % 2 == 1:
+            trace_axes = axes[:-1]
+            summary_ax = axes[-1]
+        else:
+            trace_axes = axes
+            summary_ax = None
+
+    # Plot divergences traces
+    total_divergences = 0
+    total_iterations = 0
+
+    plot_idx = 0
+    for label, div_values in divergences_data.items():
+        if label == "main":
+            title = "NUTS Divergences"
+            ax = trace_axes[plot_idx] if n_plots > 1 else axes[0]
+        else:
+            title = f"Channel {label} Divergences"
+            ax = trace_axes[plot_idx] if n_plots > 1 else axes[0]
+            plot_idx += 1
+
+        # Plot divergence indicators (where divergences occur)
+        div_indices = np.where(div_values)[0]
+        ax.scatter(
+            div_indices,
+            np.ones_like(div_indices),
+            color="red",
+            marker="x",
+            s=50,
+            linewidth=2,
+            label="Divergent",
+            alpha=0.8,
+        )
+
+        # Add background shading for divergent regions
+        if len(div_indices) > 0:
+            for idx in div_indices:
+                ax.axvspan(idx - 0.5, idx + 0.5, alpha=0.2, color="red")
+
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Divergence Indicator")
+        ax.set_title(title)
+        ax.set_yticks([0, 1])
+        ax.set_yticklabels(["No", "Yes"])
+        ax.grid(True, alpha=0.3)
+
+        # Add statistics
+        n_divergent = np.sum(div_values)
+        pct_divergent = n_divergent / len(div_values) * 100
+        stats_text = f"{n_divergent}/{len(div_values)} ({pct_divergent:.2f}%)"
+        ax.text(
+            0.02,
+            0.98,
+            stats_text,
+            transform=ax.transAxes,
+            fontsize=10,
+            bbox=dict(boxstyle="round", facecolor="lightcoral", alpha=0.8),
+            verticalalignment="top",
+        )
+
+        total_divergences += n_divergent
+        total_iterations += len(div_values)
+
+        # Legend only if there are divergences
+        if n_divergent > 0:
+            ax.legend(loc="upper right", fontsize="small")
+
+    # Summary plot
+    if summary_ax is not None and n_plots > 1:
+        summary_ax.text(
+            0.05,
+            0.95,
+            _get_divergences_summary(divergences_data),
+            transform=summary_ax.transAxes,
+            fontsize=12,
+            verticalalignment="top",
+            fontfamily="monospace",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.9),
+        )
+        summary_ax.set_title("Divergences Summary")
+        summary_ax.axis("off")
+    elif n_plots == 1:
+        axes[1].text(
+            0.05,
+            0.95,
+            _get_divergences_summary(divergences_data),
+            transform=axes[1].transAxes,
+            fontsize=12,
+            verticalalignment="top",
+            fontfamily="monospace",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.9),
+        )
+        axes[1].set_title("Divergences Summary")
+        axes[1].axis("off")
+
+    # Overall title
+    overall_pct = (
+        total_divergences / total_iterations * 100
+        if total_iterations > 0
+        else 0
+    )
+    fig.suptitle(f"Overall Divergences: {overall_pct:.2f}%")
+
+    plt.tight_layout()
+
+
+def _get_divergences_summary(divergences_data):
+    """Generate text summary of divergences."""
+    lines = ["Divergences Summary:", ""]
+
+    total_divergences = 0
+    total_iterations = 0
+
+    for label, div_values in divergences_data.items():
+        n_divergent = np.sum(div_values)
+        pct_divergent = n_divergent / len(div_values) * 100
+
+        if label == "main":
+            lines.append(
+                f"NUTS: {n_divergent}/{len(div_values)} ({pct_divergent:.2f}%)"
+            )
+        else:
+            lines.append(
+                f"Channel {label}: {n_divergent}/{len(div_values)} ({pct_divergent:.2f}%)"
+            )
+
+        total_divergences += n_divergent
+        total_iterations += len(div_values)
+
+    lines.append("")
+    overall_pct = (
+        total_divergences / total_iterations * 100
+        if total_iterations > 0
+        else 0
+    )
+    lines.append(
+        f"Total: {total_divergences}/{total_iterations} ({overall_pct:.2f}%)"
+    )
+
+    lines.append("")
+    lines.append("Interpretation:")
+    if overall_pct == 0:
+        lines.append("  ✓ No divergences detected")
+        lines.append("    Sampling appears well-behaved")
+    elif overall_pct < 0.1:
+        lines.append("  ~ Few divergences")
+        lines.append("    Generally good, but monitor")
+    elif overall_pct < 1.0:
+        lines.append("  ⚠ Some divergences detected")
+        lines.append("    May indicate sampling issues")
+    else:
+        lines.append("  ✗ Many divergences!")
+        lines.append("    Significant sampling problems")
+        lines.append("    Consider model reparameterization")
+
+    return "\n".join(lines)
 
 
 def _plot_grouped_traces(idata, figsize):

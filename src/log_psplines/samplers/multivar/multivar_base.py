@@ -174,6 +174,8 @@ class MultivarBaseSampler(BaseSampler):
                         vi_psd=vi_psd,
                         empirical_psd=empirical_psd,
                         true_psd=vi_diag.get("true_psd"),
+                        psd_quantiles=vi_diag.get("psd_quantiles"),
+                        coherence_quantiles=vi_diag.get("coherence_quantiles"),
                     )
         except Exception as e:
             if self.config.verbose:

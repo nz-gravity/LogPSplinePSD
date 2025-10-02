@@ -375,3 +375,51 @@ class MultivariateLogPSplines:
             f"knots={self.n_knots}, degree={self.degree}, "
             f"penaltyOrder={self.diffMatrixOrder}, n_freq={self.n_freq})"
         )
+
+    def get_psd_matrix_percentiles(
+        self, psd_matrix_samples: jnp.ndarray, percentiles=[2.5, 50, 97.5]
+    ) -> dict:
+        psd_matrix_real = np.zeros_like(psd_matrix_samples, dtype=np.float64)
+
+        # transform each sample to real-valued representation
+        for i in range(psd_matrix_samples.shape[0]):
+            for j in range(psd_matrix_samples.shape[1]):
+                psd_matrix_real[i, j] = _complex_to_real(
+                    psd_matrix_samples[i, j]
+                )
+
+        posterior_percentiles = np.percentile(
+            psd_matrix_real, percentiles, axis=0
+        )  # (percentile, freq, channels, channels_out)
+        return posterior_percentiles
+
+    def get_psd_matrix_coverage(
+        self, psd_matrix_samples: jnp.ndarray, empirical_psd: jnp.ndarray
+    ) -> float:
+        # Transform empirical_psd to real-valued representation
+        empirical_psd_real = np.zeros_like(empirical_psd)
+        for i in range(empirical_psd.shape[0]):
+            empirical_psd_real[i] = _complex_to_real(empirical_psd[i])
+
+        psd_percentiles = self.get_psd_matrix_percentiles(psd_matrix_samples)
+        coverage = np.mean(
+            (empirical_psd_real >= psd_percentiles[0])
+            & (empirical_psd_real <= psd_percentiles[0])
+        )
+        return float(coverage)
+
+
+def _complex_to_real(matrix):
+    """
+    Transform a complex valued Hermitian matrix to a real valued matrix.
+
+    Upper triangular elements (including diagonal) contain the real parts,
+    lower triangular elements (excluding diagonal) contain the imaginary parts.
+    """
+    n = matrix.shape[0]
+    real_matrix = np.zeros_like(matrix, dtype=float)
+    real_matrix[np.triu_indices(n)] = np.real(matrix[np.triu_indices(n)])
+    real_matrix[np.tril_indices(n, -1)] = np.imag(
+        matrix[np.tril_indices(n, -1)]
+    )
+    return real_matrix

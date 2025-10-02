@@ -94,6 +94,7 @@ class UnivarBaseSampler(BaseSampler):
 
             weights = vi_diag.get("weights")
             if weights is not None:
+                psd_quantiles = vi_diag.get("psd_quantiles")
                 plot_vi_initial_psd_univariate(
                     outfile=os.path.join(
                         outdir, "diagnostics", "vi_initial_psd.png"
@@ -102,6 +103,7 @@ class UnivarBaseSampler(BaseSampler):
                     spline_model=self.spline_model,
                     weights=weights,
                     true_psd=vi_diag.get("true_psd"),
+                    psd_quantiles=psd_quantiles,
                 )
 
     def _get_lnz(

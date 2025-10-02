@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -11,12 +12,12 @@ import numpy as np
 from .pdgrm import plot_pdgrm
 
 
-def plot_vi_elbo(losses: np.ndarray, guide_name: str, outfile: Path) -> None:
+def plot_vi_elbo(losses: np.ndarray, guide_name: str, outfile: str) -> None:
     """Plot the ELBO trace recorded during SVI optimisation."""
     if losses.size == 0:
         return
 
-    outfile.parent.mkdir(parents=True, exist_ok=True)
+    os.makedirs(os.path.dirname(outfile), exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(4.0, 3.0))
     steps = np.arange(losses.size)
@@ -32,14 +33,14 @@ def plot_vi_elbo(losses: np.ndarray, guide_name: str, outfile: Path) -> None:
 
 def plot_vi_initial_psd_univariate(
     *,
-    outfile: Path,
+    outfile: str,
     periodogram,
     spline_model,
     weights: np.ndarray,
     true_psd: Optional[np.ndarray] = None,
 ) -> None:
     """Plot the PSD implied by the VI mean weights for the univariate model."""
-    outfile.parent.mkdir(parents=True, exist_ok=True)
+    os.makedirs(os.path.dirname(outfile), exist_ok=True)
 
     fig, ax = plot_pdgrm(
         pdgrm=periodogram,
@@ -58,14 +59,14 @@ def plot_vi_initial_psd_univariate(
 
 def plot_vi_initial_psd_matrix(
     *,
-    outfile: Path,
+    outfile: str,
     freq: np.ndarray,
     vi_psd: np.ndarray,
     empirical_psd: Optional[np.ndarray] = None,
     true_psd: Optional[np.ndarray] = None,
 ) -> None:
     """Plot diagonal auto-spectra implied by VI means for multivariate models."""
-    outfile.parent.mkdir(parents=True, exist_ok=True)
+    os.makedirs(os.path.dirname(outfile), exist_ok=True)
 
     n_channels = vi_psd.shape[1]
     fig, axes = plt.subplots(

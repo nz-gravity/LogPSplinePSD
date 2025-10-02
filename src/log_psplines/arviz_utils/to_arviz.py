@@ -101,8 +101,9 @@ def _prepare_attributes_and_dims(
     """Prepare attributes, coordinates, and dimensions for InferenceData."""
     # Convert config to attributes (handle booleans)
     config_attrs = {
-        k: int(v) if isinstance(v, bool) else v
+        k: (int(v) if isinstance(v, bool) else v)
         for k, v in asdict(config).items()
+        if v is not None
     }
 
     true_psd_attr = config_attrs.pop("true_psd", None)

@@ -54,7 +54,7 @@ def plot_vi_initial_psd_univariate(
     )
 
     if psd_quantiles:
-        freq = np.asarray(periodogram.freq)
+        freq = np.asarray(periodogram.freqs)
         q05 = (
             np.asarray(psd_quantiles.get("q05"))
             if psd_quantiles.get("q05") is not None

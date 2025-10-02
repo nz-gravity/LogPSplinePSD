@@ -1,6 +1,4 @@
-"""
-NUTS sampler for multivariate PSD estimation.
-"""
+"""NUTS sampler for multivariate PSD estimation."""
 
 import time
 from dataclasses import dataclass
@@ -14,7 +12,6 @@ import numpyro
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
-from ...inference.vi import fit_vi
 from ..base_sampler import SamplerConfig
 from ..utils import (
     build_log_density_fn,
@@ -22,6 +19,7 @@ from ..utils import (
     pspline_hyperparameter_initials,
     sample_pspline_block,
 )
+from ..vi_init import VIInitialisationArtifacts, VIInitialisationMixin
 from .multivar_base import MultivarBaseSampler
 
 
@@ -164,7 +162,7 @@ def multivariate_psplines_model(
     numpyro.deterministic("log_likelihood", log_likelihood)
 
 
-class MultivarNUTSSampler(MultivarBaseSampler):
+class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
     """NUTS sampler for multivariate PSD estimation using Cholesky parameterization."""
 
     def __init__(
@@ -195,8 +193,12 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         self, n_samples: int, n_warmup: int = 500, **kwargs
     ) -> az.InferenceData:
         """Run multivariate NUTS sampling."""
-        init_strategy, run_key = self._select_initialisation_strategy()
-        self.rng_key = run_key
+        vi_artifacts = self._select_initialisation_strategy()
+        init_strategy = (
+            vi_artifacts.init_strategy or self._default_init_strategy()
+        )
+        self.rng_key = vi_artifacts.rng_key
+        self._vi_diagnostics = vi_artifacts.diagnostics
 
         # Setup NUTS kernel
         kernel = NUTS(
@@ -283,126 +285,105 @@ class MultivarNUTSSampler(MultivarBaseSampler):
 
         return self.to_arviz(samples, stats)
 
-    def _select_initialisation_strategy(self):
-        self._vi_diagnostics = None
-        if not self.config.init_from_vi:
-            return self._default_init_strategy(), self.rng_key
-
-        key_vi, key_run = jax.random.split(self.rng_key)
-        progress_bar = (
-            self.config.vi_progress_bar
-            if self.config.vi_progress_bar is not None
-            else self.config.verbose
-        )
-
+    def _select_initialisation_strategy(self) -> VIInitialisationArtifacts:
         guide_spec = self.config.vi_guide or self._suggest_vi_guide()
 
-        try:
-            vi_result = fit_vi(
-                model=multivariate_psplines_model,
-                rng_key=key_vi,
-                vi_steps=self.config.vi_steps,
-                optimizer_lr=self.config.vi_lr,
-                model_args=(
-                    self.y_re,
-                    self.y_im,
-                    self.Z_re,
-                    self.Z_im,
-                    self.all_bases,
-                    self.all_penalties,
-                    self.config.alpha_phi,
-                    self.config.beta_phi,
-                    self.config.alpha_delta,
-                    self.config.beta_delta,
-                ),
-                guide=guide_spec,
-                posterior_draws=self.config.vi_posterior_draws,
-                progress_bar=progress_bar,
-            )
-        except Exception as exc:  # pragma: no cover - defensive fallback
-            if self.config.verbose:
-                print(
-                    f"Multivariate VI init failed ({exc}) - using default init."
-                )
-            return self._default_init_strategy(), key_run
+        def _postprocess(vi_result):
+            init_values = {
+                name: jnp.asarray(value)
+                for name, value in vi_result.means.items()
+            }
 
-        init_values = {
-            name: jnp.asarray(value) for name, value in vi_result.means.items()
-        }
-        init_strategy = init_to_value(values=init_values)
-
-        losses = np.asarray(jax.device_get(vi_result.losses))
-        means = vi_result.means
-
-        log_delta_terms = []
-        try:
-            for channel_index in range(self.n_channels):
-                weights_name = f"weights_delta_{channel_index}"
-                weights = means.get(weights_name)
-                if weights is None:
-                    raise KeyError(weights_name)
-                basis = self.all_bases[channel_index]
-                component_eval = jnp.einsum("nk,k->n", basis, weights)
-                log_delta_terms.append(component_eval)
-            log_delta_sq = jnp.stack(log_delta_terms, axis=1)
-
-            if self.n_theta > 0:
-                basis_theta = self.all_bases[self.n_channels]
-                weights_theta_re = means.get("weights_theta_re")
-                weights_theta_im = means.get("weights_theta_im")
-                if weights_theta_re is None or weights_theta_im is None:
-                    raise KeyError("theta weights")
-                theta_re_base = jnp.einsum(
-                    "nk,k->n", basis_theta, weights_theta_re
-                )
-                theta_im_base = jnp.einsum(
-                    "nk,k->n", basis_theta, weights_theta_im
-                )
-                tile_shape = (1, max(1, self.n_theta))
-                theta_re = jnp.tile(theta_re_base[:, None], tile_shape)
-                theta_im = jnp.tile(theta_im_base[:, None], tile_shape)
-                if self.n_theta == 0:
-                    theta_re = jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
-                    theta_im = jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
-            else:
-                theta_re = jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
-                theta_im = jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
-
-            vi_psd = self.spline_model.reconstruct_psd_matrix(
-                log_delta_sq[None, ...],
-                theta_re[None, ...],
-                theta_im[None, ...],
-                n_samples_max=1,
-            )[0]
-            vi_psd_np = np.asarray(jax.device_get(vi_psd))
-        except Exception as err:  # pragma: no cover - defensive fallback
             vi_psd_np = None
-            if self.config.verbose:
-                print(f"Warning: could not build VI PSD diagnostics ({err}).")
+            try:
+                log_delta_terms = []
+                for channel_index in range(self.n_channels):
+                    weights_name = f"weights_delta_{channel_index}"
+                    weights = vi_result.means.get(weights_name)
+                    if weights is None:
+                        raise KeyError(weights_name)
+                    basis = self.all_bases[channel_index]
+                    component_eval = jnp.einsum("nk,k->n", basis, weights)
+                    log_delta_terms.append(component_eval)
+                log_delta_sq = jnp.stack(log_delta_terms, axis=1)
 
-        true_psd = None
-        if self.config.true_psd is not None:
-            true_psd = np.asarray(jax.device_get(self.config.true_psd))
+                if self.n_theta > 0:
+                    basis_theta = self.all_bases[self.n_channels]
+                    weights_theta_re = vi_result.means.get("weights_theta_re")
+                    weights_theta_im = vi_result.means.get("weights_theta_im")
+                    if weights_theta_re is None or weights_theta_im is None:
+                        raise KeyError("theta weights")
+                    theta_re_base = jnp.einsum(
+                        "nk,k->n", basis_theta, weights_theta_re
+                    )
+                    theta_im_base = jnp.einsum(
+                        "nk,k->n", basis_theta, weights_theta_im
+                    )
+                    theta_re = jnp.tile(
+                        theta_re_base[:, None], (1, max(1, self.n_theta))
+                    )
+                    theta_im = jnp.tile(
+                        theta_im_base[:, None], (1, max(1, self.n_theta))
+                    )
+                else:
+                    theta_re = jnp.zeros((self.n_freq, 0))
+                    theta_im = jnp.zeros((self.n_freq, 0))
 
-        self._vi_diagnostics = {
-            "losses": losses,
-            "guide": vi_result.guide_name,
-            "psd_matrix": vi_psd_np,
-            "true_psd": true_psd,
-        }
+                vi_psd = self.spline_model.reconstruct_psd_matrix(
+                    log_delta_sq[None, ...],
+                    theta_re[None, ...],
+                    theta_im[None, ...],
+                    n_samples_max=1,
+                )[0]
+                vi_psd_np = np.asarray(jax.device_get(vi_psd))
+            except Exception as err:  # pragma: no cover - defensive fallback
+                if self.config.verbose:
+                    print(
+                        f"Warning: could not build VI PSD diagnostics ({err})."
+                    )
 
-        if self.config.verbose:
-            final_loss = (
-                float(vi_result.losses[-1])
-                if vi_result.losses.size
-                else float("nan")
-            )
-            print(
-                "VI init (multivar) -> guide=%s, final ELBO %.3f"
-                % (vi_result.guide_name, final_loss)
-            )
+            true_psd = None
+            if self.config.true_psd is not None:
+                true_psd = np.asarray(jax.device_get(self.config.true_psd))
 
-        return init_strategy, key_run
+            diagnostics = {
+                "psd_matrix": vi_psd_np,
+                "true_psd": true_psd,
+            }
+            return init_values, diagnostics
+
+        artifacts = self._run_vi_initialisation(
+            model=multivariate_psplines_model,
+            model_args=(
+                self.y_re,
+                self.y_im,
+                self.Z_re,
+                self.Z_im,
+                self.all_bases,
+                self.all_penalties,
+                self.config.alpha_phi,
+                self.config.beta_phi,
+                self.config.alpha_delta,
+                self.config.beta_delta,
+            ),
+            guide=guide_spec,
+            postprocess=_postprocess,
+        )
+
+        if self.config.verbose and artifacts.diagnostics is not None:
+            losses = artifacts.diagnostics.get("losses")
+            if losses is not None:
+                losses_arr = np.asarray(losses)
+                if losses_arr.size:
+                    print(
+                        "VI init (multivar) -> guide=%s, final ELBO %.3f"
+                        % (
+                            artifacts.diagnostics.get("guide", "vi"),
+                            float(losses_arr[-1]),
+                        )
+                    )
+
+        return artifacts
 
     def _default_init_strategy(self):
         init_values = self._get_initial_values()

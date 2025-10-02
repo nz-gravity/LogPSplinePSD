@@ -14,7 +14,6 @@ import numpyro
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
-from ...inference.vi import fit_vi
 from ..base_sampler import SamplerConfig
 from ..utils import (
     build_log_density_fn,
@@ -22,6 +21,7 @@ from ..utils import (
     pspline_hyperparameter_initials,
     sample_pspline_block,
 )
+from ..vi_init import VIInitialisationArtifacts, VIInitialisationMixin
 from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
 
@@ -67,7 +67,7 @@ def bayesian_model(
     numpyro.factor("ln_likelihood", lnl)
 
 
-class NUTSSampler(UnivarBaseSampler):
+class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
     """NUTS sampler for univariate PSD estimation."""
 
     def __init__(self, periodogram, spline_model, config: NUTSConfig = None):
@@ -94,8 +94,12 @@ class NUTSSampler(UnivarBaseSampler):
         self, n_samples: int, n_warmup: int = 500, **kwargs
     ) -> az.InferenceData:
         """Run NUTS sampling."""
-        init_strategy, run_key = self._select_initialisation_strategy()
-        self.rng_key = run_key
+        vi_artifacts = self._select_initialisation_strategy()
+        init_strategy = (
+            vi_artifacts.init_strategy or self._default_init_strategy()
+        )
+        self.rng_key = vi_artifacts.rng_key
+        self._vi_diagnostics = vi_artifacts.diagnostics
 
         # Setup NUTS kernel
         kernel = NUTS(
@@ -162,89 +166,66 @@ class NUTSSampler(UnivarBaseSampler):
 
         return self.to_arviz(samples, stats)
 
-    def _select_initialisation_strategy(self):
-        """Return the init strategy (and RNG key) for the upcoming run."""
-        self._vi_diagnostics = None
-        if not self.config.init_from_vi:
-            return self._default_init_strategy(), self.rng_key
-
-        key_vi, key_run = jax.random.split(self.rng_key)
-
-        progress_bar = (
-            self.config.vi_progress_bar
-            if self.config.vi_progress_bar is not None
-            else self.config.verbose
-        )
-
+    def _select_initialisation_strategy(self) -> VIInitialisationArtifacts:
         guide_spec = self.config.vi_guide or self._suggest_vi_guide()
 
-        try:
-            vi_result = fit_vi(
-                model=bayesian_model,
-                rng_key=key_vi,
-                vi_steps=self.config.vi_steps,
-                optimizer_lr=self.config.vi_lr,
-                model_args=(
-                    self.log_pdgrm,
-                    self.basis_matrix,
-                    self.penalty_matrix,
-                    self.log_parametric,
-                    self.config.alpha_phi,
-                    self.config.beta_phi,
-                    self.config.alpha_delta,
-                    self.config.beta_delta,
-                ),
-                guide=guide_spec,
-                posterior_draws=self.config.vi_posterior_draws,
-                progress_bar=progress_bar,
-            )
-        except Exception as exc:  # pragma: no cover - defensive fallback
-            if self.config.verbose:
+        def _postprocess(vi_result):
+            init_values = {
+                name: jnp.asarray(value)
+                for name, value in vi_result.means.items()
+            }
+
+            weights = jax.device_get(vi_result.means.get("weights"))
+            weights_np = None
+            vi_psd = None
+            if weights is not None:
+                weights_np = np.asarray(weights)
+                ln_psd = self.spline_model(vi_result.means["weights"])
+                vi_psd = np.asarray(jax.device_get(jnp.exp(ln_psd)))
+
+            true_psd = None
+            if self.config.true_psd is not None:
+                true_psd = np.asarray(jax.device_get(self.config.true_psd))
+
+            diagnostics = {
+                "weights": weights_np,
+                "psd": vi_psd,
+                "true_psd": true_psd,
+            }
+            return init_values, diagnostics
+
+        artifacts = self._run_vi_initialisation(
+            model=bayesian_model,
+            model_args=(
+                self.log_pdgrm,
+                self.basis_matrix,
+                self.penalty_matrix,
+                self.log_parametric,
+                self.config.alpha_phi,
+                self.config.beta_phi,
+                self.config.alpha_delta,
+                self.config.beta_delta,
+            ),
+            guide=guide_spec,
+            postprocess=_postprocess,
+        )
+
+        if (
+            self.config.verbose
+            and artifacts.diagnostics
+            and artifacts.diagnostics.get("losses") is not None
+        ):
+            losses = np.asarray(artifacts.diagnostics["losses"])
+            if losses.size:
                 print(
-                    f"VI initialisation failed ({exc}) - using default init."
+                    "VI init -> guide=%s, final ELBO %.3f"
+                    % (
+                        artifacts.diagnostics.get("guide", "vi"),
+                        float(losses[-1]),
+                    )
                 )
-            return self._default_init_strategy(), key_run
 
-        init_values = {
-            name: jnp.asarray(value) for name, value in vi_result.means.items()
-        }
-        init_strategy = init_to_value(values=init_values)
-
-        losses = np.asarray(jax.device_get(vi_result.losses))
-        means_np = {
-            name: np.asarray(jax.device_get(value))
-            for name, value in vi_result.means.items()
-        }
-        weights_mean = means_np.get("weights")
-        true_psd = None
-        if self.config.true_psd is not None:
-            true_psd = np.asarray(jax.device_get(self.config.true_psd))
-
-        vi_psd = None
-        if weights_mean is not None:
-            ln_psd = self.spline_model(vi_result.means["weights"])
-            vi_psd = np.asarray(jax.device_get(jnp.exp(ln_psd)))
-
-        self._vi_diagnostics = {
-            "losses": losses,
-            "guide": vi_result.guide_name,
-            "weights": weights_mean,
-            "psd": vi_psd,
-            "true_psd": true_psd,
-        }
-
-        if self.config.verbose:
-            final_loss = (
-                float(vi_result.losses[-1])
-                if vi_result.losses.size
-                else float("nan")
-            )
-            print(
-                "VI init -> guide=%s, final ELBO %.3f"
-                % (vi_result.guide_name, final_loss)
-            )
-
-        return init_strategy, key_run
+        return artifacts
 
     def _default_init_strategy(self):
         delta_0, phi_0 = pspline_hyperparameter_initials(

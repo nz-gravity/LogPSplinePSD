@@ -4,15 +4,17 @@ NUTS sampler for multivariate PSD estimation.
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import arviz as az
 import jax
 import jax.numpy as jnp
+import numpy as np
 import numpyro
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
+from ...inference.vi import fit_vi
 from ..base_sampler import SamplerConfig
 from ..utils import (
     build_log_density_fn,
@@ -29,6 +31,12 @@ class MultivarNUTSConfig(SamplerConfig):
     max_tree_depth: int = 10
     dense_mass: bool = True
     save_nuts_diagnostics: bool = True
+    init_from_vi: bool = True
+    vi_steps: int = 1500
+    vi_lr: float = 1e-2
+    vi_guide: Optional[str] = None
+    vi_posterior_draws: int = 256
+    vi_progress_bar: Optional[bool] = None
 
 
 @jax.jit
@@ -169,6 +177,7 @@ class MultivarNUTSSampler(MultivarBaseSampler):
             config = MultivarNUTSConfig()
         super().__init__(fft_data, spline_model, config)
         self.config: MultivarNUTSConfig = config
+        self._vi_diagnostics: Optional[Dict[str, Any]] = None
 
         # Build JIT log posterior for evidence calculations
         self._logpost_fn = build_log_density_fn(
@@ -186,9 +195,8 @@ class MultivarNUTSSampler(MultivarBaseSampler):
         self, n_samples: int, n_warmup: int = 500, **kwargs
     ) -> az.InferenceData:
         """Run multivariate NUTS sampling."""
-        # Initialize starting values
-        init_values = self._get_initial_values()
-        init_strategy = init_to_value(values=init_values)
+        init_strategy, run_key = self._select_initialisation_strategy()
+        self.rng_key = run_key
 
         # Setup NUTS kernel
         kernel = NUTS(
@@ -274,6 +282,149 @@ class MultivarNUTSSampler(MultivarBaseSampler):
                 samples[key] = jnp.exp(samples[key])
 
         return self.to_arviz(samples, stats)
+
+    def _select_initialisation_strategy(self):
+        self._vi_diagnostics = None
+        if not self.config.init_from_vi:
+            return self._default_init_strategy(), self.rng_key
+
+        key_vi, key_run = jax.random.split(self.rng_key)
+        progress_bar = (
+            self.config.vi_progress_bar
+            if self.config.vi_progress_bar is not None
+            else self.config.verbose
+        )
+
+        guide_spec = self.config.vi_guide or self._suggest_vi_guide()
+
+        try:
+            vi_result = fit_vi(
+                model=multivariate_psplines_model,
+                rng_key=key_vi,
+                vi_steps=self.config.vi_steps,
+                optimizer_lr=self.config.vi_lr,
+                model_args=(
+                    self.y_re,
+                    self.y_im,
+                    self.Z_re,
+                    self.Z_im,
+                    self.all_bases,
+                    self.all_penalties,
+                    self.config.alpha_phi,
+                    self.config.beta_phi,
+                    self.config.alpha_delta,
+                    self.config.beta_delta,
+                ),
+                guide=guide_spec,
+                posterior_draws=self.config.vi_posterior_draws,
+                progress_bar=progress_bar,
+            )
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            if self.config.verbose:
+                print(
+                    f"Multivariate VI init failed ({exc}) - using default init."
+                )
+            return self._default_init_strategy(), key_run
+
+        init_values = {
+            name: jnp.asarray(value) for name, value in vi_result.means.items()
+        }
+        init_strategy = init_to_value(values=init_values)
+
+        losses = np.asarray(jax.device_get(vi_result.losses))
+        means = vi_result.means
+
+        log_delta_terms = []
+        try:
+            for channel_index in range(self.n_channels):
+                weights_name = f"weights_delta_{channel_index}"
+                weights = means.get(weights_name)
+                if weights is None:
+                    raise KeyError(weights_name)
+                basis = self.all_bases[channel_index]
+                component_eval = jnp.einsum("nk,k->n", basis, weights)
+                log_delta_terms.append(component_eval)
+            log_delta_sq = jnp.stack(log_delta_terms, axis=1)
+
+            if self.n_theta > 0:
+                basis_theta = self.all_bases[self.n_channels]
+                weights_theta_re = means.get("weights_theta_re")
+                weights_theta_im = means.get("weights_theta_im")
+                if weights_theta_re is None or weights_theta_im is None:
+                    raise KeyError("theta weights")
+                theta_re_base = jnp.einsum(
+                    "nk,k->n", basis_theta, weights_theta_re
+                )
+                theta_im_base = jnp.einsum(
+                    "nk,k->n", basis_theta, weights_theta_im
+                )
+                tile_shape = (1, max(1, self.n_theta))
+                theta_re = jnp.tile(theta_re_base[:, None], tile_shape)
+                theta_im = jnp.tile(theta_im_base[:, None], tile_shape)
+                if self.n_theta == 0:
+                    theta_re = jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
+                    theta_im = jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
+            else:
+                theta_re = jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
+                theta_im = jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
+
+            vi_psd = self.spline_model.reconstruct_psd_matrix(
+                log_delta_sq[None, ...],
+                theta_re[None, ...],
+                theta_im[None, ...],
+                n_samples_max=1,
+            )[0]
+            vi_psd_np = np.asarray(jax.device_get(vi_psd))
+        except Exception as err:  # pragma: no cover - defensive fallback
+            vi_psd_np = None
+            if self.config.verbose:
+                print(f"Warning: could not build VI PSD diagnostics ({err}).")
+
+        true_psd = None
+        if self.config.true_psd is not None:
+            true_psd = np.asarray(jax.device_get(self.config.true_psd))
+
+        self._vi_diagnostics = {
+            "losses": losses,
+            "guide": vi_result.guide_name,
+            "psd_matrix": vi_psd_np,
+            "true_psd": true_psd,
+        }
+
+        if self.config.verbose:
+            final_loss = (
+                float(vi_result.losses[-1])
+                if vi_result.losses.size
+                else float("nan")
+            )
+            print(
+                "VI init (multivar) -> guide=%s, final ELBO %.3f"
+                % (vi_result.guide_name, final_loss)
+            )
+
+        return init_strategy, key_run
+
+    def _default_init_strategy(self):
+        init_values = self._get_initial_values()
+        return init_to_value(values=init_values)
+
+    def _suggest_vi_guide(self) -> str:
+        total_latents = 0
+        for model in self.spline_model.diagonal_models:
+            total_latents += model.n_basis + 2
+
+        if self.n_theta > 0:
+            total_latents += self.spline_model.offdiag_re_model.n_basis + 2
+            total_latents += self.spline_model.offdiag_im_model.n_basis + 2
+
+        if total_latents <= 120:
+            return "diag"
+
+        rank = max(16, min(64, total_latents // 6))
+        rank = min(rank, max(2, total_latents - 1))
+        if rank < 2:
+            return "diag"
+        return f"lowrank:{rank}"
 
     def _get_initial_values(self) -> Dict[str, jnp.ndarray]:
         """Get initial values for all parameters."""

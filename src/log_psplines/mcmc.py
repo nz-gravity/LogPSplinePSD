@@ -51,6 +51,12 @@ def run_mcmc(
     # NUTS specific
     target_accept_prob: float = 0.8,
     max_tree_depth: int = 10,
+    init_from_vi: bool = True,
+    vi_steps: int = 1500,
+    vi_lr: float = 1e-2,
+    vi_guide: Optional[str] = None,
+    vi_posterior_draws: int = 256,
+    vi_progress_bar: Optional[bool] = None,
     # MH specific
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
@@ -239,6 +245,12 @@ def run_mcmc(
         compute_lnz=compute_lnz,
         target_accept_prob=target_accept_prob,
         max_tree_depth=max_tree_depth,
+        init_from_vi=init_from_vi,
+        vi_steps=vi_steps,
+        vi_lr=vi_lr,
+        vi_guide=vi_guide,
+        vi_posterior_draws=vi_posterior_draws,
+        vi_progress_bar=vi_progress_bar,
         target_accept_rate=target_accept_rate,
         adaptation_window=adaptation_window,
         scaling_factor=(
@@ -273,6 +285,12 @@ def create_sampler(
     compute_lnz: bool = False,
     target_accept_prob: float = 0.8,
     max_tree_depth: int = 10,
+    init_from_vi: bool = True,
+    vi_steps: int = 1500,
+    vi_lr: float = 1e-2,
+    vi_guide: Optional[str] = None,
+    vi_posterior_draws: int = 256,
+    vi_progress_bar: Optional[bool] = None,
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
     scaling_factor: float = 1.0,
@@ -307,6 +325,12 @@ def create_sampler(
                 **common_config_kwargs,
                 target_accept_prob=target_accept_prob,
                 max_tree_depth=max_tree_depth,
+                init_from_vi=init_from_vi,
+                vi_steps=vi_steps,
+                vi_lr=vi_lr,
+                vi_guide=vi_guide,
+                vi_posterior_draws=vi_posterior_draws,
+                vi_progress_bar=vi_progress_bar,
             )
             return NUTSSampler(data, model, config)
         elif sampler_type == "mh":
@@ -341,6 +365,12 @@ def create_sampler(
                 **common_config_kwargs,
                 target_accept_prob=target_accept_prob,
                 max_tree_depth=max_tree_depth,
+                init_from_vi=init_from_vi,
+                vi_steps=vi_steps,
+                vi_lr=vi_lr,
+                vi_guide=vi_guide,
+                vi_posterior_draws=vi_posterior_draws,
+                vi_progress_bar=vi_progress_bar,
             )
             return MultivarBlockedNUTSSampler(data, model, config)
 
@@ -348,6 +378,12 @@ def create_sampler(
             **common_config_kwargs,
             target_accept_prob=target_accept_prob,
             max_tree_depth=max_tree_depth,
+            init_from_vi=init_from_vi,
+            vi_steps=vi_steps,
+            vi_lr=vi_lr,
+            vi_guide=vi_guide,
+            vi_posterior_draws=vi_posterior_draws,
+            vi_progress_bar=vi_progress_bar,
         )
         return MultivarNUTSSampler(data, model, config)
 

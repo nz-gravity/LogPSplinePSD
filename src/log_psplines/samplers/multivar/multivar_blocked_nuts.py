@@ -28,7 +28,7 @@ assembled into global arrays ``log_delta_sq`` with shape (draw, freq, p) and
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import arviz as az
 import jax
@@ -36,7 +36,9 @@ import jax.numpy as jnp
 import numpy as np
 import numpyro
 from numpyro.infer import MCMC, NUTS
+from numpyro.infer.util import init_to_value
 
+from ...inference.vi import fit_vi
 from ..base_sampler import SamplerConfig
 from ..utils import sample_pspline_block
 from .multivar_base import MultivarBaseSampler
@@ -196,6 +198,12 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     max_tree_depth: int = 10
     dense_mass: bool = True
     save_nuts_diagnostics: bool = True
+    init_from_vi: bool = True
+    vi_steps: int = 1500
+    vi_lr: float = 1e-2
+    vi_guide: Optional[str] = None
+    vi_posterior_draws: int = 256
+    vi_progress_bar: Optional[bool] = None
 
 
 class MultivarBlockedNUTSSampler(MultivarBaseSampler):
@@ -224,6 +232,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             config = MultivarBlockedNUTSConfig()
         super().__init__(fft_data, spline_model, config)
         self.config: MultivarBlockedNUTSConfig = config
+        self._vi_diagnostics: Optional[Dict[str, Any]] = None
 
         theta_basis_idx = self.n_channels
         self._theta_basis = (
@@ -275,8 +284,21 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         rng_key = self.rng_key
         total_runtime = 0.0
 
+        self._vi_diagnostics = None
+        vi_losses_blocks: List[np.ndarray] = []
+        vi_guides: List[str] = []
+        vi_log_delta_means: List[np.ndarray] = []
+        vi_theta_re_mean: Optional[np.ndarray] = None
+        vi_theta_im_mean: Optional[np.ndarray] = None
+        vi_success_count = 0
+
         for channel_index in range(self.n_channels):
-            rng_key, subkey = jax.random.split(rng_key)
+            rng_key, block_key = jax.random.split(rng_key)
+            vi_key = None
+            if self.config.init_from_vi:
+                vi_key, subkey = jax.random.split(block_key)
+            else:
+                subkey = block_key
 
             delta_basis = self.all_bases[channel_index]
             delta_penalty = self.all_penalties[channel_index]
@@ -299,12 +321,138 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 else jnp.zeros((self.n_freq, 0))
             )
 
-            kernel = NUTS(
-                _blocked_channel_model,
+            init_strategy = None
+            if self.config.init_from_vi and vi_key is not None:
+                guide_spec = (
+                    self.config.vi_guide
+                    or self._suggest_vi_guide_block(
+                        delta_basis.shape[1], theta_count
+                    )
+                )
+                progress_bar = (
+                    self.config.vi_progress_bar
+                    if self.config.vi_progress_bar is not None
+                    else self.config.verbose
+                )
+                try:
+                    vi_result = fit_vi(
+                        model=_blocked_channel_model,
+                        rng_key=vi_key,
+                        vi_steps=self.config.vi_steps,
+                        optimizer_lr=self.config.vi_lr,
+                        model_args=(
+                            channel_index,
+                            self.y_re[:, channel_index],
+                            self.y_im[:, channel_index],
+                            Z_re_block,
+                            Z_im_block,
+                            delta_basis,
+                            delta_penalty,
+                            self._theta_basis,
+                            self._theta_penalty,
+                            self.config.alpha_phi,
+                            self.config.beta_phi,
+                            self.config.alpha_delta,
+                            self.config.beta_delta,
+                        ),
+                        guide=guide_spec,
+                        posterior_draws=self.config.vi_posterior_draws,
+                        progress_bar=progress_bar,
+                    )
+
+                    init_values = {
+                        name: jnp.asarray(value)
+                        for name, value in vi_result.means.items()
+                    }
+                    init_strategy = init_to_value(values=init_values)
+
+                    losses_arr = np.asarray(jax.device_get(vi_result.losses))
+                    vi_losses_blocks.append(losses_arr)
+                    vi_guides.append(vi_result.guide_name)
+
+                    weights_delta_name = f"weights_delta_{channel_index}"
+                    weights_delta = vi_result.means.get(weights_delta_name)
+                    if weights_delta is None:
+                        raise KeyError(weights_delta_name)
+                    log_delta_vi = jnp.einsum(
+                        "nk,k->n", delta_basis, weights_delta
+                    )
+                    vi_log_delta_means.append(
+                        np.asarray(jax.device_get(log_delta_vi))
+                    )
+
+                    if theta_count > 0 and self.n_theta > 0:
+                        if vi_theta_re_mean is None:
+                            vi_theta_re_mean = np.zeros(
+                                (self.n_freq, self.n_theta), dtype=np.float32
+                            )
+                            vi_theta_im_mean = np.zeros(
+                                (self.n_freq, self.n_theta), dtype=np.float32
+                            )
+                        theta_re_components = []
+                        theta_im_components = []
+                        for theta_idx in range(theta_count):
+                            prefix = f"{channel_index}_{theta_idx}"
+                            weights_theta_re = vi_result.means.get(
+                                f"weights_theta_re_{prefix}"
+                            )
+                            weights_theta_im = vi_result.means.get(
+                                f"weights_theta_im_{prefix}"
+                            )
+                            if (
+                                weights_theta_re is None
+                                or weights_theta_im is None
+                            ):
+                                raise KeyError(f"theta weights {prefix}")
+                            theta_re_eval = jnp.einsum(
+                                "nk,k->n", self._theta_basis, weights_theta_re
+                            )
+                            theta_im_eval = jnp.einsum(
+                                "nk,k->n", self._theta_basis, weights_theta_im
+                            )
+                            theta_re_components.append(
+                                np.asarray(jax.device_get(theta_re_eval))
+                            )
+                            theta_im_components.append(
+                                np.asarray(jax.device_get(theta_im_eval))
+                            )
+
+                        theta_re_components = (
+                            np.stack(theta_re_components, axis=1)
+                            if theta_re_components
+                            else np.zeros((self.n_freq, theta_count))
+                        )
+                        theta_im_components = (
+                            np.stack(theta_im_components, axis=1)
+                            if theta_im_components
+                            else np.zeros((self.n_freq, theta_count))
+                        )
+                        theta_slice = slice(
+                            theta_start, theta_start + theta_count
+                        )
+                        vi_theta_re_mean[:, theta_slice] = theta_re_components
+                        vi_theta_im_mean[:, theta_slice] = theta_im_components
+
+                    vi_success_count += 1
+                except (
+                    Exception
+                ) as exc:  # pragma: no cover - defensive fallback
+                    if self.config.verbose:
+                        print(
+                            "VI block initialisation failed "
+                            f"[channel {channel_index}] ({exc})"
+                        )
+                    init_strategy = None
+
+            kernel_kwargs = dict(
                 target_accept_prob=self.config.target_accept_prob,
                 max_tree_depth=self.config.max_tree_depth,
                 dense_mass=self.config.dense_mass,
             )
+            if init_strategy is not None:
+                kernel_kwargs["init_strategy"] = init_strategy
+
+            kernel = NUTS(_blocked_channel_model, **kernel_kwargs)
 
             mcmc = MCMC(
                 kernel,
@@ -436,6 +584,67 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             }
         )
 
+        if self.config.init_from_vi and vi_log_delta_means:
+            if len(vi_log_delta_means) == self.n_channels:
+                log_delta_vi_np = np.stack(vi_log_delta_means, axis=1)
+            else:
+                log_delta_vi_np = None
+
+            if log_delta_vi_np is not None:
+                if self.n_theta > 0:
+                    assert (
+                        vi_theta_re_mean is not None
+                        and vi_theta_im_mean is not None
+                    )
+                    theta_re_vi_np = vi_theta_re_mean
+                    theta_im_vi_np = vi_theta_im_mean
+                else:
+                    theta_re_vi_np = np.zeros(
+                        (self.n_freq, 0), dtype=np.float32
+                    )
+                    theta_im_vi_np = np.zeros(
+                        (self.n_freq, 0), dtype=np.float32
+                    )
+
+                vi_psd = self.spline_model.reconstruct_psd_matrix(
+                    jnp.asarray(log_delta_vi_np)[None, ...],
+                    jnp.asarray(theta_re_vi_np)[None, ...],
+                    jnp.asarray(theta_im_vi_np)[None, ...],
+                    n_samples_max=1,
+                )[0]
+                vi_psd_np = np.asarray(jax.device_get(vi_psd))
+            else:
+                vi_psd_np = None
+
+            valid_losses = [arr for arr in vi_losses_blocks if arr.size]
+            losses_mean = None
+            losses_stack = None
+            if valid_losses:
+                min_len = min(arr.shape[0] for arr in valid_losses)
+                if min_len > 0:
+                    losses_stack = np.stack(
+                        [arr[-min_len:] for arr in valid_losses], axis=0
+                    )
+                    losses_mean = losses_stack.mean(axis=0)
+
+            true_psd = None
+            if self.config.true_psd is not None:
+                true_psd = np.asarray(jax.device_get(self.config.true_psd))
+
+            guide_label = (
+                ",".join(sorted(set(vi_guides))) if vi_guides else "vi"
+            )
+
+            self._vi_diagnostics = {
+                "losses": (
+                    losses_mean if losses_mean is not None else np.asarray([])
+                ),
+                "losses_per_block": losses_stack,
+                "guide": guide_label,
+                "psd_matrix": vi_psd_np,
+                "true_psd": true_psd,
+            }
+
         return self.to_arviz(combined_samples, combined_stats)
 
     def _get_lnz(
@@ -443,3 +652,22 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     ) -> Tuple[float, float]:
         """LnZ is currently not computed for the multivariate samplers."""
         return super()._get_lnz(samples, sample_stats)
+
+    def _suggest_vi_guide_block(
+        self, delta_basis_cols: int, theta_count: int
+    ) -> str:
+        total_latents = (
+            delta_basis_cols + 2
+        )  # weights + phi/delta for diagonal
+        if theta_count > 0:
+            theta_basis_cols = self._theta_basis.shape[1]
+            total_latents += theta_count * (theta_basis_cols + 2)
+
+        if total_latents <= 80:
+            return "diag"
+
+        rank = max(8, min(32, total_latents // 5))
+        rank = min(rank, max(2, total_latents - 1))
+        if rank < 2:
+            return "diag"
+        return f"lowrank:{rank}"

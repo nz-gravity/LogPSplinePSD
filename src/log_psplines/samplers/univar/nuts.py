@@ -4,15 +4,17 @@ NUTS sampler for univariate PSD estimation.
 
 import time
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 import arviz as az
 import jax
 import jax.numpy as jnp
+import numpy as np
 import numpyro
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
+from ...inference.vi import fit_vi
 from ..base_sampler import SamplerConfig
 from ..utils import (
     build_log_density_fn,
@@ -29,6 +31,12 @@ class NUTSConfig(SamplerConfig):
     max_tree_depth: int = 10
     dense_mass: bool = True
     save_nuts_diagnostics: bool = True
+    init_from_vi: bool = True
+    vi_steps: int = 1500
+    vi_lr: float = 1e-2
+    vi_guide: Optional[str] = None
+    vi_posterior_draws: int = 256
+    vi_progress_bar: Optional[bool] = None
 
 
 def bayesian_model(
@@ -67,6 +75,7 @@ class NUTSSampler(UnivarBaseSampler):
             config = NUTSConfig()
         super().__init__(periodogram, spline_model, config)
         self.config: NUTSConfig = config  # Type hint for IDE
+        self._vi_diagnostics: Optional[Dict[str, np.ndarray]] = None
 
         # Pre-build JIT-compiled log-posterior for morphZ evidence
         self._logpost_fn = build_log_density_fn(
@@ -85,21 +94,8 @@ class NUTSSampler(UnivarBaseSampler):
         self, n_samples: int, n_warmup: int = 500, **kwargs
     ) -> az.InferenceData:
         """Run NUTS sampling."""
-        # Initialize starting values
-        delta_0, phi_0 = pspline_hyperparameter_initials(
-            alpha_phi=self.config.alpha_phi,
-            beta_phi=self.config.beta_phi,
-            alpha_delta=self.config.alpha_delta,
-            beta_delta=self.config.beta_delta,
-            divide_phi_by_delta=True,
-        )
-        init_strategy = init_to_value(
-            values=dict(
-                delta=delta_0,
-                phi=jnp.log(phi_0),
-                weights=self.spline_model.weights,
-            )
-        )
+        init_strategy, run_key = self._select_initialisation_strategy()
+        self.rng_key = run_key
 
         # Setup NUTS kernel
         kernel = NUTS(
@@ -165,6 +161,116 @@ class NUTSSampler(UnivarBaseSampler):
             samples["phi"] = jnp.exp(samples["phi"])
 
         return self.to_arviz(samples, stats)
+
+    def _select_initialisation_strategy(self):
+        """Return the init strategy (and RNG key) for the upcoming run."""
+        self._vi_diagnostics = None
+        if not self.config.init_from_vi:
+            return self._default_init_strategy(), self.rng_key
+
+        key_vi, key_run = jax.random.split(self.rng_key)
+
+        progress_bar = (
+            self.config.vi_progress_bar
+            if self.config.vi_progress_bar is not None
+            else self.config.verbose
+        )
+
+        guide_spec = self.config.vi_guide or self._suggest_vi_guide()
+
+        try:
+            vi_result = fit_vi(
+                model=bayesian_model,
+                rng_key=key_vi,
+                vi_steps=self.config.vi_steps,
+                optimizer_lr=self.config.vi_lr,
+                model_args=(
+                    self.log_pdgrm,
+                    self.basis_matrix,
+                    self.penalty_matrix,
+                    self.log_parametric,
+                    self.config.alpha_phi,
+                    self.config.beta_phi,
+                    self.config.alpha_delta,
+                    self.config.beta_delta,
+                ),
+                guide=guide_spec,
+                posterior_draws=self.config.vi_posterior_draws,
+                progress_bar=progress_bar,
+            )
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            if self.config.verbose:
+                print(
+                    f"VI initialisation failed ({exc}) - using default init."
+                )
+            return self._default_init_strategy(), key_run
+
+        init_values = {
+            name: jnp.asarray(value) for name, value in vi_result.means.items()
+        }
+        init_strategy = init_to_value(values=init_values)
+
+        losses = np.asarray(jax.device_get(vi_result.losses))
+        means_np = {
+            name: np.asarray(jax.device_get(value))
+            for name, value in vi_result.means.items()
+        }
+        weights_mean = means_np.get("weights")
+        true_psd = None
+        if self.config.true_psd is not None:
+            true_psd = np.asarray(jax.device_get(self.config.true_psd))
+
+        vi_psd = None
+        if weights_mean is not None:
+            ln_psd = self.spline_model(vi_result.means["weights"])
+            vi_psd = np.asarray(jax.device_get(jnp.exp(ln_psd)))
+
+        self._vi_diagnostics = {
+            "losses": losses,
+            "guide": vi_result.guide_name,
+            "weights": weights_mean,
+            "psd": vi_psd,
+            "true_psd": true_psd,
+        }
+
+        if self.config.verbose:
+            final_loss = (
+                float(vi_result.losses[-1])
+                if vi_result.losses.size
+                else float("nan")
+            )
+            print(
+                "VI init -> guide=%s, final ELBO %.3f"
+                % (vi_result.guide_name, final_loss)
+            )
+
+        return init_strategy, key_run
+
+    def _default_init_strategy(self):
+        delta_0, phi_0 = pspline_hyperparameter_initials(
+            alpha_phi=self.config.alpha_phi,
+            beta_phi=self.config.beta_phi,
+            alpha_delta=self.config.alpha_delta,
+            beta_delta=self.config.beta_delta,
+            divide_phi_by_delta=True,
+        )
+        return init_to_value(
+            values=dict(
+                delta=delta_0,
+                phi=jnp.log(phi_0),
+                weights=self.spline_model.weights,
+            )
+        )
+
+    def _suggest_vi_guide(self) -> str:
+        n_latents = self.n_weights + 2  # weights plus phi/delta
+        if n_latents <= 64:
+            return "diag"
+        rank = max(8, min(32, n_latents // 4))
+        rank = min(rank, max(2, n_latents - 1))
+        if rank < 2:
+            return "diag"
+        return f"lowrank:{rank}"
 
     @property
     def _logp_kwargs(self):

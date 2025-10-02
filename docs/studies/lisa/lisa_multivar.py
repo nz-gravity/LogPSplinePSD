@@ -49,7 +49,7 @@ else:
 
     idata = run_mcmc(
         data=fft_data,
-        sampler="nuts",
+        sampler="multivar-blocked-nuts",
         n_samples=100,
         n_warmup=100,
         n_knots=10,
@@ -58,7 +58,6 @@ else:
         knot_kwargs=dict(strategy="log"),
         outdir=f"{HERE}/results/lisa",
         verbose=True,
-        dense_massl=False,
     )
 
 print(idata)

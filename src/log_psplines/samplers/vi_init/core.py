@@ -27,6 +27,7 @@ class VIResult:
     losses: jnp.ndarray
     params: Dict[str, Any]
     guide_name: str
+    samples: Optional[Dict[str, jnp.ndarray]] = None
 
 
 def resolve_guide(
@@ -139,6 +140,9 @@ def fit_vi(
         )
         means = _reduce_tree(vi_samples, lambda value: jnp.mean(value, axis=0))
         scales = _reduce_tree(vi_samples, lambda value: jnp.std(value, axis=0))
+        samples = {
+            name: jnp.asarray(array) for name, array in vi_samples.items()
+        }
     else:
         posterior_sample = guide_obj.median(
             params, *model_args, **model_kwargs
@@ -148,6 +152,7 @@ def fit_vi(
             for name, value in posterior_sample.items()
         }
         scales = {name: jnp.zeros_like(array) for name, array in means.items()}
+        samples = None
 
     return VIResult(
         means=means,
@@ -155,4 +160,5 @@ def fit_vi(
         losses=losses,
         params=params,
         guide_name=guide_name,
+        samples=samples,
     )

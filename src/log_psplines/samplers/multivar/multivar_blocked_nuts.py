@@ -38,9 +38,9 @@ import numpyro
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
-from ...inference.vi import fit_vi
 from ..base_sampler import SamplerConfig
 from ..utils import sample_pspline_block
+from ..vi_init import fit_vi
 from .multivar_base import MultivarBaseSampler
 
 

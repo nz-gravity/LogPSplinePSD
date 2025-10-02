@@ -3,6 +3,7 @@ Base class for multivariate PSD samplers.
 """
 
 import tempfile
+from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import arviz as az
@@ -12,7 +13,11 @@ import morphZ
 import numpy as np
 
 from ...datatypes import MultivarFFT
-from ...plotting import plot_psd_matrix
+from ...plotting import (
+    plot_psd_matrix,
+    plot_vi_elbo,
+    plot_vi_initial_psd_matrix,
+)
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -138,6 +143,40 @@ class MultivarBaseSampler(BaseSampler):
                 empirical_psd=empirical_psd,
                 outdir=self.config.outdir,
             )
+
+            import os
+
+            vi_diag = getattr(self, "_vi_diagnostics", None)
+            if vi_diag and self.config.outdir is not None:
+                outdir = self.config.outdir
+                diagnostics_dir = os.path.join(outdir, "diagnostics")
+                losses = vi_diag.get("losses")
+                if losses is not None:
+                    losses_arr = np.asarray(losses)
+                    if losses_arr.ndim > 1:
+                        losses_arr = losses_arr.mean(axis=0)
+                    if losses_arr.size:
+                        plot_vi_elbo(
+                            losses=losses_arr,
+                            guide_name=vi_diag.get("guide", "vi"),
+                            outfile=os.path.join(
+                                diagnostics_dir, "vi_elbo_trace.png"
+                            ),
+                        )
+
+                vi_psd = vi_diag.get("psd_matrix")
+                if vi_psd is not None:
+                    plot_vi_initial_psd_matrix(
+                        outfile=os.path.join(
+                            diagnostics_dir, "vi_initial_psd_matrix.png"
+                        ),
+                        freq=np.array(self.freq),
+                        vi_psd=vi_psd,
+                        empirical_psd=empirical_psd,
+                        true_psd=vi_diag.get("true_psd"),
+                        psd_quantiles=vi_diag.get("psd_quantiles"),
+                        coherence_quantiles=vi_diag.get("coherence_quantiles"),
+                    )
         except Exception as e:
             if self.config.verbose:
                 print(f"Warning: Could not create plots: {e}")

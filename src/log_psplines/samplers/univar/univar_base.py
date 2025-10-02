@@ -3,6 +3,7 @@ Base class for univariate PSD samplers.
 """
 
 import tempfile
+from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import arviz as az
@@ -13,7 +14,11 @@ import numpy as np
 
 from ...arviz_utils.to_arviz import results_to_arviz
 from ...datatypes import Periodogram
-from ...plotting import plot_pdgrm
+from ...plotting import (
+    plot_pdgrm,
+    plot_vi_elbo,
+    plot_vi_initial_psd_univariate,
+)
 from ...psplines import LogPSplines, build_spline
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -67,6 +72,39 @@ class UnivarBaseSampler(BaseSampler):
         """Save univariate-specific plots."""
         fig, _ = plot_pdgrm(idata=idata)
         fig.savefig(f"{self.config.outdir}/posterior_predictive.png")
+
+        vi_diag = getattr(self, "_vi_diagnostics", None)
+        import os
+
+        if vi_diag and self.config.outdir is not None:
+            outdir = self.config.outdir
+            losses = vi_diag.get("losses")
+            if losses is not None:
+                losses_arr = np.asarray(losses)
+                if losses_arr.ndim > 1:
+                    losses_arr = losses_arr.mean(axis=0)
+                if losses_arr.size:
+                    plot_vi_elbo(
+                        losses=losses_arr,
+                        guide_name=vi_diag.get("guide", "vi"),
+                        outfile=os.path.join(
+                            outdir, "diagnostics", "vi_elbo_trace.png"
+                        ),
+                    )
+
+            weights = vi_diag.get("weights")
+            if weights is not None:
+                psd_quantiles = vi_diag.get("psd_quantiles")
+                plot_vi_initial_psd_univariate(
+                    outfile=os.path.join(
+                        outdir, "diagnostics", "vi_initial_psd.png"
+                    ),
+                    periodogram=self.periodogram,
+                    spline_model=self.spline_model,
+                    weights=weights,
+                    true_psd=vi_diag.get("true_psd"),
+                    psd_quantiles=psd_quantiles,
+                )
 
     def _get_lnz(
         self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]

@@ -28,7 +28,7 @@ assembled into global arrays ``log_delta_sq`` with shape (draw, freq, p) and
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import arviz as az
 import jax
@@ -39,6 +39,7 @@ from numpyro.infer import MCMC, NUTS
 
 from ..base_sampler import SamplerConfig
 from ..utils import sample_pspline_block
+from ..vi_init.adapters import prepare_block_vi
 from .multivar_base import MultivarBaseSampler
 
 
@@ -196,6 +197,12 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     max_tree_depth: int = 10
     dense_mass: bool = True
     save_nuts_diagnostics: bool = True
+    init_from_vi: bool = True
+    vi_steps: int = 1500
+    vi_lr: float = 1e-2
+    vi_guide: Optional[str] = None
+    vi_posterior_draws: int = 256
+    vi_progress_bar: Optional[bool] = None
 
 
 class MultivarBlockedNUTSSampler(MultivarBaseSampler):
@@ -224,6 +231,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             config = MultivarBlockedNUTSConfig()
         super().__init__(fft_data, spline_model, config)
         self.config: MultivarBlockedNUTSConfig = config
+        self._vi_diagnostics: Optional[Dict[str, Any]] = None
 
         theta_basis_idx = self.n_channels
         self._theta_basis = (
@@ -252,12 +260,12 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
            (consistent with the triangular ordering used by
            :class:`~log_psplines.datatypes.MultivarFFT`), and run NUTS on the
            corresponding block model.
-        2. Move per‑block deterministics out of the ``samples`` dict into
-           ``sample_stats`` and, for diagnostics, optionally rename NumPyro’s
+        2. Move per-block deterministics out of the ``samples`` dict into
+           ``sample_stats`` and, for diagnostics, optionally rename NumPyro's
            NUTS fields with ``_channel_{j}`` suffixes.
-        3. Stack ``log_delta_sq_j`` across channels and place the θ blocks into
+        3. Stack ``log_delta_sq_j`` across channels and place the theta blocks into
            the correct positions of the global ``theta_re|im`` arrays.
-        4. Sum the block log‑likelihoods to obtain the joint log‑likelihood.
+        4. Sum the block log-likelihoods to obtain the joint log-likelihood.
         """
         if self.config.verbose:
             print(
@@ -272,39 +280,59 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         theta_im_total = None
         log_likelihood_total = None
 
-        rng_key = self.rng_key
         total_runtime = 0.0
 
-        for channel_index in range(self.n_channels):
-            rng_key, subkey = jax.random.split(rng_key)
+        vi_setup = prepare_block_vi(
+            self,
+            rng_key=self.rng_key,
+            block_model=_blocked_channel_model,
+        )
+        self._vi_diagnostics = vi_setup.diagnostics
+        self.rng_key = vi_setup.rng_key
+        init_strategies = vi_setup.init_strategies
+        mcmc_keys = vi_setup.mcmc_keys
 
+        if (
+            self.config.verbose
+            and self._vi_diagnostics is not None
+            and self._vi_diagnostics.get("losses") is not None
+        ):
+            losses = np.asarray(self._vi_diagnostics["losses"])
+            if losses.size:
+                guide = self._vi_diagnostics.get("guide", "vi")
+                print(
+                    "VI block init -> guide=%s, final ELBO %.3f"
+                    % (guide, float(losses[-1]))
+                )
+
+        for channel_index in range(self.n_channels):
             delta_basis = self.all_bases[channel_index]
             delta_penalty = self.all_penalties[channel_index]
 
             theta_start = channel_index * (channel_index - 1) // 2
             theta_count = channel_index
 
-            Z_re_block = (
-                self.Z_re[
+            if theta_count > 0:
+                Z_re_block = self.Z_re[
                     :, channel_index, theta_start : theta_start + theta_count
                 ]
-                if theta_count > 0
-                else jnp.zeros((self.n_freq, 0))
-            )
-            Z_im_block = (
-                self.Z_im[
+                Z_im_block = self.Z_im[
                     :, channel_index, theta_start : theta_start + theta_count
                 ]
-                if theta_count > 0
-                else jnp.zeros((self.n_freq, 0))
-            )
+            else:
+                Z_re_block = jnp.zeros((self.n_freq, 0))
+                Z_im_block = jnp.zeros((self.n_freq, 0))
 
-            kernel = NUTS(
-                _blocked_channel_model,
+            kernel_kwargs = dict(
                 target_accept_prob=self.config.target_accept_prob,
                 max_tree_depth=self.config.max_tree_depth,
                 dense_mass=self.config.dense_mass,
             )
+            init_strategy = init_strategies[channel_index]
+            if init_strategy is not None:
+                kernel_kwargs["init_strategy"] = init_strategy
+
+            kernel = NUTS(_blocked_channel_model, **kernel_kwargs)
 
             mcmc = MCMC(
                 kernel,
@@ -317,7 +345,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
             start_time = time.time()
             mcmc.run(
-                subkey,
+                mcmc_keys[channel_index],
                 channel_index,
                 self.y_re[:, channel_index],
                 self.y_im[:, channel_index],

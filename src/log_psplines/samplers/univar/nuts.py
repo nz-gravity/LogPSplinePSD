@@ -4,11 +4,11 @@ NUTS sampler for univariate PSD estimation.
 
 import time
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 import arviz as az
-import jax
 import jax.numpy as jnp
+import numpy as np
 import numpyro
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
@@ -17,9 +17,11 @@ from ..base_sampler import SamplerConfig
 from ..utils import (
     build_log_density_fn,
     evaluate_log_density_batch,
-    pspline_hyperparameter_initials,
     sample_pspline_block,
 )
+from ..vi_init import VIInitialisationMixin
+from ..vi_init.adapters import compute_vi_artifacts_univar
+from ..vi_init.defaults import default_init_values_univar
 from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
 
@@ -29,6 +31,12 @@ class NUTSConfig(SamplerConfig):
     max_tree_depth: int = 10
     dense_mass: bool = True
     save_nuts_diagnostics: bool = True
+    init_from_vi: bool = True
+    vi_steps: int = 1500
+    vi_lr: float = 1e-2
+    vi_guide: Optional[str] = None
+    vi_posterior_draws: int = 256
+    vi_progress_bar: Optional[bool] = None
 
 
 def bayesian_model(
@@ -59,7 +67,7 @@ def bayesian_model(
     numpyro.factor("ln_likelihood", lnl)
 
 
-class NUTSSampler(UnivarBaseSampler):
+class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
     """NUTS sampler for univariate PSD estimation."""
 
     def __init__(self, periodogram, spline_model, config: NUTSConfig = None):
@@ -67,6 +75,7 @@ class NUTSSampler(UnivarBaseSampler):
             config = NUTSConfig()
         super().__init__(periodogram, spline_model, config)
         self.config: NUTSConfig = config  # Type hint for IDE
+        self._vi_diagnostics: Optional[Dict[str, np.ndarray]] = None
 
         # Pre-build JIT-compiled log-posterior for morphZ evidence
         self._logpost_fn = build_log_density_fn(
@@ -85,21 +94,25 @@ class NUTSSampler(UnivarBaseSampler):
         self, n_samples: int, n_warmup: int = 500, **kwargs
     ) -> az.InferenceData:
         """Run NUTS sampling."""
-        # Initialize starting values
-        delta_0, phi_0 = pspline_hyperparameter_initials(
-            alpha_phi=self.config.alpha_phi,
-            beta_phi=self.config.beta_phi,
-            alpha_delta=self.config.alpha_delta,
-            beta_delta=self.config.beta_delta,
-            divide_phi_by_delta=True,
+        vi_artifacts = compute_vi_artifacts_univar(self, model=bayesian_model)
+        init_strategy = (
+            vi_artifacts.init_strategy or self._default_init_strategy()
         )
-        init_strategy = init_to_value(
-            values=dict(
-                delta=delta_0,
-                phi=jnp.log(phi_0),
-                weights=self.spline_model.weights,
-            )
-        )
+        self.rng_key = vi_artifacts.rng_key
+        self._vi_diagnostics = vi_artifacts.diagnostics
+
+        if (
+            self.config.verbose
+            and vi_artifacts.diagnostics
+            and vi_artifacts.diagnostics.get("losses") is not None
+        ):
+            losses = np.asarray(vi_artifacts.diagnostics["losses"])
+            if losses.size:
+                guide = vi_artifacts.diagnostics.get("guide", "vi")
+                print(
+                    "VI init -> guide=%s, final ELBO %.3f"
+                    % (guide, float(losses[-1]))
+                )
 
         # Setup NUTS kernel
         kernel = NUTS(
@@ -166,6 +179,16 @@ class NUTSSampler(UnivarBaseSampler):
 
         return self.to_arviz(samples, stats)
 
+    def _default_init_strategy(self):
+        default_values = default_init_values_univar(
+            self.spline_model,
+            alpha_phi=self.config.alpha_phi,
+            beta_phi=self.config.beta_phi,
+            alpha_delta=self.config.alpha_delta,
+            beta_delta=self.config.beta_delta,
+        )
+        return init_to_value(values=default_values)
+
     @property
     def _logp_kwargs(self):
         """Arguments passed to the NumPyro model / log-density helpers."""
@@ -189,7 +212,8 @@ class NUTSSampler(UnivarBaseSampler):
                 print("Pre-compiling NumPyro model...")
 
             # Initialize model with dummy data to trigger compilation
-            delta_phi_default = pspline_hyperparameter_initials(
+            default_values = default_init_values_univar(
+                self.spline_model,
                 alpha_phi=self.config.alpha_phi,
                 beta_phi=self.config.beta_phi,
                 alpha_delta=self.config.alpha_delta,
@@ -200,13 +224,7 @@ class NUTSSampler(UnivarBaseSampler):
                 self.rng_key,
                 bayesian_model,
                 model_kwargs=self._logp_kwargs,
-                init_strategy=init_to_value(
-                    values=dict(
-                        delta=delta_phi_default[0],
-                        phi=jnp.log(delta_phi_default[1]),
-                        weights=self.spline_model.weights,
-                    )
-                ),
+                init_strategy=init_to_value(values=default_values),
             )
 
             if self.config.verbose:

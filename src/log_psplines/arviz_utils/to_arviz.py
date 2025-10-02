@@ -39,7 +39,9 @@ def results_to_arviz(
 
     # Compute diagnostics if true_psd is provided (using posterior_psd from idata)
     if config.true_psd is not None:
-        idata.attrs.update(_compute_psd_diagnostics(idata, config, data))
+        idata.attrs.update(
+            _compute_psd_diagnostics(idata, config, data, model)
+        )
 
     return idata
 
@@ -101,8 +103,9 @@ def _prepare_attributes_and_dims(
     """Prepare attributes, coordinates, and dimensions for InferenceData."""
     # Convert config to attributes (handle booleans)
     config_attrs = {
-        k: int(v) if isinstance(v, bool) else v
+        k: (int(v) if isinstance(v, bool) else v)
         for k, v in asdict(config).items()
+        if v is not None
     }
 
     true_psd_attr = config_attrs.pop("true_psd", None)
@@ -404,6 +407,7 @@ def _create_multivar_inference_data(
         fft_data,
         spline_model,
     )
+    print("Prepared InferenceData attributes and dimensions.")
 
     # Create base InferenceData
     idata = az.from_dict(
@@ -674,7 +678,7 @@ def _reconstruct_theta_params(
         )
 
 
-def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
+def _compute_psd_diagnostics(idata, config, data, model) -> Dict[str, Any]:
     """Compute PSD diagnostics when true_psd is provided using the posterior_psd from idata."""
     diagnostics = {}
 
@@ -749,7 +753,7 @@ def _compute_psd_diagnostics(idata, config, data) -> Dict[str, Any]:
                 }
 
                 # Compute CI coverage for multivariate
-                ci_coverage_matrix = _compute_ci_coverage_multivar(
+                ci_coverage_matrix = model.get_psd_matrix_coverage(
                     psd_matrix_samples, true_psd_real
                 )
 
@@ -850,22 +854,6 @@ def _compute_ci_coverage_univar(
         (true_psd >= posterior_lower) & (true_psd <= posterior_upper)
     )
     return float(coverage)
-
-
-def _complex_to_real(matrix):
-    """
-    Transform a complex valued Hermitian matrix to a real valued matrix.
-
-    Upper triangular elements (including diagonal) contain the real parts,
-    lower triangular elements (excluding diagonal) contain the imaginary parts.
-    """
-    n = matrix.shape[0]
-    real_matrix = np.zeros_like(matrix, dtype=float)
-    real_matrix[np.triu_indices(n)] = np.real(matrix[np.triu_indices(n)])
-    real_matrix[np.tril_indices(n, -1)] = np.imag(
-        matrix[np.tril_indices(n, -1)]
-    )
-    return real_matrix
 
 
 def _compute_ci_coverage_multivar(

@@ -7,15 +7,16 @@ from log_psplines.plotting import plot_pdgrm
 
 ar4 = ARData(order=4, duration=2.0, fs=512.0, sigma=1.0, seed=42)
 kawrgs = dict(
-    pdgrm=ar4.periodogram,
+    data=ar4.ts,
     n_knots=15,
     n_samples=2500,
     n_warmup=1000,
     rng_key=0,
     knot_kwargs=dict(method="uniform"),
+    init_from_vi=True,
 )
-inference_mh = run_mcmc(**kawrgs, sampler="mh", outdir="mh_out")
-inference_nuts = run_mcmc(**kawrgs, sampler="nuts", outdir="nuts_out")
+inference_mh = run_mcmc(**kawrgs, sampler="mh", outdir="out/mh_out")
+inference_nuts = run_mcmc(**kawrgs, sampler="nuts", outdir="out/nuts_out")
 
 fig, ax = plt.subplots(1, 1, figsize=(4, 3))
 ax.plot(

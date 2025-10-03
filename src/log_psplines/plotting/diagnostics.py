@@ -7,6 +7,8 @@ import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..logger import logger
+
 
 @dataclass
 class DiagnosticsConfig:
@@ -28,8 +30,8 @@ def safe_plot(filename: str, dpi: int = 150):
                 plt.close()
                 return True
             except Exception as e:
-                print(
-                    f"Warning: Failed to create {os.path.basename(filename)}: {e}"
+                logger.warning(
+                    f"Failed to create {os.path.basename(filename)}: {e}"
                 )
                 plt.close("all")
                 return False
@@ -149,7 +151,7 @@ def plot_diagnostics(
     diag_dir = os.path.join(outdir, "diagnostics")
     os.makedirs(diag_dir, exist_ok=True)
 
-    print("Generating MCMC diagnostics...")
+    logger.info("Generating MCMC diagnostics...")
 
     # Generate summary report
     generate_diagnostics_summary(idata, diag_dir)
@@ -159,7 +161,7 @@ def plot_diagnostics(
         idata, diag_dir, config, n_channels, n_freq, runtime
     )
 
-    print(f"Diagnostics saved to {diag_dir}/")
+    logger.debug(f"Diagnostics saved to {diag_dir}/")
 
 
 def _create_essential_diagnostics(
@@ -2145,5 +2147,5 @@ def generate_diagnostics_summary(idata, outdir):
         with open(f"{outdir}/diagnostics_summary.txt", "w") as f:
             f.write(summary_text)
 
-    print("\n" + summary_text + "\n")
+    logger.info(f"\n{summary_text}\n")
     return summary_text

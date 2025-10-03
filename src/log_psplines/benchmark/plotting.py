@@ -7,6 +7,8 @@ import matplotlib.ticker as ticker
 import numpy as np
 from matplotlib.patches import Patch
 
+from ..logger import logger
+
 MH_COLOR = "tab:blue"
 NUTS_COLOR = "tab:orange"
 GPU_MARKER = "o--"
@@ -84,7 +86,7 @@ def plot_data_size_results(filepaths: List[str]) -> None:
 
     for filepath in filepaths:
         if not os.path.exists(filepath):
-            print(f"Data file {filepath} not found")
+            logger.info(f"Data file {filepath} not found")
             continue
 
         with open(filepath, "r") as f:
@@ -120,7 +122,7 @@ def plot_knots_results(filepaths: List[str]) -> None:
 
     for filepath in filepaths:
         if not os.path.exists(filepath):
-            print(f"Data file {filepath} not found")
+            logger.info(f"Data file {filepath} not found")
             continue
 
         with open(filepath, "r") as f:

@@ -16,6 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..arviz_utils.to_arviz import results_to_arviz
+from ..logger import logger
 from ..plotting import plot_diagnostics, plot_pdgrm
 
 
@@ -108,9 +109,9 @@ class BaseSampler(ABC):
             ess = az.ess(idata)
             ess_min = ess.to_array().min().values
             ess_max = ess.to_array().max().values
-            print(f"  ESS min: {ess_min:.1f}, max: {ess_max:.1f}")
+            logger.info(f"  ESS min: {ess_min:.1f}, max: {ess_max:.1f}")
             if not (np.isnan(lnz) or np.isnan(lnz_err)):
-                print(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
+                logger.info(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
 
             # Print RIAE diagnostics if true_psd was provided
             if hasattr(idata.attrs, "get"):
@@ -120,14 +121,16 @@ class BaseSampler(ABC):
                     errorbars = idata.attrs.get("riae_errorbars", [])
                     if len(errorbars) >= 5:
                         iqr_half = (errorbars[3] - errorbars[1]) / 2.0
-                        print(f"  RIAE: {riae_median:.3f} ± {iqr_half:.3f}")
+                        logger.info(
+                            f"  RIAE: {riae_median:.3f} ± {iqr_half:.3f}"
+                        )
                     else:
-                        print(f"  RIAE: {riae_median:.3f}")
+                        logger.info(f"  RIAE: {riae_median:.3f}")
 
                 # Check for multivariate RIAE
                 if "riae_matrix" in idata.attrs:
                     riae_matrix = idata.attrs["riae_matrix"]
-                    print(f"  RIAE (matrix): {riae_matrix:.3f}")
+                    logger.info(f"  RIAE (matrix): {riae_matrix:.3f}")
 
         # Save outputs if requested
         if self.config.outdir is not None:

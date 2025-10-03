@@ -12,6 +12,7 @@ import numpyro
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
+from ...logger import logger
 from ..base_sampler import SamplerConfig
 from ..utils import (
     build_log_density_fn,
@@ -211,9 +212,8 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             losses = np.asarray(vi_artifacts.diagnostics["losses"])
             if losses.size:
                 guide = vi_artifacts.diagnostics.get("guide", "vi")
-                print(
-                    "VI init (multivar) -> guide=%s, final ELBO %.3f"
-                    % (guide, float(losses[-1]))
+                logger.info(
+                    f"VI init (multivar) -> guide={guide}, final ELBO {float(losses[-1]):.3f}"
                 )
 
         # Setup NUTS kernel
@@ -235,10 +235,9 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             jit_model_args=True,
         )
 
-        if self.config.verbose:
-            print(
-                f"Multivariate NUTS sampler [{self.device}] - {self.n_channels} channels"
-            )
+        logger.info(
+            f"Multivariate NUTS sampler [{self.device}] - {self.n_channels} channels"
+        )
 
         # FIXED: Run sampling with individual arrays instead of MultivarFFT object
         start_time = time.time()
@@ -271,8 +270,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         )
         self.runtime = time.time() - start_time
 
-        if self.config.verbose:
-            print(f"Sampling completed in {self.runtime:.2f} seconds")
+        logger.info(f"Sampling completed in {self.runtime:.2f} seconds")
 
         # Extract samples and convert to ArviZ
         samples = mcmc.get_samples()
@@ -317,7 +315,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             from numpyro.infer.util import initialize_model
 
             if self.config.verbose:
-                print("Pre-compiling NumPyro model...")
+                logger.debug("Pre-compiling NumPyro model...")
 
             # Initialize model with dummy data to trigger compilation
             init_params = initialize_model(
@@ -347,10 +345,10 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             )
 
             if self.config.verbose:
-                print("Model pre-compilation completed")
+                logger.debug("Model pre-compilation completed")
         except Exception as e:
             if self.config.verbose:
-                print(f"Warning: Model pre-compilation failed: {e}")
+                logger.warning(f"Model pre-compilation failed: {e}")
 
     def _get_lnz(
         self, samples: Dict[str, Any], sample_stats: Dict[str, Any]

@@ -13,6 +13,7 @@ import morphZ
 import numpy as np
 
 from ...datatypes import MultivarFFT
+from ...logger import logger
 from ...plotting import (
     plot_psd_matrix,
     plot_vi_elbo,
@@ -179,7 +180,7 @@ class MultivarBaseSampler(BaseSampler):
                     )
         except Exception as e:
             if self.config.verbose:
-                print(f"Warning: Could not create plots: {e}")
+                logger.warning(f"Could not create plots: {e}")
 
     def _get_lnz(
         self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
@@ -190,8 +191,8 @@ class MultivarBaseSampler(BaseSampler):
 
         # Temporarily disabled until multivariate morphZ path is stabilised.
         if self.config.verbose:
-            print(
-                "Warning: LnZ computation is not yet supported for multivariate samplers; returning NaN."
+            logger.warning(
+                "LnZ computation is not yet supported for multivariate samplers; returning NaN."
             )
         return np.nan, np.nan
 

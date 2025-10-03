@@ -4,6 +4,7 @@ from gwosc import datasets as gwosc_datasets
 from gwpy.frequencyseries import FrequencySeries
 from gwpy.timeseries import TimeSeries
 
+from ..logger import logger
 from .utils import PSD_FILE
 
 
@@ -47,7 +48,7 @@ class LVKData:
         fmax: float = 512,
     ) -> "LVKData":
         gps_end = gps_start + duration
-        print(f"Downloading {detector} data [{gps_start} - {gps_end}]")
+        logger.info(f"Downloading {detector} data [{gps_start} - {gps_end}]")
         strain = TimeSeries.fetch_open_data(detector, gps_start, gps_end)
         strain = (strain - strain.mean()) / strain.std()
         psd = strain.psd()

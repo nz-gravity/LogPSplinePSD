@@ -5,6 +5,8 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal.windows import gaussian
 
+from ...logger import logger
+
 
 class LvkKnotAllocator:
     def __init__(
@@ -48,8 +50,9 @@ class LvkKnotAllocator:
         self._process_peaks()
         self.knots = self.calculate_knots(degree=degree)
         self.knots_hz = self.knots * (self.fmax - self.fmin) + self.fmin
-        print(
-            f"Generated {len(self.knots)} adaptive knots ({self.knots_hz[0]:.1f}-{self.knots_hz[-1]:.1f} Hz)"
+
+        logger.info(
+            f"Generated {len(self.knots)} adaptive knots ({float(self.knots_hz[0])}-{float(self.knots_hz[-1])} Hz)",
         )
 
         if knots_plotfn is not None:
@@ -83,8 +86,8 @@ class LvkKnotAllocator:
                 == 1
             )
         )
-        print(
-            f"Found {n_lines} spectral line regions using threshold = {self.threshold:.2f}"
+        logger.info(
+            f"Found {n_lines} spectral line regions using threshold = {float(self.threshold):.2f}"
         )
 
     def _extract_peaks(self) -> np.ndarray:
@@ -154,8 +157,11 @@ class LvkKnotAllocator:
             self.bin_regions = sorted(all_regions, key=lambda x: x[0])
             peak_count = sum(1 for _, _, t in self.bin_regions if t == "peak")
             zero_count = len(self.bin_regions) - peak_count
-            print(
-                f"Adaptive binning (d={self.d}): {peak_count} peak regions, {zero_count} zero regions"
+            logger.info(
+                "Adaptive binning (d=%d): %d peak regions, %d zero regions",
+                self.d,
+                peak_count,
+                zero_count,
             )
         else:
             band_idxs = np.where(band_mask)[0]
@@ -164,7 +170,7 @@ class LvkKnotAllocator:
                 if len(band_idxs)
                 else []
             )
-            print(
+            logger.info(
                 "No significant peaks after smoothing; using single zero region."
             )
 
@@ -537,5 +543,5 @@ class LvkKnotAllocator:
 
         plt.tight_layout()
         plt.savefig(fname, bbox_inches="tight", dpi=300)
-        print(f"KnotLoc saved as {fname} (xscale={xscale})")
+        logger.info(f"KnotLoc saved as {fname} (xscale={xscale})")
         return fig, (ax1, ax2)

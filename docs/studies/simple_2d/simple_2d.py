@@ -10,6 +10,8 @@ from numpyro.infer import MCMC, NUTS
 from scipy.interpolate import BSpline
 from scipy.signal.windows import tukey
 
+from log_psplines.logger import logger
+
 CLEAN = True
 
 
@@ -81,10 +83,10 @@ fs = 2 * fmax
 delta_t = 1 / fs
 n_data = 2 ** int(np.log(tmax / delta_t) / np.log(2))
 
-print(f"Number of data points (n_data): {n_data}")
-print(f"Sampling frequency (fs): {fs} Hz")
-print(f"Delta T: {delta_t}")
-print(f"Maximum frequency (f_nyquist): {fs / 2} Hz")
+logger.info(f"Number of data points (n_data): {n_data}")
+logger.info(f"Sampling frequency (fs): {fs} Hz")
+logger.info(f"Delta T: {delta_t}")
+logger.info(f"Maximum frequency (f_nyquist): {fs / 2} Hz")
 
 # Generate frequency array and PSD
 freq = np.fft.rfftfreq(n_data, delta_t)[1:]
@@ -327,7 +329,7 @@ penalty_matrix_jax = jnp.array(penalty_matrix)
 
 
 if os.path.exists(samples_file) and os.path.exists(posts_file) and not CLEAN:
-    print("Loading existing results...")
+    logger.info("Loading existing results...")
     with open(samples_file, "rb") as f:
         orbital_samples = pickle.load(f)
     with open(posts_file, "rb") as f:
@@ -341,7 +343,7 @@ if os.path.exists(samples_file) and os.path.exists(posts_file) and not CLEAN:
 else:
     nuts_kernel = NUTS(bayesian_orbital_model_corrected)
     mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=1)
-    print("Running MCMC...")
+    logger.info("Running MCMC...")
     mcmc.run(
         jax.random.PRNGKey(123),
         segment_log_periodograms=segment_log_periodograms_2d,
@@ -422,12 +424,12 @@ if not (os.path.exists(samples_file) and os.path.exists(posts_file)):
 
 
 # Print parameter estimates
-print(f"True orbital amplitude: {A_ORBIT:.3f}")
-print(
+logger.info(f"True orbital amplitude: {A_ORBIT:.3f}")
+logger.info(
     f"Estimated orbital amplitude: {np.median(orbital_samples['orbital_amplitude']):.3f} ± {np.std(orbital_samples['orbital_amplitude']):.3f}"
 )
-print(f"True orbital frequency: {F_ORBIT:.2e}")
-print(
+logger.info(f"True orbital frequency: {F_ORBIT:.2e}")
+logger.info(
     f"Estimated orbital frequency: {np.median(orbital_samples['orbital_frequency']):.2e} ± {np.std(orbital_samples['orbital_frequency']):.2e}"
 )
 
@@ -487,7 +489,7 @@ error = (
     / time_varying_PSD_at_seg_interp
 )
 mean_error = np.mean(error)
-print(
+logger.info(
     f"Mean relative error between expected and posterior median PSD: {mean_error:.3f}"
 )
 
@@ -586,4 +588,4 @@ plt.tight_layout()
 plt.savefig("non_modulated_psd.png", dpi=150)
 plt.show()
 
-print("Analysis complete!")
+logger.info("Analysis complete!")

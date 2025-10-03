@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 from numpyro.infer.util import init_to_value
 
+from ...logger import logger
 from .core import fit_vi
 from .guide import (
     suggest_guide_block,
@@ -303,7 +304,7 @@ def compute_vi_artifacts_multivar(
                         }
         except OverflowError as err:  # pragma: no cover - defensive fallback
             if sampler.config.verbose:
-                print(f"Warning: could not build VI PSD diagnostics ({err}).")
+                logger.warning(f"Could not build VI PSD diagnostics: {err}")
                 # print full traceback
                 import traceback
 
@@ -613,9 +614,8 @@ def prepare_block_vi(
 
         except Exception as exc:  # pragma: no cover - defensive fallback
             if sampler.config.verbose:
-                print(
-                    "VI block initialisation failed "
-                    f"[channel {channel_index}] ({exc})"
+                logger.warning(
+                    f"VI block initialisation failed [channel {channel_index}]: {exc}"
                 )
             if store_draws:
                 draws_missing = True

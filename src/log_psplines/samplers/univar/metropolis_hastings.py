@@ -14,6 +14,7 @@ import morphZ
 import numpy as np
 from tqdm.auto import tqdm
 
+from ...logger import logger
 from ..base_sampler import SamplerConfig
 from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
@@ -271,7 +272,7 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
         start_time = time.time()
 
         if self.config.verbose:
-            print(
+            logger.info(
                 f"Metropolis-Hastings with adaptive step sizes [{self.device}] {self.rng_key}"
             )
 
@@ -337,10 +338,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
             if len(sample_stats["accept_prob"]) > 50:
                 final_accept = np.mean(sample_stats["accept_prob"][-50:])
 
-            print(f"\nSampling completed in {self.runtime:.2f} seconds")
-            print(
-                f"Final acceptance rate: {final_accept:.3f} "
-                f"(target: {self.config.target_accept_rate})"
+            logger.info(f"Sampling completed in {self.runtime:.2f} seconds")
+            logger.info(
+                f"Final acceptance rate: {final_accept:.3f} (target: {self.config.target_accept_rate:.3f})"
             )
 
         return self.to_arviz(samples, sample_stats)

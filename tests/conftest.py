@@ -2,9 +2,13 @@ import os
 
 import pytest
 
+from log_psplines.logger import set_level
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 # HARDCODE TO SLOW FOR MORE ACCURATE TESTS
 os.environ["LOG_PSPLINES_SLOW_TESTS"] = "1"
+
+set_level("DEBUG")
 
 
 def _compute_test_mode() -> str:

@@ -11,11 +11,12 @@ from tqdm.auto import tqdm
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.mcmc import run_mcmc
 
+from ..logger import logger
 from .plotting import plot_data_size_results, plot_knots_results
 
 # Get device information
 DEVICE = jax.devices()[0].platform
-print(f"Running on: {DEVICE}")
+logger.info(f"Running on: {DEVICE}")
 
 AR_DEFAULTS = dict(
     order=4,

@@ -6,6 +6,8 @@ import scipy.signal
 import scipy.special
 import scipy.stats
 
+from .logger import logger
+
 
 class PSDDiagnostics:
     """
@@ -405,7 +407,7 @@ class PSDDiagnostics:
 
         plt.tight_layout()
         plt.savefig(fname, bbox_inches="tight", dpi=300)
-        print(f"Diagnostics plot saved to {fname}")
+        logger.info(f"Diagnostics plot saved to {fname}")
 
     def _prepare_whitening_data(self) -> None:
         """Prepare data for whitening diagnostics."""

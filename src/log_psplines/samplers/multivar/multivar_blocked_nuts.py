@@ -37,6 +37,7 @@ import numpy as np
 import numpyro
 from numpyro.infer import MCMC, NUTS
 
+from ...logger import logger
 from ..base_sampler import SamplerConfig
 from ..utils import sample_pspline_block
 from ..vi_init.adapters import prepare_block_vi
@@ -267,10 +268,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
            the correct positions of the global ``theta_re|im`` arrays.
         4. Sum the block log-likelihoods to obtain the joint log-likelihood.
         """
-        if self.config.verbose:
-            print(
-                f"Blocked multivariate NUTS sampler [{self.device}] - {self.n_channels} channels"
-            )
+        logger.info(
+            f"Blocked multivariate NUTS sampler [{self.device}] - {self.n_channels} channels"
+        )
 
         combined_samples: Dict[str, np.ndarray] = {}
         combined_stats: Dict[str, np.ndarray] = {}
@@ -300,9 +300,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             losses = np.asarray(self._vi_diagnostics["losses"])
             if losses.size:
                 guide = self._vi_diagnostics.get("guide", "vi")
-                print(
-                    "VI block init -> guide=%s, final ELBO %.3f"
-                    % (guide, float(losses[-1]))
+                logger.info(
+                    f"VI block init -> guide={guide}, final ELBO {float(losses[-1]):.3f}"
                 )
 
         for channel_index in range(self.n_channels):

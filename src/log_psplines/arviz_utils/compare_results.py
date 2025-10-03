@@ -5,6 +5,7 @@ import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..logger import logger
 from ..plotting.plot_ess_evolution import plot_ess_evolution
 
 
@@ -13,8 +14,10 @@ def compare_results(
     run2: Union[az.InferenceData, str],
     labels: List[str],
     outdir: str,
-    colors: List[str] = ["tab:blue", "tab:orange"],
+    colors: List[str] = None,
 ):
+    if colors is None:
+        colors = ["tab:blue", "tab:orange"]
     os.makedirs(outdir, exist_ok=True)
 
     if isinstance(run1, str):
@@ -107,8 +110,8 @@ def compare_results(
     diff = summary1.loc[common_vars] - summary2.loc[common_vars]
     diff.to_csv(f"{outdir}/summary_diff.csv")
 
-    print("Summary Differences:")
-    print(diff)
+    logger.info("Summary Differences:")
+    logger.info(f"\n{diff}")
 
 
 def _get_ess(run: az.InferenceData) -> np.array:

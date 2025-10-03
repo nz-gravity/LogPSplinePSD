@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 from numpyro.infer.util import init_to_value
 
+from ...logger import logger
 from .core import VIResult, fit_vi
 
 
@@ -81,7 +82,7 @@ class VIInitialisationMixin:
             )
         except Exception as exc:  # pragma: no cover - defensive fallback
             if getattr(self.config, "verbose", False):
-                print(
+                logger.warning(
                     f"VI initialisation failed ({exc}) - using default init."
                 )
             return VIInitialisationArtifacts(None, key_run, None)

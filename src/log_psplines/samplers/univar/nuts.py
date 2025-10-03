@@ -13,6 +13,7 @@ import numpyro
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
+from ...logger import logger
 from ..base_sampler import SamplerConfig
 from ..utils import (
     build_log_density_fn,
@@ -109,9 +110,8 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             losses = np.asarray(vi_artifacts.diagnostics["losses"])
             if losses.size:
                 guide = vi_artifacts.diagnostics.get("guide", "vi")
-                print(
-                    "VI init -> guide=%s, final ELBO %.3f"
-                    % (guide, float(losses[-1]))
+                logger.info(
+                    f"VI init -> guide={guide}, final ELBO {float(losses[-1]):.3f}",
                 )
 
         # Setup NUTS kernel
@@ -134,7 +134,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         )
 
         if self.config.verbose:
-            print(f"NUTS sampler [{self.device}] {self.rng_key}")
+            logger.info(f"NUTS sampler [{self.device}] {self.rng_key}")
 
         # Run sampling
         start_time = time.time()
@@ -163,7 +163,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         self.runtime = time.time() - start_time
 
         if self.config.verbose:
-            print(f"Sampling completed in {self.runtime:.2f} seconds")
+            logger.info(f"Sampling completed in {self.runtime:.2f} seconds")
 
         # Extract samples and convert to ArviZ
         samples = mcmc.get_samples()
@@ -209,7 +209,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             from numpyro.infer.util import initialize_model
 
             if self.config.verbose:
-                print("Pre-compiling NumPyro model...")
+                logger.debug("Pre-compiling NumPyro model...")
 
             # Initialize model with dummy data to trigger compilation
             default_values = default_init_values_univar(
@@ -228,10 +228,10 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             )
 
             if self.config.verbose:
-                print("Model pre-compilation completed")
+                logger.debug("Model pre-compilation completed")
         except Exception as e:
             if self.config.verbose:
-                print(f"Warning: Model pre-compilation failed: {e}")
+                logger.warning(f"Model pre-compilation failed: {e}")
 
     def _compute_log_posterior(
         self, weights: jnp.ndarray, phi: float, delta: float

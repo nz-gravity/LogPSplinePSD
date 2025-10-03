@@ -2,6 +2,7 @@ from typing import Literal, Optional, Union
 
 import arviz as az
 import jax.numpy as jnp
+from loguru import logger
 
 from .datatypes import Periodogram
 from .datatypes.multivar import MultivarFFT, MultivariateTimeseries
@@ -156,7 +157,7 @@ def run_mcmc(
             )
 
         if verbose:
-            print(
+            logger.info(
                 f"Standardized data: original scale ~{processed_data.scaling_factor:.2e}"
             )
 
@@ -166,8 +167,8 @@ def run_mcmc(
             if sampler not in allowed_multivar_samplers:
                 if verbose:
                     allowed = ", ".join(sorted(allowed_multivar_samplers))
-                    print(
-                        f"Warning: Multivariate analysis supports {allowed}. Using NUTS instead of {sampler}"
+                    logger.warning(
+                        f"Multivariate analysis supports {allowed}. Using NUTS instead of {sampler}"
                     )
                 sampler = "nuts"
 
@@ -355,8 +356,8 @@ def create_sampler(
         if sampler_type not in allowed_types:
             if verbose:
                 allowed = ", ".join(sorted(allowed_types))
-                print(
-                    f"Warning: Multivariate analysis supports {allowed}. Using NUTS instead of {sampler_type}"
+                logger.warning(
+                    f"Multivariate analysis supports {allowed}. Using NUTS instead of {sampler_type}"
                 )
             sampler_type = "nuts"
 

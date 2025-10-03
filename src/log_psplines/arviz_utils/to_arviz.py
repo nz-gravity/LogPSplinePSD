@@ -13,6 +13,8 @@ from xarray import DataArray, Dataset
 
 from log_psplines.datatypes import MultivarFFT, Periodogram
 
+from ..logger import logger
+
 warnings.filterwarnings("ignore", module="arviz")
 
 
@@ -318,7 +320,7 @@ def _create_multivar_inference_data(
             observed_csd[:, i, j] *= config.scaling_factor
     observed_csd = np.real(observed_csd)
     if config.verbose:
-        print(
+        logger.info(
             f"Rescaling multivariate posterior samples: max scaling ~{config.scaling_factor:.2e}"
         )
     psd_samples = psd_samples_rescaled
@@ -407,7 +409,7 @@ def _create_multivar_inference_data(
         fft_data,
         spline_model,
     )
-    print("Prepared InferenceData attributes and dimensions.")
+    logger.info("Prepared InferenceData attributes and dimensions.")
 
     # Create base InferenceData
     idata = az.from_dict(

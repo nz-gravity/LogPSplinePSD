@@ -361,6 +361,7 @@ def prepare_block_vi(
 ) -> BlockVIArtifacts:
     """Run VI per block for blocked multivariate samplers."""
 
+    logger.info("Running VI initialisation per block...")
     n_channels = sampler.n_channels
     init_strategies: List[Optional[Callable[[Any], Any]]] = [None] * n_channels
     mcmc_keys: List[jax.Array] = [jax.random.PRNGKey(0)] * n_channels
@@ -674,6 +675,7 @@ def prepare_block_vi(
                 )
                 theta_im_samples = jnp.zeros_like(theta_re_samples)
 
+            logger.debug("Reconstructing PSD samples from VI draws...")
             psd_samples = sampler.spline_model.reconstruct_psd_matrix(
                 log_delta_samples,
                 theta_re_samples,

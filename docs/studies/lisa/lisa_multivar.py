@@ -5,10 +5,12 @@ import numpy as np
 from lisa_data import TEN_DAYS, LISAData, download
 
 from log_psplines.datatypes import MultivariateTimeseries
-from log_psplines.logger import logger
+from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting.psd_matrix import plot_psd_matrix
 from log_psplines.psplines.multivar_psplines import MultivariateLogPSplines
+
+set_level("DEBUG")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

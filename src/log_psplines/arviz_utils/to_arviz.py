@@ -27,12 +27,19 @@ def results_to_arviz(
     attributes: Dict[str, Any],
 ) -> az.InferenceData:
     """Unified ArviZ conversion for both univar and multivar cases."""
+    logger.debug(f"results_to_arviz: entry")
+    logger.debug(f"results_to_arviz: samples keys={list(samples.keys())}")
+    logger.debug(
+        f"results_to_arviz: sample_stats keys={list(sample_stats.keys())}"
+    )
 
     if isinstance(data, Periodogram):
+        logger.debug(f"results_to_arviz: detected Periodogram")
         idata = _create_univar_inference_data(
             samples, sample_stats, config, data, model, attributes
         )
     elif isinstance(data, MultivarFFT):
+        logger.debug(f"results_to_arviz: detected MultivarFFT")
         idata = _create_multivar_inference_data(
             samples, sample_stats, config, data, model, attributes
         )
@@ -41,9 +48,13 @@ def results_to_arviz(
 
     # Compute diagnostics if true_psd is provided (using posterior_psd from idata)
     if config.true_psd is not None:
+        logger.debug(
+            f"results_to_arviz: computing PSD diagnostics (true_psd provided)"
+        )
         idata.attrs.update(
             _compute_psd_diagnostics(idata, config, data, model)
         )
+    logger.debug(f"results_to_arviz: exit")
 
     return idata
 
@@ -53,6 +64,9 @@ def _add_chain_dim(data_dict: Dict[str, Any]) -> Dict[str, Any]:
     result = {}
     for k, v in data_dict.items():
         v_array = np.array(v)
+        logger.debug(
+            f"_add_chain_dim: key={k}, original_ndim={v_array.ndim}, shape={getattr(v_array, 'shape', None)}, dtype={getattr(v_array, 'dtype', None)}"
+        )
         # Always add chain dimension as first dimension if not present
         # NumPyro with 1 chain returns samples without chain dimension
         if v_array.ndim == 1:  # Scalar parameters: (n_draws,) -> (1, n_draws)
@@ -71,7 +85,11 @@ def _add_chain_dim(data_dict: Dict[str, Any]) -> Dict[str, Any]:
             result[k] = v_array
         else:
             # Handle higher dimensional cases
+            logger.debug(
+                f"_add_chain_dim: fallback adding leading chain axis for key={k}"
+            )
             result[k] = v_array[None, ...]
+        logger.debug(f"_add_chain_dim: key={k} -> new_shape={result[k].shape}")
     return result
 
 
@@ -79,16 +97,34 @@ def _prepare_samples_and_stats(
     samples: Dict[str, Any], sample_stats: Dict[str, Any]
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Prepare samples and sample_stats by adding chain dimensions."""
+    logger.debug(f"_prepare_samples_and_stats: entry")
     samples = _add_chain_dim(samples)
     sample_stats = _add_chain_dim(sample_stats)
+    logger.debug(
+        f"_prepare_samples_and_stats: samples keys after add_chain={list(samples.keys())}"
+    )
+    logger.debug(
+        f"_prepare_samples_and_stats: sample_stats keys after add_chain={list(sample_stats.keys())}"
+    )
     return samples, sample_stats
 
 
 def _handle_log_posterior(sample_stats: Dict[str, Any]) -> None:
     """Add log posterior to sample_stats if likelihood and prior exist."""
+    logger.debug(f"_handle_log_posterior: keys={list(sample_stats.keys())}")
     if {"log_likelihood", "log_prior"}.issubset(sample_stats.keys()):
-        sample_stats["lp"] = (
-            sample_stats["log_likelihood"] + sample_stats["log_prior"]
+        logger.debug(f"_handle_log_posterior: constructing lp")
+        try:
+            sample_stats["lp"] = (
+                sample_stats["log_likelihood"] + sample_stats["log_prior"]
+            )
+        except Exception as e:
+            logger.exception(
+                "_handle_log_posterior: failed to compute lp: %s", e
+            )
+    else:
+        logger.debug(
+            f"_handle_log_posterior: missing log_likelihood or log_prior"
         )
 
 
@@ -119,10 +155,21 @@ def _prepare_attributes_and_dims(
 
     # Add ESS calculation
     try:
-        attributes.update(
-            dict(ess=az.ess(samples).to_array().values.flatten())
+        ess_vars = list(samples.keys())
+        # just keep first 10 variables for speed if too many
+        if len(ess_vars) > 10:
+            ess_vars = ess_vars[:10]
+        logger.debug(f"_prepare_attributes_and_dims: computing ESS")
+        summary = az.summary(samples, var_names=ess_vars, round_to=2)
+        ess_vals = summary["ess_bulk"].values
+        attributes.update(dict(ess=ess_vals))
+        logger.debug(
+            f"_prepare_attributes_and_dims: ESS shape={getattr(ess_vals, 'shape', None)}"
         )
     except:
+        logger.exception(
+            "_prepare_attributes_and_dims: ESS computation failed"
+        )
         attributes.update(dict(ess=[]))
 
     # Add base coordinates that both functions use
@@ -132,10 +179,14 @@ def _prepare_attributes_and_dims(
             "draw": range(samples[list(samples.keys())[0]].shape[1]),
         }
     )
+    logger.debug(
+        f"_prepare_attributes_and_dims: coords chain/draw sizes={samples[list(samples.keys())[0]].shape[0]}/{samples[list(samples.keys())[0]].shape[1]}"
+    )
 
     # Add log posterior to dims if it was added to sample_stats
     if "lp" in sample_stats:
         dims["lp"] = ["chain", "draw"]
+        logger.debug(f"_prepare_attributes_and_dims: added lp to dims")
 
 
 def _pack_spline_model(spline_model) -> Dataset:
@@ -163,6 +214,9 @@ def _pack_spline_model(spline_model) -> Dataset:
         "weights_dim_col": np.arange(spline_model.penalty_matrix.shape[1]),
         "freq": np.arange(spline_model.basis.shape[0]),
     }
+    logger.debug(
+        f"_pack_spline_model: knots={len(spline_model.knots)}, weights={spline_model.basis.shape[1]}, freq={spline_model.basis.shape[0]}"
+    )
 
     return Dataset(
         {
@@ -188,9 +242,13 @@ def _create_univar_inference_data(
     """Create InferenceData for univariate case."""
     # Prepare samples and stats with chain dimensions
     samples, sample_stats = _prepare_samples_and_stats(samples, sample_stats)
+    logger.debug(f"_create_univar_inference_data: entry")
 
     # Extract dimensions
     n_chains, n_draws, n_weights = samples["weights"].shape
+    logger.debug(
+        f"_create_univar_inference_data: n_chains={n_chains}, n_draws={n_draws}, n_weights={n_weights}"
+    )
 
     # Create posterior predictive samples
     weights_chain0 = samples["weights"][0]  # First chain
@@ -200,17 +258,30 @@ def _create_univar_inference_data(
         if n_draws > n_pp
         else slice(None)
     )
-    pp_samples = np.array(
-        [spline_model(w) for w in weights_chain0[pp_idx]], dtype=np.float64
+    logger.debug(
+        f"_create_univar_inference_data: drawing {n_pp} posterior predictive samples"
+    )
+    # Evaluate spline_model on a subset of draws (may allocate); log shapes
+    pp_eval = [spline_model(w) for w in weights_chain0[pp_idx]]
+    logger.debug(f"_create_univar_inference_data: pp_eval len={len(pp_eval)}")
+    pp_samples = np.array(pp_eval, dtype=np.float64)
+    logger.debug(
+        f"_create_univar_inference_data: pp_samples shape={pp_samples.shape}, dtype={pp_samples.dtype}"
     )
     pp_samples = np.exp(pp_samples)
 
     # Ensure arrays are numpy before rescaling
     pp_samples = np.array(pp_samples, dtype=np.float64)
     observed_power = np.array(periodogram.power, dtype=np.float64)
+    logger.debug(
+        f"_create_univar_inference_data: observed_power shape={observed_power.shape}"
+    )
 
     pp_samples_rescaled = pp_samples * config.scaling_factor
     observed_power_rescaled = observed_power * config.scaling_factor
+    logger.debug(
+        f"_create_univar_inference_data: rescaled pp_samples shape={pp_samples_rescaled.shape}"
+    )
     # Handle log posterior
     _handle_log_posterior(sample_stats)
 
@@ -241,6 +312,9 @@ def _create_univar_inference_data(
         periodogram,
         spline_model,
     )
+    logger.debug(
+        f"_create_univar_inference_data: prepared attributes and dims"
+    )
 
     # Create base InferenceData
     idata = az.from_dict(
@@ -261,8 +335,12 @@ def _create_univar_inference_data(
             coords={"pp_draw": coords["pp_draw"], "freq": coords["freq"]},
         )
     )
+    logger.debug(
+        f"_create_univar_inference_data: added posterior_psd group with shape={pp_samples_rescaled.shape}"
+    )
     # Add spline model info
     idata.add_groups(spline_model=_pack_spline_model(spline_model))
+    logger.debug(f"_create_univar_inference_data: added spline_model group")
     return idata
 
 
@@ -277,6 +355,7 @@ def _create_multivar_inference_data(
     """Create InferenceData for multivariate case."""
     # Prepare samples and stats with chain dimensions
     samples, sample_stats = _prepare_samples_and_stats(samples, sample_stats)
+    logger.debug(f"_create_multivar_inference_data: entry")
 
     # Extract dimensions from a standard sample
     first_sample_key = next(
@@ -285,22 +364,37 @@ def _create_multivar_inference_data(
     )
     sample_shape = samples[first_sample_key].shape
     n_chains, n_draws = sample_shape[:2]
+    logger.debug(
+        f"_create_multivar_inference_data: first_sample_key={first_sample_key}, sample_shape={sample_shape}"
+    )
 
     # Create posterior predictive samples
     psd_samples = _compute_posterior_predictive_multivar(
         samples, sample_stats, spline_model, fft_data
     )
     n_pp = psd_samples.shape[0]
+    logger.debug(
+        f"_create_multivar_inference_data: psd_samples shape={psd_samples.shape}"
+    )
 
     # Ensure arrays are numpy before rescaling
     psd_samples = np.array(psd_samples)
     fft_y_re = np.array(fft_data.y_re)
     fft_y_im = np.array(fft_data.y_im)
+    logger.debug(
+        f"_create_multivar_inference_data: fft_y_re shape={fft_y_re.shape}, fft_y_im shape={fft_y_im.shape}"
+    )
 
     # Rescale each cross-spectral component
     psd_samples_rescaled = np.zeros_like(psd_samples)
     for i in range(fft_data.n_dim):
         for j in range(fft_data.n_dim):
+            if (i == 0 and j == 0) or (
+                i == fft_data.n_dim - 1 and j == fft_data.n_dim - 1
+            ):
+                logger.debug(
+                    f"_create_multivar_inference_data: rescaling component ({i},{j})"
+                )
             psd_samples_rescaled[:, :, i, j] = (
                 psd_samples[:, :, i, j] * config.scaling_factor
             )
@@ -311,6 +405,9 @@ def _create_multivar_inference_data(
     y_re = observed_fft_re_rescaled
     y_im = observed_fft_im_rescaled
     n_freq, n_dim = y_re.shape
+    logger.debug(
+        f"_create_multivar_inference_data: n_freq={n_freq}, n_dim={n_dim}"
+    )
     observed_csd = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex64)
     for i in range(n_dim):
         for j in range(n_dim):
@@ -319,6 +416,9 @@ def _create_multivar_inference_data(
             )
             observed_csd[:, i, j] *= config.scaling_factor
     observed_csd = np.real(observed_csd)
+    logger.debug(
+        f"_create_multivar_inference_data: observed_csd shape={observed_csd.shape}, dtype={observed_csd.dtype}"
+    )
     if config.verbose:
         logger.info(
             f"Rescaling multivariate posterior samples: max scaling ~{config.scaling_factor:.2e}"
@@ -332,6 +432,7 @@ def _create_multivar_inference_data(
 
     # Handle log posterior
     _handle_log_posterior(sample_stats)
+    logger.debug(f"_create_multivar_inference_data: handled log posterior")
 
     # Setup coordinates and dimensions
     coords = {
@@ -409,6 +510,9 @@ def _create_multivar_inference_data(
         fft_data,
         spline_model,
     )
+    logger.debug(
+        f"_create_multivar_inference_data: prepared attributes and dims"
+    )
     logger.info("Prepared InferenceData attributes and dimensions.")
 
     # Create base InferenceData
@@ -443,9 +547,12 @@ def _create_multivar_inference_data(
             },
         )
     )
-
+    logger.debug(
+        f"_create_multivar_inference_data: added posterior_psd group shape={psd_samples.shape}"
+    )
     # Add spline model info
     idata.add_groups(spline_model=_pack_spline_model_multivar(spline_model))
+    logger.debug(f"_create_multivar_inference_data: added spline_model group")
     return idata
 
 
@@ -550,6 +657,7 @@ def _compute_posterior_predictive_multivar(
     fft_data: MultivarFFT,
 ) -> jnp.ndarray:
     """Compute posterior predictive PSD matrices from samples."""
+    logger.debug(f"_compute_posterior_predictive_multivar: entry")
 
     def _flatten_chain_dim(
         array: Optional[jnp.ndarray],
@@ -568,6 +676,9 @@ def _compute_posterior_predictive_multivar(
                 arr = arr[0]
             else:
                 arr = arr.reshape((-1,) + tuple(arr.shape[2:]))
+            logger.debug(
+                f"_compute_posterior_predictive_multivar._flatten_chain_dim: reshaped arr to {getattr(arr, 'shape', None)}"
+            )
         elif arr.ndim == 2 and arr.shape[0] == 1:
             arr = arr[0]
         return arr
@@ -575,6 +686,9 @@ def _compute_posterior_predictive_multivar(
     log_delta_sq = _flatten_chain_dim(sample_stats.get("log_delta_sq"))
     theta_re = _flatten_chain_dim(sample_stats.get("theta_re"))
     theta_im = _flatten_chain_dim(sample_stats.get("theta_im"))
+    logger.debug(
+        f"_compute_posterior_predictive_multivar: log_delta_sq shape={getattr(log_delta_sq, 'shape', None)}, theta_re shape={getattr(theta_re, 'shape', None)}, theta_im shape={getattr(theta_im, 'shape', None)}"
+    )
 
     if log_delta_sq is None:
         # Reconstruct from individual component samples (fallback for samplers that
@@ -582,32 +696,24 @@ def _compute_posterior_predictive_multivar(
         log_delta_sq = _reconstruct_log_delta_sq(
             samples, spline_model, fft_data
         )
+        logger.debug(
+            f"_compute_posterior_predictive_multivar: reconstructed log_delta_sq shape={getattr(log_delta_sq, 'shape', None)}"
+        )
 
     if theta_re is None:
         theta_re = _reconstruct_theta_params(
             samples, spline_model, fft_data, "re"
+        )
+        logger.debug(
+            f"_compute_posterior_predictive_multivar: reconstructed theta_re shape={getattr(theta_re, 'shape', None)}"
         )
 
     if theta_im is None:
         theta_im = _reconstruct_theta_params(
             samples, spline_model, fft_data, "im"
         )
-
-    if (
-        theta_re is not None
-        and theta_re.shape[-1] == 0
-        and spline_model.n_theta > 0
-    ):
-        theta_re = jnp.zeros(
-            (log_delta_sq.shape[0], fft_data.n_freq, spline_model.n_theta)
-        )
-    if (
-        theta_im is not None
-        and theta_im.shape[-1] == 0
-        and spline_model.n_theta > 0
-    ):
-        theta_im = jnp.zeros(
-            (log_delta_sq.shape[0], fft_data.n_freq, spline_model.n_theta)
+        logger.debug(
+            f"_compute_posterior_predictive_multivar: reconstructed theta_im shape={getattr(theta_im, 'shape', None)}"
         )
 
     return spline_model.reconstruct_psd_matrix(

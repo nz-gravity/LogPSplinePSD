@@ -1,14 +1,14 @@
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Callable, List, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from jax.scipy.linalg import solve_triangular
-from tqdm.auto import trange
 
 from ..datatypes import MultivarFFT
+from ..logger import logger
 from .initialisation import init_basis_and_penalty, init_knots, init_weights
 from .psplines import LogPSplines
 
@@ -379,14 +379,19 @@ class MultivariateLogPSplines:
     def get_psd_matrix_percentiles(
         self, psd_matrix_samples: jnp.ndarray, percentiles=[2.5, 50, 97.5]
     ) -> dict:
-        psd_matrix_real = np.zeros_like(psd_matrix_samples, dtype=np.float64)
+        # ensure shape is (samples, freqs, n, n)
+        if (
+            psd_matrix_samples.ndim == 3
+        ):  # maybe missing the "samples" dimension
+            psd_matrix_samples = psd_matrix_samples[None, ...]
+        elif psd_matrix_samples.ndim != 4:
+            raise ValueError(
+                f"Expected 4D array (samples, freqs, n, n), got {psd_matrix_samples.shape}"
+            )
+        logger.debug(f"psd_matrix_samples shape: {psd_matrix_samples.shape}")
 
         # transform each sample to real-valued representation
-        for i in range(psd_matrix_samples.shape[0]):
-            for j in range(psd_matrix_samples.shape[1]):
-                psd_matrix_real[i, j] = _complex_to_real(
-                    psd_matrix_samples[i, j]
-                )
+        psd_matrix_real = _complex_to_real_batch(psd_matrix_samples)
 
         posterior_percentiles = np.percentile(
             psd_matrix_real, percentiles, axis=0
@@ -397,29 +402,30 @@ class MultivariateLogPSplines:
         self, psd_matrix_samples: jnp.ndarray, empirical_psd: jnp.ndarray
     ) -> float:
         # Transform empirical_psd to real-valued representation
-        empirical_psd_real = np.zeros_like(empirical_psd)
-        for i in range(empirical_psd.shape[0]):
-            empirical_psd_real[i] = _complex_to_real(empirical_psd[i])
+        empirical_psd_real = _complex_to_real_batch(empirical_psd)
 
         psd_percentiles = self.get_psd_matrix_percentiles(psd_matrix_samples)
         coverage = np.mean(
             (empirical_psd_real >= psd_percentiles[0])
-            & (empirical_psd_real <= psd_percentiles[0])
+            & (empirical_psd_real <= psd_percentiles[-1])
         )
         return float(coverage)
 
 
-def _complex_to_real(matrix):
+def _complex_to_real_batch(mats):
     """
-    Transform a complex valued Hermitian matrix to a real valued matrix.
+    Safe, vectorized transform:
+      - Upper triangle (incl diag) -> real part
+      - Strict lower triangle      -> imag part
+    mats: (..., n, n) complex
+    returns float64 with same leading dims
+    """
+    mats = np.asarray(mats)
+    n = mats.shape[-1]
+    # boolean masks that broadcast over leading dims
+    upper = np.triu(np.ones((n, n), dtype=bool))
+    lower = np.tril(np.ones((n, n), dtype=bool), k=-1)
 
-    Upper triangular elements (including diagonal) contain the real parts,
-    lower triangular elements (excluding diagonal) contain the imaginary parts.
-    """
-    n = matrix.shape[0]
-    real_matrix = np.zeros_like(matrix, dtype=float)
-    real_matrix[np.triu_indices(n)] = np.real(matrix[np.triu_indices(n)])
-    real_matrix[np.tril_indices(n, -1)] = np.imag(
-        matrix[np.tril_indices(n, -1)]
-    )
-    return real_matrix
+    out = np.where(upper, mats.real, 0.0)
+    out = np.where(lower, mats.imag, out)
+    return out.astype(np.float64, copy=False)

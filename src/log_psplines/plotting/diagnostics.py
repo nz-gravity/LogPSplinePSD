@@ -25,9 +25,13 @@ def safe_plot(filename: str, dpi: int = 150):
         @wraps(plot_func)
         def wrapper(*args, **kwargs):
             try:
+                logger.debug(
+                    f"--- Creating plot: {os.path.basename(filename)}"
+                )
                 result = plot_func(*args, **kwargs)
                 plt.savefig(filename, dpi=dpi, bbox_inches="tight")
                 plt.close()
+                logger.debug(f"--- Saved plot: {filename}")
                 return True
             except Exception as e:
                 logger.warning(
@@ -155,19 +159,18 @@ def plot_diagnostics(
 
     # Generate summary report
     generate_diagnostics_summary(idata, diag_dir)
-
-    # Essential diagnostics only
-    _create_essential_diagnostics(
+    _create_diagnostic_plots(
         idata, diag_dir, config, n_channels, n_freq, runtime
     )
 
     logger.debug(f"Diagnostics saved to {diag_dir}/")
 
 
-def _create_essential_diagnostics(
+def _create_diagnostic_plots(
     idata, diag_dir, config, n_channels, n_freq, runtime
 ):
     """Create only the essential diagnostic plots."""
+    logger.debug("Generating diagnostic plots...")
 
     # 1. ArviZ trace plots
     @safe_plot(f"{diag_dir}/trace_plots.png", config.dpi)
@@ -205,191 +208,88 @@ def _create_essential_diagnostics(
 
 
 def _plot_summary_dashboard(idata, config, n_channels, n_freq, runtime):
-    """Essential summary dashboard."""
 
-    # Check if R-hat is available
-    rhat_available = False
+    # Create 2x2 layout
+    fig, axes = plt.subplots(
+        2, 2, figsize=(config.figsize[0] * 0.8, config.figsize[1])
+    )
+    ess_ax = axes[0, 0]
+    meta_ax = axes[0, 1]
+    param_ax = axes[1, 0]
+    status_ax = axes[1, 1]
+
+    # Get ESS values once
+    ess_values = None
     try:
-        rhat = az.rhat(idata).to_array().values.flatten()
-        rhat_values = rhat[~np.isnan(rhat)]
-        rhat_available = len(rhat_values) > 0
+        ess = idata.attrs.get("ess")
+        ess_values = ess[~np.isnan(ess)]
     except Exception:
         pass
 
-    # Create subplot layout based on data availability
-    if rhat_available:
-        # Full 2x3 layout when R-hat is available
-        fig, axes = plt.subplots(2, 3, figsize=config.figsize)
-        rhat_ax = axes[0, 1]
-        scatter_ax = axes[0, 2]
-        meta_ax = axes[1, 0]
-        param_ax = axes[1, 1]
-        status_ax = axes[1, 2]
-    else:
-        # Reduced 2x2 layout when R-hat is not available
-        fig, axes = plt.subplots(
-            2, 2, figsize=(config.figsize[0] * 0.8, config.figsize[1])
-        )
-        # Rearrange axes for 2x2 layout
-        meta_ax = axes[0, 0]
-        param_ax = axes[0, 1]
-        status_ax = axes[1, 0]
-        # Use bottom-right for additional info or leave empty
-        axes[1, 1].axis("off")  # Hide unused subplot
+    # 1. ESS Distribution
+    _plot_ess_histogram(ess_ax, ess_values, config)
 
-    # ESS histogram (always in top-left)
-    try:
-        ess = az.ess(idata).to_array().values.flatten()
-        ess_values = ess[~np.isnan(ess)]
+    # 2. Analysis Metadata
+    _plot_metadata(meta_ax, idata, n_channels, n_freq, runtime)
 
-        if len(ess_values) > 0:
-            # Add color zones for ESS quality
-            ess_thresholds = [
-                (400, "red", "--", "Minimum reliable ESS"),
-                (1000, "orange", "--", "Good ESS"),
-                (
-                    np.max(ess_values),
-                    "green",
-                    ":",
-                    f"Max ESS = {np.max(ess_values):.0f}",
-                ),
-            ]
+    # 3. Parameter Summary
+    _plot_parameter_summary(param_ax, idata)
 
-            ax_ess = axes[0, 0]  # Always available
-            n, bins, patches = ax_ess.hist(
-                ess_values, bins=30, alpha=0.7, edgecolor="black"
-            )
+    # 4. Convergence Status
+    _plot_convergence_status(status_ax, ess_values, config)
 
-            # Add reference lines
-            for threshold, color, style, label in ess_thresholds:
-                ax_ess.axvline(
-                    x=threshold,
-                    color=color,
-                    linestyle=style,
-                    linewidth=2 if threshold < np.max(ess_values) else 1,
-                    alpha=0.8,
-                    label=label,
-                )
+    plt.tight_layout()
 
-            ax_ess.set_xlabel("ESS")
-            ax_ess.set_ylabel("Count")
-            ax_ess.set_title("ESS Distribution")
-            ax_ess.legend(loc="upper right", fontsize="x-small")
-            ax_ess.grid(True, alpha=0.3)
 
-            pct_good = (ess_values >= config.ess_threshold).mean() * 100
-            ax_ess.text(
-                0.02,
-                0.98,
-                f"Min: {ess_values.min():.0f}\nMean: {ess_values.mean():.0f}\n≥{config.ess_threshold}: {pct_good:.1f}%",
-                transform=ax_ess.transAxes,
-                fontsize=10,
-                verticalalignment="top",
-                bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.7),
-            )
-    except Exception:
-        axes[0, 0].text(0.5, 0.5, "ESS unavailable", ha="center", va="center")
-        axes[0, 0].set_title("ESS Distribution")
+def _plot_ess_histogram(ax, ess_values, config):
+    """Plot ESS distribution with quality thresholds."""
+    if ess_values is None or len(ess_values) == 0:
+        ax.text(0.5, 0.5, "ESS unavailable", ha="center", va="center")
+        ax.set_title("ESS Distribution")
+        return
 
-    # R-hat histogram and scatter (only when R-hat is available)
-    if rhat_available and "rhat_ax" in locals():
-        # Add shaded regions for R-hat quality
-        rhat_ax.axvspan(
-            1.0,
-            config.rhat_threshold,
-            alpha=0.1,
-            color="green",
-            label="Converged (≤1.01)",
-        )
-        rhat_ax.axvspan(
-            config.rhat_threshold,
-            1.1,
-            alpha=0.1,
-            color="yellow",
-            label="Concerning (1.01-1.10)",
-        )
-        rhat_ax.axvspan(
-            1.1,
-            rhat_values.max(),
-            alpha=0.1,
-            color="red",
-            label="Not converged (>1.10)",
+    # Histogram
+    ax.hist(ess_values, bins=30, alpha=0.7, edgecolor="black")
+
+    # Reference lines
+    thresholds = [
+        (400, "red", "--", "Minimum reliable"),
+        (1000, "orange", "--", "Good"),
+        (np.max(ess_values), "green", ":", f"Max = {np.max(ess_values):.0f}"),
+    ]
+
+    for threshold, color, style, label in thresholds:
+        ax.axvline(
+            x=threshold,
+            color=color,
+            linestyle=style,
+            linewidth=2 if threshold < np.max(ess_values) else 1,
+            alpha=0.8,
+            label=label,
         )
 
-        rhat_ax.hist(rhat_values, bins=30, alpha=0.7, edgecolor="black")
-        rhat_ax.axvline(
-            1.0,
-            color="green",
-            linestyle="--",
-            linewidth=2,
-            label="Perfectly mixed",
-        )
-        rhat_ax.axvline(
-            config.rhat_threshold,
-            color="orange",
-            linestyle="--",
-            linewidth=2,
-            label="Acceptable",
-        )
-        rhat_ax.set_xlabel("R-hat")
-        rhat_ax.set_ylabel("Count")
-        rhat_ax.set_title("R-hat Distribution")
-        rhat_ax.legend(loc="upper right", fontsize="x-small")
-        rhat_ax.grid(True, alpha=0.3)
+    ax.set_xlabel("ESS")
+    ax.set_ylabel("Count")
+    ax.set_title("ESS Distribution")
+    ax.legend(loc="upper right", fontsize="x-small")
+    ax.grid(True, alpha=0.3)
 
-        pct_excellent = (rhat_values <= 1.01).mean() * 100
-        pct_concerning = (
-            (rhat_values > 1.01) & (rhat_values <= 1.1)
-        ).mean() * 100
-        pct_bad = (rhat_values > 1.1).mean() * 100
-        rhat_ax.text(
-            0.02,
-            0.98,
-            f"Max: {rhat_values.max():.3f}\nMean: {rhat_values.mean():.3f}\n≤1.01: {pct_excellent:.1f}%\n>1.10: {pct_bad:.1f}%",
-            transform=rhat_ax.transAxes,
-            fontsize=9,
-            verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="lightgreen", alpha=0.7),
-        )
+    # Summary stats
+    pct_good = (ess_values >= config.ess_threshold).mean() * 100
+    stats_text = f"Min: {ess_values.min():.0f}\nMean: {ess_values.mean():.0f}\n≥{config.ess_threshold}: {pct_good:.1f}%"
+    ax.text(
+        0.02,
+        0.98,
+        stats_text,
+        transform=ax.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.7),
+    )
 
-    # ESS vs R-hat scatter (only when R-hat is available)
-    if rhat_available and "scatter_ax" in locals():
-        try:
-            if len(ess_values) > 0 and len(rhat_values) > 0:
-                ess_all = az.ess(idata).to_array().values.flatten()
-                rhat_all = az.rhat(idata).to_array().values.flatten()
-                valid_mask = ~(np.isnan(ess_all) | np.isnan(rhat_all))
 
-                if np.sum(valid_mask) > 0:
-                    scatter_ax.scatter(
-                        rhat_all[valid_mask],
-                        ess_all[valid_mask],
-                        alpha=0.6,
-                        s=20,
-                    )
-                    scatter_ax.axvline(
-                        config.rhat_threshold,
-                        color="red",
-                        linestyle="--",
-                        alpha=0.7,
-                    )
-                    scatter_ax.axhline(
-                        config.ess_threshold,
-                        color="orange",
-                        linestyle="--",
-                        alpha=0.7,
-                    )
-                    scatter_ax.set_xlabel("R-hat")
-                    scatter_ax.set_ylabel("ESS")
-                    scatter_ax.set_title("Convergence Overview")
-                    scatter_ax.grid(True, alpha=0.3)
-        except Exception:
-            scatter_ax.text(
-                0.5, 0.5, "Scatter unavailable", ha="center", va="center"
-            )
-            scatter_ax.set_title("Convergence Overview")
-
-    # Analysis metadata
+def _plot_metadata(ax, idata, n_channels, n_freq, runtime):
+    """Display analysis metadata."""
     try:
         n_samples = idata.posterior.sizes.get("draw", 0)
         n_chains = idata.posterior.sizes.get("chain", 1)
@@ -408,103 +308,71 @@ def _plot_summary_dashboard(idata, config, n_channels, n_freq, runtime):
         if runtime is not None:
             metadata_lines.append(f"Runtime: {runtime:.2f}s")
 
-        meta_ax.text(
+        ax.text(
             0.05,
             0.95,
             "\n".join(metadata_lines),
-            transform=meta_ax.transAxes,
+            transform=ax.transAxes,
             fontsize=12,
             verticalalignment="top",
             fontfamily="monospace",
         )
-        meta_ax.set_title("Analysis Summary")
-        meta_ax.axis("off")
     except Exception:
-        meta_ax.text(
-            0.5, 0.5, "Metadata unavailable", ha="center", va="center"
-        )
-        meta_ax.set_title("Analysis Summary")
-        meta_ax.axis("off")
+        ax.text(0.5, 0.5, "Metadata unavailable", ha="center", va="center")
 
-    # Parameter counts (placeholder - turned off as not helpful per user feedback)
+    ax.set_title("Analysis Summary")
+    ax.axis("off")
+
+
+def _plot_parameter_summary(ax, idata):
+    """Display parameter count summary."""
     try:
-        # Just show a summary text instead of the full bar chart
         param_groups = _group_parameters_simple(idata)
         if param_groups:
             summary_text = "Parameter Summary:\n"
             for group_name, params in param_groups.items():
-                if params:  # Only show non-empty groups
+                if params:
                     summary_text += f"{group_name}: {len(params)}\n"
-            param_ax.text(
+            ax.text(
                 0.05,
                 0.95,
                 summary_text.strip(),
-                transform=param_ax.transAxes,
+                transform=ax.transAxes,
                 fontsize=11,
                 verticalalignment="top",
                 fontfamily="monospace",
             )
-        param_ax.set_title("Parameter Summary")
-        param_ax.axis("off")  # Don't show axes for this simple text summary
     except Exception:
-        param_ax.text(
+        ax.text(
             0.5,
             0.5,
             "Parameter summary\nunavailable",
             ha="center",
             va="center",
         )
-        param_ax.set_title("Parameter Summary")
-        param_ax.axis("off")
 
-    # Convergence status
+    ax.set_title("Parameter Summary")
+    ax.axis("off")
+
+
+def _plot_convergence_status(ax, ess_values, config):
+    """Display convergence status based on ESS only."""
     try:
-        ess_retrieved = []
-        rhat_retrieved = []
-        try:
-            ess_retrieved = az.ess(idata).to_array().values.flatten()
-            ess_retrieved = ess_retrieved[~np.isnan(ess_retrieved)]
-        except:
-            pass
-        try:
-            rhat_retrieved = az.rhat(idata).to_array().values.flatten()
-            rhat_retrieved = rhat_retrieved[~np.isnan(rhat_retrieved)]
-        except:
-            pass
-
         status_lines = ["Convergence Status:"]
 
-        if len(ess_retrieved) > 0:
-            ess_good = (ess_retrieved >= config.ess_threshold).mean() * 100
+        if ess_values is not None and len(ess_values) > 0:
+            ess_good = (ess_values >= config.ess_threshold).mean() * 100
             status_lines.append(
                 f"ESS ≥ {config.ess_threshold}: {ess_good:.0f}%"
             )
+            status_lines.append("")
+            status_lines.append("Overall Status:")
 
-        if len(rhat_retrieved) > 0:
-            rhat_good = (rhat_retrieved <= config.rhat_threshold).mean() * 100
-            status_lines.append(
-                f"R-hat ≤ {config.rhat_threshold}: {rhat_good:.0f}%"
-            )
-
-        status_lines.append("")
-        status_lines.append("Overall Status:")
-
-        if len(ess_retrieved) > 0 and len(rhat_retrieved) > 0:
-            if ess_good >= 90 and rhat_good >= 90:
+            if ess_good >= 90:
                 status_lines.append("✓ EXCELLENT")
                 color = "green"
-            elif ess_good >= 75 and rhat_good >= 75:
-                status_lines.append("✓ GOOD")
-                color = "orange"
-            else:
-                status_lines.append("⚠ NEEDS ATTENTION")
-                color = "red"
-        elif len(ess_retrieved) > 0:
-            if ess_good >= 90:
-                status_lines.append("✓ GOOD (based on ESS only)")
-                color = "green"
             elif ess_good >= 75:
-                status_lines.append("✓ ADEQUATE (based on ESS only)")
+                status_lines.append("✓ ADEQUATE")
                 color = "orange"
             else:
                 status_lines.append("⚠ NEEDS ATTENTION")
@@ -513,26 +381,21 @@ def _plot_summary_dashboard(idata, config, n_channels, n_freq, runtime):
             status_lines.append("? UNABLE TO ASSESS")
             color = "gray"
 
-        status_ax.text(
+        ax.text(
             0.05,
             0.95,
             "\n".join(status_lines),
-            transform=status_ax.transAxes,
+            transform=ax.transAxes,
             fontsize=11,
             verticalalignment="top",
             fontfamily="monospace",
             color=color,
         )
-        status_ax.set_title("Convergence Status")
-        status_ax.axis("off")
     except Exception:
-        status_ax.text(
-            0.5, 0.5, "Status unavailable", ha="center", va="center"
-        )
-        status_ax.set_title("Convergence Status")
-        status_ax.axis("off")
+        ax.text(0.5, 0.5, "Status unavailable", ha="center", va="center")
 
-    plt.tight_layout()
+    ax.set_title("Convergence Status")
+    ax.axis("off")
 
 
 def _plot_log_posterior(idata, config):
@@ -2007,7 +1870,7 @@ def generate_diagnostics_summary(idata, outdir):
 
     # ESS
     try:
-        ess = az.ess(idata).to_array().values.flatten()
+        ess = idata.attrs.get("ess")
         ess_values = ess[~np.isnan(ess)]
 
         if len(ess_values) > 0:
@@ -2017,21 +1880,6 @@ def generate_diagnostics_summary(idata, outdir):
             summary.append(f"ESS ≥ 400: {(ess_values >= 400).mean()*100:.1f}%")
     except Exception as e:
         summary.append(f"\nESS: unavailable")
-
-    # R-hat
-    try:
-        rhat = az.rhat(idata).to_array().values.flatten()
-        rhat_values = rhat[~np.isnan(rhat)]
-
-        if len(rhat_values) > 0:
-            summary.append(
-                f"R-hat: max={rhat_values.max():.3f}, mean={rhat_values.mean():.3f}"
-            )
-            summary.append(
-                f"R-hat > 1.01: {(rhat_values > 1.01).mean()*100:.1f}%"
-            )
-    except Exception:
-        summary.append(f"R-hat: unavailable")
 
     # Acceptance
     accept_key = None
@@ -2127,14 +1975,14 @@ def generate_diagnostics_summary(idata, outdir):
 
     # Overall assessment
     try:
-        if len(ess_values) > 0 and len(rhat_values) > 0:
+        # rhat_values = []
+        # rhat_good = (rhat_values <= 1.01).mean() * 100
+        if len(ess_values) > 0:
             ess_good = (ess_values >= 400).mean() * 100
-            rhat_good = (rhat_values <= 1.01).mean() * 100
-
             summary.append(f"\nOverall Convergence Assessment:")
-            if ess_good >= 90 and rhat_good >= 90:
+            if ess_good >= 90:  # and rhat_good >= 90:
                 summary.append("  Status: EXCELLENT ✓")
-            elif ess_good >= 75 and rhat_good >= 75:
+            elif ess_good >= 75:  # and rhat_good >= 75:
                 summary.append("  Status: GOOD ✓")
             else:
                 summary.append("  Status: NEEDS ATTENTION ⚠")

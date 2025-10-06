@@ -183,6 +183,8 @@ def _prepare_attributes_and_dims(
         f"_prepare_attributes_and_dims: coords chain/draw sizes={samples[list(samples.keys())[0]].shape[0]}/{samples[list(samples.keys())[0]].shape[1]}"
     )
 
+    # one could add Rhat stuff here -- but right now we don't compute it
+
     # Add log posterior to dims if it was added to sample_stats
     if "lp" in sample_stats:
         dims["lp"] = ["chain", "draw"]

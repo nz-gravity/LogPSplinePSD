@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
 import numpy as np
+from scipy.signal import csd, welch
 
 
 @dataclass
@@ -28,6 +29,7 @@ class MultivarFFT:
     n_freq: int
     n_dim: int
     scaling_factor: Optional[float] = 1.0  # Track the PSD scaling factor
+    fs: float = field(default=1.0, repr=False)
 
     @classmethod
     def compute_fft(
@@ -88,6 +90,7 @@ class MultivarFFT:
             n_freq=len(freqs),
             n_dim=n_dim,
             scaling_factor=scaling_factor,
+            fs=fs,
         )
 
     def cut(self, fmin: float, fmax: float) -> "MultivarFFT":
@@ -155,25 +158,33 @@ class MultivarFFT:
         return f"MultivarFFT(n_freq={self.n_freq}, n_dim={self.n_dim}, amplitudes={self.amplitude_range})"
 
     @property
-    def empirical_psd(self):
-        return (
-            self.get_empirical_psd(self.y_re, self.y_im) * self.scaling_factor
+    def empirical_psd(self) -> "EmpiricalPSD":
+        return self.get_empirical_psd(
+            self.y_re, self.y_im, self.scaling_factor, self.fs
         )
 
     @staticmethod
-    def get_empirical_psd(y_re, y_im) -> np.ndarray:
+    def get_empirical_psd(
+        y_re, y_im, scaling=1.0, fs: float = 1
+    ) -> "EmpiricalPSD":
         y_re = np.array(y_re, dtype=np.float64)
         y_im = np.array(y_im, dtype=np.float64)
         n_freq, n_dim = y_re.shape
         _y = y_re + 1j * y_im
-        empirical_psd = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex128)
+        S = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex128)
         norm_factor = 2 * np.pi
         for i in range(n_dim):
             for j in range(n_dim):
-                empirical_psd[:, i, j] = (
-                    2 * (_y[:, i] * np.conj(_y[:, j])) / norm_factor
-                )
-        return empirical_psd
+                S[:, i, j] = 2 * (_y[:, i] * np.conj(_y[:, j])) / norm_factor
+
+        S *= scaling
+        coh = _get_coherence(S)
+        freq = np.fft.fftfreq(2 * n_freq, 1 / fs)[:n_freq]
+        return EmpiricalPSD(
+            freq=freq,
+            psd=S,
+            coherence=coh,
+        )
 
 
 @dataclass
@@ -244,3 +255,97 @@ class MultivariateTimeseries:
 
     def __repr__(self):
         return f"MultivariateTimeseries(n_time={self.y.shape[0]}, n_channels={self.n_channels}, fs={self.fs:.3f}, amplitudes={self.amplitude_range})"
+
+    def get_empirical_psd(self, **kwargs) -> "EmpiricalPSD":
+        return EmpiricalPSD.from_timeseries_data(
+            self.y,
+            fs=self.fs,
+            **kwargs,
+        )
+
+
+@dataclass
+class EmpiricalPSD:
+    freq: np.ndarray  # (n_freq,)
+    psd: np.ndarray  # (n_freq, n_channels, n_channels) complex CSD matrix
+    coherence: (
+        np.ndarray
+    )  # (n_freq, n_channels, n_channels) real-valued coherence matrix
+
+    def __repr__(self):
+        return f"EmpiricalPSD(n_freq={self.freq.shape[0]}, n_channels={self.psd.shape[1]})"
+
+    @classmethod
+    def from_timeseries_data(
+        cls,
+        data: np.ndarray,
+        fs: float,
+        nperseg: int | None = None,
+        noverlap: int | None = None,
+        window: str = "hann",
+    ) -> "EmpiricalPSD":
+        n_channels = data.shape[1]
+
+        if nperseg is None:
+            # Use half or full data length depending on total size
+            n_time = data.shape[0]
+            if n_time <= 512:
+                nperseg = n_time  # full segment for short data
+            else:
+                nperseg = n_time // 2
+        if noverlap is None:
+            noverlap = nperseg // 2
+
+        # --- auto spectra ---
+        psds = []
+        f_ref = None
+        for i in range(n_channels):
+            f, Pxx = welch(
+                data[:, i],
+                fs=fs,
+                window=window,
+                nperseg=nperseg,
+                noverlap=noverlap,
+                return_onesided=True,
+                detrend="constant",
+                scaling="density",
+            )
+            psds.append(Pxx)
+            if f_ref is None:
+                f_ref = f
+        psds = np.stack(psds, axis=1)  # (n_freq, n_channels)
+
+        # --- full CSD matrix ---
+        S = np.zeros((len(f_ref), n_channels, n_channels), dtype=complex)
+        for i in range(n_channels):
+            S[:, i, i] = psds[:, i]
+            for j in range(i + 1, n_channels):
+                _, Sij = csd(
+                    data[:, i],
+                    data[:, j],
+                    fs=fs,
+                    window=window,
+                    nperseg=nperseg,
+                    noverlap=noverlap,
+                    return_onesided=True,
+                    detrend="constant",
+                    scaling="density",
+                )
+                S[:, i, j] = Sij
+                S[:, j, i] = np.conj(Sij)
+
+        coh = _get_coherence(S)
+        return cls(freq=f_ref, psd=S, coherence=coh)
+
+
+def _get_coherence(psd: np.ndarray) -> np.ndarray:
+    n_freq, n_channels, _ = psd.shape
+    coh = np.zeros((n_freq, n_channels, n_channels))
+    for i in range(n_channels):
+        coh[:, i, i] = 1.0
+        for j in range(i + 1, n_channels):
+            coh[:, i, j] = np.abs(psd[:, i, j]) ** 2 / (
+                np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
+            )
+            coh[:, j, i] = coh[:, i, j]
+    return coh

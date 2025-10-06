@@ -17,7 +17,7 @@ def test_multivar_mcmc(outdir, test_mode):
     os.makedirs(outdir, exist_ok=True)
     print(f"++++ Running multivariate MCMC test {test_mode} ++++")
 
-    n = 256
+    n = 1024
     n_knots = 10
     n_samples = n_warmup = 1200
     verbose = True
@@ -42,7 +42,7 @@ def test_multivar_mcmc(outdir, test_mode):
     print(f"Timeseries: {timeseries}")
 
     true_psd = varma.get_true_psd()
-    empirical_psd = varma.get_periodogram()
+    empirical_psd = timeseries.get_empirical_psd()
 
     samplers = [
         ("nuts", "multivariate_nuts"),
@@ -132,13 +132,12 @@ def test_multivar_mcmc(outdir, test_mode):
 
         # check that results saved, and plots created
         result_fn = os.path.join(sampler_outdir, "inference_data.nc")
-        plot_fn = os.path.join(sampler_outdir, "psd_matrix_posterior.png")
+        plot_fn = os.path.join(sampler_outdir, "psd_matrix.png")
         assert os.path.exists(result_fn), "InferenceData file not found!"
         assert os.path.exists(plot_fn), "PSD matrix plot file not found!"
 
         plot_psd_matrix(
             idata=idata,
-            n_channels=n_dim,
             freq=varma.freq,
             empirical_psd=empirical_psd,
             outdir=sampler_outdir,

@@ -2,7 +2,9 @@
 Base class for multivariate PSD samplers.
 """
 
+import os
 import tempfile
+import traceback
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -136,16 +138,15 @@ class MultivarBaseSampler(BaseSampler):
             empirical_psd = MultivarFFT.get_empirical_psd(
                 np.array(self.fft_data.y_re, dtype=np.float64),
                 np.array(self.fft_data.y_im, dtype=np.float64),
+                fs=self.fft_data.fs,
+                scaling=self.fft_data.scaling_factor,
             )
             plot_psd_matrix(
                 idata=idata,
-                n_channels=self.n_channels,
                 freq=np.array(self.freq),
                 empirical_psd=empirical_psd,
                 outdir=self.config.outdir,
             )
-
-            import os
 
             vi_diag = getattr(self, "_vi_diagnostics", None)
             if vi_diag and self.config.outdir is not None:
@@ -169,10 +170,9 @@ class MultivarBaseSampler(BaseSampler):
                 if vi_psd is not None:
                     plot_vi_initial_psd_matrix(
                         outfile=os.path.join(
-                            diagnostics_dir, "vi_initial_psd_matrix.png"
+                            diagnostics_dir, "vi_psd_matrix.png"
                         ),
                         freq=np.array(self.freq),
-                        vi_psd=vi_psd,
                         empirical_psd=empirical_psd,
                         true_psd=vi_diag.get("true_psd"),
                         psd_quantiles=vi_diag.get("psd_quantiles"),
@@ -180,7 +180,9 @@ class MultivarBaseSampler(BaseSampler):
                     )
         except Exception as e:
             if self.config.verbose:
-                logger.warning(f"Could not create plots: {e}")
+                logger.warning(
+                    f"Could not create VI plots: {e}, \nFull trace:\n{traceback.format_exc()}"
+                )
 
     def _get_lnz(
         self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]

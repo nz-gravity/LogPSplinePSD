@@ -86,7 +86,7 @@ def plot_psd_matrix(
                             alpha=0.7,
                             label="True PSD",
                         )
-                ax.set_title(f"Auto-spectrum Channel {i}")
+                ax.set_title(f"PSD Channel {i}")
                 ax.set_yscale("log")
 
             elif show_coherence:

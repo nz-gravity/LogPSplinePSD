@@ -53,9 +53,9 @@ else:
     idata = run_mcmc(
         data=fft_data,
         sampler="multivar-blocked-nuts",
-        n_samples=100,
-        n_warmup=100,
-        n_knots=10,
+        n_samples=1000,
+        n_warmup=1000,
+        n_knots=20,
         degree=3,
         diffMatrixOrder=2,
         knot_kwargs=dict(strategy="log"),
@@ -68,9 +68,8 @@ logger.info(idata)
 
 plot_psd_matrix(
     idata=idata,
-    n_channels=3,
     freq=fft_data.freq,
-    empirical_psd=fft_data.empirical_psd,
+    empirical_psd=timeseries.get_empirical_psd(),
     outdir=f"{HERE}/results/lisa",
     filename=f"psd_matrix.png",
     diag_yscale="log",

@@ -32,9 +32,10 @@ def test_mode():
 
 @pytest.fixture
 def outdir():
-    # get git branch
-    branch = os.getenv("GITHUB_HEAD_REF", "local").replace("/", "_")
-    outdir = f"{HERE}/test_output/{branch}"
+    from git import Repo
+
+    branch = Repo(".", search_parent_directories=True).active_branch.name
+    outdir = f"{HERE}/test_output/branch_[{branch}]"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     return outdir

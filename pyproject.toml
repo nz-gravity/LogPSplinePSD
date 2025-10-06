@@ -56,6 +56,7 @@ dev = [
     "jupyter-book",
     "pre-commit",
     "gwpy>=1.3.0",
+    "GitPython"
 ]
 
 [tool.setuptools_scm]

@@ -103,18 +103,21 @@ class BaseSampler(ABC):
         idata = self._create_inference_data(
             samples, sample_stats, lnz, lnz_err
         )
+        logger.debug(" InferenceData created.")
 
         # Summary statistics
         if self.config.verbose:
-            ess = az.ess(idata)
-            ess_min = ess.to_array().min().values
-            ess_max = ess.to_array().max().values
-            logger.info(f"  ESS min: {ess_min:.1f}, max: {ess_max:.1f}")
             if not (np.isnan(lnz) or np.isnan(lnz_err)):
                 logger.info(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
 
-            # Print RIAE diagnostics if true_psd was provided
             if hasattr(idata.attrs, "get"):
+
+                if "ess" in idata.attrs:
+                    ess = idata.attrs["ess"]
+                    logger.info(
+                        f"  ESS min: {np.min(ess):.1f}, max: {np.max(ess):.1f}"
+                    )
+
                 if "riae" in idata.attrs:
                     # Univariate case
                     riae_median = idata.attrs["riae"]
@@ -134,6 +137,7 @@ class BaseSampler(ABC):
 
         # Save outputs if requested
         if self.config.outdir is not None:
+            logger.debug(" Saving results to disk...")
             self._save_results(idata)
 
         return idata

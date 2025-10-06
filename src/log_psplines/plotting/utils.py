@@ -37,6 +37,7 @@ def unpack_data(
     use_parametric_model=True,
     freqs=None,
     posterior_psd=None,
+    model_ci=None,
 ):
     plt_dat = PlottingData()
     if pdgrm is not None:
@@ -47,6 +48,10 @@ def unpack_data(
         plt_dat.freqs = np.linspace(0, 1, plt_dat.n)
     elif freqs is not None:
         plt_dat.freqs = freqs
+
+    if model_ci is not None:
+        plt_dat.ci = model_ci
+        plt_dat.model = model_ci[1]
 
     if posterior_psd is not None:
         ci = np.percentile(posterior_psd, q=jnp.array([16, 50, 84]), axis=0)

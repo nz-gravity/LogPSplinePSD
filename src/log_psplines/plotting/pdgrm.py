@@ -24,6 +24,7 @@ def plot_pdgrm(
     ax=None,
     idata=None,
     true_psd=None,
+    model_ci=None,
     model_color=MODEL_COL,
     model_label="Model",
     data_color=DATA_COL,
@@ -66,6 +67,7 @@ def plot_pdgrm(
         use_parametric_model=use_parametric_model,
         freqs=freqs,
         posterior_psd=posterior_psd,
+        model_ci=model_ci,
     )
 
     if interactive:

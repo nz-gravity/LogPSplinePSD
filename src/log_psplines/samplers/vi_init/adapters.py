@@ -40,10 +40,12 @@ def compute_vi_artifacts_univar(
         weights_np = None
         vi_psd = None
         psd_quantiles = None
+        scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
+
         if weights is not None:
             weights_np = np.asarray(jax.device_get(weights))
             ln_psd = sampler.spline_model(vi_result.means["weights"])
-            vi_psd = np.asarray(jax.device_get(jnp.exp(ln_psd)))
+            vi_psd = np.asarray(jax.device_get(jnp.exp(ln_psd))) * scaling
 
         if vi_result.samples is not None:
             weights_draws = vi_result.samples.get("weights")
@@ -52,7 +54,7 @@ def compute_vi_artifacts_univar(
                     jnp.asarray(weights_draws)
                 )
                 psd_draws = jnp.exp(ln_psd_draws)
-                psd_draws_np = np.asarray(jax.device_get(psd_draws))
+                psd_draws_np = np.asarray(jax.device_get(psd_draws)) * scaling
                 q05, q50, q95 = np.percentile(
                     psd_draws_np, [5, 50, 95], axis=0
                 )
@@ -120,6 +122,8 @@ def compute_vi_artifacts_multivar(
             name: jnp.asarray(value) for name, value in vi_result.means.items()
         }
 
+        scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
+
         vi_psd_np = None
         psd_quantiles = None
         coherence_quantiles = None
@@ -163,7 +167,7 @@ def compute_vi_artifacts_multivar(
                 theta_im[None, ...],
                 n_samples_max=1,
             )[0]
-            vi_psd_np = np.asarray(jax.device_get(vi_psd))
+            vi_psd_np = np.asarray(jax.device_get(vi_psd)) * scaling
 
             samples_tree = vi_result.samples or {}
             if samples_tree:
@@ -252,7 +256,9 @@ def compute_vi_artifacts_multivar(
                             max(1, sampler.config.vi_posterior_draws),
                         ),
                     )
-                    psd_samples_np = np.asarray(jax.device_get(psd_samples))
+                    psd_samples_np = (
+                        np.asarray(jax.device_get(psd_samples)) * scaling
+                    )
 
                     psd_quantiles = (
                         sampler.spline_model.get_psd_matrix_percentiles(
@@ -365,6 +371,8 @@ def prepare_block_vi(
     n_channels = sampler.n_channels
     init_strategies: List[Optional[Callable[[Any], Any]]] = [None] * n_channels
     mcmc_keys: List[jax.Array] = [jax.random.PRNGKey(0)] * n_channels
+
+    scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
 
     vi_losses_blocks: List[np.ndarray] = []
     vi_guides: List[str] = []
@@ -651,7 +659,7 @@ def prepare_block_vi(
                 jnp.asarray(theta_im_vi_np)[None, ...],
                 n_samples_max=1,
             )[0]
-            vi_psd_np = np.asarray(jax.device_get(vi_psd))
+            vi_psd_np = np.asarray(jax.device_get(vi_psd)) * scaling
         else:
             vi_psd_np = None
 
@@ -682,7 +690,7 @@ def prepare_block_vi(
                 theta_im_samples,
                 n_samples_max=draws_used,
             )
-            psd_samples_np = np.asarray(jax.device_get(psd_samples))
+            psd_samples_np = np.asarray(jax.device_get(psd_samples)) * scaling
 
             # make them real
             psd_quantiles = sampler.spline_model.get_psd_matrix_percentiles(

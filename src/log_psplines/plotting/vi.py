@@ -275,3 +275,122 @@ def _pack_ci_from_quantiles(
                 ci_dict["im"][(i, j)] = (im_q05, im_q50, im_q95)
 
     return ci_dict
+
+
+def save_vi_diagnostics_univariate(
+    *,
+    outdir: Optional[str],
+    periodogram,
+    spline_model,
+    diagnostics: Optional[Dict[str, np.ndarray]],
+) -> None:
+    """Persist VI diagnostics for univariate samplers as soon as they are available."""
+
+    if not diagnostics or outdir is None:
+        return
+
+    diagnostics_dir = os.path.join(outdir, "diagnostics")
+    os.makedirs(diagnostics_dir, exist_ok=True)
+
+    losses = diagnostics.get("losses")
+    if losses is not None:
+        losses_arr = np.asarray(losses)
+        if losses_arr.ndim > 1:
+            losses_arr = losses_arr.mean(axis=0)
+        if losses_arr.size:
+            plot_vi_elbo(
+                losses=losses_arr,
+                guide_name=diagnostics.get("guide", "vi"),
+                outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
+            )
+
+    weights = diagnostics.get("weights")
+    if weights is not None:
+        plot_vi_initial_psd_univariate(
+            outfile=os.path.join(diagnostics_dir, "vi_initial_psd.png"),
+            periodogram=periodogram,
+            spline_model=spline_model,
+            weights=weights,
+            true_psd=diagnostics.get("true_psd"),
+            psd_quantiles=diagnostics.get("psd_quantiles"),
+        )
+
+
+def save_vi_diagnostics_multivariate(
+    *,
+    outdir: Optional[str],
+    freq: np.ndarray,
+    empirical_psd: Optional[np.ndarray],
+    diagnostics: Optional[Dict[str, np.ndarray]],
+) -> None:
+    """Persist VI diagnostics for multivariate samplers right after VI initialisation."""
+
+    if not diagnostics or outdir is None:
+        return
+
+    diagnostics_dir = os.path.join(outdir, "diagnostics")
+    os.makedirs(diagnostics_dir, exist_ok=True)
+
+    losses = diagnostics.get("losses")
+    loss_components = diagnostics.get("losses_per_block")
+
+    component_dict: Optional[Dict[str, np.ndarray]] = None
+    component_source = None
+    if loss_components is not None:
+        component_source = np.asarray(loss_components)
+        if component_source.ndim == 2 and component_source.shape[1] > 0:
+            component_dict = {
+                f"block_{idx}": component_source[idx]
+                for idx in range(component_source.shape[0])
+            }
+        elif component_source.ndim == 3 and component_source.shape[2] > 0:
+            component_dict = {}
+            for block_idx in range(component_source.shape[0]):
+                mean_trace = component_source[block_idx].mean(axis=0)
+                component_dict[f"block_{block_idx}"] = mean_trace
+
+    if losses is not None:
+        losses_arr = np.asarray(losses)
+        if losses_arr.ndim == 1 and losses_arr.size:
+            plot_kwargs = dict(
+                losses=losses_arr,
+                guide_name=diagnostics.get("guide", "vi"),
+                outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
+            )
+            if component_dict:
+                plot_kwargs["loss_components"] = component_dict
+            plot_vi_elbo(**plot_kwargs)
+        elif losses_arr.ndim > 1 and losses_arr.shape[1] > 0:
+            mean_loss = losses_arr.mean(axis=0)
+            components = {
+                f"run_{idx}": losses_arr[idx]
+                for idx in range(losses_arr.shape[0])
+            }
+            if component_dict:
+                components.update(component_dict)
+            plot_vi_elbo(
+                losses=mean_loss,
+                guide_name=diagnostics.get("guide", "vi"),
+                outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
+                loss_components=components if components else None,
+            )
+    elif component_dict:
+        # No aggregate losses stored; fall back to plotting components only
+        mean_loss = np.mean(np.vstack(list(component_dict.values())), axis=0)
+        plot_vi_elbo(
+            losses=mean_loss,
+            guide_name=diagnostics.get("guide", "vi"),
+            outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
+            loss_components=component_dict,
+        )
+
+    psd_quantiles = diagnostics.get("psd_quantiles")
+    if psd_quantiles is not None:
+        plot_vi_initial_psd_matrix(
+            outfile=os.path.join(diagnostics_dir, "vi_initial_psd_matrix.png"),
+            freq=freq,
+            empirical_psd=empirical_psd,
+            true_psd=diagnostics.get("true_psd"),
+            psd_quantiles=psd_quantiles,
+            coherence_quantiles=diagnostics.get("coherence_quantiles"),
+        )

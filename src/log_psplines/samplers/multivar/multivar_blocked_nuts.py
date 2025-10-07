@@ -288,6 +288,10 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             block_model=_blocked_channel_model,
         )
         self._vi_diagnostics = vi_setup.diagnostics
+        if self._vi_diagnostics and self.config.outdir is not None:
+            self._save_vi_diagnostics(
+                empirical_psd=self._compute_empirical_psd()
+            )
         self.rng_key = vi_setup.rng_key
         init_strategies = vi_setup.init_strategies
         mcmc_keys = vi_setup.mcmc_keys

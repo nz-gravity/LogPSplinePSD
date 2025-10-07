@@ -101,6 +101,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         )
         self.rng_key = vi_artifacts.rng_key
         self._vi_diagnostics = vi_artifacts.diagnostics
+        self._save_vi_diagnostics()
 
         if (
             self.config.verbose

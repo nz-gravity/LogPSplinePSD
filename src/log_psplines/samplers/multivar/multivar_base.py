@@ -6,7 +6,7 @@ import os
 import tempfile
 import traceback
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import arviz as az
 import jax
@@ -18,8 +18,7 @@ from ...datatypes import MultivarFFT
 from ...logger import logger
 from ...plotting import (
     plot_psd_matrix,
-    plot_vi_elbo,
-    plot_vi_initial_psd_matrix,
+    save_vi_diagnostics_multivariate,
 )
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
@@ -135,12 +134,7 @@ class MultivarBaseSampler(BaseSampler):
         """Save multivariate-specific plots."""
         try:
             # Create empirical PSD matrix for comparison
-            empirical_psd = MultivarFFT.get_empirical_psd(
-                np.array(self.fft_data.y_re, dtype=np.float64),
-                np.array(self.fft_data.y_im, dtype=np.float64),
-                fs=self.fft_data.fs,
-                scaling=self.fft_data.scaling_factor,
-            )
+            empirical_psd = self._compute_empirical_psd()
             plot_psd_matrix(
                 idata=idata,
                 freq=np.array(self.freq),
@@ -148,63 +142,35 @@ class MultivarBaseSampler(BaseSampler):
                 outdir=self.config.outdir,
             )
 
-            vi_diag = getattr(self, "_vi_diagnostics", None)
-            if vi_diag and self.config.outdir is not None:
-                outdir = self.config.outdir
-                diagnostics_dir = os.path.join(outdir, "diagnostics")
-                losses = vi_diag.get("losses")
-                if losses is not None:
-                    losses_arr = np.asarray(losses)
-                    # Ensure diagnostics directory exists
-                    os.makedirs(diagnostics_dir, exist_ok=True)
-
-                    # If we have multiple loss traces (e.g. from multiple restarts
-                    # or chains), preserve them instead of averaging so they can
-                    # be shown individually on the plot. We keep the mean as the
-                    # main ELBO trace and pass individual runs as `loss_components`.
-                    if losses_arr.ndim > 1:
-                        # Expect shape (n_runs, n_steps)
-                        mean_loss = losses_arr.mean(axis=0)
-                        loss_components = {
-                            f"run_{i}": losses_arr[i, :]
-                            for i in range(losses_arr.shape[0])
-                        }
-                        if mean_loss.size:
-                            plot_vi_elbo(
-                                losses=mean_loss,
-                                guide_name=vi_diag.get("guide", "vi"),
-                                outfile=os.path.join(
-                                    diagnostics_dir, "vi_elbo_trace.png"
-                                ),
-                                loss_components=loss_components,
-                            )
-                    else:
-                        if losses_arr.size:
-                            plot_vi_elbo(
-                                losses=losses_arr,
-                                guide_name=vi_diag.get("guide", "vi"),
-                                outfile=os.path.join(
-                                    diagnostics_dir, "vi_elbo_trace.png"
-                                ),
-                            )
-
-                vi_psd = vi_diag.get("psd_matrix")
-                if vi_psd is not None:
-                    plot_vi_initial_psd_matrix(
-                        outfile=os.path.join(
-                            diagnostics_dir, "vi_psd_matrix.png"
-                        ),
-                        freq=np.array(self.freq),
-                        empirical_psd=empirical_psd,
-                        true_psd=vi_diag.get("true_psd"),
-                        psd_quantiles=vi_diag.get("psd_quantiles"),
-                        coherence_quantiles=vi_diag.get("coherence_quantiles"),
-                    )
+            self._save_vi_diagnostics(empirical_psd=empirical_psd)
         except Exception as e:
             if self.config.verbose:
                 logger.warning(
                     f"Could not create VI plots: {e}, \nFull trace:\n{traceback.format_exc()}"
                 )
+
+    def _compute_empirical_psd(self) -> np.ndarray:
+        return MultivarFFT.get_empirical_psd(
+            np.array(self.fft_data.y_re, dtype=np.float64),
+            np.array(self.fft_data.y_im, dtype=np.float64),
+            fs=self.fft_data.fs,
+            scaling=self.fft_data.scaling_factor,
+        )
+
+    def _save_vi_diagnostics(
+        self, *, empirical_psd: Optional[np.ndarray] = None
+    ) -> None:
+        """Persist VI diagnostics if available."""
+        vi_diag = getattr(self, "_vi_diagnostics", None)
+        if not vi_diag:
+            return
+
+        save_vi_diagnostics_multivariate(
+            outdir=self.config.outdir,
+            freq=np.array(self.freq),
+            empirical_psd=empirical_psd,
+            diagnostics=vi_diag,
+        )
 
     def _get_lnz(
         self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]

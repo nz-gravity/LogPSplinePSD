@@ -2,22 +2,82 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ..datatypes.multivar import EmpiricalPSD
-
-plt.rcParams.update(
-    {
-        "font.size": 11,
-        "axes.labelsize": 12,
-        "axes.titlesize": 12,
-        "xtick.labelsize": 10,
-        "ytick.labelsize": 10,
-        "legend.fontsize": 10,
-        "axes.linewidth": 1.2,
-        "xtick.major.width": 1.1,
-        "ytick.major.width": 1.1,
-        "figure.dpi": 150,
-        "savefig.dpi": 300,
-    }
+from ..logger import logger
+from .base import (
+    COLORS,
+    PlotConfig,
+    compute_coherence_ci,
+    compute_cross_spectra_ci,
+    extract_plotting_data,
+    setup_plot_style,
+    validate_plotting_data,
 )
+
+# Setup default plot styling
+setup_plot_style()
+
+
+def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
+    """
+    Extract empirical PSD from multivariate idata for plotting.
+
+    For multivariate data, the structure is different from univariate.
+    This function handles the case where data is stored as separate
+    frequency, channel, and FFT components.
+    """
+    try:
+        # Check if we have the multivariate data structure
+        if "observed_data" in idata:
+            obs_data = idata["observed_data"]
+
+            # Check for the components that indicate multivariate structure
+            if all(
+                key in obs_data
+                for key in ["freq", "channels", "fft_re", "fft_im"]
+            ):
+                freq = obs_data["freq"].values
+                channels = obs_data["channels"].values
+                fft_re = obs_data["fft_re"].values
+                fft_im = obs_data["fft_im"].values
+
+                # Reconstruct the complex FFT
+                fft_complex = fft_re + 1j * fft_im
+
+                # Compute PSD matrix
+                # For multivariate data, we need to compute the PSD for each channel pair
+                n_channels = len(channels)
+                n_freq = len(freq)
+
+                # Initialize PSD matrix
+                psd_matrix = np.zeros(
+                    (n_freq, n_channels, n_channels), dtype=complex
+                )
+
+                # For now, assume diagonal structure (auto-PSDs only)
+                # This is a simplified version - in practice, you might need
+                # more sophisticated logic to handle cross-channel relationships
+                for i in range(n_channels):
+                    # Compute periodogram for each channel
+                    # This is a placeholder - you may need to adjust based on
+                    # how your multivariate data is actually structured
+                    channel_fft = (
+                        fft_complex[:, i]
+                        if fft_complex.ndim > 1
+                        else fft_complex
+                    )
+                    psd_matrix[:, i, i] = np.abs(channel_fft) ** 2
+
+                # Create EmpiricalPSD object
+                return EmpiricalPSD(
+                    freq=freq, psd=psd_matrix, channels=channels
+                )
+
+        return None
+
+    except Exception as e:
+        # If extraction fails, return None and let the plotting function handle it
+        logger.warning(f"Could not extract empirical PSD from idata: {e}")
+        return None
 
 
 def _pack_ci_dict(psd_samples, show_coherence: bool):
@@ -144,13 +204,45 @@ def plot_psd_matrix(
     """
     # ----- Extract/validate -----
     if idata is not None:
+        # Check for required data
         if "psd_matrix" not in idata.posterior_psd:
             raise ValueError("idata missing posterior_psd['psd_matrix']")
-        psd_samples = idata.posterior_psd["psd_matrix"].values
-        freq = idata.attrs.get("frequencies", freq)
-        ci_dict = _pack_ci_dict(psd_samples, show_coherence)
-        if "true_psd" in idata.attrs and true_psd is None:
-            true_psd = idata.attrs["true_psd"]
+
+        # Extract data using shared utility
+        extracted_data = extract_plotting_data(idata)
+        psd_samples = extracted_data.get("posterior_psd_matrix")
+
+        if psd_samples is None:
+            raise ValueError("Could not extract PSD matrix from idata")
+
+        freq = extracted_data.get("frequencies", freq)
+        true_psd = extracted_data.get("true_psd", true_psd)
+
+        # For multivariate data, try to extract empirical PSD if not provided
+        if empirical_psd is None:
+            empirical_psd = _extract_empirical_psd_from_idata(idata)
+
+        # Compute confidence intervals using shared utilities
+        if show_coherence:
+            ci_dict = dict(coh=compute_coherence_ci(psd_samples))
+            # Add PSD diagonal elements
+            ci_dict["psd"] = {}
+            for i in range(psd_samples.shape[2]):
+                q05 = np.percentile(psd_samples[:, :, i, i].real, 5, axis=0)
+                q50 = np.percentile(psd_samples[:, :, i, i].real, 50, axis=0)
+                q95 = np.percentile(psd_samples[:, :, i, i].real, 95, axis=0)
+                ci_dict["psd"][(i, i)] = (q05, q50, q95)
+
+        else:
+            real_dict, imag_dict = compute_cross_spectra_ci(psd_samples)
+            ci_dict = {"psd": {}, "coh": {}, "re": real_dict, "im": imag_dict}
+            # Add PSD diagonal elements
+            for i in range(psd_samples.shape[2]):
+                q05 = np.percentile(psd_samples[:, :, i, i].real, 5, axis=0)
+                q50 = np.percentile(psd_samples[:, :, i, i].real, 50, axis=0)
+                q95 = np.percentile(psd_samples[:, :, i, i].real, 95, axis=0)
+                ci_dict["psd"][(i, i)] = (q05, q50, q95)
+
     elif ci_dict is None:
         raise ValueError("Provide either `idata` or `ci_dict`.")
 
@@ -207,7 +299,7 @@ def plot_psd_matrix(
 
             elif i > j:  # lower triangle
                 if show_coherence:
-                    if (i, j) in ci_dict["coh"]:
+                    if "coh" in ci_dict and (i, j) in ci_dict["coh"]:
                         q05, q50, q95 = ci_dict["coh"][(i, j)]
                         # draw empirical first so it's visible under the band
                         if empirical_psd is not None:
@@ -236,6 +328,10 @@ def plot_psd_matrix(
                                 freq, true_coh, color="k", lw=1.2, label="True"
                             )
                         ax.set_ylim(0, 1)
+                    else:
+                        raise ValueError(
+                            "ci_dict missing coherence (i,j)={i,j}"
+                        )
                 else:
                     q05, q50, q95 = ci_dict["re"][(i, j)]
                     ax.fill_between(

@@ -4,11 +4,19 @@ import matplotlib.pyplot as plt
 
 from ..datatypes import Periodogram
 from ..psplines import LogPSplines
+from .base import (
+    COLORS,
+    compute_confidence_intervals,
+    extract_plotting_data,
+    setup_plot_style,
+    validate_plotting_data,
+)
 from .utils import unpack_data
 
-DATA_COL = mcolors.to_hex("lightgray")
-MODEL_COL = mcolors.to_hex("tab:orange")
-KNOTS_COL = mcolors.to_hex("tab:red")
+# Use colors from base module
+DATA_COL = COLORS["data"]
+MODEL_COL = COLORS["model"]
+KNOTS_COL = COLORS["knots"]
 
 
 def plot_pdgrm(
@@ -25,6 +33,7 @@ def plot_pdgrm(
     idata=None,
     true_psd=None,
     model_ci=None,
+    posterior_psd=None,
     model_color=MODEL_COL,
     model_label="Model",
     data_color=DATA_COL,
@@ -36,27 +45,16 @@ def plot_pdgrm(
     interactive=False,
 ):
 
-    posterior_psd = None
-    true_psd = true_psd
+    # Extract data from idata if provided
     if idata:
-        from ..arviz_utils import (
-            get_periodogram,
-            get_spline_model,
-            get_weights,
-        )
+        extracted_data = extract_plotting_data(idata, weights)
 
-        pdgrm = get_periodogram(idata)
-        spline_model = get_spline_model(idata)
-        weights = get_weights(idata, weights)
-        posterior_psd = idata.posterior_psd.psd
-
-        # Extract true_psd from attributes if available
-        if (
-            true_psd is None
-            and hasattr(idata, "attrs")
-            and "true_psd" in idata.attrs
-        ):
-            true_psd = idata.attrs["true_psd"]
+        # Update local variables with extracted data
+        pdgrm = extracted_data.get("periodogram", pdgrm)
+        spline_model = extracted_data.get("spline_model", spline_model)
+        weights = extracted_data.get("weights", weights)
+        posterior_psd = extracted_data.get("posterior_psd")
+        true_psd = extracted_data.get("true_psd", true_psd)
 
     plt_data = unpack_data(
         pdgrm=pdgrm,

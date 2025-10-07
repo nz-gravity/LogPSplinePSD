@@ -5,6 +5,7 @@ import numpy as np
 
 from ..datatypes import Periodogram
 from ..psplines import LogPSplines
+from .base import compute_confidence_intervals, subsample_weights
 
 __all__ = ["unpack_data"]
 
@@ -83,10 +84,12 @@ def unpack_data(
             )
 
             if use_uniform_ci:
-                ln_ci = _get_uni_ci(ln_splines)
+                ln_ci = compute_confidence_intervals(
+                    ln_splines, method="uniform"
+                )
             else:  # percentile
-                ln_ci = jnp.percentile(
-                    ln_splines, q=jnp.array([16, 50, 84]), axis=0
+                ln_ci = compute_confidence_intervals(
+                    ln_splines, method="percentile"
                 )
             ln_ci = jnp.array(ln_ci)
             plt_dat.ci = np.exp(ln_ci, dtype=np.float64) * yscalar
@@ -94,40 +97,3 @@ def unpack_data(
         plt_dat.model = np.exp(ln_spline, dtype=np.float64) * yscalar
 
     return plt_dat
-
-
-def _get_uni_ci(samples, alpha=0.1):
-    """
-    Compute a uniform (simultaneous) confidence band for a set of function samples.
-
-    Args:
-        samples (jnp.ndarray): Shape (num_samples, num_points) array of function samples.
-        alpha (float): Significance level (default 0.1 for 90% CI).
-
-    Returns:
-        tuple: (lower_bound, median, upper_bound) arrays.
-    """
-    num_samples, num_points = samples.shape
-
-    # Compute pointwise median and standard deviation
-    median = jnp.median(samples, axis=0)
-    std = jnp.std(samples, axis=0)
-
-    # Compute the max deviation over all samples
-    deviations = (samples - median[None, :]) / std[
-        None, :
-    ]  # Normalize deviations
-    max_deviation = jnp.max(
-        jnp.abs(deviations), axis=1
-    )  # Max deviation per sample
-
-    # Compute the scaling factor using the distribution of max deviations
-    k_alpha = jnp.percentile(
-        max_deviation, 100 * (1 - alpha)
-    )  # Critical value
-
-    # Compute uniform confidence bands
-    lower_bound = median - k_alpha * std
-    upper_bound = median + k_alpha * std
-
-    return lower_bound, median, upper_bound

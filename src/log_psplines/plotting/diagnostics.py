@@ -1,48 +1,29 @@
 import os
 from dataclasses import dataclass
-from functools import wraps
-from typing import Callable, Optional
+from typing import Optional
 
 import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 
 from ..logger import logger
+from .base import PlotConfig, safe_plot, setup_plot_style
+
+# Setup consistent styling for diagnostics plots
+setup_plot_style()
 
 
 @dataclass
 class DiagnosticsConfig:
+    """Configuration for diagnostics plotting parameters."""
+
     figsize: tuple = (12, 8)
     dpi: int = 150
     ess_threshold: int = 400
     rhat_threshold: float = 1.01
-
-
-def safe_plot(filename: str, dpi: int = 150):
-    """Decorator for safe plotting with error handling."""
-
-    def decorator(plot_func: Callable):
-        @wraps(plot_func)
-        def wrapper(*args, **kwargs):
-            try:
-                logger.debug(
-                    f"--- Creating plot: {os.path.basename(filename)}"
-                )
-                result = plot_func(*args, **kwargs)
-                plt.savefig(filename, dpi=dpi, bbox_inches="tight")
-                plt.close()
-                logger.debug(f"--- Saved plot: {filename}")
-                return True
-            except Exception as e:
-                logger.warning(
-                    f"Failed to create {os.path.basename(filename)}: {e}"
-                )
-                plt.close("all")
-                return False
-
-        return wrapper
-
-    return decorator
+    fontsize: int = 11
+    labelsize: int = 12
+    titlesize: int = 12
 
 
 def plot_trace(idata: az.InferenceData, compact=True) -> plt.Figure:
@@ -162,8 +143,6 @@ def plot_diagnostics(
     _create_diagnostic_plots(
         idata, diag_dir, config, n_channels, n_freq, runtime
     )
-
-    logger.debug(f"Diagnostics saved to {diag_dir}/")
 
 
 def _create_diagnostic_plots(
@@ -1653,173 +1632,6 @@ def _get_divergences_summary(divergences_data):
         lines.append("    Consider model reparameterization")
 
     return "\n".join(lines)
-
-
-def _plot_grouped_traces(idata, figsize):
-    """Create grouped trace plots for delta, phi, and weights parameters."""
-    # Define color cycle for multiple parameters in each group
-    colors = [
-        "blue",
-        "red",
-        "green",
-        "orange",
-        "purple",
-        "brown",
-        "pink",
-        "gray",
-        "olive",
-        "cyan",
-    ]
-
-    # Group parameters by type
-    delta_params = [
-        param
-        for param in idata.posterior.data_vars
-        if param.startswith("delta")
-    ]
-    phi_params = [
-        param for param in idata.posterior.data_vars if param.startswith("phi")
-    ]
-    weights_params = [
-        param
-        for param in idata.posterior.data_vars
-        if param.startswith("weights")
-    ]
-
-    # Create 3 subplots
-    fig, axes = plt.subplots(3, 1, figsize=figsize)
-
-    # Plot delta parameters
-    ax = axes[0]
-    if delta_params:
-        for i, param in enumerate(delta_params):
-            color = colors[i % len(colors)]
-            # For multivariate parameters, merge across chains
-            values = idata.posterior[param].values
-            if values.ndim == 3:  # (chain, draw, possibly_channel)
-                if values.shape[-1] == 1:
-                    values = values.squeeze(-1)  # Remove singleton dimension
-                else:
-                    values = values.reshape(
-                        values.shape[0] * values.shape[1], -1
-                    )  # Flatten chain/draw dims
-                    if values.shape[-1] > 1:  # Multiple values per timestep
-                        values = values.mean(
-                            axis=-1
-                        )  # Average across channels if needed
-                    else:
-                        values = values.flatten()
-            elif values.ndim == 2:  # (chain, draw)
-                values = values.flatten()
-
-            ax.plot(values, color=color, alpha=0.7, linewidth=1, label=param)
-        ax.set_ylabel("Delta Parameters")
-        ax.set_title("Delta Parameters Trace")
-        ax.legend(loc="upper right", fontsize="small")
-        ax.grid(True, alpha=0.3)
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "No delta parameters found",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-        ax.set_title("Delta Parameters")
-        ax.axis("off")
-
-    # Plot phi parameters
-    ax = axes[1]
-    if phi_params:
-        for i, param in enumerate(phi_params):
-            color = colors[i % len(colors)]
-            # For multivariate parameters, merge across chains
-            values = idata.posterior[param].values
-            if values.ndim == 3:  # (chain, draw, possibly_channel)
-                if values.shape[-1] == 1:
-                    values = values.squeeze(-1)  # Remove singleton dimension
-                else:
-                    values = values.reshape(
-                        values.shape[0] * values.shape[1], -1
-                    )  # Flatten chain/draw dims
-                    if values.shape[-1] > 1:  # Multiple values per timestep
-                        values = values.mean(
-                            axis=-1
-                        )  # Average across channels if needed
-                    else:
-                        values = values.flatten()
-            elif values.ndim == 2:  # (chain, draw)
-                values = values.flatten()
-
-            ax.plot(values, color=color, alpha=0.7, linewidth=1, label=param)
-        ax.set_ylabel("Phi Parameters")
-        ax.set_title("Phi Parameters Trace")
-        ax.legend(loc="upper right", fontsize="small")
-        ax.grid(True, alpha=0.3)
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "No phi parameters found",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-        ax.set_title("Phi Parameters")
-        ax.axis("off")
-
-    # Plot weights parameters (these are higher dimensional)
-    ax = axes[2]
-    if weights_params:
-        # For weights, we'll show the mean across weight dimensions if they have shape (chain, draw, weight_dim)
-        max_traces = min(
-            10, len(weights_params)
-        )  # Limit number of weight parameters to show
-        for i, param in enumerate(weights_params[:max_traces]):
-            color = colors[i % len(colors)]
-            values = idata.posterior[param].values
-
-            # Handle different dimensionalities
-            if values.ndim == 4:  # (chain, draw, dim1, dim2)
-                values = values.mean(axis=-1).mean(axis=-1).flatten()
-            elif values.ndim == 3:  # (chain, draw, weight_dim)
-                values = values.mean(
-                    axis=-1
-                ).flatten()  # Average across weight dimension
-            elif values.ndim == 2:  # (chain, draw)
-                values = values.flatten()
-
-            ax.plot(values, color=color, alpha=0.7, linewidth=1, label=param)
-
-        if len(weights_params) > max_traces:
-            ax.text(
-                0.02,
-                0.02,
-                f"Showing {max_traces} of {len(weights_params)} weight parameters",
-                transform=ax.transAxes,
-                fontsize="small",
-                bbox=dict(boxstyle="round", facecolor="lightcoral", alpha=0.7),
-            )
-
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel("Weights Parameters (mean)")
-        ax.set_title("Weights Parameters Trace (averaged)")
-        ax.legend(loc="upper right", fontsize="small")
-        ax.grid(True, alpha=0.3)
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "No weights parameters found",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-        ax.set_title("Weights Parameters")
-        ax.axis("off")
-
-    plt.tight_layout()
 
 
 def _group_parameters_simple(idata):

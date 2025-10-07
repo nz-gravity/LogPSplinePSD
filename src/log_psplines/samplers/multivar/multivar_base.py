@@ -155,16 +155,38 @@ class MultivarBaseSampler(BaseSampler):
                 losses = vi_diag.get("losses")
                 if losses is not None:
                     losses_arr = np.asarray(losses)
+                    # Ensure diagnostics directory exists
+                    os.makedirs(diagnostics_dir, exist_ok=True)
+
+                    # If we have multiple loss traces (e.g. from multiple restarts
+                    # or chains), preserve them instead of averaging so they can
+                    # be shown individually on the plot. We keep the mean as the
+                    # main ELBO trace and pass individual runs as `loss_components`.
                     if losses_arr.ndim > 1:
-                        losses_arr = losses_arr.mean(axis=0)
-                    if losses_arr.size:
-                        plot_vi_elbo(
-                            losses=losses_arr,
-                            guide_name=vi_diag.get("guide", "vi"),
-                            outfile=os.path.join(
-                                diagnostics_dir, "vi_elbo_trace.png"
-                            ),
-                        )
+                        # Expect shape (n_runs, n_steps)
+                        mean_loss = losses_arr.mean(axis=0)
+                        loss_components = {
+                            f"run_{i}": losses_arr[i, :]
+                            for i in range(losses_arr.shape[0])
+                        }
+                        if mean_loss.size:
+                            plot_vi_elbo(
+                                losses=mean_loss,
+                                guide_name=vi_diag.get("guide", "vi"),
+                                outfile=os.path.join(
+                                    diagnostics_dir, "vi_elbo_trace.png"
+                                ),
+                                loss_components=loss_components,
+                            )
+                    else:
+                        if losses_arr.size:
+                            plot_vi_elbo(
+                                losses=losses_arr,
+                                guide_name=vi_diag.get("guide", "vi"),
+                                outfile=os.path.join(
+                                    diagnostics_dir, "vi_elbo_trace.png"
+                                ),
+                            )
 
                 vi_psd = vi_diag.get("psd_matrix")
                 if vi_psd is not None:

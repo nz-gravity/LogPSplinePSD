@@ -170,15 +170,8 @@ def plot_coarse_vs_original_multivar(
 
     coarse_result = apply_coarse_graining_multivar_fft(fft, spec)
 
-    empirical_full = MultivarFFT.get_empirical_psd(
-        fft.y_re, fft.y_im, scaling=fft.scaling_factor, fs=fft.fs
-    )
-    empirical_coarse = MultivarFFT.get_empirical_psd(
-        coarse_result.fft.y_re,
-        coarse_result.fft.y_im,
-        scaling=coarse_result.fft.scaling_factor,
-        fs=coarse_result.fft.fs,
-    )
+    empirical_full = fft.empirical_psd
+    empirical_coarse = coarse_result.fft.empirical_psd
 
     ci_full = _empirical_to_ci(empirical_full, show_coherence)
     ci_coarse = _empirical_to_ci(empirical_coarse, show_coherence)

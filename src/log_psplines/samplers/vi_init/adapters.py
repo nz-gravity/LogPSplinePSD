@@ -427,17 +427,6 @@ def prepare_block_vi(
         theta_start = channel_index * (channel_index - 1) // 2
         theta_count = channel_index
 
-        if theta_count > 0:
-            Z_re_block = sampler.Z_re[
-                :, channel_index, theta_start : theta_start + theta_count
-            ]
-            Z_im_block = sampler.Z_im[
-                :, channel_index, theta_start : theta_start + theta_count
-            ]
-        else:
-            Z_re_block = jnp.zeros((sampler.n_freq, 0))
-            Z_im_block = jnp.zeros((sampler.n_freq, 0))
-
         guide_spec = sampler.config.vi_guide or suggest_guide_block(
             delta_basis.shape[1], theta_count, sampler._theta_basis.shape[1]
         )
@@ -448,12 +437,37 @@ def prepare_block_vi(
         )
 
         try:
-            vi_result = fit_vi(
-                model=block_model,
-                rng_key=vi_key,
-                vi_steps=sampler.config.vi_steps,
-                optimizer_lr=sampler.config.vi_lr,
-                model_args=(
+            if getattr(sampler, "_use_coarse_stats", False):
+                model_args = (
+                    channel_index,
+                    sampler.csd_sums,
+                    sampler.bin_weights,
+                    delta_basis,
+                    delta_penalty,
+                    sampler._theta_basis,
+                    sampler._theta_penalty,
+                    sampler.config.alpha_phi,
+                    sampler.config.beta_phi,
+                    sampler.config.alpha_delta,
+                    sampler.config.beta_delta,
+                )
+            else:
+                if theta_count > 0:
+                    Z_re_block = sampler.Z_re[
+                        :,
+                        channel_index,
+                        theta_start : theta_start + theta_count,
+                    ]
+                    Z_im_block = sampler.Z_im[
+                        :,
+                        channel_index,
+                        theta_start : theta_start + theta_count,
+                    ]
+                else:
+                    Z_re_block = jnp.zeros((sampler.n_freq, 0))
+                    Z_im_block = jnp.zeros((sampler.n_freq, 0))
+
+                model_args = (
                     channel_index,
                     sampler.y_re[:, channel_index],
                     sampler.y_im[:, channel_index],
@@ -468,7 +482,14 @@ def prepare_block_vi(
                     sampler.config.beta_phi,
                     sampler.config.alpha_delta,
                     sampler.config.beta_delta,
-                ),
+                )
+
+            vi_result = fit_vi(
+                model=block_model,
+                rng_key=vi_key,
+                vi_steps=sampler.config.vi_steps,
+                optimizer_lr=sampler.config.vi_lr,
+                model_args=model_args,
                 guide=guide_spec,
                 posterior_draws=sampler.config.vi_posterior_draws,
                 progress_bar=progress_bar,

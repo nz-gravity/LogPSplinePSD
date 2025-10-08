@@ -123,6 +123,11 @@ class MultivarBaseSampler(BaseSampler):
         self.Z_re = jnp.array(self.fft_data.Z_re)
         self.Z_im = jnp.array(self.fft_data.Z_im)
         self.freq = jnp.array(self.fft_data.freq)
+        self.csd_sums = None
+        if getattr(self.fft_data, "csd_sums", None) is not None:
+            self.csd_sums = jnp.asarray(
+                self.fft_data.csd_sums, dtype=jnp.complex64
+            )
 
         # Create MultivarFFT object for JAX functions
         self.data_jax = MultivarFFT(
@@ -146,6 +151,13 @@ class MultivarBaseSampler(BaseSampler):
             self.freq_weights = freq_weights
         else:
             self.freq_weights = jnp.ones(self.n_freq, dtype=jnp.float32)
+
+        if getattr(self.fft_data, "bin_weights", None) is not None:
+            self.bin_weights = jnp.asarray(
+                self.fft_data.bin_weights, dtype=jnp.float32
+            )
+        else:
+            self.bin_weights = None
 
         if self.config.verbose:
             logger.info(
@@ -180,6 +192,16 @@ class MultivarBaseSampler(BaseSampler):
                 )
 
     def _compute_empirical_psd(self) -> np.ndarray:
+        if getattr(self.fft_data, "csd_sums", None) is not None:
+            return MultivarFFT.get_empirical_psd(
+                None,
+                None,
+                scaling=self.fft_data.scaling_factor,
+                fs=self.fft_data.fs,
+                csd_sums=self.fft_data.csd_sums,
+                bin_weights=np.array(self.freq_weights),
+                freq=np.array(self.fft_data.freq),
+            )
         return MultivarFFT.get_empirical_psd(
             np.array(self.fft_data.y_re, dtype=np.float64),
             np.array(self.fft_data.y_im, dtype=np.float64),

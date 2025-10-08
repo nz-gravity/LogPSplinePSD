@@ -348,6 +348,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
                     y_im=self.y_im,
                     Z_re=self.Z_re,
                     Z_im=self.Z_im,
+                    freq_weights=self.freq_weights,
                     all_bases=self.all_bases,
                     all_penalties=self.all_penalties,
                     alpha_phi=self.config.alpha_phi,

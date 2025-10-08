@@ -75,6 +75,7 @@ def init_basis_and_penalty(
     n_grid_points: int,
     diff_matrix_order: int,
     epsilon: float = 1e-6,
+    grid_points: np.ndarray | None = None,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     Generate B-spline basis matrix and penalty matrix.
@@ -86,11 +87,14 @@ def init_basis_and_penalty(
     degree : int
         Degree of the B-spline
     n_grid_points : int
-        Number of grid points
+        Number of grid points. Ignored if `grid_points` is provided.
     diff_matrix_order : int
         Order of the differential operator for regularization
     epsilon : float, default=1e-6
         Small constant for numerical stability
+    grid_points : np.ndarray, optional
+        Locations in [0, 1] at which to evaluate the basis. If None,
+        uses a uniform grid of length `n_grid_points`.
 
     Returns
     -------
@@ -99,7 +103,16 @@ def init_basis_and_penalty(
     """
     order = degree + 1
     basis = BSplineBasis(domain_range=[0, 1], order=order, knots=knots)
-    grid_points = np.linspace(0, 1, n_grid_points)
+    if grid_points is None:
+        grid_points = np.linspace(0, 1, n_grid_points)
+    else:
+        grid_points = np.asarray(grid_points, dtype=float)
+        if grid_points.ndim != 1:
+            raise ValueError("grid_points must be 1-D if provided")
+        if grid_points.size != n_grid_points:
+            raise ValueError("grid_points length must match n_grid_points")
+        # Clip to [0,1] for numerical safety
+        grid_points = np.clip(grid_points, 0.0, 1.0)
 
     # Compute basis matrix
     basis_matrix = (

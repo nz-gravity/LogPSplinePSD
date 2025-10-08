@@ -16,6 +16,10 @@ def coarse_grain_univar(
     bin_counts: jnp.ndarray,
     n_low: int,
     n_bins_high: int,
+    freqs: jnp.ndarray,
+    f_coarse: jnp.ndarray,
+    bin_widths: jnp.ndarray,
+    fine_spacing: float,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Coarse-grain a power spectrum using precomputed masks/bins."""
 
@@ -48,7 +52,22 @@ def coarse_grain_univar(
         mean_power = mean_power[non_empty]
         counts = counts[non_empty]
 
+        # Calculate new weights based on frequency spacing ratio
+        bin_widths = jnp.asarray(bin_widths)
+        bin_widths = bin_widths[non_empty]
+        fine_spacing = jnp.asarray(fine_spacing)
+        new_weights_high = bin_widths / fine_spacing
+        # Renormalize to preserve total member count
+        total_expected = jnp.asarray(jnp.sum(counts))
+        total_current = jnp.asarray(jnp.sum(new_weights_high))
+        new_weights_high = jnp.where(
+            total_current > 0,
+            new_weights_high * (total_expected / total_current),
+            new_weights_high,
+        )
+        # Keep raw (non-monotonic) weights for correct likelihood weighting.
+
         power_coarse = jnp.concatenate((power_low, mean_power))
-        weights = jnp.concatenate((weights_low, counts))
+        weights = jnp.concatenate((weights_low, new_weights_high))
 
     return power_coarse, weights

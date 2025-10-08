@@ -126,6 +126,15 @@ class MultivarBaseSampler(BaseSampler):
             n_dim=self.n_channels,
         )
 
+        if self.config.verbose:
+            logger.info(
+                f"Frequency bins used for inference (N): {self.n_freq}"
+            )
+            basis_shapes = ", ".join(
+                [f"{tuple(b.shape)}" for b in self.all_bases]
+            )
+            logger.info(f"B-spline basis shapes: {basis_shapes}")
+
     @property
     def data_type(self) -> str:
         return "multivariate"

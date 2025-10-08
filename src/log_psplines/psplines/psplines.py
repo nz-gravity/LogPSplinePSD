@@ -275,8 +275,12 @@ class LogPSplines:
             **knot_kwargs,
         )
         # compute degree based on the number of knots
+        # Evaluate basis at actual normalized frequencies to preserve geometry
+        fmin, fmax = float(periodogram.freqs[0]), float(periodogram.freqs[-1])
+        denom = (fmax - fmin) if fmax > fmin else 1.0
+        grid = (np.asarray(periodogram.freqs) - fmin) / denom
         basis, penalty_matrix = init_basis_and_penalty(
-            knots, degree, periodogram.n, diffMatrixOrder
+            knots, degree, periodogram.n, diffMatrixOrder, grid_points=grid
         )
         model = cls(
             knots=knots,

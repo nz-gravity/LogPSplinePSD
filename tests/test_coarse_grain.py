@@ -37,11 +37,47 @@ def test_compute_binning_structure_simple():
 
     indices = np.nonzero(spec.selection_mask)[0]
     power_selected = np.sin(indices * 0.1) ** 2 + 1.0
-    power_coarse, weights = apply_coarse_graining_univar(power_selected, spec)
+    freqs_selected = freqs[indices]
+    power_coarse, weights = apply_coarse_graining_univar(
+        power_selected, spec, freqs_selected
+    )
 
     assert power_coarse.shape[0] == weights.shape[0]
     assert power_coarse.shape[0] == spec.f_coarse.shape[0]
     assert np.all(weights[: spec.n_low] == 1.0)
+    # total weight should equal number of selected fine frequencies
+    assert np.isclose(
+        weights.sum(), spec.mask_low.sum() + spec.bin_counts.sum()
+    )
+
+
+def test_coarse_weights_properties_log_bins():
+    freqs = np.linspace(0.5, 128.0, 512)
+    power = np.ones_like(freqs)
+    cfg = CoarseGrainConfig(
+        enabled=True,
+        f_transition=16.0,
+        n_log_bins=50,
+        f_min=1.0,
+        f_max=120.0,
+    )
+
+    spec = compute_binning_structure(
+        freqs,
+        f_transition=cfg.f_transition,
+        n_log_bins=cfg.n_log_bins,
+        f_min=cfg.f_min,
+        f_max=cfg.f_max,
+    )
+    selection = spec.selection_mask
+    power_sel = power[selection]
+    freqs_sel = freqs[selection]
+
+    _, weights = apply_coarse_graining_univar(power_sel, spec, freqs_sel)
+
+    assert np.all(weights[: spec.n_low] == 1.0)
+    # Non-negativity and correct total mass
+    assert np.all(weights >= 0)
     assert np.isclose(
         weights.sum(), spec.mask_low.sum() + spec.bin_counts.sum()
     )
@@ -67,7 +103,7 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
         enabled=True,
         f_transition=100.0,
         f_max=ar_data.ts.fs / 2,
-        n_log_bins=300,
+        n_log_bins=100,
     )
 
     spec = compute_binning_structure(
@@ -78,13 +114,23 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
         f_max=coarse_cfg.f_max,
     )
 
-    fig, ax = plot_coarse_vs_original(
+    fig, ax, weights = plot_coarse_vs_original(
         periodogram_full.freqs,
         periodogram_full.power,
         spec,
         scaling_factor=standardized.scaling_factor,
         transition_freq=coarse_cfg.f_transition,
     )
+
+    # Plot the weights for diagnostics
+    from log_psplines.coarse_grain import plot_coarse_grain_weights
+
+    fig_weights, ax_weights = plot_coarse_grain_weights(
+        spec,
+        weights,
+        transition_freq=coarse_cfg.f_transition,
+    )
+    fig_weights.savefig(f"{outdir}/coarse_grain_weights.png")
     ax = fig.gca()
     ax.loglog(
         ar_data.freqs, ar_data.psd_theoretical, "k--", label="Theoretical PSD"
@@ -94,10 +140,10 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
     idata = run_mcmc(
         ar_data.ts,
         sampler="nuts",
-        n_knots=10,
+        n_knots=15,
         n_samples=500,
         n_warmup=500,
-        outdir=str(outdir),
+        outdir=f"{outdir}/coarse_grain",
         rng_key=0,
         compute_lnz=False,
         init_from_vi=True,
@@ -109,10 +155,10 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
     idata2 = run_mcmc(
         ar_data.ts,
         sampler="nuts",
-        n_knots=10,
+        n_knots=15,
         n_samples=500,
         n_warmup=500,
-        outdir=str(outdir),
+        outdir=f"{outdir}/full_freq",
         rng_key=0,
         compute_lnz=False,
         init_from_vi=True,
@@ -130,7 +176,7 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
     assert np.allclose(freq_coords, spec.f_coarse, rtol=1e-6, atol=1e-9)
 
     # finally, lets make a comparison PSD plot between coarse and full
-    fig, ax = plot_coarse_vs_original(
+    fig, ax, _ = plot_coarse_vs_original(
         periodogram_full.freqs,
         periodogram_full.power,
         spec,
@@ -161,6 +207,7 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
         idata=idata,
         show_data=False,
         model_label="Coarse-grained NUTS",
+        knot_color="tab:orange",
     )
     plot_pdgrm(
         idata=idata2,
@@ -168,6 +215,7 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
         show_data=False,
         model_label="Full freq NUTS",
         model_color="tab:green",
+        knot_color="tab:green",
     )
     ax.loglog(
         ar_data.freqs, ar_data.psd_theoretical, "k--", label="Theoretical PSD"

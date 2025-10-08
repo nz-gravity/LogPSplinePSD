@@ -230,8 +230,9 @@ def run_mcmc(
 
         selection_mask = spec.selection_mask
         power_selected = np.asarray(processed_data.power[selection_mask])
+        freqs_selected = processed_data.freqs[selection_mask]
         power_coarse, weights = apply_coarse_graining_univar(
-            power_selected, spec
+            power_selected, spec, freqs_selected
         )
 
         processed_data = Periodogram(
@@ -246,7 +247,7 @@ def run_mcmc(
             try:
                 true_selected = np.asarray(scaled_true_psd)[selection_mask]
                 true_coarse, _ = apply_coarse_graining_univar(
-                    true_selected, spec
+                    true_selected, spec, freqs_selected
                 )
                 scaled_true_psd = true_coarse
             except Exception:

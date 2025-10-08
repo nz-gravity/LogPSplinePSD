@@ -14,6 +14,7 @@ import numpy as np
 
 from ...arviz_utils.to_arviz import results_to_arviz
 from ...datatypes import Periodogram
+from ...logger import logger
 from ...plotting import (
     plot_pdgrm,
     save_vi_diagnostics_univariate,
@@ -75,6 +76,13 @@ class UnivarBaseSampler(BaseSampler):
             self.freq_weights = freq_weights
         else:
             self.freq_weights = jnp.ones_like(self.log_pdgrm)
+
+        if self.config.verbose:
+            basis_shape = tuple(self.basis_matrix.shape)
+            logger.info(
+                f"Frequency bins used for inference (N): {self.periodogram.n}"
+            )
+            logger.info(f"B-spline basis shape: {basis_shape}")
 
     @property
     def data_type(self) -> str:

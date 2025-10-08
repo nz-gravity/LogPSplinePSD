@@ -85,6 +85,8 @@ def compute_vi_artifacts_univar(
             sampler.penalty_matrix,
             sampler.log_parametric,
             sampler.freq_weights,
+            sampler.observed_power,
+            sampler.sigma_obs,
             sampler.config.alpha_phi,
             sampler.config.beta_phi,
             sampler.config.alpha_delta,

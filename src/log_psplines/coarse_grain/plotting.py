@@ -7,7 +7,7 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .preprocess import CoarseGrainSpec, apply_coarse_graining_univar
+from .preprocess import CoarseGrainSpec, compute_gaussian_bin_statistics
 
 
 def plot_coarse_vs_original(
@@ -29,8 +29,7 @@ def plot_coarse_vs_original(
     else:
         fig = ax.figure
 
-    selected_power = power[spec.selection_mask]
-    coarse_power, _ = apply_coarse_graining_univar(selected_power, spec)
+    _, coarse_power, _ = compute_gaussian_bin_statistics(freqs, power, spec)
 
     n_orig = freqs.size
     n_coarse = spec.f_coarse.size

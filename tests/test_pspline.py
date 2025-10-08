@@ -12,7 +12,7 @@ from log_psplines.datatypes import MultivarFFT, Periodogram, Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
-from log_psplines.samplers.univar.univar_base import log_likelihood
+from log_psplines.samplers.univar.univar_base import whittle_log_likelihood
 
 
 @pytest.fixture
@@ -39,9 +39,21 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     optim_weights = spline_model.weights
 
     # compute LnL at init and optimized weights
-    lnl_args = (ln_pdgrm, spline_model.basis, zero_param)
-    lnl_initial = log_likelihood(zero_weights, *lnl_args)
-    lnl_final = log_likelihood(optim_weights, *lnl_args)
+    freq_weights = jnp.ones_like(ln_pdgrm)
+    lnl_initial = whittle_log_likelihood(
+        zero_weights,
+        ln_pdgrm,
+        jnp.asarray(spline_model.basis, dtype=jnp.float32),
+        zero_param,
+        freq_weights,
+    )
+    lnl_final = whittle_log_likelihood(
+        optim_weights,
+        ln_pdgrm,
+        jnp.asarray(spline_model.basis, dtype=jnp.float32),
+        zero_param,
+        freq_weights,
+    )
     runtime = float(time.time()) - t0
 
     print(

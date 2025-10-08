@@ -23,17 +23,34 @@ from ..base_sampler import BaseSampler, SamplerConfig
 
 
 @jax.jit
-def log_likelihood(
+def whittle_log_likelihood(
     weights: jnp.ndarray,
     log_pdgrm: jnp.ndarray,
     basis_matrix: jnp.ndarray,
     log_parametric: jnp.ndarray,
     freq_weights: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Univariate log-likelihood function."""
+    """Whittle likelihood on the (possibly coarse) frequency grid."""
     ln_model = build_spline(basis_matrix, weights, log_parametric)
     integrand = ln_model + jnp.exp(log_pdgrm - ln_model)
     return -0.5 * jnp.sum(freq_weights * integrand)
+
+
+@jax.jit
+def gaussian_log_likelihood(
+    weights: jnp.ndarray,
+    basis_matrix: jnp.ndarray,
+    log_parametric: jnp.ndarray,
+    observed_power: jnp.ndarray,
+    sigma_obs: jnp.ndarray,
+) -> jnp.ndarray:
+    """Gaussian likelihood using coarse-grained power and per-bin uncertainties."""
+    ln_model = build_spline(basis_matrix, weights, log_parametric)
+    model_power = jnp.exp(ln_model)
+    sigma = jnp.maximum(sigma_obs, 1e-30)
+    resid = (observed_power - model_power) / sigma
+    log_det = 2.0 * jnp.log(sigma)
+    return -0.5 * jnp.sum(resid**2 + log_det + jnp.log(2.0 * jnp.pi))
 
 
 class UnivarBaseSampler(BaseSampler):
@@ -75,6 +92,22 @@ class UnivarBaseSampler(BaseSampler):
             self.freq_weights = freq_weights
         else:
             self.freq_weights = jnp.ones_like(self.log_pdgrm)
+        self.observed_power = jnp.asarray(
+            self.periodogram.power,
+            dtype=self.log_pdgrm.dtype,
+        )
+        if self.config.coarse_sigma is not None:
+            sigma = jnp.asarray(
+                self.config.coarse_sigma,
+                dtype=self.log_pdgrm.dtype,
+            )
+            if sigma.shape[0] != self.observed_power.shape[0]:
+                raise ValueError("Coarse sigma must match periodogram length")
+            self.sigma_obs = jnp.maximum(sigma, 1e-30)
+            self._use_coarse_gaussian = True
+        else:
+            self.sigma_obs = jnp.maximum(self.observed_power, 1e-30)
+            self._use_coarse_gaussian = False
 
     @property
     def data_type(self) -> str:
@@ -138,7 +171,10 @@ class UnivarBaseSampler(BaseSampler):
             log_pdgrm=self.log_pdgrm,
             basis_matrix=self.basis_matrix,
             log_parametric=self.log_parametric,
+            observed_power=self.observed_power,
+            sigma_obs=self.sigma_obs,
             penalty_matrix=self.penalty_matrix,
+            freq_weights=self.freq_weights,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,
             alpha_delta=self.config.alpha_delta,

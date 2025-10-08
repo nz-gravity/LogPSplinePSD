@@ -7,6 +7,7 @@ from log_psplines.coarse_grain import (
     CoarseGrainConfig,
     apply_coarse_graining_univar,
     compute_binning_structure,
+    compute_gaussian_bin_statistics,
     plot_coarse_vs_original,
 )
 from log_psplines.plotting import plot_pdgrm
@@ -38,6 +39,7 @@ def test_compute_binning_structure_simple():
     indices = np.nonzero(spec.selection_mask)[0]
     power_selected = np.sin(indices * 0.1) ** 2 + 1.0
     power_coarse, weights = apply_coarse_graining_univar(power_selected, spec)
+    _, _, sigma = compute_gaussian_bin_statistics(freqs, freqs * 0 + 1, spec)
 
     assert power_coarse.shape[0] == weights.shape[0]
     assert power_coarse.shape[0] == spec.f_coarse.shape[0]
@@ -45,6 +47,7 @@ def test_compute_binning_structure_simple():
     assert np.isclose(
         weights.sum(), spec.mask_low.sum() + spec.bin_counts.sum()
     )
+    assert sigma.shape[0] == spec.f_coarse.shape[0]
 
 
 @pytest.mark.skipif(
@@ -125,9 +128,14 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
     obs_freqs = np.asarray(
         idata.observed_data["periodogram"].coords["freq"].values
     )
-    assert freq_coords.shape[0] == spec.f_coarse.shape[0]
-    assert obs_freqs.shape[0] == spec.f_coarse.shape[0]
-    assert np.allclose(freq_coords, spec.f_coarse, rtol=1e-6, atol=1e-9)
+    freq_expected, _, _ = compute_gaussian_bin_statistics(
+        periodogram_full.freqs,
+        periodogram_full.power,
+        spec,
+    )
+    assert freq_coords.shape[0] == freq_expected.shape[0]
+    assert obs_freqs.shape[0] == freq_expected.shape[0]
+    assert np.allclose(freq_coords, freq_expected, rtol=1e-6, atol=1e-9)
 
     # finally, lets make a comparison PSD plot between coarse and full
     fig, ax = plot_coarse_vs_original(

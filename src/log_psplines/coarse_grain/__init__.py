@@ -6,6 +6,7 @@ from .preprocess import (
     CoarseGrainSpec,
     apply_coarse_graining_univar,
     compute_binning_structure,
+    compute_gaussian_bin_statistics,
 )
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "CoarseGrainSpec",
     "compute_binning_structure",
     "apply_coarse_graining_univar",
+    "compute_gaussian_bin_statistics",
     "plot_coarse_vs_original",
 ]

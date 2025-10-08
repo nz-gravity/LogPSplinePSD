@@ -115,6 +115,61 @@ def compute_binning_structure(
     )
 
 
+def compute_gaussian_bin_statistics(
+    freqs: np.ndarray,
+    power: np.ndarray,
+    spec: CoarseGrainSpec,
+    *,
+    epsilon: float = 1e-20,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute coarse-grained Gaussian statistics per Caprini et al."""
+
+    selected_freqs = np.asarray(freqs)[spec.selection_mask]
+    selected_power = np.asarray(power)[spec.selection_mask]
+
+    low_freqs = selected_freqs[spec.mask_low]
+    low_power = selected_power[spec.mask_low]
+    low_sigma = np.sqrt(np.maximum(low_power**2, epsilon))
+
+    if spec.n_bins_high == 0:
+        return low_freqs, low_power, low_sigma
+
+    high_freqs = selected_freqs[spec.mask_high]
+    high_power = selected_power[spec.mask_high]
+    high_freqs_sorted = high_freqs[spec.sort_indices]
+    high_power_sorted = high_power[spec.sort_indices]
+    bins_sorted = spec.bin_indices[spec.sort_indices]
+
+    inv_var = 1.0 / (np.maximum(high_power_sorted**2, epsilon))
+
+    sum_inv_var = np.bincount(
+        bins_sorted,
+        weights=inv_var,
+        minlength=spec.n_bins_high,
+    )
+    sum_weighted_power = np.bincount(
+        bins_sorted,
+        weights=high_power_sorted * inv_var,
+        minlength=spec.n_bins_high,
+    )
+    sum_weighted_freqs = np.bincount(
+        bins_sorted,
+        weights=high_freqs_sorted * inv_var,
+        minlength=spec.n_bins_high,
+    )
+
+    sum_inv_var = np.maximum(sum_inv_var, epsilon)
+    coarse_power_high = sum_weighted_power / sum_inv_var
+    coarse_freq_high = sum_weighted_freqs / sum_inv_var
+    sigma_high = 1.0 / np.sqrt(sum_inv_var)
+
+    coarse_freqs = np.concatenate((low_freqs, coarse_freq_high))
+    coarse_power = np.concatenate((low_power, coarse_power_high))
+    sigma = np.concatenate((low_sigma, sigma_high))
+
+    return coarse_freqs, coarse_power, sigma
+
+
 def apply_coarse_graining_univar(
     power: np.ndarray,
     spec: CoarseGrainSpec,

@@ -90,11 +90,18 @@ class Periodogram:
     power: np.ndarray
     filtered: bool = False
     scaling_factor: float = 1.0  # New: scaling factor for rescaling PSD
+    weights: Optional[np.ndarray] = None
 
     def __post_init__(self):
         # assert no nans
         if np.isnan(self.freqs).any() or np.isnan(self.power).any():
             raise ValueError("Frequency or power contains NaN values.")
+        if self.weights is None:
+            self.weights = np.ones_like(self.power, dtype=float)
+        else:
+            self.weights = np.asarray(self.weights, dtype=float)
+            if self.weights.shape != self.power.shape:
+                raise ValueError("weights must match power shape")
 
     @property
     def n(self):
@@ -113,6 +120,7 @@ class Periodogram:
             self.power[mask],
             filtered=True,
             scaling_factor=self.scaling_factor,
+            weights=self.weights[mask],
         )
 
     def to_timeseries(self) -> "Timeseries":
@@ -123,12 +131,18 @@ class Periodogram:
 
     def __mul__(self, other):
         return Periodogram(
-            self.freqs, self.power * other, scaling_factor=self.scaling_factor
+            self.freqs,
+            self.power * other,
+            scaling_factor=self.scaling_factor,
+            weights=self.weights,
         )
 
     def __truediv__(self, other):
         return Periodogram(
-            self.freqs, self.power / other, scaling_factor=self.scaling_factor
+            self.freqs,
+            self.power / other,
+            scaling_factor=self.scaling_factor,
+            weights=self.weights,
         )
 
     def __repr__(self):
@@ -142,6 +156,7 @@ class Periodogram:
             self.power[mask],
             filtered=True,
             scaling_factor=self.scaling_factor,
+            weights=self.weights[mask],
         )
 
     @property

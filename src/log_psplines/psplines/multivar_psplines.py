@@ -122,7 +122,7 @@ class MultivariateLogPSplines:
 
         # Create basis and penalty matrices (same for all components)
         basis, penalty = init_basis_and_penalty(
-            knots, degree, n_freq, diffMatrixOrder
+            knots, degree, n_freq, diffMatrixOrder, grid_points=freq_norm
         )
 
         # Create diagonal models (one per channel)

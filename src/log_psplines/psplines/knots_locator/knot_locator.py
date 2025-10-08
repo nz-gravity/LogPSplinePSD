@@ -131,16 +131,30 @@ def _quantile_based_knots(
 
     # Step 3: Absolute values and normalize to create PMF
     z = np.abs(y)
-    z = z / np.sum(z)  # Normalize to sum to 1
+    weights = getattr(periodogram, "weights", None)
+    if weights is None:
+        weights = np.ones_like(z)
+    else:
+        weights = np.asarray(weights, dtype=float)
+        if weights.shape != z.shape:
+            weights = np.ones_like(z)
+    z = z * weights
+    total = np.sum(z)
+    if total <= 0:
+        z = np.ones_like(z) / z.size
+    else:
+        z = z / total
 
     # Step 4: Create cumulative distribution function
     cdf_values = np.cumsum(z)
+    cdf_values = np.insert(cdf_values, 0, 0.0)
+    freqs = np.insert(periodogram.freqs, 0, periodogram.freqs[0])
 
     # Step 5: Place knots at equally spaced quantiles
     # We want n_knots total, including endpoints
     quantiles = np.linspace(0, 1, n_knots)
 
     # Interpolate to find frequencies corresponding to these quantiles
-    knots = np.interp(quantiles, cdf_values, periodogram.freqs)
+    knots = np.interp(quantiles, cdf_values, freqs)
 
     return knots

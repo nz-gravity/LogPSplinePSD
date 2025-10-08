@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from log_psplines.arviz_utils import compare_results, get_weights
+from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
@@ -173,6 +174,13 @@ def test_mcmc(outdir: str, test_mode: str):
     )
     print(f"{ar_data.ts}")
 
+    # coarse_grain = CoarseGrainConfig(
+    #     enabled=True,
+    #     f_transition=10**2,
+    #     f_max=ar_data.ts.fs / 2,
+    #     n_log_bins=100,
+    # )
+
     for sampler in sampler_names:
         sampler_out = f"{outdir}/out_{sampler}"
         idata = run_mcmc(
@@ -186,6 +194,7 @@ def test_mcmc(outdir: str, test_mode: str):
             compute_lnz=compute_lnz,
             true_psd=ar_data.psd_theoretical,
             verbose=(test_mode != "fast"),
+            # coarse_grain=coarse_grain,
         )
 
         print(

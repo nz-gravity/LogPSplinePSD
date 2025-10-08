@@ -7,8 +7,8 @@ from loguru import logger
 
 from .coarse_grain import (
     CoarseGrainConfig,
-    apply_coarse_graining_univar,
     compute_binning_structure,
+    compute_gaussian_bin_statistics,
 )
 from .datatypes import Periodogram
 from .datatypes.multivar import MultivarFFT, MultivariateTimeseries
@@ -158,6 +158,7 @@ def run_mcmc(
     # Handle raw timeseries input - standardize automatically
     processed_data = None
     freq_weights = None
+    coarse_sigma = None
 
     if isinstance(data, (Timeseries, MultivariateTimeseries)):
         # Standardize the raw timeseries for numerical stability
@@ -220,33 +221,47 @@ def run_mcmc(
             )
 
     if isinstance(processed_data, Periodogram) and cg_config.enabled:
+        orig_freqs = np.asarray(processed_data.freqs)
+        orig_power = np.asarray(processed_data.power)
+
         spec = compute_binning_structure(
-            processed_data.freqs,
+            orig_freqs,
             f_transition=cg_config.f_transition,
             n_log_bins=cg_config.n_log_bins,
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,
         )
 
-        selection_mask = spec.selection_mask
-        power_selected = np.asarray(processed_data.power[selection_mask])
-        power_coarse, weights = apply_coarse_graining_univar(
-            power_selected, spec
+        freq_coarse, power_coarse, sigma_coarse = (
+            compute_gaussian_bin_statistics(
+                orig_freqs,
+                orig_power,
+                spec,
+            )
+        )
+        spec.f_coarse = freq_coarse
+        weights_counts = np.concatenate(
+            (
+                np.ones(spec.n_low, dtype=np.float64),
+                spec.bin_counts.astype(np.float64),
+            )
         )
 
         processed_data = Periodogram(
-            spec.f_coarse,
+            freq_coarse,
             power_coarse,
             scaling_factor=processed_data.scaling_factor,
-            weights=weights,
+            weights=weights_counts,
         )
-        freq_weights = weights.astype(np.float32)
+        freq_weights = weights_counts.astype(np.float32)
+        coarse_sigma = sigma_coarse.astype(np.float32)
 
         if scaled_true_psd is not None:
             try:
-                true_selected = np.asarray(scaled_true_psd)[selection_mask]
-                true_coarse, _ = apply_coarse_graining_univar(
-                    true_selected, spec
+                _, true_coarse, _ = compute_gaussian_bin_statistics(
+                    orig_freqs,
+                    np.asarray(scaled_true_psd),
+                    spec,
                 )
                 scaled_true_psd = true_coarse
             except Exception:
@@ -313,6 +328,7 @@ def run_mcmc(
         ),  # Pass scaling info to sampler
         true_psd=scaled_true_psd,
         freq_weights=freq_weights,
+        coarse_sigma=coarse_sigma,
         **kwargs,
     )
 
@@ -350,6 +366,7 @@ def create_sampler(
     scaling_factor: float = 1.0,
     true_psd: Optional[jnp.ndarray] = None,
     freq_weights: Optional[np.ndarray] = None,
+    coarse_sigma: Optional[np.ndarray] = None,
     **kwargs,
 ):
     """Factory function to create appropriate sampler."""
@@ -372,6 +389,7 @@ def create_sampler(
         "scaling_factor": scaling_factor,
         "true_psd": true_psd,
         "freq_weights": freq_weights,
+        "coarse_sigma": coarse_sigma,
     }
 
     if isinstance(data, Periodogram):

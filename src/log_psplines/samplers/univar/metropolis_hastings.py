@@ -16,7 +16,11 @@ from tqdm.auto import tqdm
 
 from ...logger import logger
 from ..base_sampler import SamplerConfig
-from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
+from .univar_base import (
+    UnivarBaseSampler,
+    gaussian_log_likelihood,
+    whittle_log_likelihood,
+)
 
 
 @dataclass
@@ -92,6 +96,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
             self.log_pdgrm,
             self.basis_matrix,
             self.log_parametric,
+            self.observed_power,
+            self.sigma_obs,
+            self._use_coarse_gaussian,
             self.freq_weights,
             self.penalty_matrix,
             self.config.alpha_phi,
@@ -126,6 +133,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
             self.log_pdgrm,
             self.basis_matrix,
             self.log_parametric,
+            self.observed_power,
+            self.sigma_obs,
+            self._use_coarse_gaussian,
             self.freq_weights,
             self.penalty_matrix,
             self.config.alpha_phi,
@@ -147,6 +157,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
                 self.log_pdgrm,
                 self.basis_matrix,
                 self.log_parametric,
+                self.observed_power,
+                self.sigma_obs,
+                self._use_coarse_gaussian,
                 self.freq_weights,
                 self.penalty_matrix,
                 subkey,
@@ -305,6 +318,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
                             self.log_pdgrm,
                             self.basis_matrix,
                             self.log_parametric,
+                            self.observed_power,
+                            self.sigma_obs,
+                            self._use_coarse_gaussian,
                             self.freq_weights,
                             self.penalty_matrix,
                             self.config.alpha_phi,
@@ -356,6 +372,9 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
             log_pdgrm=self.log_pdgrm,
             basis_matrix=self.basis_matrix,
             log_parametric=self.log_parametric,
+            observed_power=self.observed_power,
+            sigma_obs=self.sigma_obs,
+            use_coarse_gaussian=bool(self._use_coarse_gaussian),
             freq_weights=self.freq_weights,
             penalty_matrix=self.penalty_matrix,
             alpha_phi=self.config.alpha_phi,
@@ -424,6 +443,9 @@ def log_posterior(
     log_pdgrm: jnp.ndarray,
     basis_matrix: jnp.ndarray,
     log_parametric: jnp.ndarray,
+    observed_power: jnp.ndarray,
+    sigma_obs: jnp.ndarray,
+    use_coarse_gaussian: bool,
     freq_weights: jnp.ndarray,
     penalty_matrix: jnp.ndarray,
     alpha_phi: float,
@@ -432,13 +454,22 @@ def log_posterior(
     beta_delta: float,
 ) -> float:
     """Complete log posterior computation."""
-    log_like = log_likelihood(
-        weights,
-        log_pdgrm,
-        basis_matrix,
-        log_parametric,
-        freq_weights,
-    )
+    if bool(use_coarse_gaussian):
+        log_like = gaussian_log_likelihood(
+            weights,
+            basis_matrix,
+            log_parametric,
+            observed_power,
+            sigma_obs,
+        )
+    else:
+        log_like = whittle_log_likelihood(
+            weights,
+            log_pdgrm,
+            basis_matrix,
+            log_parametric,
+            freq_weights,
+        )
     log_prior_w = log_prior_weights(weights, phi, penalty_matrix)
     log_prior_phi_val = log_prior_phi(phi, delta, alpha_phi, beta_phi)
     log_prior_delta_val = log_prior_delta(delta, alpha_delta, beta_delta)
@@ -482,7 +513,7 @@ def gibbs_update_delta(
     return jax.random.gamma(rng_key, shape) / rate
 
 
-@partial(jax.jit, static_argnums=(10,))
+@partial(jax.jit, static_argnums=(9, 13))
 def update_weights_componentwise(
     weights: jnp.ndarray,
     step_sizes: jnp.ndarray,
@@ -491,6 +522,9 @@ def update_weights_componentwise(
     log_pdgrm: jnp.ndarray,
     basis_matrix: jnp.ndarray,
     log_parametric: jnp.ndarray,
+    observed_power: jnp.ndarray,
+    sigma_obs: jnp.ndarray,
+    use_coarse_gaussian: bool,
     freq_weights: jnp.ndarray,
     penalty_matrix: jnp.ndarray,
     rng_key: jax.random.PRNGKey,
@@ -501,6 +535,7 @@ def update_weights_componentwise(
     beta_delta: float,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, float]:
     """Component-wise Metropolis-Hastings update for weights."""
+    use_coarse_gaussian = bool(use_coarse_gaussian)
     current_log_post = log_posterior(
         weights,
         phi,
@@ -508,6 +543,9 @@ def update_weights_componentwise(
         log_pdgrm,
         basis_matrix,
         log_parametric,
+        observed_power,
+        sigma_obs,
+        use_coarse_gaussian,
         freq_weights,
         penalty_matrix,
         alpha_phi,
@@ -535,6 +573,9 @@ def update_weights_componentwise(
             log_pdgrm,
             basis_matrix,
             log_parametric,
+            observed_power,
+            sigma_obs,
+            use_coarse_gaussian,
             freq_weights,
             penalty_matrix,
             alpha_phi,
@@ -567,6 +608,9 @@ def update_weights_componentwise(
         log_pdgrm,
         basis_matrix,
         log_parametric,
+        observed_power,
+        sigma_obs,
+        use_coarse_gaussian,
         freq_weights,
         penalty_matrix,
         alpha_phi,

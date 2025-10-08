@@ -2,6 +2,7 @@
 NUTS sampler for univariate PSD estimation.
 """
 
+import functools
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -23,7 +24,11 @@ from ..utils import (
 from ..vi_init import VIInitialisationMixin
 from ..vi_init.adapters import compute_vi_artifacts_univar
 from ..vi_init.defaults import default_init_values_univar
-from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
+from .univar_base import (  # Updated import
+    UnivarBaseSampler,
+    gaussian_log_likelihood,
+    whittle_log_likelihood,
+)
 
 
 @dataclass
@@ -40,18 +45,22 @@ class NUTSConfig(SamplerConfig):
     vi_progress_bar: Optional[bool] = None
 
 
-def bayesian_model(
+def bayesian_model_core(
     log_pdgrm: jnp.ndarray,
     lnspline_basis: jnp.ndarray,
     penalty_matrix: jnp.ndarray,
     ln_parametric: jnp.ndarray,
     freq_weights: jnp.ndarray,
+    observed_power: jnp.ndarray,
+    sigma_obs: jnp.ndarray,
     alpha_phi,
     beta_phi,
     alpha_delta,
     beta_delta,
+    use_coarse_gaussian: bool = False,
 ):
-    """NumPyro model for univariate PSD estimation."""
+    """NumPyro model for univariate PSD estimation with optional coarse Gaussian likelihood."""
+    use_coarse_gaussian = bool(use_coarse_gaussian)
     block = sample_pspline_block(
         delta_name="delta",
         phi_name="phi",
@@ -65,13 +74,22 @@ def bayesian_model(
     )
 
     weights = block["weights"]
-    lnl = log_likelihood(
-        weights,
-        log_pdgrm,
-        lnspline_basis,
-        ln_parametric,
-        freq_weights,
-    )
+    if use_coarse_gaussian:
+        lnl = gaussian_log_likelihood(
+            weights,
+            lnspline_basis,
+            ln_parametric,
+            observed_power,
+            sigma_obs,
+        )
+    else:
+        lnl = whittle_log_likelihood(
+            weights,
+            log_pdgrm,
+            lnspline_basis,
+            ln_parametric,
+            freq_weights,
+        )
     numpyro.factor("ln_likelihood", lnl)
 
 
@@ -86,8 +104,12 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         self._vi_diagnostics: Optional[Dict[str, np.ndarray]] = None
 
         # Pre-build JIT-compiled log-posterior for morphZ evidence
+        self._model_partial = functools.partial(
+            bayesian_model_core,
+            use_coarse_gaussian=bool(self._use_coarse_gaussian),
+        )
         self._logpost_fn = build_log_density_fn(
-            bayesian_model, self._logp_kwargs
+            self._model_partial, self._logp_kwargs
         )
 
         # Pre-compile NumPyro model for faster warmup
@@ -102,7 +124,9 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         self, n_samples: int, n_warmup: int = 500, **kwargs
     ) -> az.InferenceData:
         """Run NUTS sampling."""
-        vi_artifacts = compute_vi_artifacts_univar(self, model=bayesian_model)
+        vi_artifacts = compute_vi_artifacts_univar(
+            self, model=self._model_partial
+        )
         init_strategy = (
             vi_artifacts.init_strategy or self._default_init_strategy()
         )
@@ -124,7 +148,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
 
         # Setup NUTS kernel
         kernel = NUTS(
-            bayesian_model,
+            self._model_partial,
             init_strategy=init_strategy,
             target_accept_prob=self.config.target_accept_prob,
             max_tree_depth=self.config.max_tree_depth,
@@ -153,6 +177,8 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             self.penalty_matrix,
             self.log_parametric,
             self.freq_weights,
+            self.observed_power,
+            self.sigma_obs,
             self.config.alpha_phi,
             self.config.beta_phi,
             self.config.alpha_delta,
@@ -207,6 +233,8 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             penalty_matrix=self.penalty_matrix,
             ln_parametric=self.log_parametric,
             freq_weights=self.freq_weights,
+            observed_power=self.observed_power,
+            sigma_obs=self.sigma_obs,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,
             alpha_delta=self.config.alpha_delta,
@@ -232,7 +260,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
 
             init_params = initialize_model(
                 self.rng_key,
-                bayesian_model,
+                self._model_partial,
                 model_kwargs=self._logp_kwargs,
                 init_strategy=init_to_value(values=default_values),
             )

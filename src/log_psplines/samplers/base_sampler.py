@@ -35,6 +35,8 @@ class SamplerConfig:
     compute_lnz: bool = False
     scaling_factor: float = 1.0  # To track any data scaling
     true_psd: Optional[jnp.ndarray] = None  # True PSD for diagnostics
+    freq_weights: Optional[np.ndarray] = None  # Optional frequency weights
+    coarse_sigma: Optional[np.ndarray] = None  # Optional coarse Gaussian sigma
 
     def __post_init__(self):
         if self.outdir is not None:

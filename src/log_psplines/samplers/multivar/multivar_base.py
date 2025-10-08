@@ -49,9 +49,18 @@ def whittle_likelihood(
     log_delta_sq: jnp.ndarray,  # (n_freq, n_dim)
     theta_re: jnp.ndarray,  # (n_freq, n_theta)
     theta_im: jnp.ndarray,  # (n_freq, n_theta)
+    freq_weights: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Multivariate Whittle likelihood for Cholesky PSD parameterization."""
-    sum_log_det = -jnp.sum(log_delta_sq)
+    if freq_weights is None:
+        freq_weights = jnp.ones(
+            log_delta_sq.shape[0], dtype=log_delta_sq.dtype
+        )
+    else:
+        freq_weights = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
+    freq_weights = freq_weights.reshape((-1, 1))
+
+    sum_log_det = -jnp.sum(freq_weights * log_delta_sq)
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
 
     if Z_re.shape[2] > 0:
@@ -69,7 +78,7 @@ def whittle_likelihood(
 
     numerator = u_re**2 + u_im**2
     internal = numerator * exp_neg_log_delta
-    tmp2 = -jnp.sum(internal)
+    tmp2 = -jnp.sum(freq_weights * internal)
     return sum_log_det + tmp2
 
 
@@ -125,6 +134,18 @@ class MultivarBaseSampler(BaseSampler):
             n_freq=self.n_freq,
             n_dim=self.n_channels,
         )
+
+        if self.config.freq_weights is not None:
+            freq_weights = jnp.asarray(
+                self.config.freq_weights, dtype=jnp.float32
+            )
+            if freq_weights.shape[0] != self.n_freq:
+                raise ValueError(
+                    "Frequency weights must match number of coarse frequencies"
+                )
+            self.freq_weights = freq_weights
+        else:
+            self.freq_weights = jnp.ones(self.n_freq, dtype=jnp.float32)
 
         if self.config.verbose:
             logger.info(

@@ -7,6 +7,7 @@ from loguru import logger
 
 from .coarse_grain import (
     CoarseGrainConfig,
+    apply_coarse_graining_multivar_fft,
     apply_coarse_graining_univar,
     compute_binning_structure,
 )
@@ -254,6 +255,21 @@ def run_mcmc(
                 logger.warning(
                     "Could not coarse-grain provided true_psd; leaving unchanged."
                 )
+
+    elif isinstance(processed_data, MultivarFFT) and cg_config.enabled:
+        spec = compute_binning_structure(
+            processed_data.freq,
+            f_transition=cg_config.f_transition,
+            n_log_bins=cg_config.n_log_bins,
+            f_min=cg_config.f_min,
+            f_max=cg_config.f_max,
+        )
+
+        coarse_result = apply_coarse_graining_multivar_fft(
+            processed_data, spec
+        )
+        processed_data = coarse_result.fft
+        freq_weights = coarse_result.weights.astype(np.float32)
 
     # Create model based on processed data type
     if isinstance(processed_data, Periodogram):

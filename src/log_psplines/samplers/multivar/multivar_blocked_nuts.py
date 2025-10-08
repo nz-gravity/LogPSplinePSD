@@ -50,6 +50,7 @@ def _blocked_channel_model(
     y_im: jnp.ndarray,
     Z_re: jnp.ndarray,
     Z_im: jnp.ndarray,
+    freq_weights: jnp.ndarray,
     basis_delta: jnp.ndarray,
     penalty_delta: jnp.ndarray,
     basis_theta: jnp.ndarray,
@@ -151,7 +152,8 @@ def _blocked_channel_model(
         theta_im = jnp.zeros((n_freq, 0))
 
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
-    sum_log_det = -jnp.sum(log_delta_sq)
+    freq_weights = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
+    sum_log_det = -jnp.sum(freq_weights * log_delta_sq)
 
     if n_theta_block > 0:
         z_theta_re = jnp.sum(Z_re * theta_re, axis=1) - jnp.sum(
@@ -167,7 +169,9 @@ def _blocked_channel_model(
         u_im = y_im
 
     residual_power = u_re**2 + u_im**2
-    log_likelihood = sum_log_det - jnp.sum(residual_power * exp_neg_log_delta)
+    log_likelihood = sum_log_det - jnp.sum(
+        freq_weights * residual_power * exp_neg_log_delta
+    )
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
 
@@ -354,6 +358,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.y_im[:, channel_index],
                 Z_re_block,
                 Z_im_block,
+                self.freq_weights,
                 delta_basis,
                 delta_penalty,
                 self._theta_basis,

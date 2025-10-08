@@ -1,14 +1,18 @@
 import os
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
 from log_psplines.coarse_grain import (
     CoarseGrainConfig,
+    apply_coarse_graining_multivar_fft,
     apply_coarse_graining_univar,
     compute_binning_structure,
     plot_coarse_vs_original,
+    plot_coarse_vs_original_multivar,
 )
+from log_psplines.datatypes import MultivarFFT
 from log_psplines.plotting import plot_pdgrm
 
 
@@ -81,6 +85,86 @@ def test_coarse_weights_properties_log_bins():
     assert np.isclose(
         weights.sum(), spec.mask_low.sum() + spec.bin_counts.sum()
     )
+
+
+def test_coarse_grain_multivar_fft():
+    rng = np.random.default_rng(0)
+    n_freq = 64
+    n_dim = 3
+    freqs = np.linspace(1.0, 256.0, n_freq)
+    n_theta = n_dim * (n_dim - 1) // 2
+
+    y_re = rng.standard_normal((n_freq, n_dim))
+    y_im = rng.standard_normal((n_freq, n_dim))
+    Z_re = rng.standard_normal((n_freq, n_dim, n_theta))
+    Z_im = rng.standard_normal((n_freq, n_dim, n_theta))
+
+    fft = MultivarFFT(
+        y_re=y_re,
+        y_im=y_im,
+        Z_re=Z_re,
+        Z_im=Z_im,
+        freq=freqs,
+        n_freq=n_freq,
+        n_dim=n_dim,
+        scaling_factor=1.0,
+        fs=512.0,
+    )
+
+    spec = compute_binning_structure(
+        freqs,
+        f_transition=64.0,
+        n_log_bins=8,
+        f_min=2.0,
+        f_max=240.0,
+    )
+
+    result = apply_coarse_graining_multivar_fft(fft, spec)
+
+    assert result.fft.n_freq == spec.n_low + np.count_nonzero(spec.bin_counts)
+    assert result.fft.y_re.shape == (result.fft.n_freq, n_dim)
+    assert result.weights.shape[0] == result.fft.n_freq
+    assert np.all(result.weights[: spec.n_low] == 1.0)
+    total_expected = spec.mask_low.sum() + spec.bin_counts.sum()
+    assert np.isclose(result.weights.sum(), total_expected)
+    plt.close("all")
+
+
+def test_plot_coarse_vs_original_multivar(outdir):
+    outdir = f"{outdir}/out_coarse_grain/plot_multivar"
+    os.makedirs(outdir, exist_ok=True)
+    rng = np.random.default_rng(10)
+    n_freq = 32
+    n_dim = 2
+    freqs = np.linspace(1.0, 64.0, n_freq)
+    n_theta = n_dim * (n_dim - 1) // 2
+
+    fft = MultivarFFT(
+        y_re=rng.standard_normal((n_freq, n_dim)),
+        y_im=rng.standard_normal((n_freq, n_dim)),
+        Z_re=rng.standard_normal((n_freq, n_dim, n_theta)),
+        Z_im=rng.standard_normal((n_freq, n_dim, n_theta)),
+        freq=freqs,
+        n_freq=n_freq,
+        n_dim=n_dim,
+        scaling_factor=1.0,
+        fs=128.0,
+    )
+
+    spec = compute_binning_structure(
+        freqs,
+        f_transition=16.0,
+        n_log_bins=6,
+        f_min=2.0,
+        f_max=60.0,
+    )
+
+    fig, axes_pair, weights = plot_coarse_vs_original_multivar(fft, spec)
+    fig.savefig(f"{outdir}/coarse_vs_fine_multivar.png")
+
+    assert weights.shape[0] == spec.f_coarse.shape[0]
+    assert len(axes_pair) == 2
+    plt.close(fig)
 
 
 @pytest.mark.skipif(
@@ -222,3 +306,63 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
     )
     ax.legend()
     fig.savefig(f"{outdir}/coarse_vs_full_psd_just_splines.png")
+
+
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") is not None,
+    reason="Skip on GitHub Actions for time",
+)
+def test_coarse_lnl_with_multivar_mcmc(outdir):
+
+    from log_psplines.datatypes import MultivariateTimeseries
+    from log_psplines.example_datasets.varma_data import VARMAData
+    from log_psplines.mcmc import run_mcmc
+
+    outdir = f"{outdir}/out_coarse_grain/multivar"
+    os.makedirs(outdir, exist_ok=True)
+
+    varma = VARMAData(
+        n_samples=1024,
+    )
+    n_dim = varma.dim
+    varma.plot(fname=os.path.join(outdir, "varma_data.png"))
+
+    print(f"VARMA data shape: {varma.data.shape}, dim={n_dim}")
+
+    timeseries = MultivariateTimeseries(
+        t=varma.time,
+        y=varma.data,
+    )
+    coarse_settings = CoarseGrainConfig(
+        enabled=True,
+        f_transition=varma.fs / 5,
+        f_max=varma.fs / 2,
+        n_log_bins=50,
+    )
+
+    run_mcmc(
+        data=timeseries,
+        sampler="multivar_blocked_nuts",
+        n_knots=10,
+        n_samples=500,
+        n_warmup=500,
+        outdir=f"{outdir}/full_freq",
+        rng_key=0,
+        compute_lnz=False,
+        init_from_vi=True,
+        verbose=False,
+    )
+
+    run_mcmc(
+        data=timeseries,
+        sampler="multivar_blocked_nuts",
+        n_knots=10,
+        n_samples=500,
+        n_warmup=500,
+        outdir=f"{outdir}/coarse_grain",
+        rng_key=0,
+        compute_lnz=False,
+        init_from_vi=True,
+        verbose=False,
+        coarse_grain_config=coarse_settings,
+    )

@@ -2,8 +2,14 @@ from typing import Literal, Optional, Union
 
 import arviz as az
 import jax.numpy as jnp
+import numpy as np
 from loguru import logger
 
+from .coarse_grain import (
+    CoarseGrainConfig,
+    apply_coarse_graining_univar,
+    compute_binning_structure,
+)
 from .datatypes import Periodogram
 from .datatypes.multivar import MultivarFFT, MultivariateTimeseries
 from .datatypes.univar import Timeseries
@@ -58,6 +64,7 @@ def run_mcmc(
     vi_guide: Optional[str] = None,
     vi_posterior_draws: int = 256,
     vi_progress_bar: Optional[bool] = None,
+    coarse_grain_config: Optional[CoarseGrainConfig | dict] = None,
     # MH specific
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
@@ -115,6 +122,8 @@ def run_mcmc(
         Target acceptance probability for NUTS
     max_tree_depth : int, default=10
         Maximum tree depth for NUTS
+    coarse_grain_config : CoarseGrainConfig or dict, optional
+        Optional frequency coarse-graining configuration for univariate periodograms.
     target_accept_rate : float, default=0.44
         Target acceptance rate for MH
     adaptation_window : int, default=50
@@ -134,6 +143,13 @@ def run_mcmc(
     }
     sampler = sampler_aliases.get(sampler, sampler)
 
+    if coarse_grain_config is None:
+        cg_config = CoarseGrainConfig()
+    elif isinstance(coarse_grain_config, dict):
+        cg_config = CoarseGrainConfig(**coarse_grain_config)
+    else:
+        cg_config = coarse_grain_config
+
     # Keep true_psd on the original data scale. Any standardisation applied
     # to the observed data is tracked separately via the scaling_factor and
     # consistently undone inside ArviZ conversion before comparisons.
@@ -141,6 +157,7 @@ def run_mcmc(
 
     # Handle raw timeseries input - standardize automatically
     processed_data = None
+    freq_weights = None
 
     if isinstance(data, (Timeseries, MultivariateTimeseries)):
         # Standardize the raw timeseries for numerical stability
@@ -202,6 +219,42 @@ def run_mcmc(
                 "Frequency truncation removed all data points. Check fmin/fmax."
             )
 
+    if isinstance(processed_data, Periodogram) and cg_config.enabled:
+        spec = compute_binning_structure(
+            processed_data.freqs,
+            f_transition=cg_config.f_transition,
+            n_log_bins=cg_config.n_log_bins,
+            f_min=cg_config.f_min,
+            f_max=cg_config.f_max,
+        )
+
+        selection_mask = spec.selection_mask
+        power_selected = np.asarray(processed_data.power[selection_mask])
+        freqs_selected = processed_data.freqs[selection_mask]
+        power_coarse, weights = apply_coarse_graining_univar(
+            power_selected, spec, freqs_selected
+        )
+
+        processed_data = Periodogram(
+            spec.f_coarse,
+            power_coarse,
+            scaling_factor=processed_data.scaling_factor,
+            weights=weights,
+        )
+        freq_weights = weights.astype(np.float32)
+
+        if scaled_true_psd is not None:
+            try:
+                true_selected = np.asarray(scaled_true_psd)[selection_mask]
+                true_coarse, _ = apply_coarse_graining_univar(
+                    true_selected, spec, freqs_selected
+                )
+                scaled_true_psd = true_coarse
+            except Exception:
+                logger.warning(
+                    "Could not coarse-grain provided true_psd; leaving unchanged."
+                )
+
     # Create model based on processed data type
     if isinstance(processed_data, Periodogram):
         # Univariate case
@@ -260,6 +313,7 @@ def run_mcmc(
             else 1.0
         ),  # Pass scaling info to sampler
         true_psd=scaled_true_psd,
+        freq_weights=freq_weights,
         **kwargs,
     )
 
@@ -296,6 +350,7 @@ def create_sampler(
     adaptation_window: int = 50,
     scaling_factor: float = 1.0,
     true_psd: Optional[jnp.ndarray] = None,
+    freq_weights: Optional[np.ndarray] = None,
     **kwargs,
 ):
     """Factory function to create appropriate sampler."""
@@ -317,6 +372,7 @@ def create_sampler(
         "compute_lnz": compute_lnz,
         "scaling_factor": scaling_factor,
         "true_psd": true_psd,
+        "freq_weights": freq_weights,
     }
 
     if isinstance(data, Periodogram):

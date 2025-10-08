@@ -45,6 +45,7 @@ def bayesian_model(
     lnspline_basis: jnp.ndarray,
     penalty_matrix: jnp.ndarray,
     ln_parametric: jnp.ndarray,
+    freq_weights: jnp.ndarray,
     alpha_phi,
     beta_phi,
     alpha_delta,
@@ -64,7 +65,13 @@ def bayesian_model(
     )
 
     weights = block["weights"]
-    lnl = log_likelihood(weights, log_pdgrm, lnspline_basis, ln_parametric)
+    lnl = log_likelihood(
+        weights,
+        log_pdgrm,
+        lnspline_basis,
+        ln_parametric,
+        freq_weights,
+    )
     numpyro.factor("ln_likelihood", lnl)
 
 
@@ -145,6 +152,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             self.basis_matrix,
             self.penalty_matrix,
             self.log_parametric,
+            self.freq_weights,
             self.config.alpha_phi,
             self.config.beta_phi,
             self.config.alpha_delta,
@@ -198,6 +206,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             lnspline_basis=self.basis_matrix,
             penalty_matrix=self.penalty_matrix,
             ln_parametric=self.log_parametric,
+            freq_weights=self.freq_weights,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,
             alpha_delta=self.config.alpha_delta,

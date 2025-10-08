@@ -48,9 +48,18 @@ def whittle_likelihood_arrays(
     log_delta_sq: jnp.ndarray,  # (n_freq, n_dim)
     theta_re: jnp.ndarray,  # (n_freq, n_theta)
     theta_im: jnp.ndarray,  # (n_freq, n_theta)
+    freq_weights: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Multivariate Whittle likelihood for Cholesky PSD parameterization - JIT version."""
-    sum_log_det = -jnp.sum(log_delta_sq)
+    if freq_weights is None:
+        freq_weights = jnp.ones(
+            log_delta_sq.shape[0], dtype=log_delta_sq.dtype
+        )
+    else:
+        freq_weights = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
+    freq_weights = freq_weights.reshape((-1, 1))
+
+    sum_log_det = -jnp.sum(freq_weights * log_delta_sq)
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
 
     if Z_re.shape[2] > 0:
@@ -68,7 +77,7 @@ def whittle_likelihood_arrays(
 
     numerator = u_re**2 + u_im**2
     internal = numerator * exp_neg_log_delta
-    tmp2 = -jnp.sum(internal)
+    tmp2 = -jnp.sum(freq_weights * internal)
     return sum_log_det + tmp2
 
 
@@ -77,6 +86,7 @@ def multivariate_psplines_model(
     y_im: jnp.ndarray,  # FFT imaginary parts
     Z_re: jnp.ndarray,  # Design matrix real parts
     Z_im: jnp.ndarray,  # Design matrix imaginary parts
+    freq_weights: jnp.ndarray,
     all_bases,
     all_penalties,
     alpha_phi: float = 1.0,
@@ -153,7 +163,14 @@ def multivariate_psplines_model(
 
     # Likelihood using individual arrays
     log_likelihood = whittle_likelihood_arrays(
-        y_re, y_im, Z_re, Z_im, log_delta_sq, theta_re, theta_im
+        y_re,
+        y_im,
+        Z_re,
+        Z_im,
+        log_delta_sq,
+        theta_re,
+        theta_im,
+        freq_weights,
     )
     numpyro.factor("likelihood", log_likelihood)
 
@@ -251,6 +268,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             self.y_im,
             self.Z_re,
             self.Z_im,
+            self.freq_weights,
             # Remove these lines:
             # self.n_freq,
             # self.n_channels,
@@ -368,6 +386,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             y_im=self.y_im,
             Z_re=self.Z_re,
             Z_im=self.Z_im,
+            freq_weights=self.freq_weights,
             all_bases=self.all_bases,
             all_penalties=self.all_penalties,
             alpha_phi=self.config.alpha_phi,

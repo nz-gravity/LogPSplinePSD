@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..datatypes import MultivarFFT
+from ..datatypes.multivar import EmpiricalPSD
+from ..plotting import plot_psd_matrix
+from .multivar import apply_coarse_graining_multivar_fft
 from .preprocess import CoarseGrainSpec, apply_coarse_graining_univar
 
 
@@ -118,3 +122,115 @@ def plot_coarse_grain_weights(
 
     fig.tight_layout()
     return fig, ax
+
+
+def _empirical_to_ci(emp: EmpiricalPSD, show_coherence: bool) -> dict:
+    n_channels = emp.psd.shape[1]
+    ci: dict = {"psd": {}}
+    for i in range(n_channels):
+        diag = emp.psd[:, i, i].real
+        ci["psd"][(i, i)] = (diag, diag, diag)
+
+    if show_coherence:
+        coh_dict = {}
+        for i in range(1, n_channels):
+            for j in range(i):
+                coh_vals = emp.coherence[:, i, j]
+                coh_dict[(i, j)] = (coh_vals, coh_vals, coh_vals)
+        ci["coh"] = coh_dict
+    else:
+        re_dict = {}
+        im_dict = {}
+        for i in range(n_channels):
+            for j in range(i):
+                re_vals = emp.psd[:, i, j].real
+                im_vals = emp.psd[:, i, j].imag
+                re_dict[(i, j)] = (re_vals, re_vals, re_vals)
+                im_dict[(i, j)] = (im_vals, im_vals, im_vals)
+        ci["re"] = re_dict
+        ci["im"] = im_dict
+    return ci
+
+
+def plot_coarse_vs_original_multivar(
+    fft: MultivarFFT,
+    spec: CoarseGrainSpec,
+    *,
+    show_coherence: bool = True,
+    transition_freq: float | None = None,
+    channel_labels: Sequence[str] | None = None,
+) -> tuple[plt.Figure, Tuple[np.ndarray, np.ndarray], np.ndarray]:
+    """Compare multivariate FFT data before/after coarse graining.
+
+    Produces a two-panel figure using :func:`plot_psd_matrix` for the original
+    and coarse-grained empirical PSD matrices. The coarse-grained FFT is
+    generated via :func:`apply_coarse_graining_multivar_fft`, and per-bin weights
+    are returned for downstream use (e.g. likelihood weighting).
+    """
+
+    coarse_result = apply_coarse_graining_multivar_fft(fft, spec)
+
+    empirical_full = MultivarFFT.get_empirical_psd(
+        fft.y_re, fft.y_im, scaling=fft.scaling_factor, fs=fft.fs
+    )
+    empirical_coarse = MultivarFFT.get_empirical_psd(
+        coarse_result.fft.y_re,
+        coarse_result.fft.y_im,
+        scaling=coarse_result.fft.scaling_factor,
+        fs=coarse_result.fft.fs,
+    )
+
+    ci_full = _empirical_to_ci(empirical_full, show_coherence)
+    ci_coarse = _empirical_to_ci(empirical_coarse, show_coherence)
+
+    n_channels = empirical_full.psd.shape[1]
+    fig = plt.figure(figsize=(7.8 * n_channels, 3.9 * n_channels))
+    subfigs = fig.subfigures(1, 2, wspace=0.08)
+
+    axes_full = subfigs[0].subplots(n_channels, n_channels)
+    axes_coarse = subfigs[1].subplots(n_channels, n_channels)
+
+    plot_psd_matrix(
+        ci_dict=ci_full,
+        freq=empirical_full.freq,
+        empirical_psd=None,
+        true_psd=None,
+        channel_labels=channel_labels,
+        show_coherence=show_coherence,
+        diag_yscale="log",
+        xscale="linear",
+        fig=subfigs[0],
+        axes=axes_full,
+        save=False,
+    )
+
+    plot_psd_matrix(
+        ci_dict=ci_coarse,
+        freq=empirical_coarse.freq,
+        empirical_psd=None,
+        true_psd=None,
+        channel_labels=channel_labels,
+        show_coherence=show_coherence,
+        diag_yscale="log",
+        xscale="linear",
+        fig=subfigs[1],
+        axes=axes_coarse,
+        save=False,
+    )
+
+    if transition_freq is not None:
+        for ax_grid in (axes_full, axes_coarse):
+            for ax_row in np.atleast_2d(ax_grid):
+                for ax in np.atleast_1d(ax_row):
+                    if ax.axison:
+                        ax.axvline(
+                            transition_freq,
+                            color="gray",
+                            linestyle="--",
+                            alpha=0.6,
+                        )
+
+    subfigs[0].suptitle("Original (full resolution)", fontsize=14)
+    subfigs[1].suptitle("Coarse-grained", fontsize=14)
+    fig.tight_layout()
+    return fig, (axes_full, axes_coarse), coarse_result.weights

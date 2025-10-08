@@ -30,6 +30,8 @@ class MultivarFFT:
     n_dim: int
     scaling_factor: Optional[float] = 1.0  # Track the PSD scaling factor
     fs: float = field(default=1.0, repr=False)
+    bin_weights: Optional[np.ndarray] = None
+    csd_sums: Optional[np.ndarray] = None
 
     @classmethod
     def compute_fft(
@@ -159,14 +161,52 @@ class MultivarFFT:
 
     @property
     def empirical_psd(self) -> "EmpiricalPSD":
+        if self.csd_sums is not None and self.bin_weights is not None:
+            return self.get_empirical_psd(
+                self.y_re,
+                self.y_im,
+                self.scaling_factor,
+                self.fs,
+                csd_sums=self.csd_sums,
+                bin_weights=self.bin_weights,
+                freq=self.freq,
+            )
         return self.get_empirical_psd(
             self.y_re, self.y_im, self.scaling_factor, self.fs
         )
 
     @staticmethod
     def get_empirical_psd(
-        y_re, y_im, scaling=1.0, fs: float = 1
+        y_re,
+        y_im,
+        scaling=1.0,
+        fs: float = 1,
+        *,
+        csd_sums: np.ndarray | None = None,
+        bin_weights: np.ndarray | None = None,
+        freq: np.ndarray | None = None,
     ) -> "EmpiricalPSD":
+        if csd_sums is not None:
+            csd_sums = np.asarray(csd_sums, dtype=np.complex128)
+            if bin_weights is None:
+                raise ValueError("bin_weights must be provided with csd_sums")
+            weights = np.asarray(bin_weights, dtype=np.float64)
+            if freq is None:
+                raise ValueError("freq must be provided with csd_sums")
+            psd = np.divide(
+                csd_sums,
+                weights[:, None, None],
+                out=np.zeros_like(csd_sums),
+                where=weights[:, None, None] > 0,
+            )
+            psd *= scaling
+            coh = _get_coherence(psd)
+            return EmpiricalPSD(
+                freq=np.asarray(freq),
+                psd=psd,
+                coherence=coh,
+            )
+
         y_re = np.array(y_re, dtype=np.float64)
         y_im = np.array(y_im, dtype=np.float64)
         n_freq, n_dim = y_re.shape
@@ -179,9 +219,9 @@ class MultivarFFT:
 
         S *= scaling
         coh = _get_coherence(S)
-        freq = np.fft.fftfreq(2 * n_freq, 1 / fs)[:n_freq]
+        freq_out = np.fft.fftfreq(2 * n_freq, 1 / fs)[:n_freq]
         return EmpiricalPSD(
-            freq=freq,
+            freq=freq_out,
             psd=S,
             coherence=coh,
         )

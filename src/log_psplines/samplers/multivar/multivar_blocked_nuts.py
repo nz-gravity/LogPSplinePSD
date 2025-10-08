@@ -185,6 +185,112 @@ def _blocked_channel_model(
     )
 
 
+def _blocked_channel_model_binned(
+    channel_index: int,
+    csd_sums: jnp.ndarray,
+    bin_weights: jnp.ndarray,
+    basis_delta: jnp.ndarray,
+    penalty_delta: jnp.ndarray,
+    basis_theta: jnp.ndarray,
+    penalty_theta: jnp.ndarray,
+    alpha_phi: float,
+    beta_phi: float,
+    alpha_delta: float,
+    beta_delta: float,
+) -> None:
+    """NumPyro model for a single block using aggregated CSD sufficient statistics."""
+
+    channel_label = f"{channel_index}"
+    delta_block = sample_pspline_block(
+        delta_name=f"delta_{channel_label}",
+        phi_name=f"phi_delta_{channel_label}",
+        weights_name=f"weights_delta_{channel_label}",
+        penalty_matrix=penalty_delta,
+        alpha_phi=alpha_phi,
+        beta_phi=beta_phi,
+        alpha_delta=alpha_delta,
+        beta_delta=beta_delta,
+    )
+    log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
+    exp_neg_log_delta = jnp.exp(-log_delta_sq)
+
+    n_bins = log_delta_sq.shape[0]
+    theta_count = channel_index
+
+    if theta_count > 0:
+        theta_re_components = []
+        theta_im_components = []
+        for theta_idx in range(theta_count):
+            theta_prefix = f"theta_re_{channel_label}_{theta_idx}"
+            theta_re_block = sample_pspline_block(
+                delta_name=f"delta_{theta_prefix}",
+                phi_name=f"phi_{theta_prefix}",
+                weights_name=f"weights_{theta_prefix}",
+                penalty_matrix=penalty_theta,
+                alpha_phi=alpha_phi,
+                beta_phi=beta_phi,
+                alpha_delta=alpha_delta,
+                beta_delta=beta_delta,
+            )
+            theta_re_eval = jnp.einsum(
+                "nk,k->n", basis_theta, theta_re_block["weights"]
+            )
+            theta_re_components.append(theta_re_eval)
+
+            theta_im_prefix = f"theta_im_{channel_label}_{theta_idx}"
+            theta_im_block = sample_pspline_block(
+                delta_name=f"delta_{theta_im_prefix}",
+                phi_name=f"phi_{theta_im_prefix}",
+                weights_name=f"weights_{theta_im_prefix}",
+                penalty_matrix=penalty_theta,
+                alpha_phi=alpha_phi,
+                beta_phi=beta_phi,
+                alpha_delta=alpha_delta,
+                beta_delta=beta_delta,
+            )
+            theta_im_eval = jnp.einsum(
+                "nk,k->n", basis_theta, theta_im_block["weights"]
+            )
+            theta_im_components.append(theta_im_eval)
+
+        theta_re = jnp.stack(theta_re_components, axis=1)
+        theta_im = jnp.stack(theta_im_components, axis=1)
+        theta_complex = theta_re + 1j * theta_im
+    else:
+        theta_re = jnp.zeros((n_bins, 0))
+        theta_im = jnp.zeros((n_bins, 0))
+        theta_complex = jnp.zeros((n_bins, 0), dtype=jnp.complex64)
+
+    csd_local = jnp.asarray(csd_sums, dtype=jnp.complex64)
+    diag_power = csd_local[:, channel_index, channel_index].real
+
+    if theta_count > 0:
+        lower_slice = csd_local[:, :channel_index, :channel_index]
+        cross_vec = csd_local[:, :channel_index, channel_index]
+        theta_conj = jnp.conj(theta_complex)
+
+        cross_term = jnp.real(jnp.sum(theta_conj * cross_vec, axis=1))
+        quad_term = jnp.real(
+            jnp.einsum("bi,bij,bj->b", theta_conj, lower_slice, theta_complex)
+        )
+        residual_sum = diag_power - 2.0 * cross_term + quad_term
+    else:
+        residual_sum = diag_power
+
+    sum_log_det = -jnp.sum(bin_weights * log_delta_sq)
+    quadratic_term = -jnp.sum(exp_neg_log_delta * residual_sum)
+    log_likelihood = sum_log_det + quadratic_term
+
+    numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
+    numpyro.deterministic(f"log_delta_sq_{channel_label}", log_delta_sq)
+    if theta_count > 0:
+        numpyro.deterministic(f"theta_re_{channel_label}", theta_re)
+        numpyro.deterministic(f"theta_im_{channel_label}", theta_im)
+    numpyro.deterministic(
+        f"log_likelihood_block_{channel_label}", log_likelihood
+    )
+
+
 @dataclass
 class MultivarBlockedNUTSConfig(SamplerConfig):
     """Configuration for the blocked multivariate NUTS sampler.
@@ -249,6 +355,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             if self.n_theta > 0
             else jnp.zeros((0, 0))
         )
+        self._use_coarse_stats = self.csd_sums is not None
 
     @property
     def sampler_type(self) -> str:
@@ -286,10 +393,15 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         total_runtime = 0.0
 
+        block_model = (
+            _blocked_channel_model_binned
+            if self._use_coarse_stats
+            else _blocked_channel_model
+        )
         vi_setup = prepare_block_vi(
             self,
             rng_key=self.rng_key,
-            block_model=_blocked_channel_model,
+            block_model=block_model,
         )
         self._vi_diagnostics = vi_setup.diagnostics
         if self._vi_diagnostics and self.config.outdir is not None:
@@ -319,17 +431,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             theta_start = channel_index * (channel_index - 1) // 2
             theta_count = channel_index
 
-            if theta_count > 0:
-                Z_re_block = self.Z_re[
-                    :, channel_index, theta_start : theta_start + theta_count
-                ]
-                Z_im_block = self.Z_im[
-                    :, channel_index, theta_start : theta_start + theta_count
-                ]
-            else:
-                Z_re_block = jnp.zeros((self.n_freq, 0))
-                Z_im_block = jnp.zeros((self.n_freq, 0))
-
             kernel_kwargs = dict(
                 target_accept_prob=self.config.target_accept_prob,
                 max_tree_depth=self.config.max_tree_depth,
@@ -339,7 +440,54 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             if init_strategy is not None:
                 kernel_kwargs["init_strategy"] = init_strategy
 
-            kernel = NUTS(_blocked_channel_model, **kernel_kwargs)
+            if self._use_coarse_stats:
+                kernel = NUTS(_blocked_channel_model_binned, **kernel_kwargs)
+                model_args = (
+                    channel_index,
+                    self.csd_sums,
+                    self.bin_weights,
+                    delta_basis,
+                    delta_penalty,
+                    self._theta_basis,
+                    self._theta_penalty,
+                    self.config.alpha_phi,
+                    self.config.beta_phi,
+                    self.config.alpha_delta,
+                    self.config.beta_delta,
+                )
+            else:
+                if theta_count > 0:
+                    Z_re_block = self.Z_re[
+                        :,
+                        channel_index,
+                        theta_start : theta_start + theta_count,
+                    ]
+                    Z_im_block = self.Z_im[
+                        :,
+                        channel_index,
+                        theta_start : theta_start + theta_count,
+                    ]
+                else:
+                    Z_re_block = jnp.zeros((self.n_freq, 0))
+                    Z_im_block = jnp.zeros((self.n_freq, 0))
+
+                kernel = NUTS(_blocked_channel_model, **kernel_kwargs)
+                model_args = (
+                    channel_index,
+                    self.y_re[:, channel_index],
+                    self.y_im[:, channel_index],
+                    Z_re_block,
+                    Z_im_block,
+                    self.freq_weights,
+                    delta_basis,
+                    delta_penalty,
+                    self._theta_basis,
+                    self._theta_penalty,
+                    self.config.alpha_phi,
+                    self.config.beta_phi,
+                    self.config.alpha_delta,
+                    self.config.beta_delta,
+                )
 
             mcmc = MCMC(
                 kernel,
@@ -353,20 +501,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             start_time = time.time()
             mcmc.run(
                 mcmc_keys[channel_index],
-                channel_index,
-                self.y_re[:, channel_index],
-                self.y_im[:, channel_index],
-                Z_re_block,
-                Z_im_block,
-                self.freq_weights,
-                delta_basis,
-                delta_penalty,
-                self._theta_basis,
-                self._theta_penalty,
-                self.config.alpha_phi,
-                self.config.beta_phi,
-                self.config.alpha_delta,
-                self.config.beta_delta,
+                *model_args,
                 extra_fields=(
                     (
                         "potential_energy",

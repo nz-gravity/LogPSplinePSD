@@ -60,6 +60,15 @@ def apply_coarse_graining_multivar_fft(
     freq_low = freq_selected[spec.mask_low]
     weights_low = np.ones(freq_low.shape[0], dtype=np.float64)
 
+    fft_selected = y_re_selected + 1j * y_im_selected
+    fft_low = fft_selected[spec.mask_low]
+
+    csd_low = (
+        fft_low[:, :, None] * np.conjugate(fft_low[:, None, :])
+        if fft_low.size
+        else np.zeros((0, fft.n_dim, fft.n_dim), dtype=np.complex128)
+    )
+
     if spec.n_bins_high == 0:
         coarse_fft = MultivarFFT(
             y_re=y_re_low,
@@ -71,6 +80,8 @@ def apply_coarse_graining_multivar_fft(
             n_dim=fft.n_dim,
             scaling_factor=fft.scaling_factor,
             fs=fft.fs,
+            bin_weights=weights_low,
+            csd_sums=csd_low,
         )
         return CoarseGrainedMultivar(coarse_fft, weights_low)
 
@@ -78,31 +89,28 @@ def apply_coarse_graining_multivar_fft(
     if counts.shape[0] != spec.n_bins_high:
         raise ValueError("bin_counts length must match n_bins_high")
 
-    positive_mask = counts > 0
-    counts_positive = counts[positive_mask]
-
-    if counts_positive.size == 0:
-        coarse_fft = MultivarFFT(
-            y_re=y_re_low,
-            y_im=y_im_low,
-            Z_re=Z_re_low,
-            Z_im=Z_im_low,
-            freq=freq_low,
-            n_freq=freq_low.shape[0],
-            n_dim=fft.n_dim,
-            scaling_factor=fft.scaling_factor,
-            fs=fft.fs,
-        )
-        return CoarseGrainedMultivar(coarse_fft, weights_low)
-
     y_re_high = y_re_selected[spec.mask_high]
     y_im_high = y_im_selected[spec.mask_high]
     Z_re_high = Z_re_selected[spec.mask_high]
     Z_im_high = Z_im_selected[spec.mask_high]
-    freq_high_means = spec.f_coarse[spec.n_low :][positive_mask]
+    freq_high_means = spec.f_coarse[spec.n_low :]
 
     # Compute cumulative offsets for slicing the high-frequency members.
     offsets = np.concatenate([[0], np.cumsum(counts)])
+
+    # Complex FFT vectors for stats aggregation
+    fft_high = fft_selected[spec.mask_high]
+
+    outer_high = (
+        fft_high[:, :, None] * np.conjugate(fft_high[:, None, :])
+        if fft_high.size
+        else np.zeros((0, fft.n_dim, fft.n_dim), dtype=np.complex128)
+    )
+    csd_high = np.zeros(
+        (spec.n_bins_high, fft.n_dim, fft.n_dim), dtype=np.complex128
+    )
+    if outer_high.size:
+        np.add.at(csd_high, spec.bin_indices, outer_high)
 
     y_re_bins = []
     y_im_bins = []
@@ -129,8 +137,9 @@ def apply_coarse_graining_multivar_fft(
     Z_re_coarse = np.concatenate((Z_re_low, Z_re_bins_arr), axis=0)
     Z_im_coarse = np.concatenate((Z_im_low, Z_im_bins_arr), axis=0)
     weights_coarse = np.concatenate(
-        (weights_low, counts_positive.astype(np.float64)), axis=0
+        (weights_low, counts.astype(np.float64)), axis=0
     )
+    csd_coarse = np.concatenate((csd_low, csd_high), axis=0)
 
     coarse_fft = MultivarFFT(
         y_re=y_re_coarse,
@@ -142,6 +151,8 @@ def apply_coarse_graining_multivar_fft(
         n_dim=fft.n_dim,
         scaling_factor=fft.scaling_factor,
         fs=fft.fs,
+        bin_weights=weights_coarse,
+        csd_sums=csd_coarse,
     )
     return CoarseGrainedMultivar(coarse_fft, weights_coarse)
 

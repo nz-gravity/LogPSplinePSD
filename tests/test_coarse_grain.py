@@ -127,6 +127,14 @@ def test_coarse_grain_multivar_fft():
     assert np.all(result.weights[: spec.n_low] == 1.0)
     total_expected = spec.mask_low.sum() + spec.bin_counts.sum()
     assert np.isclose(result.weights.sum(), total_expected)
+    assert result.fft.csd_sums.shape == (result.fft.n_freq, n_dim, n_dim)
+    assert result.fft.bin_weights.shape[0] == result.fft.n_freq
+    selected = (y_re + 1j * y_im)[spec.selection_mask]
+    expected_diag = np.abs(selected[spec.mask_low, 0]) ** 2
+    np.testing.assert_allclose(
+        result.fft.csd_sums[: spec.n_low, 0, 0].real, expected_diag
+    )
+    assert np.allclose(result.weights, result.fft.bin_weights)
     plt.close("all")
 
 

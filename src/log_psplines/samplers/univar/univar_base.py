@@ -28,11 +28,12 @@ def log_likelihood(
     log_pdgrm: jnp.ndarray,
     basis_matrix: jnp.ndarray,
     log_parametric: jnp.ndarray,
+    freq_weights: jnp.ndarray,
 ) -> jnp.ndarray:
     """Univariate log-likelihood function."""
     ln_model = build_spline(basis_matrix, weights, log_parametric)
     integrand = ln_model + jnp.exp(log_pdgrm - ln_model)
-    return -0.5 * jnp.sum(integrand)
+    return -0.5 * jnp.sum(freq_weights * integrand)
 
 
 class UnivarBaseSampler(BaseSampler):
@@ -62,6 +63,18 @@ class UnivarBaseSampler(BaseSampler):
             self.spline_model.basis, dtype=jnp.float32
         )
         self.log_parametric = jnp.array(self.spline_model.log_parametric_model)
+        if self.config.freq_weights is not None:
+            freq_weights = jnp.asarray(
+                self.config.freq_weights,
+                dtype=self.log_pdgrm.dtype,
+            )
+            if freq_weights.shape[0] != self.log_pdgrm.shape[0]:
+                raise ValueError(
+                    "Frequency weights must match periodogram length"
+                )
+            self.freq_weights = freq_weights
+        else:
+            self.freq_weights = jnp.ones_like(self.log_pdgrm)
 
     @property
     def data_type(self) -> str:

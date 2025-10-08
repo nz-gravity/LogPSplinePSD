@@ -17,8 +17,10 @@ class CoarseGrainSpec:
     bin_indices: np.ndarray
     sort_indices: np.ndarray
     bin_counts: np.ndarray
+    bin_widths: np.ndarray
     n_low: int
     n_bins_high: int
+    fine_spacing: float
 
 
 def compute_binning_structure(
@@ -58,18 +60,32 @@ def compute_binning_structure(
 
     n_low = int(mask_low.sum())
 
+    if selected_freqs.size < 2:
+        fine_spacing = 1.0
+    else:
+        freq_diffs = np.diff(selected_freqs)
+        positive_diffs = freq_diffs[freq_diffs > 0]
+        if positive_diffs.size == 0:
+            raise ValueError(
+                "Selected frequencies must contain increasing values."
+            )
+        fine_spacing = float(np.median(positive_diffs))
+
     high_freqs = selected_freqs[mask_high]
     if high_freqs.size == 0:
         # No high-frequency bins; only low frequencies retained
         return CoarseGrainSpec(
             f_coarse=selected_freqs,
+            selection_mask=in_range,
             mask_low=mask_low,
             mask_high=mask_high,
             bin_indices=np.array([], dtype=np.int32),
             sort_indices=np.array([], dtype=np.int32),
             bin_counts=np.array([], dtype=np.int32),
+            bin_widths=np.array([], dtype=np.float64),
             n_low=n_low,
             n_bins_high=0,
+            fine_spacing=fine_spacing,
         )
 
     # Build logarithmic bin edges for the high-frequency region
@@ -99,6 +115,9 @@ def compute_binning_structure(
     bin_sums = np.zeros(n_bins_high, dtype=np.float64)
     np.add.at(bin_sums, sorted_bins, high_freqs[sort_indices])
     bin_means = bin_sums / np.where(bin_counts > 0, bin_counts, 1)
+    raw_widths = edges[unique_bins + 1] - edges[unique_bins]
+    min_width = np.array(fine_spacing, dtype=np.float64)
+    bin_widths = np.maximum(raw_widths, min_width)
 
     f_coarse = np.concatenate((selected_freqs[:n_low], bin_means))
 
@@ -110,14 +129,17 @@ def compute_binning_structure(
         bin_indices=reindexed,
         sort_indices=sort_indices,
         bin_counts=bin_counts,
+        bin_widths=bin_widths,
         n_low=n_low,
         n_bins_high=n_bins_high,
+        fine_spacing=fine_spacing,
     )
 
 
 def apply_coarse_graining_univar(
     power: np.ndarray,
     spec: CoarseGrainSpec,
+    freqs: Optional[np.ndarray] = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Apply coarse graining to a power array using ``CoarseGrainSpec``."""
 
@@ -127,6 +149,21 @@ def apply_coarse_graining_univar(
         raise ValueError("power length must match selected frequency count")
 
     power_low = power[spec.mask_low]
+
+    fine_spacing = spec.fine_spacing
+    if freqs is not None:
+        freqs = np.asarray(freqs, dtype=np.float64)
+        if freqs.ndim != 1:
+            raise ValueError("freqs must be 1-D when provided")
+        if freqs.size != spec.selection_mask.sum():
+            raise ValueError(
+                "freqs length must match selected frequency count"
+            )
+        if freqs.size >= 2:
+            diff_freqs = np.diff(freqs)
+            positive_diffs = diff_freqs[diff_freqs > 0]
+            if positive_diffs.size > 0:
+                fine_spacing = float(np.median(positive_diffs))
 
     if spec.n_bins_high == 0:
         weights = np.ones_like(power_low, dtype=np.float64)
@@ -149,11 +186,29 @@ def apply_coarse_graining_univar(
         where=counts > 0,
     )
 
+    bin_widths = spec.bin_widths.astype(np.float64, copy=False)
+    if bin_widths.size != spec.n_bins_high:
+        raise ValueError("bin_widths length must equal n_bins_high")
+
+    if fine_spacing <= 0:
+        raise ValueError("fine_spacing must be positive")
+
+    new_weights_high = bin_widths / fine_spacing
+    # Renormalize to match exact count of fine frequencies for consistency
+    total_expected = float(spec.bin_counts.sum())
+    total_current = (
+        float(new_weights_high.sum()) if new_weights_high.size else 0.0
+    )
+    if total_current > 0 and total_expected > 0:
+        new_weights_high *= total_expected / total_current
+    # Do not enforce monotonicity in weights used for likelihood; small
+    # non-monotonicity due to edge quantization is expected and correct.
+
     power_coarse = np.concatenate((power_low, means))
     weights = np.concatenate(
         (
             np.ones_like(power_low, dtype=np.float64),
-            counts,
+            new_weights_high,
         )
     )
     return power_coarse, weights

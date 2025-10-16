@@ -294,3 +294,4 @@ cython_debug/
 .vscode/
 *venv
 /AGENTS.md
+*docs/paper_draft.tex

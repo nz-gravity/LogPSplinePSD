@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Tuple, Union
 
 import arviz as az
 import jax.numpy as jnp
@@ -24,6 +24,125 @@ from .samplers import (
     NUTSConfig,
     NUTSSampler,
 )
+
+
+def _unpack_true_psd(
+    true_psd: Union[
+        None,
+        np.ndarray,
+        Tuple[np.ndarray, np.ndarray],
+        list,
+        dict,
+    ]
+) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    """Return (freq, psd) pair from accepted true_psd formats."""
+    if true_psd is None:
+        return None, None
+
+    if isinstance(true_psd, dict):
+        freq = true_psd.get("freq")
+        psd = true_psd.get("psd")
+        if psd is None:
+            raise ValueError(
+                "true_psd dict must contain a 'psd' entry (optional 'freq')."
+            )
+        freq_arr = np.asarray(freq) if freq is not None else None
+        return freq_arr, np.asarray(psd)
+
+    if isinstance(true_psd, (tuple, list)) and len(true_psd) == 2:
+        freq = (
+            np.asarray(true_psd[0]) if true_psd[0] is not None else None
+        )
+        return freq, np.asarray(true_psd[1])
+
+    return None, np.asarray(true_psd)
+
+
+def _interp_psd_array(
+    psd: np.ndarray,
+    freq_src: np.ndarray,
+    freq_tgt: np.ndarray,
+) -> np.ndarray:
+    """Interpolate PSD arrays (real or complex) onto target frequencies."""
+    if psd.shape[0] != freq_src.size:
+        raise ValueError("psd and freq_src must have matching lengths.")
+
+    freq_src = np.asarray(freq_src)
+    freq_tgt = np.asarray(freq_tgt)
+    flat = psd.reshape(psd.shape[0], -1)
+    real_part = np.vstack(
+        [
+            np.interp(
+                freq_tgt,
+                freq_src,
+                flat[:, idx].real,
+                left=flat[0, idx].real,
+                right=flat[-1, idx].real,
+            )
+            for idx in range(flat.shape[1])
+        ]
+    ).T
+
+    if np.iscomplexobj(psd):
+        imag_part = np.vstack(
+            [
+                np.interp(
+                    freq_tgt,
+                    freq_src,
+                    flat[:, idx].imag,
+                    left=flat[0, idx].imag,
+                    right=flat[-1, idx].imag,
+                )
+                for idx in range(flat.shape[1])
+            ]
+        ).T
+        resampled = real_part + 1j * imag_part
+    else:
+        resampled = real_part
+
+    return resampled.reshape((freq_tgt.size,) + psd.shape[1:])
+
+
+def _prepare_true_psd_for_freq(
+    true_psd: Union[
+        None,
+        np.ndarray,
+        Tuple[np.ndarray, np.ndarray],
+        list,
+        dict,
+    ],
+    freq_target: Optional[np.ndarray],
+) -> Optional[np.ndarray]:
+    """Resample supplied true PSD onto the target frequency grid."""
+    if true_psd is None or freq_target is None:
+        return true_psd
+
+    freq_src, psd_array = _unpack_true_psd(true_psd)
+    if psd_array is None:
+        return None
+
+    psd_array = np.asarray(psd_array)
+    freq_target = np.asarray(freq_target)
+
+    if psd_array.shape[0] == freq_target.size:
+        return psd_array
+
+    if freq_src is None:
+        logger.warning(
+            "true_psd length (%d) does not match target frequencies (%d); "
+            "assuming uniform spacing for interpolation."
+            % (psd_array.shape[0], freq_target.size)
+        )
+        freq_src = np.linspace(freq_target[0], freq_target[-1], psd_array.shape[0])
+    else:
+        freq_src = np.asarray(freq_src)
+
+    order = np.argsort(freq_src)
+    freq_src_sorted = freq_src[order]
+    psd_sorted = psd_array[order, ...]
+
+    resampled = _interp_psd_array(psd_sorted, freq_src_sorted, freq_target)
+    return resampled
 
 
 def run_mcmc(
@@ -65,6 +184,7 @@ def run_mcmc(
     vi_posterior_draws: int = 256,
     vi_progress_bar: Optional[bool] = None,
     coarse_grain_config: Optional[CoarseGrainConfig | dict] = None,
+    n_time_blocks: int = 1,
     # MH specific
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
@@ -79,9 +199,10 @@ def run_mcmc(
         Input data for analysis. When timeseries data is provided, it will be
         automatically standardized for numerical stability, and posterior samples
         will be rescaled to original units.
-    sampler : {"nuts", "mh", "multivar_blocked_nuts"}
-        MCMC sampler type. Multivariate analysis supports "nuts" and
-        "multivar_blocked_nuts".
+    sampler : {"nuts", "mh", "multivar_blocked_nuts", "multivar_nuts"}
+        MCMC sampler type. Multivariate analysis supports the blocked sampler
+        ("multivar_blocked_nuts", the default) and the coupled sampler
+        ("multivar_nuts").
     n_samples : int, default=1000
         Number of posterior samples to collect
     n_warmup : int, default=500
@@ -124,6 +245,10 @@ def run_mcmc(
         Maximum tree depth for NUTS
     coarse_grain_config : CoarseGrainConfig or dict, optional
         Optional frequency coarse-graining configuration for univariate periodograms.
+    n_time_blocks : int, default=1
+        Number of equal-length segments used to form block-averaged (Wishart)
+        periodogram statistics for multivariate timeseries input. ``1`` reduces
+        to the standard full-length periodogram.
     target_accept_rate : float, default=0.44
         Target acceptance rate for MH
     adaptation_window : int, default=50
@@ -140,6 +265,7 @@ def run_mcmc(
     # Map any supported aliases onto canonical sampler names
     sampler_aliases = {
         "multivar-blocked-nuts": "multivar_blocked_nuts",
+        "multivar-nuts": "multivar_nuts",
     }
     sampler = sampler_aliases.get(sampler, sampler)
 
@@ -169,9 +295,20 @@ def run_mcmc(
                 fmin=fmin, fmax=fmax
             )
         else:  # MultivariateTimeseries
-            processed_data = standardized_ts.to_cross_spectral_density(
-                fmin=fmin, fmax=fmax
-            )
+            if sampler == "multivar_nuts":
+                if n_time_blocks != 1 and verbose:
+                    logger.warning(
+                        "multivar_nuts ignores n_time_blocks; using the full-periodogram likelihood."
+                    )
+                processed_data = standardized_ts.to_cross_spectral_density(
+                    fmin=fmin, fmax=fmax
+                )
+            else:
+                processed_data = standardized_ts.to_wishart_stats(
+                    n_blocks=n_time_blocks,
+                    fmin=fmin,
+                    fmax=fmax,
+                )
 
         if verbose:
             logger.info(
@@ -180,7 +317,11 @@ def run_mcmc(
 
         # Validate sampler for standardized data
         if isinstance(processed_data, MultivarFFT):
-            allowed_multivar_samplers = {"nuts", "multivar_blocked_nuts"}
+            allowed_multivar_samplers = {
+                "nuts",
+                "multivar_blocked_nuts",
+                "multivar_nuts",
+            }
             if sampler not in allowed_multivar_samplers:
                 if verbose:
                     allowed = ", ".join(sorted(allowed_multivar_samplers))
@@ -255,6 +396,21 @@ def run_mcmc(
                     "Could not coarse-grain provided true_psd; leaving unchanged."
                 )
 
+    # Align true_psd (if provided) to the processed frequency grid
+    if scaled_true_psd is not None and processed_data is not None:
+        if isinstance(processed_data, Periodogram):
+            freq_target = np.asarray(processed_data.freqs)
+        elif isinstance(processed_data, MultivarFFT):
+            freq_target = np.asarray(processed_data.freq)
+        else:
+            freq_target = None
+        if freq_target is not None:
+            aligned_true_psd = _prepare_true_psd_for_freq(
+                scaled_true_psd, freq_target
+            )
+            if aligned_true_psd is not None:
+                scaled_true_psd = aligned_true_psd
+
     # Create model based on processed data type
     if isinstance(processed_data, Periodogram):
         # Univariate case
@@ -328,6 +484,8 @@ def create_sampler(
         "mh",
         "multivar_blocked_nuts",
         "multivar-blocked-nuts",
+        "multivar_nuts",
+        "multivar-nuts",
     ] = "nuts",
     num_chains: int = 1,
     alpha_phi: float = 1.0,
@@ -357,6 +515,7 @@ def create_sampler(
 
     sampler_aliases = {
         "multivar-blocked-nuts": "multivar_blocked_nuts",
+        "multivar-nuts": "multivar_nuts",
     }
     sampler_type = sampler_aliases.get(sampler_type, sampler_type)
 
@@ -408,7 +567,7 @@ def create_sampler(
 
     elif isinstance(data, MultivarFFT):
         # Multivariate case (NUTS only for now)
-        allowed_types = {"nuts", "multivar_blocked_nuts"}
+        allowed_types = {"nuts", "multivar_blocked_nuts", "multivar_nuts"}
         if sampler_type not in allowed_types:
             if verbose:
                 allowed = ", ".join(sorted(allowed_types))
@@ -416,6 +575,13 @@ def create_sampler(
                     f"Multivariate analysis supports {allowed}. Using NUTS instead of {sampler_type}"
                 )
             sampler_type = "nuts"
+
+        if sampler_type == "nuts":
+            if verbose:
+                logger.info(
+                    "Mapping multivariate sampler 'nuts' to 'multivar_blocked_nuts'."
+                )
+            sampler_type = "multivar_blocked_nuts"
 
         if sampler_type == "multivar_blocked_nuts":
             config = MultivarBlockedNUTSConfig(

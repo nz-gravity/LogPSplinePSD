@@ -318,17 +318,27 @@ def _create_multivar_inference_data(
     observed_fft_im_rescaled = fft_y_im * np.sqrt(config.scaling_factor)
 
     # Compute and rescale observed cross-spectral density (periodogram)
-    y_re = observed_fft_re_rescaled
-    y_im = observed_fft_im_rescaled
-    n_freq, n_dim = y_re.shape
-    observed_csd = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex64)
-    for i in range(n_dim):
-        for j in range(n_dim):
-            observed_csd[:, i, j] = (y_re[:, i] + 1j * y_im[:, i]) * np.conj(
-                y_re[:, j] + 1j * y_im[:, j]
-            )
-            observed_csd[:, i, j] *= config.scaling_factor
-    observed_csd = np.real(observed_csd)
+    if fft_data.u_re is not None and fft_data.u_im is not None:
+        u_re = np.asarray(fft_data.u_re, dtype=np.float64)
+        u_im = np.asarray(fft_data.u_im, dtype=np.float64)
+        u_complex = u_re + 1j * u_im
+        Y = np.einsum("fkc,fkd->fcd", u_complex, np.conj(u_complex))
+        nu_scale = float(max(int(getattr(fft_data, "nu", 1)), 1))
+        observed_csd = np.real(Y) / nu_scale
+        observed_csd = observed_csd.astype(np.float64, copy=False)
+        observed_csd *= config.scaling_factor
+    else:
+        y_re = observed_fft_re_rescaled
+        y_im = observed_fft_im_rescaled
+        n_freq, n_dim = y_re.shape
+        observed_csd = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex64)
+        for i in range(n_dim):
+            for j in range(n_dim):
+                observed_csd[:, i, j] = (
+                    y_re[:, i] + 1j * y_im[:, i]
+                ) * np.conj(y_re[:, j] + 1j * y_im[:, j])
+                observed_csd[:, i, j] *= config.scaling_factor
+        observed_csd = np.real(observed_csd)
 
     if config.verbose:
         logger.info(

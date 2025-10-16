@@ -8,6 +8,7 @@ from typing import Dict, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..datatypes.multivar import EmpiricalPSD
 from .base import COLORS, PlotConfig, safe_plot, setup_plot_style
 from .pdgrm import plot_pdgrm
 from .psd_matrix import plot_psd_matrix
@@ -187,7 +188,7 @@ def plot_vi_initial_psd_matrix(
     *,
     outfile: str,
     freq: np.ndarray,
-    empirical_psd: Optional[np.ndarray] = None,
+    empirical_psd: Optional[EmpiricalPSD] = None,
     true_psd: Optional[np.ndarray] = None,
     psd_quantiles: Optional[Dict[str, np.ndarray]] = None,
     coherence_quantiles: Optional[Dict[str, np.ndarray]] = None,

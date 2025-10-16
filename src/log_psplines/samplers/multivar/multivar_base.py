@@ -15,6 +15,7 @@ import morphZ
 import numpy as np
 
 from ...datatypes import MultivarFFT
+from ...datatypes.multivar import EmpiricalPSD, _get_coherence
 from ...logger import logger
 from ...plotting import (
     plot_psd_matrix,
@@ -109,21 +110,42 @@ class MultivarBaseSampler(BaseSampler):
         self.all_penalties = all_penalties
 
         # FFT data arrays for JAX operations
-        self.y_re = jnp.array(self.fft_data.y_re)
-        self.y_im = jnp.array(self.fft_data.y_im)
-        self.Z_re = jnp.array(self.fft_data.Z_re)
-        self.Z_im = jnp.array(self.fft_data.Z_im)
-        self.freq = jnp.array(self.fft_data.freq)
+        self.y_re = jnp.array(self.fft_data.y_re, dtype=jnp.float32)
+        self.y_im = jnp.array(self.fft_data.y_im, dtype=jnp.float32)
+        self.Z_re = jnp.array(self.fft_data.Z_re, dtype=jnp.float32)
+        self.Z_im = jnp.array(self.fft_data.Z_im, dtype=jnp.float32)
+        self.freq = jnp.array(self.fft_data.freq, dtype=jnp.float32)
+
+        if self.fft_data.u_re is not None and self.fft_data.u_im is not None:
+            self.u_re = jnp.array(self.fft_data.u_re, dtype=jnp.float32)
+            self.u_im = jnp.array(self.fft_data.u_im, dtype=jnp.float32)
+            self.nu = int(self.fft_data.nu)
+        else:
+            # Degenerate (single-periodogram) representation
+            y_complex = np.asarray(self.fft_data.y_re) + 1j * np.asarray(
+                self.fft_data.y_im
+            )
+            u_complex = np.zeros(
+                (self.n_freq, self.n_channels, self.n_channels),
+                dtype=np.complex64,
+            )
+            u_complex[:, :, 0] = y_complex
+            self.u_re = jnp.array(u_complex.real, dtype=jnp.float32)
+            self.u_im = jnp.array(u_complex.imag, dtype=jnp.float32)
+            self.nu = 1
 
         # Create MultivarFFT object for JAX functions
         self.data_jax = MultivarFFT(
-            y_re=self.y_re,
-            y_im=self.y_im,
-            Z_re=self.Z_re,
-            Z_im=self.Z_im,
-            freq=self.freq,
+            y_re=np.asarray(self.y_re),
+            y_im=np.asarray(self.y_im),
+            Z_re=np.asarray(self.Z_re),
+            Z_im=np.asarray(self.Z_im),
+            freq=np.asarray(self.freq),
             n_freq=self.n_freq,
             n_dim=self.n_channels,
+            u_re=np.asarray(self.u_re),
+            u_im=np.asarray(self.u_im),
+            nu=self.nu,
         )
 
         if self.config.verbose:
@@ -158,7 +180,20 @@ class MultivarBaseSampler(BaseSampler):
                     f"Could not create VI plots: {e}, \nFull trace:\n{traceback.format_exc()}"
                 )
 
-    def _compute_empirical_psd(self) -> np.ndarray:
+    def _compute_empirical_psd(self) -> EmpiricalPSD:
+        if self.fft_data.u_re is not None and self.fft_data.u_im is not None:
+            u_re = np.asarray(self.fft_data.u_re, dtype=np.float64)
+            u_im = np.asarray(self.fft_data.u_im, dtype=np.float64)
+            u_complex = u_re + 1j * u_im
+            Y = np.einsum("fkc,fkd->fcd", u_complex, np.conj(u_complex))
+            norm_factor = 2 * np.pi
+            nu_scale = float(max(int(self.fft_data.nu), 1))
+            S = (2.0 / nu_scale) * Y / norm_factor
+            S *= float(self.fft_data.scaling_factor or 1.0)
+            coherence = _get_coherence(S)
+            freq = np.array(self.freq, dtype=np.float64)
+            return EmpiricalPSD(freq=freq, psd=S, coherence=coherence)
+
         return MultivarFFT.get_empirical_psd(
             np.array(self.fft_data.y_re, dtype=np.float64),
             np.array(self.fft_data.y_im, dtype=np.float64),
@@ -167,7 +202,7 @@ class MultivarBaseSampler(BaseSampler):
         )
 
     def _save_vi_diagnostics(
-        self, *, empirical_psd: Optional[np.ndarray] = None
+        self, *, empirical_psd: Optional[EmpiricalPSD] = None
     ) -> None:
         """Persist VI diagnostics if available."""
         vi_diag = getattr(self, "_vi_diagnostics", None)

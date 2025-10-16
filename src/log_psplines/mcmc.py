@@ -33,7 +33,7 @@ def _unpack_true_psd(
         Tuple[np.ndarray, np.ndarray],
         list,
         dict,
-    ]
+    ],
 ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     """Return (freq, psd) pair from accepted true_psd formats."""
     if true_psd is None:
@@ -50,9 +50,7 @@ def _unpack_true_psd(
         return freq_arr, np.asarray(psd)
 
     if isinstance(true_psd, (tuple, list)) and len(true_psd) == 2:
-        freq = (
-            np.asarray(true_psd[0]) if true_psd[0] is not None else None
-        )
+        freq = np.asarray(true_psd[0]) if true_psd[0] is not None else None
         return freq, np.asarray(true_psd[1])
 
     return None, np.asarray(true_psd)
@@ -129,11 +127,13 @@ def _prepare_true_psd_for_freq(
 
     if freq_src is None:
         logger.warning(
-            "true_psd length (%d) does not match target frequencies (%d); "
-            "assuming uniform spacing for interpolation."
-            % (psd_array.shape[0], freq_target.size)
+            "true_psd length {} does not match target frequencies {}; assuming uniform spacing for interpolation.",
+            psd_array.shape[0],
+            freq_target.size,
         )
-        freq_src = np.linspace(freq_target[0], freq_target[-1], psd_array.shape[0])
+        freq_src = np.linspace(
+            freq_target[0], freq_target[-1], psd_array.shape[0]
+        )
     else:
         freq_src = np.asarray(freq_src)
 
@@ -151,7 +151,7 @@ def run_mcmc(
         "nuts",
         "mh",
         "multivar_blocked_nuts",
-        "multivar-blocked-nuts",
+        "multivar_nuts",
     ] = "nuts",
     n_samples: int = 1000,
     n_warmup: int = 500,
@@ -263,10 +263,7 @@ def run_mcmc(
     """
 
     # Map any supported aliases onto canonical sampler names
-    sampler_aliases = {
-        "multivar-blocked-nuts": "multivar_blocked_nuts",
-        "multivar-nuts": "multivar_nuts",
-    }
+    sampler_aliases = {}
     sampler = sampler_aliases.get(sampler, sampler)
 
     if coarse_grain_config is None:
@@ -483,9 +480,7 @@ def create_sampler(
         "nuts",
         "mh",
         "multivar_blocked_nuts",
-        "multivar-blocked-nuts",
         "multivar_nuts",
-        "multivar-nuts",
     ] = "nuts",
     num_chains: int = 1,
     alpha_phi: float = 1.0,
@@ -513,10 +508,7 @@ def create_sampler(
 ):
     """Factory function to create appropriate sampler."""
 
-    sampler_aliases = {
-        "multivar-blocked-nuts": "multivar_blocked_nuts",
-        "multivar-nuts": "multivar_nuts",
-    }
+    sampler_aliases = {}
     sampler_type = sampler_aliases.get(sampler_type, sampler_type)
 
     common_config_kwargs = {

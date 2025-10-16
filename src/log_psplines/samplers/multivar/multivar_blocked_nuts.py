@@ -220,8 +220,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
     For ``p`` channels the sampler iterates ``j = 0,…,p-1`` and runs a separate
     NumPyro/NUTS inference for the j‑th block using :func:`_blocked_channel_model`.
-    The block observes ``(y_re[:, j], y_im[:, j])`` and uses as regressors the
-    previous channels' Fourier coefficients encoded in ``Z_{·, j, :j}``.
+    The block observes the Wishart replicates ``(u_re[:, j, :], u_im[:, j, :])``
+    and regresses against the corresponding lower-triangular components from
+    previous channels.
 
     The per‑block posterior draws are merged into global deterministic arrays:
     - ``log_delta_sq`` with shape ``(draw, freq, p)``

@@ -37,9 +37,10 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     )
     zero_weights = jnp.zeros(spline_model.weights.shape)  # model == zeros
     optim_weights = spline_model.weights
+    freq_weights = jnp.ones(spline_model.basis.shape[0])  # model == ones
 
     # compute LnL at init and optimized weights
-    lnl_args = (ln_pdgrm, spline_model.basis, zero_param)
+    lnl_args = (ln_pdgrm, spline_model.basis, zero_param, freq_weights)
     lnl_initial = log_likelihood(zero_weights, *lnl_args)
     lnl_final = log_likelihood(optim_weights, *lnl_args)
     runtime = float(time.time()) - t0

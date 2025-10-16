@@ -1,16 +1,15 @@
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..datatypes.multivar import EmpiricalPSD
+from ..datatypes.multivar import EmpiricalPSD, _get_coherence
 from ..logger import logger
 from .base import (
-    COLORS,
-    PlotConfig,
     compute_coherence_ci,
     compute_cross_spectra_ci,
     extract_plotting_data,
     setup_plot_style,
-    validate_plotting_data,
 )
 
 # Setup default plot styling
@@ -50,26 +49,22 @@ def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
 
                 # Initialize PSD matrix
                 psd_matrix = np.zeros(
-                    (n_freq, n_channels, n_channels), dtype=complex
+                    (n_freq, n_channels, n_channels), dtype=np.complex128
                 )
 
-                # For now, assume diagonal structure (auto-PSDs only)
-                # This is a simplified version - in practice, you might need
-                # more sophisticated logic to handle cross-channel relationships
                 for i in range(n_channels):
-                    # Compute periodogram for each channel
-                    # This is a placeholder - you may need to adjust based on
-                    # how your multivariate data is actually structured
-                    channel_fft = (
-                        fft_complex[:, i]
-                        if fft_complex.ndim > 1
-                        else fft_complex
-                    )
-                    psd_matrix[:, i, i] = np.abs(channel_fft) ** 2
+                    for j in range(n_channels):
+                        psd_matrix[:, i, j] = fft_complex[:, i] * np.conj(
+                            fft_complex[:, j]
+                        )
 
-                # Create EmpiricalPSD object
+                coherence = _get_coherence(psd_matrix)
+
                 return EmpiricalPSD(
-                    freq=freq, psd=psd_matrix, channels=channels
+                    freq=freq,
+                    psd=psd_matrix,
+                    coherence=coherence,
+                    channels=channels,
                 )
 
         return None
@@ -198,9 +193,35 @@ def plot_psd_matrix(
     channel_labels: list[str] | str | None = None,
     diag_yscale: str = "log",
     xscale: str = "linear",
+    label: Optional[str] = None,
+    fig: Optional[plt.Figure] = None,
+    ax: Optional[np.ndarray] = None,
+    save: bool = True,
+    close: Optional[bool] = None,
 ):
     """
     Publication-ready multivariate PSD matrix plotter with adaptive per-axis y-labels.
+
+    Returns
+    -------
+    (matplotlib.figure.Figure, np.ndarray)
+        Figure and axes handle for further customisation or additional overlays.
+
+    Parameters
+    ----------
+    label : str, optional
+        Legend label used for the median PSD curve. Useful when overlaying
+        multiple results on the same axes.
+    fig, ax : optional
+        Existing Matplotlib figure and axes to reuse for overlaid plots. When
+        provided, the function skips layout adjustments and automatic saving.
+    save : bool, default=True
+        Whether to save the figure to ``outdir/filename`` when the figure is
+        created inside this function.
+    close : bool, optional
+        Whether to close the figure at the end. Defaults to ``save`` when the
+        figure is created inside this function; otherwise the figure is left
+        open.
     """
     # ----- Extract/validate -----
     if idata is not None:
@@ -267,11 +288,25 @@ def plot_psd_matrix(
         raise ValueError("Could not infer number of channels.")
 
     # ----- Figure -----
-    fig, axes = plt.subplots(
-        n_channels, n_channels, figsize=(3.9 * n_channels, 3.9 * n_channels)
-    )
-    if n_channels == 1:
-        axes = np.array([[axes]])
+    fig_provided = fig is not None and ax is not None
+    if fig_provided:
+        axes = np.asarray(ax)
+        if axes.shape != (n_channels, n_channels):
+            raise ValueError(
+                f"Provided axes have shape {axes.shape}, expected "
+                f"({n_channels}, {n_channels})."
+            )
+        created_fig = False
+    else:
+        fig, axes = plt.subplots(
+            n_channels,
+            n_channels,
+            figsize=(3.9 * n_channels, 3.9 * n_channels),
+        )
+        if n_channels == 1:
+            axes = np.array([[axes]])
+        created_fig = True
+    axes = np.asarray(axes)
 
     # ----- Plot -----
     for i in range(n_channels):
@@ -293,8 +328,22 @@ def plot_psd_matrix(
                         label="Empirical",
                         zorder=-5,
                     )
-                ax.fill_between(freq, q05, q95, color="tab:blue", alpha=0.25)
-                ax.plot(freq, q50, color="tab:blue", lw=1.5, label="Median")
+                line_kwargs = {"lw": 1.5}
+                if label is not None:
+                    line_kwargs["label"] = label
+                else:
+                    line_kwargs.update(
+                        {"color": "tab:blue", "label": "Median"}
+                    )
+                line = ax.plot(freq, q50, **line_kwargs)[0]
+                ax.fill_between(
+                    freq,
+                    q05,
+                    q95,
+                    color=line.get_color(),
+                    alpha=0.25,
+                    zorder=line.get_zorder() - 1,
+                )
                 if true_psd is not None:
                     ax.plot(
                         freq,
@@ -386,11 +435,27 @@ def plot_psd_matrix(
             if i == n_channels - 1:
                 ax.set_xlabel("Frequency [Hz]", fontsize=11)
 
-    _format_text(
-        axes, channel_labels=channel_labels, show_coherence=show_coherence
+    if created_fig:
+        _format_text(
+            axes, channel_labels=channel_labels, show_coherence=show_coherence
+        )
+        plt.subplots_adjust(
+            left=0.12,
+            right=0.98,
+            top=0.98,
+            bottom=0.10,
+            wspace=0.30,
+            hspace=0.30,
+        )
+
+    effective_save = save and created_fig and outdir is not None and filename
+    if effective_save:
+        fig.savefig(f"{outdir}/{filename}", dpi=dpi, bbox_inches="tight")
+
+    close_fig = (
+        close if close is not None else (created_fig and effective_save)
     )
-    plt.subplots_adjust(
-        left=0.12, right=0.98, top=0.98, bottom=0.10, wspace=0.30, hspace=0.30
-    )
-    plt.savefig(f"{outdir}/{filename}", dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
+    if close_fig:
+        plt.close(fig)
+
+    return fig, axes

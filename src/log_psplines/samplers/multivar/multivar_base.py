@@ -15,7 +15,11 @@ import morphZ
 import numpy as np
 
 from ...datatypes import MultivarFFT
-from ...datatypes.multivar import EmpiricalPSD, _get_coherence
+from ...datatypes.multivar import (
+    EmpiricalPSD,
+    _get_coherence,
+    _interp_complex_matrix,
+)
 from ...logger import logger
 from ...plotting import (
     plot_psd_matrix,
@@ -39,39 +43,6 @@ def batch_spline_eval(
         Batch of spline evaluations (n_samples, n_freq)
     """
     return jnp.sum(basis[None, :, :] * weights_batch[:, None, :], axis=-1)
-
-
-@jax.jit
-def whittle_likelihood(
-    y_re: jnp.ndarray,  # (n_freq, n_dim)
-    y_im: jnp.ndarray,  # (n_freq, n_dim)
-    Z_re: jnp.ndarray,  # (n_freq, n_dim, n_theta)
-    Z_im: jnp.ndarray,  # (n_freq, n_dim, n_theta)
-    log_delta_sq: jnp.ndarray,  # (n_freq, n_dim)
-    theta_re: jnp.ndarray,  # (n_freq, n_theta)
-    theta_im: jnp.ndarray,  # (n_freq, n_theta)
-) -> jnp.ndarray:
-    """Multivariate Whittle likelihood for Cholesky PSD parameterization."""
-    sum_log_det = -jnp.sum(log_delta_sq)
-    exp_neg_log_delta = jnp.exp(-log_delta_sq)
-
-    if Z_re.shape[2] > 0:
-        Z_theta_re = jnp.einsum("fij,fj->fi", Z_re, theta_re) - jnp.einsum(
-            "fij,fj->fi", Z_im, theta_im
-        )
-        Z_theta_im = jnp.einsum("fij,fj->fi", Z_re, theta_im) + jnp.einsum(
-            "fij,fj->fi", Z_im, theta_re
-        )
-        u_re = y_re - Z_theta_re
-        u_im = y_im - Z_theta_im
-    else:
-        u_re = y_re
-        u_im = y_im
-
-    numerator = u_re**2 + u_im**2
-    internal = numerator * exp_neg_log_delta
-    tmp2 = -jnp.sum(internal)
-    return sum_log_det + tmp2
 
 
 class MultivarBaseSampler(BaseSampler):
@@ -112,41 +83,10 @@ class MultivarBaseSampler(BaseSampler):
         # FFT data arrays for JAX operations
         self.y_re = jnp.array(self.fft_data.y_re, dtype=jnp.float32)
         self.y_im = jnp.array(self.fft_data.y_im, dtype=jnp.float32)
-        self.Z_re = jnp.array(self.fft_data.Z_re, dtype=jnp.float32)
-        self.Z_im = jnp.array(self.fft_data.Z_im, dtype=jnp.float32)
         self.freq = jnp.array(self.fft_data.freq, dtype=jnp.float32)
-
-        if self.fft_data.u_re is not None and self.fft_data.u_im is not None:
-            self.u_re = jnp.array(self.fft_data.u_re, dtype=jnp.float32)
-            self.u_im = jnp.array(self.fft_data.u_im, dtype=jnp.float32)
-            self.nu = int(self.fft_data.nu)
-        else:
-            # Degenerate (single-periodogram) representation
-            y_complex = np.asarray(self.fft_data.y_re) + 1j * np.asarray(
-                self.fft_data.y_im
-            )
-            u_complex = np.zeros(
-                (self.n_freq, self.n_channels, self.n_channels),
-                dtype=np.complex64,
-            )
-            u_complex[:, :, 0] = y_complex
-            self.u_re = jnp.array(u_complex.real, dtype=jnp.float32)
-            self.u_im = jnp.array(u_complex.imag, dtype=jnp.float32)
-            self.nu = 1
-
-        # Create MultivarFFT object for JAX functions
-        self.data_jax = MultivarFFT(
-            y_re=np.asarray(self.y_re),
-            y_im=np.asarray(self.y_im),
-            Z_re=np.asarray(self.Z_re),
-            Z_im=np.asarray(self.Z_im),
-            freq=np.asarray(self.freq),
-            n_freq=self.n_freq,
-            n_dim=self.n_channels,
-            u_re=np.asarray(self.u_re),
-            u_im=np.asarray(self.u_im),
-            nu=self.nu,
-        )
+        self.u_re = jnp.array(self.fft_data.u_re, dtype=jnp.float32)
+        self.u_im = jnp.array(self.fft_data.u_im, dtype=jnp.float32)
+        self.nu = int(self.fft_data.nu)
 
         if self.config.verbose:
             logger.info(
@@ -181,24 +121,34 @@ class MultivarBaseSampler(BaseSampler):
                 )
 
     def _compute_empirical_psd(self) -> EmpiricalPSD:
-        if self.fft_data.u_re is not None and self.fft_data.u_im is not None:
-            u_re = np.asarray(self.fft_data.u_re, dtype=np.float64)
-            u_im = np.asarray(self.fft_data.u_im, dtype=np.float64)
-            u_complex = u_re + 1j * u_im
-            Y = np.einsum("fkc,fkd->fcd", u_complex, np.conj(u_complex))
-            norm_factor = 2 * np.pi
-            nu_scale = float(max(int(self.fft_data.nu), 1))
-            S = (2.0 / nu_scale) * Y / norm_factor
-            S *= float(self.fft_data.scaling_factor or 1.0)
-            coherence = _get_coherence(S)
-            freq = np.array(self.freq, dtype=np.float64)
-            return EmpiricalPSD(freq=freq, psd=S, coherence=coherence)
+        if (
+            getattr(self.fft_data, "raw_psd", None) is not None
+            and getattr(self.fft_data, "raw_freq", None) is not None
+        ):
+            freq = np.asarray(self.fft_data.raw_freq, dtype=np.float64)
+            psd = np.asarray(self.fft_data.raw_psd, dtype=np.complex128)
+            if psd.shape[0] != self.n_freq:
+                psd = _interp_complex_matrix(freq, np.array(self.freq), psd)
+                freq = np.array(self.freq, dtype=np.float64)
+            coherence = _get_coherence(psd)
+            channels = np.arange(psd.shape[1])
+            return EmpiricalPSD(
+                freq=freq, psd=psd, coherence=coherence, channels=channels
+            )
 
-        return MultivarFFT.get_empirical_psd(
-            np.array(self.fft_data.y_re, dtype=np.float64),
-            np.array(self.fft_data.y_im, dtype=np.float64),
-            fs=self.fft_data.fs,
-            scaling=self.fft_data.scaling_factor,
+        u_re = np.asarray(self.fft_data.u_re, dtype=np.float64)
+        u_im = np.asarray(self.fft_data.u_im, dtype=np.float64)
+        u_complex = u_re + 1j * u_im
+        Y = np.einsum("fkc,fkd->fcd", u_complex, np.conj(u_complex))
+        norm_factor = 2 * np.pi
+        nu_scale = float(max(int(self.fft_data.nu), 1))
+        S = (2.0 / nu_scale) * Y / norm_factor
+        S *= float(self.fft_data.scaling_factor or 1.0)
+        coherence = _get_coherence(S)
+        freq = np.array(self.freq, dtype=np.float64)
+        channels = np.arange(S.shape[1])
+        return EmpiricalPSD(
+            freq=freq, psd=S, coherence=coherence, channels=channels
         )
 
     def _save_vi_diagnostics(

@@ -52,7 +52,7 @@ else:
 
     idata = run_mcmc(
         data=fft_data,
-        sampler="multivar-blocked-nuts",
+        sampler="multivar_blocked_nuts",
         n_samples=1000,
         n_warmup=1000,
         n_knots=20,

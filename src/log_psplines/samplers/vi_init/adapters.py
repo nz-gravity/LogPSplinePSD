@@ -334,10 +334,9 @@ def compute_vi_artifacts_multivar(
     return sampler._run_vi_initialisation(
         model=model,
         model_args=(
-            sampler.y_re,
-            sampler.y_im,
-            sampler.Z_re,
-            sampler.Z_im,
+            sampler.u_re,
+            sampler.u_im,
+            sampler.nu,
             sampler.all_bases,
             sampler.all_penalties,
             sampler.config.alpha_phi,

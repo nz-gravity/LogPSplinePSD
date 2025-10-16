@@ -125,13 +125,26 @@ class MultivariateLogPSplines:
             knots, degree, n_freq, diffMatrixOrder, grid_points=freq_norm
         )
 
+        use_wishart = fft_data.u_re is not None and fft_data.u_im is not None
+        if use_wishart:
+            u_re = jnp.asarray(fft_data.u_re)
+            u_im = jnp.asarray(fft_data.u_im)
+            u_complex = u_re + 1j * u_im
+            Y = jnp.einsum("fkc,fkd->fcd", u_complex, jnp.conj(u_complex))
+            nu_scale = float(max(int(fft_data.nu), 1))
+        else:
+            Y = None
+            nu_scale = 1.0
+
         # Create diagonal models (one per channel)
         diagonal_models = []
         for i in range(n_channels):
-            # Create pseudo-periodogram for initialization (using diagonal of empirical PSD)
-            empirical_diag_power = (
-                fft_data.y_re[:, i] ** 2 + fft_data.y_im[:, i] ** 2
-            )
+            if use_wishart:
+                empirical_diag_power = jnp.real(Y[:, i, i]) / nu_scale
+            else:
+                empirical_diag_power = (
+                    fft_data.y_re[:, i] ** 2 + fft_data.y_im[:, i] ** 2
+                )
             empirical_diag_power = jnp.maximum(
                 empirical_diag_power, 1e-12
             )  # Avoid log(0)
@@ -180,11 +193,13 @@ class MultivariateLogPSplines:
             theta_idx = 0
             for i in range(1, n_channels):
                 for j in range(i):
-                    # Average cross-spectrum magnitude across all channel pairs and frequencies
-                    csd_ij = (
-                        fft_data.y_re[:, i] * fft_data.y_re[:, j]
-                        + fft_data.y_im[:, i] * fft_data.y_im[:, j]
-                    )
+                    if use_wishart:
+                        csd_ij = jnp.abs(Y[:, i, j]) / nu_scale
+                    else:
+                        csd_ij = (
+                            fft_data.y_re[:, i] * fft_data.y_re[:, j]
+                            + fft_data.y_im[:, i] * fft_data.y_im[:, j]
+                        )
                     empirical_csd = empirical_csd.at[:].add(jnp.abs(csd_ij))
                     theta_idx += 1
             empirical_csd = (

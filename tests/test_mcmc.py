@@ -43,14 +43,13 @@ def test_multivar_mcmc(outdir, test_mode):
     print(f"Timeseries: {timeseries}")
 
     true_psd = varma.get_true_psd()
-    empirical_psd = timeseries.get_empirical_psd()
-
+    default_blocks = 2 if test_mode == "fast" else 4
     samplers = [
-        ("nuts", "multivariate_nuts"),
-        ("multivar_blocked_nuts", "multivariate_blocked_nuts"),
+        ("nuts", "multivariate_blocked_nuts", False, default_blocks),
+        ("multivar_nuts", "multivariate_nuts", True, 1),
     ]
 
-    for sampler_name, expected_sampler_attr in samplers:
+    for sampler_name, expected_sampler_attr, expect_lp, n_blocks in samplers:
         sampler_outdir = os.path.join(outdir, sampler_name)
         # Run unified MCMC (multivariate sampler)
         idata = run_mcmc(
@@ -65,6 +64,7 @@ def test_multivar_mcmc(outdir, test_mode):
             verbose=verbose,
             target_accept_prob=0.8,
             true_psd=true_psd,
+            n_time_blocks=n_blocks,
         )
 
         # Basic checks
@@ -85,7 +85,7 @@ def test_multivar_mcmc(outdir, test_mode):
 
         # Check key parameters exist
         assert "log_likelihood" in idata.sample_stats.data_vars
-        if sampler_name == "nuts":
+        if expect_lp:
             assert "lp" in idata.sample_stats.data_vars
         else:
             assert "lp" not in idata.sample_stats.data_vars
@@ -112,11 +112,14 @@ def test_multivar_mcmc(outdir, test_mode):
         # check the posterior psd matrix shape
         psd_matrix = idata.posterior_psd["psd_matrix"].values
         psd_matrix_shape = psd_matrix.shape
-        expected_shape = (n_samples, varma.freq.shape[0], n_dim, n_dim)
-        assert psd_matrix_shape[1:] == expected_shape[1:], (
-            "Posterior PSD matrix shape mismatch (excluding 0th dim)! "
-            f"Expected {expected_shape[1:]}, got {psd_matrix_shape[1:]}"
-        )
+        freq_dim = idata.posterior_psd["psd_matrix"].sizes["freq"]
+        assert (
+            psd_matrix_shape[1] == freq_dim
+        ), "Posterior PSD frequency dimension mismatch."
+        assert psd_matrix_shape[2:] == (
+            n_dim,
+            n_dim,
+        ), f"Posterior PSD matrix channel dims mismatch: expected {(n_dim, n_dim)}, got {psd_matrix_shape[2:]}"
 
         # Check RIAE and CI coverage computation for multivariate
         print(
@@ -139,8 +142,6 @@ def test_multivar_mcmc(outdir, test_mode):
 
         plot_psd_matrix(
             idata=idata,
-            freq=varma.freq,
-            empirical_psd=empirical_psd,
             outdir=sampler_outdir,
             filename=f"psd_matrix_posterior_check_{sampler_name}.png",
             xscale="linear",

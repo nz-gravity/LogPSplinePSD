@@ -19,6 +19,9 @@ class MultivarFFT:
         freq: Frequency grid (n_freq,)
         n_freq: Number of frequencies
         n_dim: Number of channels
+        u_re: Real part of block-averaged eigen components (n_freq, n_dim, n_dim)
+        u_im: Imag part of block-averaged eigen components (n_freq, n_dim, n_dim)
+        nu: Degrees of freedom (number of averaged blocks)
     """
 
     y_re: np.ndarray
@@ -28,6 +31,9 @@ class MultivarFFT:
     freq: np.ndarray
     n_freq: int
     n_dim: int
+    u_re: Optional[np.ndarray] = None
+    u_im: Optional[np.ndarray] = None
+    nu: int = 1
     scaling_factor: Optional[float] = 1.0  # Track the PSD scaling factor
     fs: float = field(default=1.0, repr=False)
 
@@ -89,6 +95,99 @@ class MultivarFFT:
             freq=freqs,
             n_freq=len(freqs),
             n_dim=n_dim,
+            u_re=None,
+            u_im=None,
+            nu=1,
+            scaling_factor=scaling_factor,
+            fs=fs,
+        )
+
+    @classmethod
+    def compute_wishart(
+        cls,
+        x: np.ndarray,
+        fs: float,
+        n_blocks: int,
+        fmin: Optional[float] = None,
+        fmax: Optional[float] = None,
+        scaling_factor: Optional[float] = 1.0,
+    ) -> "MultivarFFT":
+        """
+        Compute block-averaged (Wishart) FFT statistics for multivariate series.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Input time series (n_time, n_channels)
+        fs : float
+            Sampling frequency
+        n_blocks : int
+            Number of non-overlapping blocks to average. Must divide n_time.
+        fmin, fmax : float, optional
+            Optional frequency truncation applied after blocking.
+        scaling_factor : float, optional
+            PSD scaling factor carried through sampling.
+        """
+        if n_blocks < 1:
+            raise ValueError("n_blocks must be positive.")
+
+        n_time, n_dim = x.shape
+        if n_time % n_blocks != 0:
+            raise ValueError(
+                f"n_time={n_time} must be divisible by n_blocks={n_blocks}."
+            )
+
+        block_len = n_time // n_blocks
+        if block_len <= n_dim:
+            raise ValueError(
+                "Block length must exceed number of channels for FFT stability."
+            )
+
+        x_centered = x - np.mean(x, axis=0)
+        blocks = x_centered.reshape(n_blocks, block_len, n_dim)
+
+        block_ffts = np.fft.fft(blocks, axis=1) / np.sqrt(block_len)
+        freqs = np.fft.fftfreq(block_len, 1 / fs)
+        pos_mask = freqs > 0
+        freqs = freqs[pos_mask]
+        block_ffts = block_ffts[:, pos_mask, :]
+
+        if fmin is not None or fmax is not None:
+            fmin_eff = freqs[0] if fmin is None else max(fmin, freqs[0])
+            fmax_eff = freqs[-1] if fmax is None else min(fmax, freqs[-1])
+            if fmax_eff < fmin_eff:
+                raise ValueError(
+                    f"Invalid frequency bounds: fmin={fmin_eff}, fmax={fmax_eff}."
+                )
+            freq_mask = (freqs >= fmin_eff) & (freqs <= fmax_eff)
+            freqs = freqs[freq_mask]
+            block_ffts = block_ffts[:, freq_mask, :]
+
+        mean_fft = np.mean(block_ffts, axis=0)
+        y_re = mean_fft.real
+        y_im = mean_fft.imag
+
+        Y = np.einsum("bnc,bnd->ncd", block_ffts, np.conj(block_ffts))
+        eigvals, eigvecs = np.linalg.eigh(Y)
+        eigvals = np.clip(eigvals, a_min=0.0, a_max=None)
+        sqrt_eigvals = np.sqrt(eigvals)[:, None, :]
+        U = eigvecs * sqrt_eigvals
+        u_re = U.real
+        u_im = U.imag
+
+        Z_re, Z_im = cls.compute_cholesky_design(mean_fft)
+
+        return cls(
+            y_re=y_re,
+            y_im=y_im,
+            Z_re=Z_re,
+            Z_im=Z_im,
+            freq=freqs,
+            n_freq=len(freqs),
+            n_dim=n_dim,
+            u_re=u_re,
+            u_im=u_im,
+            nu=n_blocks,
             scaling_factor=scaling_factor,
             fs=fs,
         )
@@ -100,6 +199,11 @@ class MultivarFFT:
                 f"Invalid frequency bounds supplied: fmin={fmin}, fmax={fmax}."
             )
         mask = (self.freq >= fmin) & (self.freq <= fmax)
+        u_re = None
+        u_im = None
+        if self.u_re is not None and self.u_im is not None:
+            u_re = self.u_re[mask]
+            u_im = self.u_im[mask]
         return MultivarFFT(
             y_re=self.y_re[mask],
             y_im=self.y_im[mask],
@@ -108,7 +212,11 @@ class MultivarFFT:
             freq=self.freq[mask],
             n_freq=int(np.sum(mask)),
             n_dim=self.n_dim,
+            u_re=u_re,
+            u_im=u_im,
+            nu=self.nu,
             scaling_factor=self.scaling_factor,
+            fs=self.fs,
         )
 
     @staticmethod
@@ -243,6 +351,21 @@ class MultivariateTimeseries:
         return MultivarFFT.compute_fft(
             self.y,
             fs=self.fs,
+            fmin=fmin,
+            fmax=fmax,
+            scaling_factor=self.scaling_factor,
+        )
+
+    def to_wishart_stats(
+        self,
+        n_blocks: int,
+        fmin: Optional[float] = None,
+        fmax: Optional[float] = None,
+    ) -> "MultivarFFT":
+        return MultivarFFT.compute_wishart(
+            self.y,
+            fs=self.fs,
+            n_blocks=n_blocks,
             fmin=fmin,
             fmax=fmax,
             scaling_factor=self.scaling_factor,

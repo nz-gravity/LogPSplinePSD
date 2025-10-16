@@ -249,6 +249,16 @@ def plot_psd_matrix(
     if freq is None:
         raise ValueError("Frequency array `freq` is required.")
 
+    if true_psd is not None:
+        true_psd = np.asarray(true_psd)
+        if true_psd.shape[0] != len(freq):
+            logger.warning(
+                "Skipping true PSD overlay: expected %d frequency bins, got %d.",
+                len(freq),
+                true_psd.shape[0],
+            )
+            true_psd = None
+
     if empirical_psd is not None:
         n_channels = empirical_psd.psd.shape[1]
     elif "psd" in ci_dict and len(ci_dict["psd"]) > 0:

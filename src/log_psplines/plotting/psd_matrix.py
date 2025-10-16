@@ -198,6 +198,11 @@ def plot_psd_matrix(
     channel_labels: list[str] | str | None = None,
     diag_yscale: str = "log",
     xscale: str = "linear",
+    *,
+    fig=None,
+    axes=None,
+    save: bool = True,
+    return_fig: bool = False,
 ):
     """
     Publication-ready multivariate PSD matrix plotter with adaptive per-axis y-labels.
@@ -257,9 +262,20 @@ def plot_psd_matrix(
         raise ValueError("Could not infer number of channels.")
 
     # ----- Figure -----
-    fig, axes = plt.subplots(
-        n_channels, n_channels, figsize=(3.9 * n_channels, 3.9 * n_channels)
-    )
+    created_axes = False
+    if axes is None:
+        if fig is None:
+            fig, axes = plt.subplots(
+                n_channels,
+                n_channels,
+                figsize=(3.9 * n_channels, 3.9 * n_channels),
+            )
+        else:
+            axes = fig.subplots(n_channels, n_channels)
+        created_axes = True
+    else:
+        if fig is None:
+            fig = axes.flat[0].figure
     if n_channels == 1:
         axes = np.array([[axes]])
 
@@ -379,8 +395,11 @@ def plot_psd_matrix(
     _format_text(
         axes, channel_labels=channel_labels, show_coherence=show_coherence
     )
-    plt.subplots_adjust(
+    fig.subplots_adjust(
         left=0.12, right=0.98, top=0.98, bottom=0.10, wspace=0.30, hspace=0.30
     )
-    plt.savefig(f"{outdir}/{filename}", dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
+    if save:
+        fig.savefig(f"{outdir}/{filename}", dpi=dpi, bbox_inches="tight")
+    if not return_fig and created_axes:
+        plt.close(fig)
+    return fig, axes

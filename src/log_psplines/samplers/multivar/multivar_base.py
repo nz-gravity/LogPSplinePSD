@@ -49,9 +49,18 @@ def whittle_likelihood(
     log_delta_sq: jnp.ndarray,  # (n_freq, n_dim)
     theta_re: jnp.ndarray,  # (n_freq, n_theta)
     theta_im: jnp.ndarray,  # (n_freq, n_theta)
+    freq_weights: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Multivariate Whittle likelihood for Cholesky PSD parameterization."""
-    sum_log_det = -jnp.sum(log_delta_sq)
+    if freq_weights is None:
+        freq_weights = jnp.ones(
+            log_delta_sq.shape[0], dtype=log_delta_sq.dtype
+        )
+    else:
+        freq_weights = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
+    freq_weights = freq_weights.reshape((-1, 1))
+
+    sum_log_det = -jnp.sum(freq_weights * log_delta_sq)
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
 
     if Z_re.shape[2] > 0:
@@ -69,7 +78,7 @@ def whittle_likelihood(
 
     numerator = u_re**2 + u_im**2
     internal = numerator * exp_neg_log_delta
-    tmp2 = -jnp.sum(internal)
+    tmp2 = -jnp.sum(freq_weights * internal)
     return sum_log_det + tmp2
 
 
@@ -114,6 +123,11 @@ class MultivarBaseSampler(BaseSampler):
         self.Z_re = jnp.array(self.fft_data.Z_re)
         self.Z_im = jnp.array(self.fft_data.Z_im)
         self.freq = jnp.array(self.fft_data.freq)
+        self.csd_sums = None
+        if getattr(self.fft_data, "csd_sums", None) is not None:
+            self.csd_sums = jnp.asarray(
+                self.fft_data.csd_sums, dtype=jnp.complex64
+            )
 
         # Create MultivarFFT object for JAX functions
         self.data_jax = MultivarFFT(
@@ -125,6 +139,25 @@ class MultivarBaseSampler(BaseSampler):
             n_freq=self.n_freq,
             n_dim=self.n_channels,
         )
+
+        if self.config.freq_weights is not None:
+            freq_weights = jnp.asarray(
+                self.config.freq_weights, dtype=jnp.float32
+            )
+            if freq_weights.shape[0] != self.n_freq:
+                raise ValueError(
+                    "Frequency weights must match number of coarse frequencies"
+                )
+            self.freq_weights = freq_weights
+        else:
+            self.freq_weights = jnp.ones(self.n_freq, dtype=jnp.float32)
+
+        if getattr(self.fft_data, "bin_weights", None) is not None:
+            self.bin_weights = jnp.asarray(
+                self.fft_data.bin_weights, dtype=jnp.float32
+            )
+        else:
+            self.bin_weights = None
 
         if self.config.verbose:
             logger.info(
@@ -159,6 +192,16 @@ class MultivarBaseSampler(BaseSampler):
                 )
 
     def _compute_empirical_psd(self) -> np.ndarray:
+        if getattr(self.fft_data, "csd_sums", None) is not None:
+            return MultivarFFT.get_empirical_psd(
+                None,
+                None,
+                scaling=self.fft_data.scaling_factor,
+                fs=self.fft_data.fs,
+                csd_sums=self.fft_data.csd_sums,
+                bin_weights=np.array(self.freq_weights),
+                freq=np.array(self.fft_data.freq),
+            )
         return MultivarFFT.get_empirical_psd(
             np.array(self.fft_data.y_re, dtype=np.float64),
             np.array(self.fft_data.y_im, dtype=np.float64),

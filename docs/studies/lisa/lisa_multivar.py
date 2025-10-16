@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from lisa_data import TEN_DAYS, LISAData, download
 
+from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
@@ -30,17 +31,23 @@ n_trunc = int(0.1 * len(t))
 t = t[:n_trunc]
 y = y[:n_trunc, :]
 
-# standardise y
-y = (y - np.mean(y, axis=0)) / np.std(y, axis=0)
 
 timeseries = MultivariateTimeseries(y=y, t=t)
 logger.info(timeseries)
 
-FMIN, FMAX = 5**-5, 6**-2
+FMIN, FMAX = 10**-5, 10**-1
 
 fft_data = timeseries.to_cross_spectral_density()  # fmin=FMIN, fmax=FMAX)
 logger.info(fft_data)
 
+
+cgc = CoarseGrainConfig(
+    enabled=True,
+    f_transition=10**-2,
+    n_log_bins=1000,
+    f_min=FMIN,
+    f_max=FMAX,
+)
 
 if os.path.exists(RESULT_FN) and False:
     logger.info(f"Found existing results at {RESULT_FN}, loading...")
@@ -51,7 +58,7 @@ if os.path.exists(RESULT_FN) and False:
 else:
 
     idata = run_mcmc(
-        data=fft_data,
+        data=timeseries,
         sampler="multivar-blocked-nuts",
         n_samples=1000,
         n_warmup=1000,
@@ -61,6 +68,9 @@ else:
         knot_kwargs=dict(strategy="log"),
         outdir=f"{HERE}/results/lisa",
         verbose=True,
+        fmin=FMIN,
+        fmax=FMAX,
+        coarse_grain_config=cgc,
     )
 
 logger.info(idata)

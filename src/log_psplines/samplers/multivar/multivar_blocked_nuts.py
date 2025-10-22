@@ -46,10 +46,10 @@ from .multivar_base import MultivarBaseSampler
 
 def _blocked_channel_model(
     channel_index: int,
-    y_re: jnp.ndarray,
-    y_im: jnp.ndarray,
-    Z_re: jnp.ndarray,
-    Z_im: jnp.ndarray,
+    u_re_channel: jnp.ndarray,
+    u_im_channel: jnp.ndarray,
+    u_re_prev: jnp.ndarray,
+    u_im_prev: jnp.ndarray,
     basis_delta: jnp.ndarray,
     penalty_delta: jnp.ndarray,
     basis_theta: jnp.ndarray,
@@ -58,6 +58,7 @@ def _blocked_channel_model(
     beta_phi: float,
     alpha_delta: float,
     beta_delta: float,
+    nu: int,
 ) -> None:
     """NumPyro model for a single Cholesky block (row of ``T``).
 
@@ -65,12 +66,13 @@ def _blocked_channel_model(
     ----------
     channel_index
         0‑based row index ``j`` in the Cholesky factor (channel in the data).
-    y_re, y_im
-        Real/imaginary parts of the DFT for the j‑th channel, shape ``(n_freq,)``.
-    Z_re, Z_im
-        Real/imaginary parts of the design matrix for the off‑diagonal terms of
-        row ``j``. Shape ``(n_freq, j)``. Column ``l`` corresponds to
-        ``d_l(f)`` with ``l < j``.
+    u_re_channel, u_im_channel
+        Real/imag parts of the eigenvector-weighted periodogram components for
+        the active channel, shape ``(n_freq, n_rep)``.
+    u_re_prev, u_im_prev
+        Same components for the lower-triangular predecessors,
+        shape ``(n_freq, channel_index, n_rep)``. The arrays can have zero size
+        in the second dimension when ``channel_index == 0``.
     basis_delta, penalty_delta
         P‑spline basis/penalty for ``log δ_j(f)^2``.
     basis_theta, penalty_theta
@@ -78,13 +80,16 @@ def _blocked_channel_model(
     alpha_phi, beta_phi, alpha_delta, beta_delta
         Hyperparameters for the hierarchical priors used in
         :func:`sample_pspline_block`.
+    nu
+        Degrees of freedom (number of averaged blocks) for determinant scaling.
 
     Notes
     -----
     - The likelihood implemented here corresponds to Eq. (likelihood_j) in your
-      draft: the residual is ``u_j(f) = d_j(f) − Σ_{l<j} θ_{jl}(f) d_l(f)`` and
-      the contribution to the log-likelihood is
-      ``−Σ_k log δ_j(f_k)^2 − Σ_k |u_j(f_k)|^2 / δ_j(f_k)^2`` up to constants.
+      draft: the residual is ``u_j(f) = y_j(f) − Σ_{l<j} θ_{jl}(f) y_l(f)`` with
+      ``y`` now replaced by the eigenvector-weighted replicates ``u``. The
+      contribution to the log-likelihood is
+      ``−ν Σ_k log δ_j(f_k)^2 − Σ_k ||u_j(f_k)||^2 / δ_j(f_k)^2`` up to constants.
     - Deterministic nodes record the evaluated spline fields so downstream code
       can reconstruct the PSD matrix without re-evaluating the splines.
     """
@@ -103,8 +108,9 @@ def _blocked_channel_model(
     )
     log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
 
-    n_freq = y_re.shape[0]
-    n_theta_block = Z_re.shape[1]
+    n_freq = u_re_channel.shape[0]
+    n_theta_block = channel_index
+    n_reps = u_re_channel.shape[1]
 
     if n_theta_block > 0:
         theta_re_components = []
@@ -151,22 +157,24 @@ def _blocked_channel_model(
         theta_im = jnp.zeros((n_freq, 0))
 
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
-    sum_log_det = -jnp.sum(log_delta_sq)
+    sum_log_det = -float(nu) * jnp.sum(log_delta_sq)
 
     if n_theta_block > 0:
-        z_theta_re = jnp.sum(Z_re * theta_re, axis=1) - jnp.sum(
-            Z_im * theta_im, axis=1
-        )
-        z_theta_im = jnp.sum(Z_re * theta_im, axis=1) + jnp.sum(
-            Z_im * theta_re, axis=1
-        )
-        u_re = y_re - z_theta_re
-        u_im = y_im - z_theta_im
+        contrib_re = jnp.einsum(
+            "fl,flr->fr", theta_re, u_re_prev
+        ) - jnp.einsum("fl,flr->fr", theta_im, u_im_prev)
+        contrib_im = jnp.einsum(
+            "fl,flr->fr", theta_re, u_im_prev
+        ) + jnp.einsum("fl,flr->fr", theta_im, u_re_prev)
+        u_re_resid = u_re_channel - contrib_re
+        u_im_resid = u_im_channel - contrib_im
     else:
-        u_re = y_re
-        u_im = y_im
+        u_re_resid = u_re_channel
+        u_im_resid = u_im_channel
 
-    residual_power = u_re**2 + u_im**2
+    residual_power = u_re_resid**2 + u_im_resid**2
+    # Sum across replicates then frequencies
+    residual_power = jnp.sum(residual_power, axis=1)
     log_likelihood = sum_log_det - jnp.sum(residual_power * exp_neg_log_delta)
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
@@ -211,8 +219,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
     For ``p`` channels the sampler iterates ``j = 0,…,p-1`` and runs a separate
     NumPyro/NUTS inference for the j‑th block using :func:`_blocked_channel_model`.
-    The block observes ``(y_re[:, j], y_im[:, j])`` and uses as regressors the
-    previous channels' Fourier coefficients encoded in ``Z_{·, j, :j}``.
+    The block observes the Wishart replicates ``(u_re[:, j, :], u_im[:, j, :])``
+    and regresses against the corresponding lower-triangular components from
+    previous channels.
 
     The per‑block posterior draws are merged into global deterministic arrays:
     - ``log_delta_sq`` with shape ``(draw, freq, p)``
@@ -257,10 +266,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         Steps
         -----
-        1. For each channel ``j`` build the design slice ``Z[:, j, :j]``
-           (consistent with the triangular ordering used by
-           :class:`~log_psplines.datatypes.MultivarFFT`), and run NUTS on the
-           corresponding block model.
+        1. For each channel ``j`` provide the eigenvector replicates ``u`` to the
+           single-row model and run an independent NUTS chain.
         2. Move per-block deterministics out of the ``samples`` dict into
            ``sample_stats`` and, for diagnostics, optionally rename NumPyro's
            NUTS fields with ``_channel_{j}`` suffixes.
@@ -315,16 +322,10 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             theta_start = channel_index * (channel_index - 1) // 2
             theta_count = channel_index
 
-            if theta_count > 0:
-                Z_re_block = self.Z_re[
-                    :, channel_index, theta_start : theta_start + theta_count
-                ]
-                Z_im_block = self.Z_im[
-                    :, channel_index, theta_start : theta_start + theta_count
-                ]
-            else:
-                Z_re_block = jnp.zeros((self.n_freq, 0))
-                Z_im_block = jnp.zeros((self.n_freq, 0))
+            u_re_channel = self.u_re[:, channel_index, :]
+            u_im_channel = self.u_im[:, channel_index, :]
+            u_re_prev = self.u_re[:, :channel_index, :]
+            u_im_prev = self.u_im[:, :channel_index, :]
 
             kernel_kwargs = dict(
                 target_accept_prob=self.config.target_accept_prob,
@@ -350,10 +351,10 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             mcmc.run(
                 mcmc_keys[channel_index],
                 channel_index,
-                self.y_re[:, channel_index],
-                self.y_im[:, channel_index],
-                Z_re_block,
-                Z_im_block,
+                u_re_channel,
+                u_im_channel,
+                u_re_prev,
+                u_im_prev,
                 delta_basis,
                 delta_penalty,
                 self._theta_basis,
@@ -362,6 +363,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.config.beta_phi,
                 self.config.alpha_delta,
                 self.config.beta_delta,
+                self.nu,
                 extra_fields=(
                     (
                         "potential_energy",

@@ -8,6 +8,7 @@ from typing import Dict, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..datatypes.multivar import EmpiricalPSD
 from .base import COLORS, PlotConfig, safe_plot, setup_plot_style
 from .pdgrm import plot_pdgrm
 from .psd_matrix import plot_psd_matrix
@@ -187,7 +188,7 @@ def plot_vi_initial_psd_matrix(
     *,
     outfile: str,
     freq: np.ndarray,
-    empirical_psd: Optional[np.ndarray] = None,
+    empirical_psd: Optional[EmpiricalPSD] = None,
     true_psd: Optional[np.ndarray] = None,
     psd_quantiles: Optional[Dict[str, np.ndarray]] = None,
     coherence_quantiles: Optional[Dict[str, np.ndarray]] = None,
@@ -242,9 +243,14 @@ def _pack_ci_from_quantiles(
     if psd_quantiles is None:
         raise ValueError("psd_quantiles must be provided.")
 
-    q05 = psd_quantiles.get("q05")
-    q50 = psd_quantiles.get("q50")
-    q95 = psd_quantiles.get("q95")
+    real_q = psd_quantiles.get("real")
+    imag_q = psd_quantiles.get("imag")
+    if real_q is None:
+        raise ValueError("psd_quantiles must include 'real' entries.")
+
+    q05 = real_q.get("q05")
+    q50 = real_q.get("q50")
+    q95 = real_q.get("q95")
 
     n_freq, n_channels, _ = q05.shape
 
@@ -263,16 +269,17 @@ def _pack_ci_from_quantiles(
                 coh_q95 = coherence_quantiles["q95"][:, i, j]
                 ci_dict["coh"][(i, j)] = (coh_q05, coh_q50, coh_q95)
 
-            elif not show_coherence:
-                # use precomputed real/imag quantiles if available
-                re_q05 = np.real(q05[:, i, j])
-                re_q50 = np.real(q50[:, i, j])
-                re_q95 = np.real(q95[:, i, j])
-                im_q05 = np.imag(q05[:, i, j])
-                im_q50 = np.imag(q50[:, i, j])
-                im_q95 = np.imag(q95[:, i, j])
-                ci_dict["re"][(i, j)] = (re_q05, re_q50, re_q95)
-                ci_dict["im"][(i, j)] = (im_q05, im_q50, im_q95)
+            elif not show_coherence and imag_q is not None:
+                ci_dict["re"][(i, j)] = (
+                    q05[:, i, j],
+                    q50[:, i, j],
+                    q95[:, i, j],
+                )
+                ci_dict["im"][(i, j)] = (
+                    imag_q["q05"][:, i, j],
+                    imag_q["q50"][:, i, j],
+                    imag_q["q95"][:, i, j],
+                )
 
     return ci_dict
 

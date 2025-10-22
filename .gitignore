@@ -295,3 +295,5 @@ cython_debug/
 *venv
 /AGENTS.md
 *docs/paper_draft.tex
+
+*.json

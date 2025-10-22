@@ -39,44 +39,10 @@ class MultivarNUTSConfig(SamplerConfig):
     vi_progress_bar: Optional[bool] = None
 
 
-@jax.jit
-def whittle_likelihood_arrays(
-    y_re: jnp.ndarray,
-    y_im: jnp.ndarray,
-    Z_re: jnp.ndarray,
-    Z_im: jnp.ndarray,
-    log_delta_sq: jnp.ndarray,  # (n_freq, n_dim)
-    theta_re: jnp.ndarray,  # (n_freq, n_theta)
-    theta_im: jnp.ndarray,  # (n_freq, n_theta)
-) -> jnp.ndarray:
-    """Multivariate Whittle likelihood for Cholesky PSD parameterization - JIT version."""
-    sum_log_det = -jnp.sum(log_delta_sq)
-    exp_neg_log_delta = jnp.exp(-log_delta_sq)
-
-    if Z_re.shape[2] > 0:
-        Z_theta_re = jnp.einsum("fij,fj->fi", Z_re, theta_re) - jnp.einsum(
-            "fij,fj->fi", Z_im, theta_im
-        )
-        Z_theta_im = jnp.einsum("fij,fj->fi", Z_re, theta_im) + jnp.einsum(
-            "fij,fj->fi", Z_im, theta_re
-        )
-        u_re = y_re - Z_theta_re
-        u_im = y_im - Z_theta_im
-    else:
-        u_re = y_re
-        u_im = y_im
-
-    numerator = u_re**2 + u_im**2
-    internal = numerator * exp_neg_log_delta
-    tmp2 = -jnp.sum(internal)
-    return sum_log_det + tmp2
-
-
 def multivariate_psplines_model(
-    y_re: jnp.ndarray,  # FFT real parts
-    y_im: jnp.ndarray,  # FFT imaginary parts
-    Z_re: jnp.ndarray,  # Design matrix real parts
-    Z_im: jnp.ndarray,  # Design matrix imaginary parts
+    u_re: jnp.ndarray,  # Wishart replicates (real)
+    u_im: jnp.ndarray,  # Wishart replicates (imag)
+    nu: int,
     all_bases,
     all_penalties,
     alpha_phi: float = 1.0,
@@ -88,8 +54,8 @@ def multivariate_psplines_model(
     NumPyro model for multivariate PSD estimation using P-splines and Cholesky parameterization.
     """
     # Extract dimensions from input arrays (these are static during compilation)
-    n_freq, n_dim = y_re.shape
-    n_theta = Z_re.shape[2]
+    n_freq, n_dim, _ = u_re.shape
+    n_theta = int(n_dim * (n_dim - 1) / 2)
 
     component_idx = 0
     log_delta_components = []
@@ -151,10 +117,26 @@ def multivariate_psplines_model(
         theta_re = jnp.zeros((n_freq, 0))
         theta_im = jnp.zeros((n_freq, 0))
 
-    # Likelihood using individual arrays
-    log_likelihood = whittle_likelihood_arrays(
-        y_re, y_im, Z_re, Z_im, log_delta_sq, theta_re, theta_im
-    )
+    # Likelihood using Wishart replicates
+    theta_complex = theta_re + 1j * theta_im
+    u_complex = u_re + 1j * u_im
+
+    nu_scale = jnp.asarray(nu, dtype=log_delta_sq.dtype)
+    u_resid = u_complex
+    idx = 0
+    for row in range(1, n_dim):
+        count = row
+        if count > 0:
+            coeff = theta_complex[:, idx : idx + count]
+            prev = u_resid[:, :row, :]
+            contrib = jnp.einsum("fl,flr->fr", coeff, prev)
+            u_resid = u_resid.at[:, row, :].set(u_resid[:, row, :] - contrib)
+            idx += count
+
+    residual_power = jnp.sum(jnp.abs(u_resid) ** 2, axis=2)
+    exp_neg_log_delta = jnp.exp(-log_delta_sq)
+    sum_log_det = -nu_scale * jnp.sum(log_delta_sq)
+    log_likelihood = sum_log_det - jnp.sum(residual_power * exp_neg_log_delta)
     numpyro.factor("likelihood", log_likelihood)
 
     # Store deterministic quantities for diagnostics
@@ -247,13 +229,9 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         start_time = time.time()
         mcmc.run(
             self.rng_key,
-            self.y_re,  # Individual arrays that JAX can handle
-            self.y_im,
-            self.Z_re,
-            self.Z_im,
-            # Remove these lines:
-            # self.n_freq,
-            # self.n_channels,
+            self.u_re,
+            self.u_im,
+            self.nu,
             self.all_bases,
             self.all_penalties,
             self.config.alpha_phi,
@@ -326,10 +304,9 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
                 self.rng_key,
                 multivariate_psplines_model,
                 model_kwargs=dict(
-                    y_re=self.y_re,
-                    y_im=self.y_im,
-                    Z_re=self.Z_re,
-                    Z_im=self.Z_im,
+                    u_re=self.u_re,
+                    u_im=self.u_im,
+                    nu=self.nu,
                     all_bases=self.all_bases,
                     all_penalties=self.all_penalties,
                     alpha_phi=self.config.alpha_phi,
@@ -364,10 +341,9 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
     @property
     def _logp_kwargs(self) -> Dict[str, Any]:
         return dict(
-            y_re=self.y_re,
-            y_im=self.y_im,
-            Z_re=self.Z_re,
-            Z_im=self.Z_im,
+            u_re=self.u_re,
+            u_im=self.u_im,
+            nu=self.nu,
             all_bases=self.all_bases,
             all_penalties=self.all_penalties,
             alpha_phi=self.config.alpha_phi,

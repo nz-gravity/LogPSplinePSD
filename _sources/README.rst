@@ -59,6 +59,7 @@ We have two options for inference:
 
 - Use Metropolis-Hastings to sample from the posterior distribution of the spline coefficients.
 - Use NumPyro’s NUTS sampler to jointly sample the spline coefficients.
+- When ``init_from_vi`` is enabled (default), the stochastic VI warm-start runs before NUTS and immediately saves convergence plots and PSD previews to ``<outdir>/diagnostics`` so you can inspect them before launching the expensive sampler.
 
 
 

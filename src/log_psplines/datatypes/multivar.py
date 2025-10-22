@@ -4,18 +4,52 @@ from typing import Optional, Tuple
 import numpy as np
 from scipy.signal import csd, welch
 
+from ..logger import logger
+
+
+def _interp_complex_matrix(
+    freq_src: np.ndarray, freq_tgt: np.ndarray, matrix: np.ndarray
+) -> np.ndarray:
+    """Linearly interpolate a complex-valued matrix along the frequency axis."""
+    freq_src = np.asarray(freq_src, dtype=float)
+    freq_tgt = np.asarray(freq_tgt, dtype=float)
+    flat = matrix.reshape(matrix.shape[0], -1)
+
+    real_interp = np.vstack(
+        [
+            np.interp(freq_tgt, freq_src, flat[:, idx].real)
+            for idx in range(flat.shape[1])
+        ]
+    ).T
+
+    if np.iscomplexobj(matrix):
+        imag_interp = np.vstack(
+            [
+                np.interp(freq_tgt, freq_src, flat[:, idx].imag)
+                for idx in range(flat.shape[1])
+            ]
+        ).T
+        res = real_interp + 1j * imag_interp
+    else:
+        res = real_interp
+
+    return res.reshape((freq_tgt.size,) + matrix.shape[1:])
+
 
 @dataclass
 class MultivarFFT:
     """
     Discrete FFTs for multivariate time series.
-    Stores real/imaginary parts and Cholesky design matrices.
+    Stores real/imaginary parts of the FFT together with Wishart replicates.
 
     Attributes:
         y_re: Real part of FFT (n_freq, n_dim)
         y_im: Imag part of FFT (n_freq, n_dim)
-        Z_re: Real part of Cholesky design matrix (n_freq, n_dim, n_theta)
-        Z_im: Imag part of Cholesky design matrix (n_freq, n_dim, n_theta)
+        u_re: Real part of eigenvector-weighted periodogram replicates
+              (n_freq, n_dim, n_dim)
+        u_im: Imag part of eigenvector-weighted periodogram replicates
+              (n_freq, n_dim, n_dim)
+        nu: Degrees of freedom (number of averaged blocks)
         freq: Frequency grid (n_freq,)
         n_freq: Number of frequencies
         n_dim: Number of channels
@@ -23,13 +57,16 @@ class MultivarFFT:
 
     y_re: np.ndarray
     y_im: np.ndarray
-    Z_re: np.ndarray
-    Z_im: np.ndarray
+    u_re: np.ndarray
+    u_im: np.ndarray
     freq: np.ndarray
     n_freq: int
     n_dim: int
+    nu: int = 1
     scaling_factor: Optional[float] = 1.0  # Track the PSD scaling factor
     fs: float = field(default=1.0, repr=False)
+    raw_psd: Optional[np.ndarray] = None
+    raw_freq: Optional[np.ndarray] = None
 
     @classmethod
     def compute_fft(
@@ -40,9 +77,28 @@ class MultivarFFT:
         fmax: float = None,
         scaling_factor: Optional[float] = 1.0,
     ) -> "MultivarFFT":
+        """Compute FFT and Wishart replicates with a single (full-length) block."""
+        return cls.compute_wishart(
+            x,
+            fs=fs,
+            n_blocks=1,
+            fmin=fmin,
+            fmax=fmax,
+            scaling_factor=scaling_factor,
+        )
+
+    @classmethod
+    def compute_wishart(
+        cls,
+        x: np.ndarray,
+        fs: float,
+        n_blocks: int,
+        fmin: Optional[float] = None,
+        fmax: Optional[float] = None,
+        scaling_factor: Optional[float] = 1.0,
+    ) -> "MultivarFFT":
         """
-        Compute FFT and Cholesky design matrices for multivariate time series.
-        FFT is normalized by sqrt(n_time).
+        Compute block-averaged (Wishart) FFT statistics for multivariate series.
 
         Parameters
         ----------
@@ -50,45 +106,102 @@ class MultivarFFT:
             Input time series (n_time, n_channels)
         fs : float
             Sampling frequency
+        n_blocks : int
+            Number of non-overlapping blocks to average. Must divide n_time.
         fmin, fmax : float, optional
-            Frequency range for filtering. If None, uses all positive frequencies.
+            Optional frequency truncation applied after blocking.
+        scaling_factor : float, optional
+            PSD scaling factor carried through sampling.
         """
+        if n_blocks < 1:
+            raise ValueError("n_blocks must be positive.")
+
         n_time, n_dim = x.shape
-        assert (
-            n_time > n_dim
-        ), f"N of time {n_time} must be greater than dim {n_dim}"
+        if n_time % n_blocks != 0:
+            raise ValueError(
+                f"n_time={n_time} must be divisible by n_blocks={n_blocks}."
+            )
 
-        # standardise
-        x = x - np.mean(x, axis=0)
+        block_len = n_time // n_blocks
+        if block_len <= n_dim:
+            raise ValueError(
+                "Block length must exceed number of channels for FFT stability."
+            )
 
-        x_fft = np.fft.fft(x, axis=0) / np.sqrt(n_time)
-        freqs = np.fft.fftfreq(n_time, 1 / fs)
+        x_centered = x - np.mean(x, axis=0)
+        blocks = x_centered.reshape(n_blocks, block_len, n_dim)
 
-        # Get positive frequencies only
-        pos_freq_idx = freqs > 0  # skip zero freq
-        freqs = freqs[pos_freq_idx]
-        x_fft = x_fft[pos_freq_idx, :]
+        block_ffts = np.fft.fft(blocks, axis=1) / np.sqrt(block_len)
+        freqs = np.fft.fftfreq(block_len, 1 / fs)
+        pos_mask = freqs > 0
+        freqs = freqs[pos_mask]
+        block_ffts = block_ffts[:, pos_mask, :]
 
-        # Apply frequency range filtering if specified
+        # Full-length FFT for empirical PSD/CSD before blocking
+        full_fft = np.fft.fft(x_centered, axis=0) / np.sqrt(n_time)
+        full_freq = np.fft.fftfreq(n_time, 1 / fs)
+        full_mask = full_freq > 0
+        full_freq = full_freq[full_mask]
+        full_fft = full_fft[full_mask, :]
+
         if fmin is not None or fmax is not None:
-            fmin = fmin if fmin is not None else freqs[0]  # skip zero freq
-            fmax = fmax if fmax is not None else freqs[-1]
-            freq_mask = (freqs >= fmin) & (freqs <= fmax)
+            fmin_eff = freqs[0] if fmin is None else max(fmin, freqs[0])
+            fmax_eff = freqs[-1] if fmax is None else min(fmax, freqs[-1])
+            if fmax_eff < fmin_eff:
+                raise ValueError(
+                    f"Invalid frequency bounds: fmin={fmin_eff}, fmax={fmax_eff}."
+                )
+            freq_mask = (freqs >= fmin_eff) & (freqs <= fmax_eff)
             freqs = freqs[freq_mask]
-            x_fft = x_fft[freq_mask, :]
+            block_ffts = block_ffts[:, freq_mask, :]
 
-        y_re = np.real(x_fft)
-        y_im = np.imag(x_fft)
-        Z_re, Z_im = cls.compute_cholesky_design(x_fft)
+            full_mask = (full_freq >= fmin_eff) & (full_freq <= fmax_eff)
+            full_freq = full_freq[full_mask]
+            full_fft = full_fft[full_mask, :]
+
+        mean_fft = np.mean(block_ffts, axis=0)
+        y_re = mean_fft.real
+        y_im = mean_fft.imag
+
+        Y = np.einsum("bnc,bnd->ncd", block_ffts, np.conj(block_ffts))
+        eigvals, eigvecs = np.linalg.eigh(Y)
+        eigvals = np.clip(eigvals, a_min=0.0, a_max=None)
+        sqrt_eigvals = np.sqrt(eigvals)[:, None, :]
+        U = eigvecs * sqrt_eigvals
+        u_re = U.real
+        u_im = U.imag
+
+        # Empirical PSD/CSD from full FFT
+        norm_factor = 2 * np.pi
+        full_psd = np.zeros(
+            (full_freq.size, n_dim, n_dim), dtype=np.complex128
+        )
+        for i in range(n_dim):
+            for j in range(n_dim):
+                full_psd[:, i, j] = (
+                    2
+                    * (full_fft[:, i] * np.conj(full_fft[:, j]))
+                    / norm_factor
+                )
+
+        if full_psd.shape[0] != freqs.size:
+            full_psd = _interp_complex_matrix(full_freq, freqs, full_psd)
+            full_freq = freqs
+
+        scaling = float(scaling_factor or 1.0)
+        full_psd *= scaling
 
         return cls(
             y_re=y_re,
             y_im=y_im,
-            Z_re=Z_re,
-            Z_im=Z_im,
             freq=freqs,
             n_freq=len(freqs),
             n_dim=n_dim,
+            u_re=u_re,
+            u_im=u_im,
+            raw_psd=full_psd,
+            raw_freq=full_freq,
+            nu=n_blocks,
             scaling_factor=scaling_factor,
             fs=fs,
         )
@@ -100,54 +213,25 @@ class MultivarFFT:
                 f"Invalid frequency bounds supplied: fmin={fmin}, fmax={fmax}."
             )
         mask = (self.freq >= fmin) & (self.freq <= fmax)
+        raw_psd = None
+        raw_freq = None
+        if self.raw_psd is not None:
+            raw_psd = self.raw_psd[mask]
+            raw_freq = self.freq[mask]
         return MultivarFFT(
             y_re=self.y_re[mask],
             y_im=self.y_im[mask],
-            Z_re=self.Z_re[mask],
-            Z_im=self.Z_im[mask],
             freq=self.freq[mask],
             n_freq=int(np.sum(mask)),
             n_dim=self.n_dim,
+            u_re=self.u_re[mask],
+            u_im=self.u_im[mask],
+            raw_psd=raw_psd,
+            raw_freq=raw_freq,
+            nu=self.nu,
             scaling_factor=self.scaling_factor,
+            fs=self.fs,
         )
-
-    @staticmethod
-    def compute_cholesky_design(
-        x_fft: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Compute Cholesky design matrices Z_re, Z_im for multivariate PSD.
-        For each frequency, Z_k[j, i, l] = FFT of previous components for Cholesky off-diagonal.
-
-        Args:
-            x_fft: Array of shape (n_freq, n_channels), complex FFT values.
-        Returns:
-            Z_re: Real part of Cholesky design matrix (n_freq, n_channels, n_theta)
-            Z_im: Imag part of Cholesky design matrix (n_freq, n_channels, n_theta)
-
-        Example (for n_channels=3):
-            n_theta = 3
-            For each frequency j:
-                Z_k[j, 1, 0] = x_fft[j, 0]
-                Z_k[j, 2, 1] = x_fft[j, 0]
-                Z_k[j, 2, 2] = x_fft[j, 1]
-            All other entries are zero.
-            So for p=3, Z_k[j] looks like:
-                [[0, 0, 0],
-                 [x_fft[j,0], 0, 0],
-                 [0, x_fft[j,0], x_fft[j,1]]]
-        """
-        n, p = x_fft.shape
-        if p <= 1:
-            return np.zeros((n, p, 0)), np.zeros((n, p, 0))
-        n_theta = int(p * (p - 1) / 2)
-        Z_k = np.zeros((n, p, n_theta), dtype=np.complex64)
-        for j in range(n):
-            count = 0
-            for i in range(1, p):
-                Z_k[j, i, count : count + i] = np.array(x_fft[j, :i])
-                count += i
-        return np.real(Z_k), np.imag(Z_k)
 
     @property
     def amplitude_range(self) -> Tuple[float, float]:
@@ -248,6 +332,37 @@ class MultivariateTimeseries:
             scaling_factor=self.scaling_factor,
         )
 
+    def to_wishart_stats(
+        self,
+        n_blocks: int,
+        fmin: Optional[float] = None,
+        fmax: Optional[float] = None,
+    ) -> "MultivarFFT":
+        n_time = self.y.shape[0]
+        if n_blocks <= 0:
+            raise ValueError("n_blocks must be positive.")
+        if n_time % n_blocks != 0:
+            raise ValueError(
+                f"n_time={n_time} must be divisible by n_blocks={n_blocks}."
+            )
+        block_len = n_time // n_blocks
+
+        wishart_fft = MultivarFFT.compute_wishart(
+            self.y,
+            fs=self.fs,
+            n_blocks=n_blocks,
+            fmin=fmin,
+            fmax=fmax,
+            scaling_factor=self.scaling_factor,
+        )
+        log_msg = (
+            f"Wishart averaging (blocks={n_blocks}): "
+            f"n_time={n_time} -> block_len={block_len}, "
+            f"n_freq={wishart_fft.n_freq}, n_channels={wishart_fft.n_dim}"
+        )
+        logger.info(log_msg)
+        return wishart_fft
+
     @property
     def amplitude_range(self) -> Tuple[float, float]:
         amps = (np.min(self.y), np.max(self.y))
@@ -271,6 +386,7 @@ class EmpiricalPSD:
     coherence: (
         np.ndarray
     )  # (n_freq, n_channels, n_channels) real-valued coherence matrix
+    channels: Optional[np.ndarray] = None
 
     def __repr__(self):
         return f"EmpiricalPSD(n_freq={self.freq.shape[0]}, n_channels={self.psd.shape[1]})"

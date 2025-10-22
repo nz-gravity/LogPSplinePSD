@@ -1,17 +1,11 @@
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..datatypes.multivar import EmpiricalPSD
+from ..datatypes.multivar import EmpiricalPSD, _get_coherence
 from ..logger import logger
-from .base import (
-    COLORS,
-    PlotConfig,
-    compute_coherence_ci,
-    compute_cross_spectra_ci,
-    extract_plotting_data,
-    setup_plot_style,
-    validate_plotting_data,
-)
+from .base import extract_plotting_data, setup_plot_style
 
 # Setup default plot styling
 setup_plot_style()
@@ -50,26 +44,22 @@ def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
 
                 # Initialize PSD matrix
                 psd_matrix = np.zeros(
-                    (n_freq, n_channels, n_channels), dtype=complex
+                    (n_freq, n_channels, n_channels), dtype=np.complex128
                 )
 
-                # For now, assume diagonal structure (auto-PSDs only)
-                # This is a simplified version - in practice, you might need
-                # more sophisticated logic to handle cross-channel relationships
                 for i in range(n_channels):
-                    # Compute periodogram for each channel
-                    # This is a placeholder - you may need to adjust based on
-                    # how your multivariate data is actually structured
-                    channel_fft = (
-                        fft_complex[:, i]
-                        if fft_complex.ndim > 1
-                        else fft_complex
-                    )
-                    psd_matrix[:, i, i] = np.abs(channel_fft) ** 2
+                    for j in range(n_channels):
+                        psd_matrix[:, i, j] = fft_complex[:, i] * np.conj(
+                            fft_complex[:, j]
+                        )
 
-                # Create EmpiricalPSD object
+                coherence = _get_coherence(psd_matrix)
+
                 return EmpiricalPSD(
-                    freq=freq, psd=psd_matrix, channels=channels
+                    freq=freq,
+                    psd=psd_matrix,
+                    coherence=coherence,
+                    channels=channels,
                 )
 
         return None
@@ -198,56 +188,102 @@ def plot_psd_matrix(
     channel_labels: list[str] | str | None = None,
     diag_yscale: str = "log",
     xscale: str = "linear",
+    label: Optional[str] = None,
+    fig: Optional[plt.Figure] = None,
+    ax: Optional[np.ndarray] = None,
+    save: bool = True,
+    close: Optional[bool] = None,
 ):
     """
     Publication-ready multivariate PSD matrix plotter with adaptive per-axis y-labels.
+
+    Returns
+    -------
+    (matplotlib.figure.Figure, np.ndarray)
+        Figure and axes handle for further customisation or additional overlays.
+
+    Parameters
+    ----------
+    label : str, optional
+        Legend label used for the median PSD curve. Useful when overlaying
+        multiple results on the same axes.
+    fig, ax : optional
+        Existing Matplotlib figure and axes to reuse for overlaid plots. When
+        provided, the function skips layout adjustments and automatic saving.
+    save : bool, default=True
+        Whether to save the figure to ``outdir/filename`` when the figure is
+        created inside this function.
+    close : bool, optional
+        Whether to close the figure at the end. Defaults to ``save`` when the
+        figure is created inside this function; otherwise the figure is left
+        open.
     """
     # ----- Extract/validate -----
     if idata is not None:
         # Check for required data
-        if "psd_matrix" not in idata.posterior_psd:
-            raise ValueError("idata missing posterior_psd['psd_matrix']")
+        extracted = extract_plotting_data(idata)
+        quantiles = extracted.get("posterior_psd_matrix_quantiles")
 
-        # Extract data using shared utility
-        extracted_data = extract_plotting_data(idata)
-        psd_samples = extracted_data.get("posterior_psd_matrix")
+        if quantiles is None:
+            raise ValueError(
+                "idata missing posterior_psd matrix quantiles for plotting"
+            )
 
-        if psd_samples is None:
-            raise ValueError("Could not extract PSD matrix from idata")
-
-        freq = extracted_data.get("frequencies", freq)
-        true_psd = extracted_data.get("true_psd", true_psd)
+        freq = extracted.get("frequencies", freq)
+        true_psd = extracted.get("true_psd", true_psd)
 
         # For multivariate data, try to extract empirical PSD if not provided
         if empirical_psd is None:
             empirical_psd = _extract_empirical_psd_from_idata(idata)
 
-        # Compute confidence intervals using shared utilities
-        if show_coherence:
-            ci_dict = dict(coh=compute_coherence_ci(psd_samples))
-            # Add PSD diagonal elements
-            ci_dict["psd"] = {}
-            for i in range(psd_samples.shape[2]):
-                q05 = np.percentile(psd_samples[:, :, i, i].real, 5, axis=0)
-                q50 = np.percentile(psd_samples[:, :, i, i].real, 50, axis=0)
-                q95 = np.percentile(psd_samples[:, :, i, i].real, 95, axis=0)
-                ci_dict["psd"][(i, i)] = (q05, q50, q95)
+        percentiles = quantiles["percentile"]
 
-        else:
-            real_dict, imag_dict = compute_cross_spectra_ci(psd_samples)
-            ci_dict = {"psd": {}, "coh": {}, "re": real_dict, "im": imag_dict}
-            # Add PSD diagonal elements
-            for i in range(psd_samples.shape[2]):
-                q05 = np.percentile(psd_samples[:, :, i, i].real, 5, axis=0)
-                q50 = np.percentile(psd_samples[:, :, i, i].real, 50, axis=0)
-                q95 = np.percentile(psd_samples[:, :, i, i].real, 95, axis=0)
-                ci_dict["psd"][(i, i)] = (q05, q50, q95)
+        def _grab(arr: np.ndarray, target: float) -> np.ndarray:
+            idx = int(np.argmin(np.abs(percentiles - target)))
+            return arr[idx]
+
+        real_q = quantiles["real"]
+        imag_q = quantiles["imag"]
+        coh_q = quantiles.get("coherence")
+
+        ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}}
+        n_channels = real_q.shape[2]
+        for i in range(n_channels):
+            for j in range(n_channels):
+                q05_r = _grab(real_q[:, :, i, j], 5.0)
+                q50_r = _grab(real_q[:, :, i, j], 50.0)
+                q95_r = _grab(real_q[:, :, i, j], 95.0)
+                ci_dict["psd"][(i, j)] = (q05_r, q50_r, q95_r)
+                if i != j:
+                    q05_im = _grab(imag_q[:, :, i, j], 5.0)
+                    q50_im = _grab(imag_q[:, :, i, j], 50.0)
+                    q95_im = _grab(imag_q[:, :, i, j], 95.0)
+                    ci_dict["re"][(i, j)] = (q05_r, q50_r, q95_r)
+                    ci_dict["im"][(i, j)] = (q05_im, q50_im, q95_im)
+
+        if coh_q is not None and show_coherence:
+            for i in range(n_channels):
+                for j in range(n_channels):
+                    q05_c = _grab(coh_q[:, :, i, j], 5.0)
+                    q50_c = _grab(coh_q[:, :, i, j], 50.0)
+                    q95_c = _grab(coh_q[:, :, i, j], 95.0)
+                    ci_dict["coh"][(i, j)] = (q05_c, q50_c, q95_c)
 
     elif ci_dict is None:
         raise ValueError("Provide either `idata` or `ci_dict`.")
 
     if freq is None:
         raise ValueError("Frequency array `freq` is required.")
+
+    if true_psd is not None:
+        true_psd = np.asarray(true_psd)
+        if true_psd.shape[0] != len(freq):
+            logger.warning(
+                "Skipping true PSD overlay: expected %d frequency bins, got %d.",
+                len(freq),
+                true_psd.shape[0],
+            )
+            true_psd = None
 
     if empirical_psd is not None:
         n_channels = empirical_psd.psd.shape[1]
@@ -257,11 +293,25 @@ def plot_psd_matrix(
         raise ValueError("Could not infer number of channels.")
 
     # ----- Figure -----
-    fig, axes = plt.subplots(
-        n_channels, n_channels, figsize=(3.9 * n_channels, 3.9 * n_channels)
-    )
-    if n_channels == 1:
-        axes = np.array([[axes]])
+    fig_provided = fig is not None and ax is not None
+    if fig_provided:
+        axes = np.asarray(ax)
+        if axes.shape != (n_channels, n_channels):
+            raise ValueError(
+                f"Provided axes have shape {axes.shape}, expected "
+                f"({n_channels}, {n_channels})."
+            )
+        created_fig = False
+    else:
+        fig, axes = plt.subplots(
+            n_channels,
+            n_channels,
+            figsize=(3.9 * n_channels, 3.9 * n_channels),
+        )
+        if n_channels == 1:
+            axes = np.array([[axes]])
+        created_fig = True
+    axes = np.asarray(axes)
 
     # ----- Plot -----
     for i in range(n_channels):
@@ -283,8 +333,22 @@ def plot_psd_matrix(
                         label="Empirical",
                         zorder=-5,
                     )
-                ax.fill_between(freq, q05, q95, color="tab:blue", alpha=0.25)
-                ax.plot(freq, q50, color="tab:blue", lw=1.5, label="Median")
+                line_kwargs = {"lw": 1.5}
+                if label is not None:
+                    line_kwargs["label"] = label
+                else:
+                    line_kwargs.update(
+                        {"color": "tab:blue", "label": "Median"}
+                    )
+                line = ax.plot(freq, q50, **line_kwargs)[0]
+                ax.fill_between(
+                    freq,
+                    q05,
+                    q95,
+                    color=line.get_color(),
+                    alpha=0.25,
+                    zorder=line.get_zorder() - 1,
+                )
                 if true_psd is not None:
                     ax.plot(
                         freq,
@@ -376,11 +440,27 @@ def plot_psd_matrix(
             if i == n_channels - 1:
                 ax.set_xlabel("Frequency [Hz]", fontsize=11)
 
-    _format_text(
-        axes, channel_labels=channel_labels, show_coherence=show_coherence
+    if created_fig:
+        _format_text(
+            axes, channel_labels=channel_labels, show_coherence=show_coherence
+        )
+        plt.subplots_adjust(
+            left=0.12,
+            right=0.98,
+            top=0.98,
+            bottom=0.10,
+            wspace=0.30,
+            hspace=0.30,
+        )
+
+    effective_save = save and created_fig and outdir is not None and filename
+    if effective_save:
+        fig.savefig(f"{outdir}/{filename}", dpi=dpi, bbox_inches="tight")
+
+    close_fig = (
+        close if close is not None else (created_fig and effective_save)
     )
-    plt.subplots_adjust(
-        left=0.12, right=0.98, top=0.98, bottom=0.10, wspace=0.30, hspace=0.30
-    )
-    plt.savefig(f"{outdir}/{filename}", dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
+    if close_fig:
+        plt.close(fig)
+
+    return fig, axes

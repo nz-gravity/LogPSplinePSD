@@ -21,22 +21,23 @@ if not os.path.exists(DATA_FPATH):
 lisa_data = LISAData.from_hdf5(DATA_FPATH)
 
 
-# lets also only save every 2 datapoint to reduce size
-t = lisa_data.t[::2]
-y = lisa_data.data[::2, :]
-
-# lets truncate to only first 10% of data to reduce size
-n_trunc = int(0.1 * len(t))
-t = t[:n_trunc]
-y = y[:n_trunc, :]
-
-# standardise y
+t = lisa_data.t
+y = lisa_data.data
 y = (y - np.mean(y, axis=0)) / np.std(y, axis=0)
+
+# detrmine number of time blocks based on data length
+n = y.shape[0]
+
+# make n_blocks so each block is ~ 1week long, power of 2
+n_blocks = max(1, 2 ** int(np.round(np.log2(n / (24 * 7)))))
+n_inside_block = n // n_blocks
+logger.info(f"Using n_blocks={n_blocks}x{n_inside_block} for data length {n}")
+
 
 timeseries = MultivariateTimeseries(y=y, t=t)
 logger.info(timeseries)
 
-FMIN, FMAX = 5**-5, 6**-2
+FMIN, FMAX = 10**-4, 5 * 10**-1
 
 fft_data = timeseries.to_cross_spectral_density()  # fmin=FMIN, fmax=FMAX)
 logger.info(fft_data)
@@ -52,7 +53,7 @@ else:
 
     idata = run_mcmc(
         data=fft_data,
-        sampler="multivar-blocked-nuts",
+        sampler="multivar_blocked_nuts",
         n_samples=1000,
         n_warmup=1000,
         n_knots=20,
@@ -61,6 +62,9 @@ else:
         knot_kwargs=dict(strategy="log"),
         outdir=f"{HERE}/results/lisa",
         verbose=True,
+        n_time_blocks=n_blocks,
+        fmin=FMIN,
+        fmax=FMAX,
     )
 
 logger.info(idata)

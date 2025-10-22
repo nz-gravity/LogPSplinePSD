@@ -1,11 +1,9 @@
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax import vmap
-from jax.scipy.linalg import solve_triangular
 
 from ..datatypes import MultivarFFT
 from ..logger import logger
@@ -304,85 +302,234 @@ class MultivariateLogPSplines:
 
         return all_bases, all_penalties
 
+    def _psd_chunk_iterator(
+        self,
+        log_delta_sq_samples: np.ndarray,
+        theta_re_samples: Optional[np.ndarray],
+        theta_im_samples: Optional[np.ndarray],
+        *,
+        n_samps: int,
+        chunk_size: int,
+    ):
+        """Yield reconstructed PSD chunks with shape (n_samps, chunk, n, n)."""
+
+        n_freq = log_delta_sq_samples.shape[1]
+        n_channels = log_delta_sq_samples.shape[2]
+        n_theta = (
+            theta_re_samples.shape[2] if theta_re_samples is not None else 0
+        )
+        tril_row, tril_col = np.tril_indices(n_channels, k=-1)
+        n_lower = len(tril_row)
+
+        for start in range(0, n_freq, chunk_size):
+            end = min(start + chunk_size, n_freq)
+
+            log_chunk = log_delta_sq_samples[:n_samps, start:end, :]
+            theta_re_chunk = (
+                theta_re_samples[:n_samps, start:end, :]
+                if theta_re_samples is not None
+                else None
+            )
+            theta_im_chunk = (
+                theta_im_samples[:n_samps, start:end, :]
+                if theta_im_samples is not None
+                else None
+            )
+
+            chunk_len = end - start
+            psd_chunk = np.empty(
+                (n_samps, chunk_len, n_channels, n_channels),
+                dtype=np.complex64,
+            )
+
+            for s in range(n_samps):
+                for local_f in range(chunk_len):
+                    diag_vals = np.exp(log_chunk[s, local_f]).astype(
+                        np.float32
+                    )
+                    T = np.eye(n_channels, dtype=np.complex64)
+
+                    if n_theta > 0:
+                        theta_complex = (
+                            theta_re_chunk[s, local_f]
+                            + 1j * theta_im_chunk[s, local_f]
+                        )
+                        n_use = min(theta_complex.shape[0], n_lower)
+                        if n_use:
+                            T[tril_row[:n_use], tril_col[:n_use]] = (
+                                -theta_complex[:n_use]
+                            )
+
+                    Tinverse = np.linalg.inv(T)
+                    D = np.diag(diag_vals)
+                    psd_chunk[s, local_f] = (
+                        Tinverse @ D @ Tinverse.conj().T
+                    ).astype(np.complex64)
+
+            yield start, end, psd_chunk
+
     def reconstruct_psd_matrix(
         self,
         log_delta_sq_samples: jnp.ndarray,
         theta_re_samples: jnp.ndarray,
         theta_im_samples: jnp.ndarray,
         n_samples_max: int = 50,
-    ) -> jnp.ndarray:
+        chunk_size: int = 2048,
+    ) -> np.ndarray:
         """
-        Reconstruct PSD matrix from Cholesky components using JAX for efficiency.
-        JIT-compiled for speed. Handles batch processing over samples and frequencies.
-        Returns:
-            psd_matrices: shape (n_samps, n_freq, n_channels, n_channels)
+        Reconstruct PSD matrices from Cholesky components using NumPy.
+
+        The computation streams over frequency chunks (default 2048 bins) so the
+        peak memory stays modest even for very long spectra. Results are returned
+        as a ``complex64`` NumPy array of shape
+        ``(n_samps, n_freq, n_channels, n_channels)``.
         """
-        # Handle arrays that may have chain dimension (1, n_draws, n_freq, n_channels)
-        if (
-            log_delta_sq_samples.ndim == 4
-        ):  # (n_chains, n_draws, n_freq, n_channels)
-            log_delta_sq_samples = log_delta_sq_samples[0]  # Take first chain
-        if theta_re_samples.ndim == 4:
-            theta_re_samples = theta_re_samples[0]
-        if theta_im_samples.ndim == 4:
-            theta_im_samples = theta_im_samples[0]
+        log_delta_sq_arr = np.asarray(log_delta_sq_samples)
+        theta_re_arr = np.asarray(theta_re_samples)
+        theta_im_arr = np.asarray(theta_im_samples)
 
-        n_samples, n_freq, n_channels = log_delta_sq_samples.shape
-        n_theta = theta_re_samples.shape[2] if theta_re_samples.ndim > 2 else 0
-        n_samps = min(n_samples_max, n_samples)
+        if log_delta_sq_arr.ndim == 4:
+            log_delta_sq_arr = log_delta_sq_arr[0]
+        if theta_re_arr.ndim == 4:
+            theta_re_arr = theta_re_arr[0]
+        if theta_im_arr.ndim == 4:
+            theta_im_arr = theta_im_arr[0]
 
-        # Subsample if needed
-        log_delta_sq = log_delta_sq_samples[:n_samps]
-        theta_re = theta_re_samples[:n_samps]
-        theta_im = theta_im_samples[:n_samps]
+        n_samples, n_freq, n_channels = log_delta_sq_arr.shape
+        n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
+        n_samps = min(int(n_samples_max), int(n_samples))
 
-        @jax.jit
-        def build_single_psd(log_delta_sq_sf, theta_re_sf, theta_im_sf):
-            """Process single sample at single frequency.
-            Args:
-                log_delta_sq_sf: shape (n_channels,)
-                theta_re_sf: shape (n_theta,)
-                theta_im_sf: shape (n_theta,)
-            """
-            D = jnp.diag(jnp.exp(log_delta_sq_sf))
-            T = jnp.eye(n_channels, dtype=jnp.complex64)
-            if n_theta > 0 and n_channels > 1:
-                theta_complex = theta_re_sf + 1j * theta_im_sf
-                tril_row, tril_col = jnp.tril_indices(n_channels, k=-1)
-                n_lower = len(tril_row)
-                n_use = min(n_theta, n_lower)
-                if n_use > 0:
-                    T = T.at[tril_row[:n_use], tril_col[:n_use]].set(
-                        -theta_complex[:n_use]
-                    )
-            temp = solve_triangular(T, D, lower=True)
-            T_inv_H = (
-                solve_triangular(
-                    T, jnp.eye(n_channels, dtype=jnp.complex64), lower=True
-                )
-                .conj()
-                .T
-            )
-            return temp @ T_inv_H
+        if chunk_size is None or chunk_size <= 0:
+            chunk_size = n_freq
 
-        @jax.jit
-        def process_single_sample(log_delta_sq_s, theta_re_s, theta_im_s):
-            """Process all frequencies for a single sample.
-            Args:
-                log_delta_sq_s: shape (n_freq, n_channels)
-                theta_re_s: shape (n_freq, n_theta)
-                theta_im_s: shape (n_freq, n_theta)
-            """
-            return vmap(build_single_psd, in_axes=(0, 0, 0))(
-                log_delta_sq_s, theta_re_s, theta_im_s
-            )
+        log_delta_sq_arr = log_delta_sq_arr[:n_samps]
+        theta_re_arr = theta_re_arr[:n_samps]
+        theta_im_arr = theta_im_arr[:n_samps]
 
-        # vmap over samples (axis 0)
-        psd_matrices = vmap(process_single_sample, in_axes=(0, 0, 0))(
-            log_delta_sq, theta_re, theta_im
+        inv_two_pi = 1.0 / (2.0 * np.pi)
+
+        psd = np.empty(
+            (n_samps, n_freq, n_channels, n_channels), dtype=np.complex64
         )
-        # Apply consistent scaling factor (divide by 2*pi) to match empirical PSD convention
-        return psd_matrices / (2 * jnp.pi)
+
+        for start, end, psd_chunk in self._psd_chunk_iterator(
+            log_delta_sq_arr,
+            theta_re_arr if n_theta > 0 else None,
+            theta_im_arr if n_theta > 0 else None,
+            n_samps=n_samps,
+            chunk_size=chunk_size,
+        ):
+            psd[:, start:end] = psd_chunk * inv_two_pi
+
+        return psd
+
+    def compute_psd_quantiles(
+        self,
+        log_delta_sq_samples: jnp.ndarray,
+        theta_re_samples: jnp.ndarray,
+        theta_im_samples: jnp.ndarray,
+        *,
+        percentiles: Optional[Sequence[float]] = None,
+        n_samples_max: int = 50,
+        chunk_size: int = 2048,
+        compute_coherence: bool = False,
+    ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+        """
+        Compute PSD (and optional coherence) percentiles without storing all draws.
+
+        Returns
+        -------
+        psd_real_percentiles : np.ndarray
+            Percentiles of the real part of the PSD matrix with shape
+            ``(n_percentiles, n_freq, n_channels, n_channels)``.
+        psd_imag_percentiles : np.ndarray
+            Percentiles of the imaginary part of the PSD matrix with matching shape.
+        coherence_percentiles : Optional[np.ndarray]
+            When ``compute_coherence`` is ``True`` and ``n_channels > 1``, contains
+            percentiles of the coherence matrix; otherwise ``None``.
+        """
+
+        if percentiles is None:
+            percentiles = [5.0, 50.0, 95.0]
+
+        log_delta_sq_arr = np.asarray(log_delta_sq_samples)
+        theta_re_arr = np.asarray(theta_re_samples)
+        theta_im_arr = np.asarray(theta_im_samples)
+
+        if log_delta_sq_arr.ndim == 4:
+            log_delta_sq_arr = log_delta_sq_arr[0]
+        if theta_re_arr.ndim == 4:
+            theta_re_arr = theta_re_arr[0]
+        if theta_im_arr.ndim == 4:
+            theta_im_arr = theta_im_arr[0]
+
+        n_samples, n_freq, n_channels = log_delta_sq_arr.shape
+        n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
+        n_samps = min(int(n_samples_max), int(n_samples))
+
+        if chunk_size is None or chunk_size <= 0:
+            chunk_size = n_freq
+
+        log_delta_sq_arr = log_delta_sq_arr[:n_samps]
+        theta_re_arr = theta_re_arr[:n_samps]
+        theta_im_arr = theta_im_arr[:n_samps]
+
+        n_percentiles = len(percentiles)
+        psd_percentiles = np.empty(
+            (n_percentiles, n_freq, n_channels, n_channels), dtype=np.float32
+        )
+        psd_imag_percentiles = np.empty_like(psd_percentiles)
+
+        coherence_percentiles = (
+            np.empty(
+                (n_percentiles, n_freq, n_channels, n_channels),
+                dtype=np.float32,
+            )
+            if compute_coherence and n_channels > 1
+            else None
+        )
+
+        for start, end, psd_chunk in self._psd_chunk_iterator(
+            log_delta_sq_arr,
+            theta_re_arr if n_theta > 0 else None,
+            theta_im_arr if n_theta > 0 else None,
+            n_samps=n_samps,
+            chunk_size=chunk_size,
+        ):
+            psd_chunk_scaled = psd_chunk / (2.0 * np.pi)
+            psd_real = psd_chunk_scaled.real
+            psd_imag = psd_chunk_scaled.imag
+
+            real_q = np.percentile(psd_real, percentiles, axis=0).astype(
+                np.float32
+            )
+            imag_q = np.percentile(psd_imag, percentiles, axis=0).astype(
+                np.float32
+            )
+
+            psd_percentiles[:, start:end] = real_q
+            psd_imag_percentiles[:, start:end] = imag_q
+
+            if coherence_percentiles is not None:
+                diag = np.abs(
+                    np.diagonal(psd_chunk_scaled, axis1=2, axis2=3)
+                )  # (samples, chunk, channels)
+                denom = diag[..., :, None] * diag[..., None, :]
+                denom = np.where(denom > 0.0, denom, np.nan)
+                coh_samples = (np.abs(psd_chunk_scaled) ** 2) / denom
+                coh_samples = np.nan_to_num(coh_samples, nan=0.0, posinf=0.0)
+                coh_q = np.percentile(coh_samples, percentiles, axis=0).astype(
+                    np.float32
+                )
+
+                # enforce exact ones on diagonal to avoid numerical drift
+                for idx in range(n_percentiles):
+                    for c in range(n_channels):
+                        coh_q[idx, :, c, c] = 1.0
+
+                coherence_percentiles[:, start:end] = coh_q
+
+        return psd_percentiles, psd_imag_percentiles, coherence_percentiles
 
     def __repr__(self):
         return (
@@ -393,30 +540,27 @@ class MultivariateLogPSplines:
 
     def get_psd_matrix_percentiles(
         self, psd_matrix_samples: jnp.ndarray, percentiles=[2.5, 50, 97.5]
-    ) -> dict:
-        # ensure shape is (samples, freqs, n, n)
-        if (
-            psd_matrix_samples.ndim == 3
-        ):  # maybe missing the "samples" dimension
-            psd_matrix_samples = psd_matrix_samples[None, ...]
-        elif psd_matrix_samples.ndim != 4:
+    ) -> np.ndarray:
+        arr = np.asarray(psd_matrix_samples)
+        if arr.ndim == 4 and arr.shape[0] == len(percentiles):
+            return arr.astype(np.float32, copy=False)
+
+        if arr.ndim == 3:
+            arr = arr[None, ...]
+        elif arr.ndim != 4:
             raise ValueError(
-                f"Expected 4D array (samples, freqs, n, n), got {psd_matrix_samples.shape}"
+                f"Expected 4D array (samples, freqs, n, n), got {arr.shape}"
             )
-        logger.debug(f"psd_matrix_samples shape: {psd_matrix_samples.shape}")
 
-        # transform each sample to real-valued representation
-        psd_matrix_real = _complex_to_real_batch(psd_matrix_samples)
-
+        psd_matrix_real = _complex_to_real_batch(arr)
         posterior_percentiles = np.percentile(
             psd_matrix_real, percentiles, axis=0
-        )  # (percentile, freq, channels, channels_out)
-        return posterior_percentiles
+        )
+        return posterior_percentiles.astype(np.float32, copy=False)
 
     def get_psd_matrix_coverage(
         self, psd_matrix_samples: jnp.ndarray, empirical_psd: jnp.ndarray
     ) -> float:
-        # Transform empirical_psd to real-valued representation
         empirical_psd_real = _complex_to_real_batch(empirical_psd)
 
         psd_percentiles = self.get_psd_matrix_percentiles(psd_matrix_samples)
@@ -433,7 +577,7 @@ def _complex_to_real_batch(mats):
       - Upper triangle (incl diag) -> real part
       - Strict lower triangle      -> imag part
     mats: (..., n, n) complex
-    returns float64 with same leading dims
+    returns float32 with same leading dims
     """
     mats = np.asarray(mats)
     n = mats.shape[-1]
@@ -443,4 +587,4 @@ def _complex_to_real_batch(mats):
 
     out = np.where(upper, mats.real, 0.0)
     out = np.where(lower, mats.imag, out)
-    return out.astype(np.float64, copy=False)
+    return out.astype(np.float32, copy=False)

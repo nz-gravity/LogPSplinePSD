@@ -8,6 +8,28 @@ from ..datatypes import Periodogram
 from ..psplines import LogPSplines
 
 
+def get_posterior_psd(idata: az.InferenceData):
+    """Return (freqs, median_psd, lower, upper) from stored percentiles."""
+
+    try:
+        psd = idata.posterior_psd["psd"]
+    except (AttributeError, KeyError):
+        raise KeyError("InferenceData missing posterior_psd 'psd' variable.")
+
+    freqs = np.asarray(psd.coords["freq"].values)
+    percentiles = np.asarray(psd.coords["percentile"].values)
+    values = np.asarray(psd.values)
+
+    def _grab(p: float) -> np.ndarray:
+        idx = int(np.argmin(np.abs(percentiles - p)))
+        return values[idx]
+
+    median = _grab(50.0)
+    lower = _grab(5.0)
+    upper = _grab(95.0)
+    return freqs, median, lower, upper
+
+
 def get_spline_model(idata: az.InferenceData) -> LogPSplines:
     """Extract spline model from inference data, handling different data structures."""
     try:

@@ -216,6 +216,8 @@ def _create_univar_inference_data(
         else slice(None)
     )
 
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
+
     # Evaluate spline_model on a subset of draws
     pp_eval = [spline_model(w) for w in weights_chain0[pp_idx]]
     pp_samples = np.array(pp_eval, dtype=np.float64)
@@ -223,12 +225,15 @@ def _create_univar_inference_data(
 
     observed_power = np.array(periodogram.power, dtype=np.float64)
     pp_samples_rescaled = pp_samples * config.scaling_factor
+    psd_percentiles = np.percentile(
+        pp_samples_rescaled, percentiles, axis=0
+    ).astype(np.float32)
     observed_power_rescaled = observed_power * config.scaling_factor
 
     _handle_log_posterior(sample_stats)
 
     coords = {
-        "pp_draw": range(n_pp),
+        "percentile": percentiles,
         "weight_dim": range(n_weights),
         "freq": periodogram.freqs,
     }
@@ -239,7 +244,6 @@ def _create_univar_inference_data(
         "weights": ["chain", "draw", "weight_dim"],
         **{k: ["chain", "draw"] for k in sample_stats.keys()},
         "periodogram": ["freq"],
-        "psd": ["chain", "pp_draw", "freq"],
     }
 
     _prepare_attributes_and_dims(
@@ -264,8 +268,11 @@ def _create_univar_inference_data(
 
     idata.add_groups(
         posterior_psd=Dataset(
-            {"psd": DataArray(pp_samples_rescaled, dims=["pp_draw", "freq"])},
-            coords={"pp_draw": coords["pp_draw"], "freq": coords["freq"]},
+            {"psd": DataArray(psd_percentiles, dims=["percentile", "freq"])},
+            coords={
+                "percentile": coords["percentile"],
+                "freq": coords["freq"],
+            },
         )
     )
 
@@ -294,24 +301,22 @@ def _create_multivar_inference_data(
     sample_shape = samples[first_sample_key].shape
     n_chains, n_draws = sample_shape[:2]
 
-    # Create posterior predictive samples
-    psd_samples = _compute_posterior_predictive_multivar(
-        samples, sample_stats, spline_model, fft_data
+    # Create posterior predictive summaries
+    percentiles, psd_real_q, psd_imag_q, coh_q = (
+        _compute_posterior_predictive_multivar(
+            samples, sample_stats, spline_model, fft_data
+        )
     )
-    n_pp = psd_samples.shape[0]
+    psd_real_q = np.asarray(psd_real_q, dtype=np.float32)
+    psd_imag_q = np.asarray(psd_imag_q, dtype=np.float32)
+    coh_q = np.asarray(coh_q, dtype=np.float32) if coh_q is not None else None
 
-    # Ensure arrays are numpy before rescaling
-    psd_samples = np.array(psd_samples)
+    psd_real_q_rescaled = psd_real_q * config.scaling_factor
+    psd_imag_q_rescaled = psd_imag_q * config.scaling_factor
+    coherence_q_rescaled = coh_q
+
     fft_y_re = np.array(fft_data.y_re)
     fft_y_im = np.array(fft_data.y_im)
-
-    # Rescale each cross-spectral component
-    psd_samples_rescaled = np.zeros_like(psd_samples)
-    for i in range(fft_data.n_dim):
-        for j in range(fft_data.n_dim):
-            psd_samples_rescaled[:, :, i, j] = (
-                psd_samples[:, :, i, j] * config.scaling_factor
-            )
 
     # Also rescale observed FFT data
     observed_fft_re_rescaled = fft_y_re * np.sqrt(config.scaling_factor)
@@ -345,7 +350,6 @@ def _create_multivar_inference_data(
             f"Rescaling multivariate posterior samples: max scaling ~{config.scaling_factor:.2e}"
         )
 
-    psd_samples = psd_samples_rescaled
     observed_fft_data_rescaled = {
         "fft_re": observed_fft_re_rescaled,
         "fft_im": observed_fft_im_rescaled,
@@ -355,9 +359,10 @@ def _create_multivar_inference_data(
     _handle_log_posterior(sample_stats)
 
     coords = {
-        "pp_draw": range(n_pp),
+        "percentile": percentiles,
         "freq": np.array(fft_data.freq),
         "channels": range(fft_data.n_dim),
+        "channels2": range(fft_data.n_dim),
     }
 
     dims = {}
@@ -393,9 +398,12 @@ def _create_multivar_inference_data(
         {
             "fft_re": ["freq", "channels"],
             "fft_im": ["freq", "channels"],
-            "psd_matrix": ["pp_draw", "freq", "channels", "channels2"],
+            "psd_matrix_real": ["percentile", "freq", "channels", "channels2"],
+            "psd_matrix_imag": ["percentile", "freq", "channels", "channels2"],
         }
     )
+    if coherence_q_rescaled is not None:
+        dims["coherence"] = ["percentile", "freq", "channels", "channels2"]
 
     attributes.update(
         {
@@ -425,27 +433,57 @@ def _create_multivar_inference_data(
             "fft_re": np.array(observed_fft_data_rescaled["fft_re"]),
             "fft_im": np.array(observed_fft_data_rescaled["fft_im"]),
         },
-        dims={k: v for k, v in dims.items() if k not in ["psd_matrix", "lp"]},
+        dims={
+            k: v
+            for k, v in dims.items()
+            if k
+            not in [
+                "psd_matrix_real",
+                "psd_matrix_imag",
+                "coherence",
+                "psd",
+                "lp",
+            ]
+        },
         coords=coords,
         attrs=attributes,
     )
 
-    idata.add_groups(
-        posterior_psd=Dataset(
-            {
-                "psd_matrix": DataArray(
-                    psd_samples,
-                    dims=["pp_draw", "freq", "channels", "channels2"],
-                )
-            },
+    posterior_psd_vars = {
+        "psd_matrix_real": DataArray(
+            psd_real_q_rescaled,
+            dims=["percentile", "freq", "channels", "channels2"],
             coords={
-                "pp_draw": coords["pp_draw"],
+                "percentile": coords["percentile"],
+                "freq": coords["freq"],
+                "channels": coords["channels"],
+                "channels2": coords["channels"],
+            },
+        ),
+        "psd_matrix_imag": DataArray(
+            psd_imag_q_rescaled,
+            dims=["percentile", "freq", "channels", "channels2"],
+            coords={
+                "percentile": coords["percentile"],
+                "freq": coords["freq"],
+                "channels": coords["channels"],
+                "channels2": coords["channels"],
+            },
+        ),
+    }
+    if coherence_q_rescaled is not None:
+        posterior_psd_vars["coherence"] = DataArray(
+            coherence_q_rescaled,
+            dims=["percentile", "freq", "channels", "channels2"],
+            coords={
+                "percentile": coords["percentile"],
                 "freq": coords["freq"],
                 "channels": coords["channels"],
                 "channels2": coords["channels"],
             },
         )
-    )
+
+    idata.add_groups(posterior_psd=Dataset(posterior_psd_vars, coords=coords))
 
     idata.add_groups(spline_model=_pack_spline_model_multivar(spline_model))
     return idata
@@ -540,8 +578,8 @@ def _compute_posterior_predictive_multivar(
     sample_stats: Dict[str, jnp.ndarray],
     spline_model,
     fft_data: MultivarFFT,
-) -> jnp.ndarray:
-    """Compute posterior predictive PSD matrices from samples."""
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    """Compute PSD percentiles (and optional coherence percentiles) from samples."""
     # Keep concise logging
     logger.debug("_compute_posterior_predictive_multivar: entry")
 
@@ -585,9 +623,16 @@ def _compute_posterior_predictive_multivar(
             samples, spline_model, fft_data, "im"
         )
 
-    return spline_model.reconstruct_psd_matrix(
-        log_delta_sq, theta_re, theta_im, n_samples_max=50
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
+    psd_real_q, psd_imag_q, coh_q = spline_model.compute_psd_quantiles(
+        log_delta_sq,
+        theta_re,
+        theta_im,
+        percentiles=percentiles,
+        n_samples_max=50,
+        compute_coherence=fft_data.n_dim > 1,
     )
+    return percentiles, psd_real_q, psd_imag_q, coh_q
 
 
 def _reconstruct_log_delta_sq(
@@ -655,15 +700,23 @@ def _compute_psd_diagnostics(idata, config, data, model) -> Dict[str, Any]:
     if isinstance(data, Periodogram):
         # Univariate case - use idata.posterior_psd.psd
         if "psd" in idata.posterior_psd:
-            psd_samples = idata.posterior_psd["psd"].values
-            median_psd = np.median(psd_samples, axis=0)
+            psd_quant = idata.posterior_psd["psd"]
+            perc = np.asarray(psd_quant.coords["percentile"].values)
+            values = psd_quant.values
 
-            riae = _compute_riae(median_psd, config.true_psd, data.freqs)
-            riae_errorbars = _compute_riae_errorbars(
-                psd_samples, config.true_psd, data.freqs
-            )
-            ci_coverage = _compute_ci_coverage_univar(
-                psd_samples, config.true_psd
+            def _grab(p: float) -> np.ndarray:
+                idx = int(np.argmin(np.abs(perc - p)))
+                return values[idx]
+
+            q50 = _grab(50.0)
+            q05 = _grab(5.0)
+            q95 = _grab(95.0)
+
+            riae = _compute_riae(q50, config.true_psd, data.freqs)
+            riae_low = _compute_riae(q05, config.true_psd, data.freqs)
+            riae_high = _compute_riae(q95, config.true_psd, data.freqs)
+            ci_coverage = np.mean(
+                (config.true_psd >= q05) & (config.true_psd <= q95)
             )
 
             diagnostics["riae"] = riae
@@ -672,18 +725,35 @@ def _compute_psd_diagnostics(idata, config, data, model) -> Dict[str, Any]:
             coverage_recorded = True
             # Store errorbars as list/tuple instead of dict for netCDF serialization
             diagnostics["riae_errorbars"] = [
-                riae_errorbars["q05"],
-                riae_errorbars["q25"],
-                riae_errorbars["median"],
-                riae_errorbars["q75"],
-                riae_errorbars["q95"],
+                float(riae_low),
+                float(riae_low),
+                float(riae),
+                float(riae_high),
+                float(riae_high),
             ]
 
     elif isinstance(data, MultivarFFT):
-        # Multivariate case - use idata.posterior_psd.psd_matrix
-        if "psd_matrix" in idata.posterior_psd:
-            psd_matrix_samples = idata.posterior_psd["psd_matrix"].values
-            median_psd_matrix = np.median(psd_matrix_samples, axis=0)
+        # Multivariate case - use idata.posterior_psd.psd_matrix_real
+        if "psd_matrix_real" in idata.posterior_psd:
+            psd_real_quant = idata.posterior_psd["psd_matrix_real"]
+            perc = np.asarray(psd_real_quant.coords["percentile"].values)
+
+            def _grab_matrix(arr: np.ndarray, p: float) -> np.ndarray:
+                idx = int(np.argmin(np.abs(perc - p)))
+                return arr[idx]
+
+            psd_real_vals = psd_real_quant.values
+            psd_imag_vals = (
+                idata.posterior_psd["psd_matrix_imag"].values
+                if "psd_matrix_imag" in idata.posterior_psd
+                else np.zeros_like(psd_real_vals)
+            )
+
+            q50_real = _grab_matrix(psd_real_vals, 50.0)
+            q05_real = _grab_matrix(psd_real_vals, 5.0)
+            q95_real = _grab_matrix(psd_real_vals, 95.0)
+
+            median_psd_matrix = q50_real
 
             # Compute matrix RIAE using Frobenius norm
             if config.true_psd is not None and config.true_psd.ndim == 3:
@@ -693,25 +763,23 @@ def _compute_psd_diagnostics(idata, config, data, model) -> Dict[str, Any]:
                     median_psd_matrix, true_psd_real, np.array(data.freq)
                 )
 
-                # Compute matrix RIAE errorbars from samples
-                matrix_riae_samples = []
-                for psd_matrix in psd_matrix_samples:
-                    matrix_riae = _compute_matrix_riae(
-                        psd_matrix, true_psd_real, np.array(data.freq)
-                    )
-                    matrix_riae_samples.append(matrix_riae)
-                matrix_riae_samples = np.array(matrix_riae_samples)
+                riae_low = _compute_matrix_riae(
+                    q05_real, true_psd_real, np.array(data.freq)
+                )
+                riae_high = _compute_matrix_riae(
+                    q95_real, true_psd_real, np.array(data.freq)
+                )
                 riae_matrix_errorbars = {
-                    "q05": float(np.percentile(matrix_riae_samples, 5)),
-                    "q25": float(np.percentile(matrix_riae_samples, 25)),
-                    "median": float(np.median(matrix_riae_samples)),
-                    "q75": float(np.percentile(matrix_riae_samples, 75)),
-                    "q95": float(np.percentile(matrix_riae_samples, 95)),
+                    "q05": float(riae_low),
+                    "q25": float(riae_low),
+                    "median": float(riae_matrix),
+                    "q75": float(riae_high),
+                    "q95": float(riae_high),
                 }
 
                 # Compute CI coverage for multivariate
                 ci_coverage_matrix = model.get_psd_matrix_coverage(
-                    psd_matrix_samples, true_psd_real
+                    psd_real_vals, true_psd_real
                 )
 
                 diagnostics["riae_matrix"] = riae_matrix
@@ -785,9 +853,14 @@ def _compute_riae_errorbars(
 def _compute_ci_coverage_univar(
     psd_samples: np.ndarray, true_psd: np.ndarray
 ) -> float:
-    """Compute 95% credible interval coverage for univariate PSD."""
-    posterior_lower = np.percentile(psd_samples, 2.5, axis=0)
-    posterior_upper = np.percentile(psd_samples, 97.5, axis=0)
+    """Compute 90% credible interval coverage for univariate PSD."""
+    arr = np.asarray(psd_samples)
+    if arr.ndim == 2 and arr.shape[0] == 3:
+        posterior_lower = arr[0]
+        posterior_upper = arr[-1]
+    else:
+        posterior_lower = np.percentile(arr, 5.0, axis=0)
+        posterior_upper = np.percentile(arr, 95.0, axis=0)
     coverage = np.mean(
         (true_psd >= posterior_lower) & (true_psd <= posterior_upper)
     )
@@ -797,20 +870,25 @@ def _compute_ci_coverage_univar(
 def _compute_ci_coverage_multivar(
     psd_matrix_samples: np.ndarray, true_psd_real: np.ndarray
 ) -> float:
-    """Compute 95% credible interval coverage for multivariate PSD matrix."""
+    """Compute 90% credible interval coverage for multivariate PSD matrix."""
     true_psd = np.zeros_like(true_psd_real)
     for i in range(true_psd_real.shape[0]):
         true_psd[i] = _complex_to_real(true_psd_real[i])
 
-    psd_matrix_real = np.zeros_like(psd_matrix_samples, dtype=np.float64)
-    for i in range(psd_matrix_samples.shape[0]):
-        for j in range(psd_matrix_samples.shape[1]):
-            psd_matrix_real[i, j] = _complex_to_real(psd_matrix_samples[i, j])
+    arr = np.asarray(psd_matrix_samples)
+    if arr.ndim == 4 and arr.shape[0] == 3:
+        posterior_lower = arr[0]
+        posterior_upper = arr[-1]
+    else:
+        psd_matrix_real = np.zeros_like(arr, dtype=np.float64)
+        for i in range(arr.shape[0]):
+            for j in range(arr.shape[1]):
+                psd_matrix_real[i, j] = _complex_to_real(arr[i, j])
+        posterior_lower = np.percentile(psd_matrix_real, 5.0, axis=0)
+        posterior_upper = np.percentile(psd_matrix_real, 95.0, axis=0)
 
-    posterior_lower = np.percentile(psd_matrix_real, 2.5, axis=0)
-    posterior_upper = np.percentile(psd_matrix_real, 97.5, axis=0)
     coverage = np.mean(
-        (true_psd_real >= posterior_lower) & (true_psd_real <= posterior_upper)
+        (true_psd >= posterior_lower) & (true_psd <= posterior_upper)
     )
     return float(coverage)
 

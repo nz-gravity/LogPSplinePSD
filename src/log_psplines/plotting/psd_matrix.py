@@ -5,12 +5,7 @@ import numpy as np
 
 from ..datatypes.multivar import EmpiricalPSD, _get_coherence
 from ..logger import logger
-from .base import (
-    compute_coherence_ci,
-    compute_cross_spectra_ci,
-    extract_plotting_data,
-    setup_plot_style,
-)
+from .base import extract_plotting_data, setup_plot_style
 
 # Setup default plot styling
 setup_plot_style()
@@ -226,43 +221,53 @@ def plot_psd_matrix(
     # ----- Extract/validate -----
     if idata is not None:
         # Check for required data
-        if "psd_matrix" not in idata.posterior_psd:
-            raise ValueError("idata missing posterior_psd['psd_matrix']")
+        extracted = extract_plotting_data(idata)
+        quantiles = extracted.get("posterior_psd_matrix_quantiles")
 
-        # Extract data using shared utility
-        extracted_data = extract_plotting_data(idata)
-        psd_samples = extracted_data.get("posterior_psd_matrix")
+        if quantiles is None:
+            raise ValueError(
+                "idata missing posterior_psd matrix quantiles for plotting"
+            )
 
-        if psd_samples is None:
-            raise ValueError("Could not extract PSD matrix from idata")
-
-        freq = extracted_data.get("frequencies", freq)
-        true_psd = extracted_data.get("true_psd", true_psd)
+        freq = extracted.get("frequencies", freq)
+        true_psd = extracted.get("true_psd", true_psd)
 
         # For multivariate data, try to extract empirical PSD if not provided
         if empirical_psd is None:
             empirical_psd = _extract_empirical_psd_from_idata(idata)
 
-        # Compute confidence intervals using shared utilities
-        if show_coherence:
-            ci_dict = dict(coh=compute_coherence_ci(psd_samples))
-            # Add PSD diagonal elements
-            ci_dict["psd"] = {}
-            for i in range(psd_samples.shape[2]):
-                q05 = np.percentile(psd_samples[:, :, i, i].real, 5, axis=0)
-                q50 = np.percentile(psd_samples[:, :, i, i].real, 50, axis=0)
-                q95 = np.percentile(psd_samples[:, :, i, i].real, 95, axis=0)
-                ci_dict["psd"][(i, i)] = (q05, q50, q95)
+        percentiles = quantiles["percentile"]
 
-        else:
-            real_dict, imag_dict = compute_cross_spectra_ci(psd_samples)
-            ci_dict = {"psd": {}, "coh": {}, "re": real_dict, "im": imag_dict}
-            # Add PSD diagonal elements
-            for i in range(psd_samples.shape[2]):
-                q05 = np.percentile(psd_samples[:, :, i, i].real, 5, axis=0)
-                q50 = np.percentile(psd_samples[:, :, i, i].real, 50, axis=0)
-                q95 = np.percentile(psd_samples[:, :, i, i].real, 95, axis=0)
-                ci_dict["psd"][(i, i)] = (q05, q50, q95)
+        def _grab(arr: np.ndarray, target: float) -> np.ndarray:
+            idx = int(np.argmin(np.abs(percentiles - target)))
+            return arr[idx]
+
+        real_q = quantiles["real"]
+        imag_q = quantiles["imag"]
+        coh_q = quantiles.get("coherence")
+
+        ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}}
+        n_channels = real_q.shape[2]
+        for i in range(n_channels):
+            for j in range(n_channels):
+                q05_r = _grab(real_q[:, :, i, j], 5.0)
+                q50_r = _grab(real_q[:, :, i, j], 50.0)
+                q95_r = _grab(real_q[:, :, i, j], 95.0)
+                ci_dict["psd"][(i, j)] = (q05_r, q50_r, q95_r)
+                if i != j:
+                    q05_im = _grab(imag_q[:, :, i, j], 5.0)
+                    q50_im = _grab(imag_q[:, :, i, j], 50.0)
+                    q95_im = _grab(imag_q[:, :, i, j], 95.0)
+                    ci_dict["re"][(i, j)] = (q05_r, q50_r, q95_r)
+                    ci_dict["im"][(i, j)] = (q05_im, q50_im, q95_im)
+
+        if coh_q is not None and show_coherence:
+            for i in range(n_channels):
+                for j in range(n_channels):
+                    q05_c = _grab(coh_q[:, :, i, j], 5.0)
+                    q50_c = _grab(coh_q[:, :, i, j], 50.0)
+                    q95_c = _grab(coh_q[:, :, i, j], 95.0)
+                    ci_dict["coh"][(i, j)] = (q05_c, q50_c, q95_c)
 
     elif ci_dict is None:
         raise ValueError("Provide either `idata` or `ci_dict`.")

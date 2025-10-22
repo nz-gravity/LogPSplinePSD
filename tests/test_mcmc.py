@@ -112,9 +112,9 @@ def test_multivar_mcmc(outdir, test_mode):
         )
 
         # check the posterior psd matrix shape
-        psd_matrix = idata.posterior_psd["psd_matrix"].values
-        psd_matrix_shape = psd_matrix.shape
-        freq_dim = idata.posterior_psd["psd_matrix"].sizes["freq"]
+        psd_matrix_real = idata.posterior_psd["psd_matrix_real"]
+        psd_matrix_shape = psd_matrix_real.shape
+        freq_dim = psd_matrix_real.sizes["freq"]
         assert (
             psd_matrix_shape[1] == freq_dim
         ), "Posterior PSD frequency dimension mismatch."
@@ -259,7 +259,9 @@ def test_mcmc(outdir: str, test_mode: str):
         weights = get_weights(idata_loaded)
         assert weights is not None, "Weights not found in posterior."
 
-        post_psd = idata_loaded.posterior_psd.psd.median(dim=["pp_draw"])
+        post_psd = idata_loaded.posterior_psd.psd.sel(
+            percentile=50.0, method="nearest"
+        )
         posd_psd_scale = post_psd.median().item()
         print(
             f"Posterior PSD scale (median): {posd_psd_scale:.2e}, expected ~{psd_scale:.2e}"

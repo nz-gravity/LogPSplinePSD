@@ -109,11 +109,30 @@ def extract_plotting_data(idata, weights_key: str = None) -> Dict[str, Any]:
     # Extract posterior samples if available
     if hasattr(idata, "posterior_psd"):
         if "psd" in idata.posterior_psd:
-            data["posterior_psd"] = idata.posterior_psd.psd.values
-        if "psd_matrix" in idata.posterior_psd:
-            data["posterior_psd_matrix"] = (
-                idata.posterior_psd.psd_matrix.values
-            )
+            arr = idata.posterior_psd["psd"]
+            data["posterior_psd_quantiles"] = {
+                "percentile": np.asarray(arr.coords["percentile"].values),
+                "values": np.asarray(arr.values),
+            }
+        if "psd_matrix_real" in idata.posterior_psd:
+            data["posterior_psd_matrix_quantiles"] = {
+                "percentile": np.asarray(
+                    idata.posterior_psd["psd_matrix_real"]
+                    .coords["percentile"]
+                    .values
+                ),
+                "real": np.asarray(
+                    idata.posterior_psd["psd_matrix_real"].values
+                ),
+                "imag": np.asarray(
+                    idata.posterior_psd["psd_matrix_imag"].values
+                ),
+                "coherence": (
+                    np.asarray(idata.posterior_psd["coherence"].values)
+                    if "coherence" in idata.posterior_psd
+                    else None
+                ),
+            }
 
     # Extract true PSD if available
     if hasattr(idata, "attrs") and "true_psd" in idata.attrs:

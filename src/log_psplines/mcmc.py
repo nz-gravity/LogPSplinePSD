@@ -183,6 +183,7 @@ def run_mcmc(
     vi_guide: Optional[str] = None,
     vi_posterior_draws: int = 256,
     vi_progress_bar: Optional[bool] = None,
+    vi_psd_max_draws: int = 64,
     coarse_grain_config: Optional[CoarseGrainConfig | dict] = None,
     n_time_blocks: int = 1,
     # MH specific
@@ -458,6 +459,7 @@ def run_mcmc(
         vi_guide=vi_guide,
         vi_posterior_draws=vi_posterior_draws,
         vi_progress_bar=vi_progress_bar,
+        vi_psd_max_draws=vi_psd_max_draws,
         target_accept_rate=target_accept_rate,
         adaptation_window=adaptation_window,
         scaling_factor=(
@@ -499,6 +501,7 @@ def create_sampler(
     vi_guide: Optional[str] = None,
     vi_posterior_draws: int = 256,
     vi_progress_bar: Optional[bool] = None,
+    vi_psd_max_draws: int = 64,
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
     scaling_factor: float = 1.0,
@@ -524,6 +527,7 @@ def create_sampler(
         "scaling_factor": scaling_factor,
         "true_psd": true_psd,
         "freq_weights": freq_weights,
+        "vi_psd_max_draws": vi_psd_max_draws,
     }
 
     if isinstance(data, Periodogram):

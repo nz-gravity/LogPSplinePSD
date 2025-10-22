@@ -37,7 +37,7 @@ def unpack_data(
     use_uniform_ci=True,
     use_parametric_model=True,
     freqs=None,
-    posterior_psd=None,
+    posterior_psd_quantiles=None,
     model_ci=None,
 ):
     plt_dat = PlottingData()
@@ -54,10 +54,20 @@ def unpack_data(
         plt_dat.ci = model_ci
         plt_dat.model = model_ci[1]
 
-    if posterior_psd is not None:
-        ci = np.percentile(posterior_psd, q=jnp.array([16, 50, 84]), axis=0)
+    if posterior_psd_quantiles is not None:
+        percentiles = np.asarray(posterior_psd_quantiles["percentile"])
+        values = np.asarray(posterior_psd_quantiles["values"])
+
+        def _grab(target: float) -> np.ndarray:
+            idx = int(np.argmin(np.abs(percentiles - target)))
+            return values[idx]
+
+        q05 = _grab(5.0)
+        q50 = _grab(50.0)
+        q95 = _grab(95.0)
+        ci = np.stack([q05, q50, q95], axis=0)
         plt_dat.ci = ci
-        plt_dat.model = ci[1]
+        plt_dat.model = q50
 
     if plt_dat.model is None and spline_model is not None:
 

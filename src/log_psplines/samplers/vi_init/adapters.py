@@ -20,6 +20,15 @@ from .guide import (
 from .mixin import VIInitialisationArtifacts
 
 
+def _cap_psd_draws(config, desired: int) -> int:
+    """Limit PSD reconstructions to a manageable number of draws."""
+    max_cfg = int(getattr(config, "vi_psd_max_draws", 0) or 0)
+    capped = int(desired)
+    if max_cfg > 0:
+        capped = min(capped, max_cfg)
+    return max(1, capped)
+
+
 def compute_vi_artifacts_univar(
     sampler,
     *,
@@ -168,7 +177,7 @@ def compute_vi_artifacts_multivar(
                 theta_im[None, ...],
                 n_samples_max=1,
             )[0]
-            vi_psd_np = np.asarray(jax.device_get(vi_psd)) * scaling
+            vi_psd_np = np.asarray(vi_psd) * scaling
 
             samples_tree = vi_result.samples or {}
             if samples_tree:
@@ -248,66 +257,56 @@ def compute_vi_artifacts_multivar(
                         )
                         theta_im_samples = jnp.zeros_like(theta_re_samples)
 
-                    psd_samples = sampler.spline_model.reconstruct_psd_matrix(
-                        log_delta_samples,
-                        theta_re_samples,
-                        theta_im_samples,
-                        n_samples_max=min(
+                    n_psd_draws = _cap_psd_draws(
+                        sampler.config,
+                        min(
                             log_delta_samples.shape[0],
                             max(1, sampler.config.vi_posterior_draws),
                         ),
                     )
-                    psd_samples_np = (
-                        np.asarray(jax.device_get(psd_samples)) * scaling
-                    )
-
-                    psd_quantiles = (
-                        sampler.spline_model.get_psd_matrix_percentiles(
-                            psd_samples_np, [5, 50, 95]
+                    if n_psd_draws < log_delta_samples.shape[0]:
+                        logger.debug(
+                            "Capping VI PSD reconstruction to %d draws "
+                            "(limit=%d).",
+                            n_psd_draws,
+                            getattr(sampler.config, "vi_psd_max_draws", 0),
+                        )
+                    log_delta_samples = log_delta_samples[:n_psd_draws]
+                    theta_re_samples = theta_re_samples[:n_psd_draws]
+                    theta_im_samples = theta_im_samples[:n_psd_draws]
+                    psd_real_q, psd_imag_q, coh_percentiles = (
+                        sampler.spline_model.compute_psd_quantiles(
+                            log_delta_samples,
+                            theta_re_samples,
+                            theta_im_samples,
+                            percentiles=[5.0, 50.0, 95.0],
+                            n_samples_max=n_psd_draws,
+                            compute_coherence=sampler.n_channels > 1,
                         )
                     )
+                    psd_real_q *= scaling
+                    psd_imag_q *= scaling
+
                     psd_quantiles = {
-                        "q05": psd_quantiles[0],
-                        "q50": psd_quantiles[1],
-                        "q95": psd_quantiles[2],
+                        "real": {
+                            "q05": psd_real_q[0],
+                            "q50": psd_real_q[1],
+                            "q95": psd_real_q[2],
+                        },
+                        "imag": {
+                            "q05": psd_imag_q[0],
+                            "q50": psd_imag_q[1],
+                            "q95": psd_imag_q[2],
+                        },
                     }
-                    vi_psd_np = psd_quantiles["q50"]
+                    vi_psd_np = psd_quantiles["real"]["q50"]
 
-                    if sampler.n_channels > 1:
-                        n_freq = psd_samples_np.shape[1]
-                        coh_q05 = np.zeros(
-                            (n_freq, sampler.n_channels, sampler.n_channels)
-                        )
-                        coh_q50 = np.zeros_like(coh_q05)
-                        coh_q95 = np.zeros_like(coh_q05)
-                        for i in range(sampler.n_channels):
-                            for j in range(sampler.n_channels):
-                                if i == j:
-                                    coh_q05[:, i, j] = 1.0
-                                    coh_q50[:, i, j] = 1.0
-                                    coh_q95[:, i, j] = 1.0
-                                    continue
-                                denom = np.abs(
-                                    psd_samples_np[:, :, i, i]
-                                ) * np.abs(psd_samples_np[:, :, j, j])
-                                denom = np.where(denom > 0, denom, np.nan)
-                                coh_samples = (
-                                    np.abs(psd_samples_np[:, :, i, j]) ** 2
-                                    / denom
-                                )
-                                coh_samples = np.nan_to_num(
-                                    coh_samples, nan=0.0
-                                )
-                                q_coh = np.percentile(
-                                    coh_samples, [5, 50, 95], axis=0
-                                )
-                                coh_q05[:, i, j] = q_coh[0]
-                                coh_q50[:, i, j] = q_coh[1]
-                                coh_q95[:, i, j] = q_coh[2]
+                    if coh_percentiles is not None:
+                        coh_percentiles *= 1.0  # already dimensionless
                         coherence_quantiles = {
-                            "q05": coh_q05,
-                            "q50": coh_q50,
-                            "q95": coh_q95,
+                            "q05": coh_percentiles[0],
+                            "q50": coh_percentiles[1],
+                            "q95": coh_percentiles[2],
                         }
         except OverflowError as err:  # pragma: no cover - defensive fallback
             if sampler.config.verbose:
@@ -435,6 +434,11 @@ def prepare_block_vi(
         )
 
         try:
+            u_re_channel = sampler.u_re[:, channel_index, :]
+            u_im_channel = sampler.u_im[:, channel_index, :]
+            u_re_prev = sampler.u_re[:, :channel_index, :]
+            u_im_prev = sampler.u_im[:, :channel_index, :]
+
             vi_result = fit_vi(
                 model=block_model,
                 rng_key=vi_key,
@@ -442,8 +446,10 @@ def prepare_block_vi(
                 optimizer_lr=sampler.config.vi_lr,
                 model_args=(
                     channel_index,
-                    sampler.u_re,
-                    sampler.u_im,
+                    u_re_channel,
+                    u_im_channel,
+                    u_re_prev,
+                    u_im_prev,
                     delta_basis,
                     delta_penalty,
                     sampler._theta_basis,
@@ -647,81 +653,79 @@ def prepare_block_vi(
                 jnp.asarray(theta_im_vi_np)[None, ...],
                 n_samples_max=1,
             )[0]
-            vi_psd_np = np.asarray(jax.device_get(vi_psd)) * scaling
+            vi_psd_np = np.asarray(vi_psd) * scaling
         else:
             vi_psd_np = None
 
         psd_quantiles = None
         coherence_quantiles = None
         if store_draws and not draws_missing and log_delta_draws is not None:
-            draws_used = draws_recorded or posterior_draws
-            log_delta_samples = jnp.asarray(
-                log_delta_draws[:draws_used], dtype=jnp.float32
-            )
-            if sampler.n_theta > 0 and theta_re_draws is not None:
-                theta_re_samples = jnp.asarray(
-                    theta_re_draws[:draws_used], dtype=jnp.float32
-                )
-                theta_im_samples = jnp.asarray(
-                    theta_im_draws[:draws_used], dtype=jnp.float32
+            desired_draws = draws_recorded or posterior_draws
+            draws_available = min(desired_draws, log_delta_draws.shape[0])
+            if draws_available == 0:
+                logger.debug(
+                    "No VI PSD draws recorded; skipping PSD reconstruction."
                 )
             else:
-                theta_re_samples = jnp.zeros(
-                    (draws_used, sampler.n_freq, 0), dtype=jnp.float32
+                draws_used = _cap_psd_draws(sampler.config, draws_available)
+                if draws_used < draws_available:
+                    logger.debug(
+                        "Capping VI PSD reconstruction to %d draws "
+                        "(limit=%d).",
+                        draws_used,
+                        getattr(sampler.config, "vi_psd_max_draws", 0),
+                    )
+                log_delta_samples = jnp.asarray(
+                    log_delta_draws[:draws_used], dtype=jnp.float32
                 )
-                theta_im_samples = jnp.zeros_like(theta_re_samples)
+                if sampler.n_theta > 0 and theta_re_draws is not None:
+                    theta_re_samples = jnp.asarray(
+                        theta_re_draws[:draws_used], dtype=jnp.float32
+                    )
+                    theta_im_samples = jnp.asarray(
+                        theta_im_draws[:draws_used], dtype=jnp.float32
+                    )
+                else:
+                    theta_re_samples = jnp.zeros(
+                        (draws_used, sampler.n_freq, 0), dtype=jnp.float32
+                    )
+                    theta_im_samples = jnp.zeros_like(theta_re_samples)
 
-            logger.debug("Reconstructing PSD samples from VI draws...")
-            psd_samples = sampler.spline_model.reconstruct_psd_matrix(
-                log_delta_samples,
-                theta_re_samples,
-                theta_im_samples,
-                n_samples_max=draws_used,
-            )
-            psd_samples_np = np.asarray(jax.device_get(psd_samples)) * scaling
-
-            # make them real
-            psd_quantiles = sampler.spline_model.get_psd_matrix_percentiles(
-                psd_samples_np, [5, 50, 95]
-            )
-            psd_quantiles = {
-                "q05": psd_quantiles[0],
-                "q50": psd_quantiles[1],
-                "q95": psd_quantiles[2],
-            }
-            vi_psd_np = psd_quantiles["q50"]
-
-            if sampler.n_channels > 1:
-                n_freq = psd_samples_np.shape[1]
-                coh_q05 = np.zeros(
-                    (n_freq, sampler.n_channels, sampler.n_channels)
+                logger.debug("Reconstructing PSD samples from VI draws...")
+                psd_real_q, psd_imag_q, coh_percentiles = (
+                    sampler.spline_model.compute_psd_quantiles(
+                        log_delta_samples,
+                        theta_re_samples,
+                        theta_im_samples,
+                        percentiles=[5.0, 50.0, 95.0],
+                        n_samples_max=draws_used,
+                        compute_coherence=sampler.n_channels > 1,
+                    )
                 )
-                coh_q50 = np.zeros_like(coh_q05)
-                coh_q95 = np.zeros_like(coh_q05)
-                for i in range(sampler.n_channels):
-                    for j in range(sampler.n_channels):
-                        if i == j:
-                            coh_q05[:, i, j] = 1.0
-                            coh_q50[:, i, j] = 1.0
-                            coh_q95[:, i, j] = 1.0
-                            continue
-                        denom = np.abs(psd_samples_np[:, :, i, i]) * np.abs(
-                            psd_samples_np[:, :, j, j]
-                        )
-                        denom = np.where(denom > 0, denom, np.nan)
-                        coh_samples = (
-                            np.abs(psd_samples_np[:, :, i, j]) ** 2 / denom
-                        )
-                        coh_samples = np.nan_to_num(coh_samples, nan=0.0)
-                        q_coh = np.percentile(coh_samples, [5, 50, 95], axis=0)
-                        coh_q05[:, i, j] = q_coh[0]
-                        coh_q50[:, i, j] = q_coh[1]
-                        coh_q95[:, i, j] = q_coh[2]
-                coherence_quantiles = {
-                    "q05": coh_q05,
-                    "q50": coh_q50,
-                    "q95": coh_q95,
+                psd_real_q *= scaling
+                psd_imag_q *= scaling
+
+                psd_quantiles = {
+                    "real": {
+                        "q05": psd_real_q[0],
+                        "q50": psd_real_q[1],
+                        "q95": psd_real_q[2],
+                    },
+                    "imag": {
+                        "q05": psd_imag_q[0],
+                        "q50": psd_imag_q[1],
+                        "q95": psd_imag_q[2],
+                    },
                 }
+                vi_psd_np = psd_quantiles["real"]["q50"]
+
+                if coh_percentiles is not None:
+                    coh_percentiles *= 1.0
+                    coherence_quantiles = {
+                        "q05": coh_percentiles[0],
+                        "q50": coh_percentiles[1],
+                        "q95": coh_percentiles[2],
+                    }
 
         valid_losses = [arr for arr in vi_losses_blocks if arr.size]
         losses_mean = None

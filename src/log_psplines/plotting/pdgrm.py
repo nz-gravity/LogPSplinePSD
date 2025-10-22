@@ -33,7 +33,7 @@ def plot_pdgrm(
     idata=None,
     true_psd=None,
     model_ci=None,
-    posterior_psd=None,
+    posterior_psd_quantiles=None,
     model_color=MODEL_COL,
     model_label="Model",
     data_color=DATA_COL,
@@ -53,7 +53,7 @@ def plot_pdgrm(
         pdgrm = extracted_data.get("periodogram", pdgrm)
         spline_model = extracted_data.get("spline_model", spline_model)
         weights = extracted_data.get("weights", weights)
-        posterior_psd = extracted_data.get("posterior_psd")
+        posterior_psd_quantiles = extracted_data.get("posterior_psd_quantiles")
         true_psd = extracted_data.get("true_psd", true_psd)
 
     plt_data = unpack_data(
@@ -64,7 +64,7 @@ def plot_pdgrm(
         use_uniform_ci=use_uniform_ci,
         use_parametric_model=use_parametric_model,
         freqs=freqs,
-        posterior_psd=posterior_psd,
+        posterior_psd_quantiles=posterior_psd_quantiles,
         model_ci=model_ci,
     )
 

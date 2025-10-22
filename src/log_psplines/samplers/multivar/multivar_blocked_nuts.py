@@ -46,8 +46,10 @@ from .multivar_base import MultivarBaseSampler
 
 def _blocked_channel_model(
     channel_index: int,
-    u_re_all: jnp.ndarray,
-    u_im_all: jnp.ndarray,
+    u_re_channel: jnp.ndarray,
+    u_im_channel: jnp.ndarray,
+    u_re_prev: jnp.ndarray,
+    u_im_prev: jnp.ndarray,
     basis_delta: jnp.ndarray,
     penalty_delta: jnp.ndarray,
     basis_theta: jnp.ndarray,
@@ -64,10 +66,13 @@ def _blocked_channel_model(
     ----------
     channel_index
         0‑based row index ``j`` in the Cholesky factor (channel in the data).
-    u_re_all, u_im_all
-        Real/imag parts of the eigenvector-weighted periodogram components,
-        shape ``(n_freq, n_dim, n_dim)``. Column ``ν`` corresponds to the
-        ``ν``-th eigenvector replicate at each frequency.
+    u_re_channel, u_im_channel
+        Real/imag parts of the eigenvector-weighted periodogram components for
+        the active channel, shape ``(n_freq, n_rep)``.
+    u_re_prev, u_im_prev
+        Same components for the lower-triangular predecessors,
+        shape ``(n_freq, channel_index, n_rep)``. The arrays can have zero size
+        in the second dimension when ``channel_index == 0``.
     basis_delta, penalty_delta
         P‑spline basis/penalty for ``log δ_j(f)^2``.
     basis_theta, penalty_theta
@@ -103,9 +108,9 @@ def _blocked_channel_model(
     )
     log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
 
-    n_freq = u_re_all.shape[0]
+    n_freq = u_re_channel.shape[0]
     n_theta_block = channel_index
-    n_reps = u_re_all.shape[2]
+    n_reps = u_re_channel.shape[1]
 
     if n_theta_block > 0:
         theta_re_components = []
@@ -154,13 +159,7 @@ def _blocked_channel_model(
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
     sum_log_det = -float(nu) * jnp.sum(log_delta_sq)
 
-    u_re_channel = u_re_all[:, channel_index, :]
-    u_im_channel = u_im_all[:, channel_index, :]
-
     if n_theta_block > 0:
-        u_re_prev = u_re_all[:, :channel_index, :]
-        u_im_prev = u_im_all[:, :channel_index, :]
-
         contrib_re = jnp.einsum(
             "fl,flr->fr", theta_re, u_re_prev
         ) - jnp.einsum("fl,flr->fr", theta_im, u_im_prev)
@@ -323,6 +322,11 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             theta_start = channel_index * (channel_index - 1) // 2
             theta_count = channel_index
 
+            u_re_channel = self.u_re[:, channel_index, :]
+            u_im_channel = self.u_im[:, channel_index, :]
+            u_re_prev = self.u_re[:, :channel_index, :]
+            u_im_prev = self.u_im[:, :channel_index, :]
+
             kernel_kwargs = dict(
                 target_accept_prob=self.config.target_accept_prob,
                 max_tree_depth=self.config.max_tree_depth,
@@ -347,8 +351,10 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             mcmc.run(
                 mcmc_keys[channel_index],
                 channel_index,
-                self.u_re,
-                self.u_im,
+                u_re_channel,
+                u_im_channel,
+                u_re_prev,
+                u_im_prev,
                 delta_basis,
                 delta_penalty,
                 self._theta_basis,

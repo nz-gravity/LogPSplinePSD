@@ -32,10 +32,15 @@ def test_mode():
 
 @pytest.fixture
 def outdir():
-    from git import Repo
+    try:
+        from git import Repo
 
-    branch = Repo(".", search_parent_directories=True).active_branch.name
-    outdir = f"{HERE}/test_output/branch_[{branch}]"
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+        branch = Repo(".", search_parent_directories=True).active_branch.name
+        outdir = f"{HERE}/test_output/branch_[{branch}]"
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+    except Exception:
+        outdir = f"{HERE}/test_output/unknown_branch"
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
     return outdir

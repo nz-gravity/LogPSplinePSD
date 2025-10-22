@@ -9,15 +9,18 @@ coverage of the 90% posterior intervals on the auto-spectra.
 Outputs are written to ``docs/studies/multivar_psd/out_change_time_blocks/`` by
 default:
 
-* ``results.csv`` – summary table with RIAE / coverage / runtime per setting
-* ``riae_vs_blocks.png`` – quick visualisation of RIAE vs. block count
+* ``results.csv`` – per-run table with RIAE / coverage / runtime per seed
+* ``summary.csv`` – aggregated means / standard deviations across seeds
+* ``riae_vs_blocks.png`` – visualisation of RIAE, runtime, and coverage vs. block count
+* (optional) PSD quantile plots when ``--save-psd-plots`` is provided
 
 Usage
 -----
 Run from the project root:
 
     python docs/studies/multivar_psd/change_time_blocks.py \
-        --outdir docs/studies/multivar_psd/out_change_time_blocks
+        --outdir docs/studies/multivar_psd/out_change_time_blocks \
+        --seeds 0 1 2
 
 """
 
@@ -25,11 +28,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,13 +42,14 @@ from log_psplines.example_datasets.varma_data import (
     _calculate_spec_matrix_helper,
 )
 from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
+from log_psplines.plotting import plot_psd_matrix
 
 # ArviZ emits a warning when fewer than 2 chains are present; suppress for this study.
 warnings.filterwarnings(
     "ignore", message="Shape validation failed", module="arviz"
 )
 
-N = 8192 * 2  # length of time series
+N = 2048  # length of time series for VARMA simulations
 
 
 @dataclass
@@ -56,10 +59,11 @@ class StudyConfig:
     n_time_blocks: Sequence[int]
     n_samples: int
     n_warmup: int
-    rng_key: int
+    seeds: Sequence[int] = (0, 1, 2)
     sampler: str = "multivar_blocked_nuts"
     outdir: Path = Path("docs/studies/multivar_psd/out_change_time_blocks")
     save_idata: bool = False
+    save_psd_plots: bool = False
 
 
 def _ensure_dir(path: Path) -> None:
@@ -133,119 +137,208 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
     """Execute the sweep and return a dataframe with summary statistics."""
     _ensure_dir(config.outdir)
 
-    # Generate synthetic VAR(2) data once
-    varma = VARMAData(n_samples=N, seed=1234)
-    timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
-    results = []
+    results: list[dict[str, float | int | str]] = []
 
-    for n_blocks in config.n_time_blocks:
-        print(f"Running sampler with n_time_blocks={n_blocks}...")
-        block_outdir = config.outdir / f"blocks_{n_blocks}"
-        if config.save_idata:
-            _ensure_dir(block_outdir)
-            outdir = block_outdir
-        else:
-            outdir = None
+    for seed in config.seeds:
+        varma = VARMAData(n_samples=N, seed=seed)
+        timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
 
-        idata = run_mcmc(
-            timeseries,
-            sampler=config.sampler,
-            n_samples=config.n_samples,
-            n_warmup=config.n_warmup,
-            n_time_blocks=n_blocks,
-            rng_key=config.rng_key,
-            verbose=False,
-            compute_lnz=False,
-            outdir=str(outdir) if outdir is not None else None,
-        )
-
-        freq, median_psd, q05_real, q95_real = _extract_psd_quantiles(idata)
-
-        true_psd_aligned = _true_psd_on_grid(
-            freq,
-            varma.var_coeffs,
-            varma.vma_coeffs,
-            varma.sigma,
-            varma.fs,
-        )
-
-        riae = _compute_riae(freq, median_psd, true_psd_aligned)
-        coverage = _compute_diag_coverage(q05_real, q95_real, true_psd_aligned)
-        runtime = float(idata.attrs.get("runtime", np.nan))
-
-        results.append(
-            dict(
-                n_time_blocks=n_blocks,
-                riae=riae,
-                diag_coverage=coverage,
-                runtime_seconds=runtime,
-                sampler_type=idata.attrs.get("sampler_type", "unknown"),
+        for n_blocks in config.n_time_blocks:
+            print(
+                f"Running sampler with n_time_blocks={n_blocks}, seed={seed}..."
             )
-        )
 
-        if config.save_idata and outdir is not None:
-            idata.to_netcdf(outdir / "inference_data.nc")
+            block_dir = config.outdir / f"blocks_{n_blocks}" / f"seed_{seed}"
+            if config.save_idata or config.save_psd_plots:
+                _ensure_dir(block_dir)
+            outdir = block_dir if config.save_idata else None
+
+            idata = run_mcmc(
+                timeseries,
+                sampler=config.sampler,
+                n_samples=config.n_samples,
+                n_warmup=config.n_warmup,
+                n_time_blocks=n_blocks,
+                rng_key=seed,
+                verbose=False,
+                compute_lnz=False,
+                outdir=str(outdir) if outdir is not None else None,
+            )
+
+            freq, median_psd, q05_real, q95_real = _extract_psd_quantiles(
+                idata
+            )
+
+            true_psd_aligned = _true_psd_on_grid(
+                freq,
+                varma.var_coeffs,
+                varma.vma_coeffs,
+                varma.sigma,
+                varma.fs,
+            )
+
+            riae = _compute_riae(freq, median_psd, true_psd_aligned)
+            coverage = _compute_diag_coverage(
+                q05_real, q95_real, true_psd_aligned
+            )
+            runtime = float(idata.attrs.get("runtime", np.nan))
+
+            results.append(
+                dict(
+                    n_time_blocks=n_blocks,
+                    seed=seed,
+                    riae=riae,
+                    diag_coverage=coverage,
+                    runtime_seconds=runtime,
+                    sampler_type=idata.attrs.get("sampler_type", "unknown"),
+                )
+            )
+
+            if config.save_psd_plots:
+                plot_dir = block_dir
+                try:
+                    plot_psd_matrix(
+                        idata=idata,
+                        freq=freq,
+                        true_psd=true_psd_aligned,
+                        outdir=str(plot_dir),
+                        filename=f"psd_quantiles_blocks_{n_blocks}_seed_{seed}.png",
+                        save=True,
+                    )
+                except (
+                    Exception
+                ) as exc:  # pragma: no cover - plotting fallback
+                    print(
+                        f"Warning: could not generate PSD plot for blocks={n_blocks}, seed={seed}: {exc}"
+                    )
+
+            if config.save_idata:
+                idata.to_netcdf(block_dir / "inference_data.nc")
 
     df = (
         pd.DataFrame(results)
-        .sort_values("n_time_blocks")
+        .sort_values(["n_time_blocks", "seed"])
         .reset_index(drop=True)
     )
     return df
 
 
-def plot_results(df: pd.DataFrame, outdir: Path) -> None:
-    """Create a simple RIAE plot."""
+def plot_results(df: pd.DataFrame, outdir: Path) -> pd.DataFrame:
+    """Plot summary statistics and return aggregated dataframe."""
     _ensure_dir(outdir)
-    fig, ax = plt.subplots(figsize=(4.8, 3.2))
-    blocks = df["n_time_blocks"].to_numpy()
-    riae = df["riae"].to_numpy()
-    runtime = df["runtime_seconds"].to_numpy()
 
-    ax.plot(
-        blocks, riae, marker="o", linestyle="-", color="tab:blue", label="RIAE"
+    summary = (
+        df.groupby("n_time_blocks")
+        .agg(
+            riae_mean=("riae", "mean"),
+            riae_std=("riae", "std"),
+            runtime_mean=("runtime_seconds", "mean"),
+            runtime_std=("runtime_seconds", "std"),
+            coverage_mean=("diag_coverage", "mean"),
+            coverage_std=("diag_coverage", "std"),
+            n_runs=("seed", "count"),
+        )
+        .reset_index()
+    )
+
+    summary.fillna(0.0, inplace=True)
+    summary["n_runs"] = summary["n_runs"].astype(int)
+
+    blocks = summary["n_time_blocks"].to_numpy()
+    riae_mean = summary["riae_mean"].to_numpy()
+    riae_std = summary["riae_std"].to_numpy()
+    runtime_mean = summary["runtime_mean"].to_numpy()
+    runtime_std = summary["runtime_std"].to_numpy()
+    coverage_mean = summary["coverage_mean"].to_numpy()
+    coverage_std = summary["coverage_std"].to_numpy()
+
+    fig, ax = plt.subplots(figsize=(5.2, 3.4))
+    ax.errorbar(
+        blocks,
+        riae_mean,
+        yerr=riae_std,
+        marker="o",
+        linestyle="-",
+        color="tab:blue",
+        label="RIAE",
+        capsize=3,
     )
     ax.set_xscale("log", base=2)
+    ax.set_xticks(blocks)
     ax.set_xlabel("Number of time blocks")
     ax.set_ylabel("RIAE (PSD median)")
     ax.set_title("Blocked averaging sensitivity")
     ax.grid(True, alpha=0.3, which="both")
 
     ax_runtime = ax.twinx()
-    ax_runtime.plot(
+    ax_runtime.errorbar(
         blocks,
-        runtime,
+        runtime_mean,
+        yerr=runtime_std,
         marker="s",
         linestyle="--",
         color="tab:orange",
         label="Runtime",
+        capsize=3,
     )
     ax_runtime.set_ylabel("Runtime (seconds)")
+    ax_runtime.tick_params(axis="y", colors="tab:orange")
 
-    # Secondary x-axis for block length (n_time / n_blocks); assumes equal n_time for all runs.
-    n_time = N  # matches VARMAData(n_samples=N)
-    block_lengths = n_time // blocks
+    ax_cov = ax.twinx()
+    ax_cov.spines["right"].set_position(("axes", 1.12))
+    ax_cov.set_frame_on(True)
+    ax_cov.patch.set_visible(False)
+    for spine in ax_cov.spines.values():
+        spine.set_visible(False)
+    ax_cov.spines["right"].set_visible(True)
+    ax_cov.errorbar(
+        blocks,
+        coverage_mean,
+        yerr=coverage_std,
+        marker="^",
+        linestyle="-.",
+        color="tab:green",
+        label="Diag coverage",
+        capsize=3,
+    )
+    ax_cov.set_ylabel("Diagonal coverage", color="tab:green")
+    ax_cov.set_ylim(0.0, 1.05)
+    ax_cov.tick_params(axis="y", colors="tab:green")
 
     def blocks_to_length(x):
-        return n_time / x
+        return N / x
 
     def length_to_blocks(x):
-        return n_time / x
+        return N / x
 
     secax = ax.secondary_xaxis(
         "top", functions=(blocks_to_length, length_to_blocks)
     )
-    secax.set_xscale("log", base=2)
     secax.set_xlabel("Block length (samples)")
-    secax.invert_xaxis()
+    lengths = blocks_to_length(blocks)
+    unique_lengths = np.unique(lengths)[::-1]
+    if unique_lengths.size >= 2:
+        secax.set_xlim(unique_lengths[0], unique_lengths[-1])
+    secax.set_xticks(unique_lengths)
+    length_labels = []
+    for val in unique_lengths:
+        exponent = np.log2(val)
+        if np.isclose(exponent, np.round(exponent), atol=1e-6):
+            length_labels.append(f"$2^{int(np.round(exponent))}$")
+        else:
+            length_labels.append(f"{int(val)}")
+    secax.set_xticklabels(length_labels)
 
     lines, labels = ax.get_legend_handles_labels()
     lines2, labels2 = ax_runtime.get_legend_handles_labels()
-    ax.legend(lines + lines2, labels + labels2, loc="best")
+    lines3, labels3 = ax_cov.get_legend_handles_labels()
+    ax.legend(lines + lines2 + lines3, labels + labels2 + labels3, loc="best")
 
     fig.tight_layout()
     fig.savefig(outdir / "riae_vs_blocks.png", dpi=150)
     plt.close(fig)
+
+    return summary
 
 
 def parse_args() -> argparse.Namespace:
@@ -265,11 +358,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--n-samples", type=int, default=400)
     parser.add_argument("--n-warmup", type=int, default=400)
-    parser.add_argument("--rng-key", type=int, default=2024)
+    parser.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=[0, 1, 2],
+        help="Seeds for data regeneration / sampler RNG.",
+    )
     parser.add_argument(
         "--save-idata",
         action="store_true",
         help="Persist InferenceData for each configuration.",
+    )
+    parser.add_argument(
+        "--save-psd-plots",
+        action="store_true",
+        help="Store PSD quantile plots for each run.",
     )
     return parser.parse_args()
 
@@ -280,14 +384,22 @@ def main() -> None:
         n_time_blocks=args.blocks,
         n_samples=args.n_samples,
         n_warmup=args.n_warmup,
-        rng_key=args.rng_key,
+        seeds=args.seeds,
         outdir=args.outdir,
         save_idata=args.save_idata,
+        save_psd_plots=args.save_psd_plots,
     )
     df = run_study(config)
     print(df)
     df.to_csv(config.outdir / "results.csv", index=False)
-    plot_results(df, config.outdir)
+    summary = plot_results(df, config.outdir)
+    summary.to_csv(config.outdir / "summary.csv", index=False)
+    config_json = asdict(config)
+    config_json["outdir"] = str(config_json["outdir"])
+    config_json["seeds"] = list(config_json["seeds"])
+    with open(config.outdir / "config.json", "w", encoding="utf-8") as fh:
+        json.dump(config_json, fh, indent=2, default=list)
+    print(summary)
     print(f"Results written to {config.outdir}")
 
 

@@ -8,6 +8,7 @@ from loguru import logger
 from .coarse_grain import (
     CoarseGrainConfig,
     apply_coarse_graining_univar,
+    coarse_grain_multivar_fft,
     compute_binning_structure,
 )
 from .datatypes import Periodogram
@@ -382,6 +383,13 @@ def run_mcmc(
         )
         freq_weights = weights.astype(np.float32)
 
+        logger.info(
+            "Coarse-grained periodogram: selected={} -> n_freq={} (n_bins_high={})",
+            int(spec.selection_mask.sum()),
+            processed_data.n,
+            int(spec.n_bins_high),
+        )
+
         if scaled_true_psd is not None:
             try:
                 true_selected = np.asarray(scaled_true_psd)[selection_mask]
@@ -393,6 +401,31 @@ def run_mcmc(
                 logger.warning(
                     "Could not coarse-grain provided true_psd; leaving unchanged."
                 )
+
+    # Coarse-graining for multivariate Wishart FFT data
+    if isinstance(processed_data, MultivarFFT) and cg_config.enabled:
+        # Build binning spec on the current (already trimmed) frequency grid
+        spec = compute_binning_structure(
+            processed_data.freq,
+            f_transition=cg_config.f_transition,
+            n_log_bins=cg_config.n_log_bins,
+            f_min=cg_config.f_min,
+            f_max=cg_config.f_max,
+        )
+
+        processed_data, weights = coarse_grain_multivar_fft(
+            processed_data, spec
+        )
+        freq_weights = weights.astype(np.float32)
+
+        logger.info(
+            "Coarse-grained multivariate FFT: selected={} -> n_freq={} (n_bins_high={})",
+            int(spec.selection_mask.sum()),
+            processed_data.n_freq,
+            int(spec.n_bins_high),
+        )
+
+        # Defer true_psd alignment to the general resampling step below
 
     # Align true_psd (if provided) to the processed frequency grid
     if scaled_true_psd is not None and processed_data is not None:

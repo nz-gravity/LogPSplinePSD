@@ -189,6 +189,7 @@ def plot_psd_matrix(
     diag_yscale: str = "log",
     xscale: str = "linear",
     label: Optional[str] = None,
+    model_color: Optional[str] = None,
     fig: Optional[plt.Figure] = None,
     ax: Optional[np.ndarray] = None,
     save: bool = True,
@@ -337,9 +338,12 @@ def plot_psd_matrix(
                 if label is not None:
                     line_kwargs["label"] = label
                 else:
-                    line_kwargs.update(
-                        {"color": "tab:blue", "label": "Median"}
-                    )
+                    line_kwargs["label"] = "Median"
+
+                if model_color is not None:
+                    line_kwargs["color"] = model_color
+                elif label is None:
+                    line_kwargs.setdefault("color", "tab:blue")
                 line = ax.plot(freq, q50, **line_kwargs)[0]
                 ax.fill_between(
                     freq,
@@ -377,11 +381,16 @@ def plot_psd_matrix(
                                 alpha=0.6,
                                 zorder=-5,
                             )
+                        coh_color = model_color or "tab:blue"
                         ax.fill_between(
-                            freq, q05, q95, color="tab:blue", alpha=0.25
+                            freq, q05, q95, color=coh_color, alpha=0.25
                         )
                         ax.plot(
-                            freq, q50, color="tab:blue", lw=1.5, label="Median"
+                            freq,
+                            q50,
+                            color=coh_color,
+                            lw=1.5,
+                            label="Median" if label is None else label,
                         )
                         if true_psd is not None:
                             true_coh = np.abs(true_psd[:, i, j]) ** 2 / (

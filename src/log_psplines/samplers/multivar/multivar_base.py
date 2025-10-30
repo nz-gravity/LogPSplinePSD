@@ -88,6 +88,17 @@ class MultivarBaseSampler(BaseSampler):
         self.u_im = jnp.array(self.fft_data.u_im, dtype=jnp.float32)
         self.nu = int(self.fft_data.nu)
 
+        # Optional frequency weights (used to scale the log-det term)
+        if self.config.freq_weights is not None:
+            fw = jnp.asarray(self.config.freq_weights, dtype=jnp.float32)
+            if fw.shape[0] != self.n_freq:
+                raise ValueError(
+                    "Frequency weights length must match number of frequencies"
+                )
+            self.freq_weights = fw
+        else:
+            self.freq_weights = jnp.ones((self.n_freq,), dtype=jnp.float32)
+
         if self.config.verbose:
             logger.info(
                 f"Frequency bins used for inference (N): {self.n_freq}"
@@ -96,6 +107,11 @@ class MultivarBaseSampler(BaseSampler):
                 [f"{tuple(b.shape)}" for b in self.all_bases]
             )
             logger.info(f"B-spline basis shapes: {basis_shapes}")
+            if self.config.freq_weights is not None:
+                total = float(jnp.sum(self.freq_weights))
+                logger.info(
+                    f"Applied coarse-grain weights; total effective count = {total:.1f}"
+                )
 
     @property
     def data_type(self) -> str:

@@ -1,9 +1,34 @@
 import os
+import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from lisa_data import TEN_DAYS, LISAData, download
 
+REPO_ROOT = next(
+    p for p in Path(__file__).resolve().parents if (p / "src").exists()
+)
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+try:  # pragma: no cover - optional dependency shim for docs
+    import loguru  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover
+    import types
+
+    loguru = types.ModuleType("loguru")
+
+    class _StubLogger:
+        def __getattr__(self, name):
+            def _(*args, **kwargs):
+                pass
+
+            return _
+
+    loguru.logger = _StubLogger()
+    sys.modules["loguru"] = loguru
+
+from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
@@ -29,9 +54,17 @@ y = (y - np.mean(y, axis=0)) / np.std(y, axis=0)
 n = y.shape[0]
 
 # make n_blocks so each block is ~ 1week long, power of 2
-n_blocks = max(1, 2 ** int(np.round(np.log2(n / (24 * 7)))))
+target_blocks = max(1, 2 ** int(np.round(np.log2(n / (24 * 7)))))
+while target_blocks > 1 and n % target_blocks != 0:
+    target_blocks //= 2
+n_blocks = target_blocks
 n_inside_block = n // n_blocks
-logger.info(f"Using n_blocks={n_blocks}x{n_inside_block} for data length {n}")
+logger.info(
+    "Using n_blocks=%d x %d (n_time=%d)",
+    n_blocks,
+    n_inside_block,
+    n,
+)
 
 
 timeseries = MultivariateTimeseries(y=y, t=t)
@@ -39,8 +72,20 @@ logger.info(timeseries)
 
 FMIN, FMAX = 10**-4, 5 * 10**-1
 
-fft_data = timeseries.to_cross_spectral_density()  # fmin=FMIN, fmax=FMAX)
+fft_data = timeseries.to_wishart_stats(
+    n_blocks=n_blocks,
+    fmin=FMIN,
+    fmax=FMAX,
+)
 logger.info(fft_data)
+
+coarse_cfg = CoarseGrainConfig(
+    enabled=True,
+    f_transition=5e-3,
+    n_log_bins=200,
+    f_min=FMIN,
+    f_max=FMAX,
+)
 
 
 if os.path.exists(RESULT_FN) and False:
@@ -62,7 +107,7 @@ else:
         knot_kwargs=dict(strategy="log"),
         outdir=f"{HERE}/results/lisa",
         verbose=True,
-        n_time_blocks=n_blocks,
+        coarse_grain_config=coarse_cfg,
         fmin=FMIN,
         fmax=FMAX,
     )
@@ -70,10 +115,12 @@ else:
 logger.info(idata)
 
 
+freq_plot = np.asarray(idata.posterior_psd["freq"].values)
+
 plot_psd_matrix(
     idata=idata,
-    freq=fft_data.freq,
-    empirical_psd=timeseries.get_empirical_psd(),
+    freq=freq_plot,
+    empirical_psd=fft_data.get_empirical_psd(),
     outdir=f"{HERE}/results/lisa",
     filename=f"psd_matrix.png",
     diag_yscale="log",

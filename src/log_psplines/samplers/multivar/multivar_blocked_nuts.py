@@ -59,6 +59,7 @@ def _blocked_channel_model(
     alpha_delta: float,
     beta_delta: float,
     nu: int,
+    freq_weights: jnp.ndarray,
 ) -> None:
     """NumPyro model for a single Cholesky block (row of ``T``).
 
@@ -157,7 +158,8 @@ def _blocked_channel_model(
         theta_im = jnp.zeros((n_freq, 0))
 
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
-    sum_log_det = -float(nu) * jnp.sum(log_delta_sq)
+    fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
+    sum_log_det = -float(nu) * jnp.sum(fw * log_delta_sq)
 
     if n_theta_block > 0:
         contrib_re = jnp.einsum(
@@ -364,6 +366,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.config.alpha_delta,
                 self.config.beta_delta,
                 self.nu,
+                self.freq_weights,
                 extra_fields=(
                     (
                         "potential_energy",

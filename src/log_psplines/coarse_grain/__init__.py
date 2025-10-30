@@ -1,6 +1,7 @@
 """Coarse-graining utilities for frequency-domain PSD data."""
 
 from .config import CoarseGrainConfig
+from .multivar import coarse_grain_multivar_fft
 from .plotting import plot_coarse_grain_weights, plot_coarse_vs_original
 from .preprocess import (
     CoarseGrainSpec,
@@ -13,6 +14,7 @@ __all__ = [
     "CoarseGrainSpec",
     "compute_binning_structure",
     "apply_coarse_graining_univar",
+    "coarse_grain_multivar_fft",
     "plot_coarse_vs_original",
     "plot_coarse_grain_weights",
 ]

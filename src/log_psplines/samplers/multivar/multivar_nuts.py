@@ -45,6 +45,7 @@ def multivariate_psplines_model(
     nu: int,
     all_bases,
     all_penalties,
+    freq_weights: jnp.ndarray,
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
     alpha_delta: float = 1e-4,
@@ -135,7 +136,9 @@ def multivariate_psplines_model(
 
     residual_power = jnp.sum(jnp.abs(u_resid) ** 2, axis=2)
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
-    sum_log_det = -nu_scale * jnp.sum(log_delta_sq)
+    # Scale log-determinant contribution by coarse-grain frequency weights
+    fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
+    sum_log_det = -nu_scale * jnp.sum(fw[:, None] * log_delta_sq)
     log_likelihood = sum_log_det - jnp.sum(residual_power * exp_neg_log_delta)
     numpyro.factor("likelihood", log_likelihood)
 
@@ -234,6 +237,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             self.nu,
             self.all_bases,
             self.all_penalties,
+            self.freq_weights,
             self.config.alpha_phi,
             self.config.beta_phi,
             self.config.alpha_delta,
@@ -309,6 +313,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
                     nu=self.nu,
                     all_bases=self.all_bases,
                     all_penalties=self.all_penalties,
+                    freq_weights=self.freq_weights,
                     alpha_phi=self.config.alpha_phi,
                     beta_phi=self.config.beta_phi,
                     alpha_delta=self.config.alpha_delta,
@@ -346,6 +351,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             nu=self.nu,
             all_bases=self.all_bases,
             all_penalties=self.all_penalties,
+            freq_weights=self.freq_weights,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,
             alpha_delta=self.config.alpha_delta,

@@ -57,13 +57,15 @@ n = y.shape[0]
 target_blocks = max(1, 2 ** int(np.round(np.log2(n / (24 * 7)))))
 while target_blocks > 1 and n % target_blocks != 0:
     target_blocks //= 2
+
+# Require each block to contain at least one quarter of the samples.
+while target_blocks > 4:
+    target_blocks //= 2
+
 n_blocks = target_blocks
 n_inside_block = n // n_blocks
 logger.info(
-    "Using n_blocks=%d x %d (n_time=%d)",
-    n_blocks,
-    n_inside_block,
-    n,
+    f"Using n_blocks={n_blocks} x {n_inside_block} (n_time={n})",
 )
 
 
@@ -120,7 +122,7 @@ freq_plot = np.asarray(idata.posterior_psd["freq"].values)
 plot_psd_matrix(
     idata=idata,
     freq=freq_plot,
-    empirical_psd=fft_data.get_empirical_psd(),
+    empirical_psd=fft_data.empirical_psd,
     outdir=f"{HERE}/results/lisa",
     filename=f"psd_matrix.png",
     diag_yscale="log",

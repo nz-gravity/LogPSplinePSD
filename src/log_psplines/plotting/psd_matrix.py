@@ -24,7 +24,21 @@ def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
         if "observed_data" in idata:
             obs_data = idata["observed_data"]
 
-            # Check for the components that indicate multivariate structure
+            # Prefer directly stored periodogram (already coarse-grained)
+            if "periodogram" in obs_data:
+                periodogram = obs_data["periodogram"]
+                freq = periodogram.coords["freq"].values
+                channels = periodogram.coords["channels"].values
+                psd_matrix = periodogram.values
+                coherence = _get_coherence(psd_matrix)
+                return EmpiricalPSD(
+                    freq=freq,
+                    psd=psd_matrix,
+                    coherence=coherence,
+                    channels=channels,
+                )
+
+            # Fallback to reconstructing from FFT components
             if all(
                 key in obs_data
                 for key in ["freq", "channels", "fft_re", "fft_im"]
@@ -34,15 +48,10 @@ def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
                 fft_re = obs_data["fft_re"].values
                 fft_im = obs_data["fft_im"].values
 
-                # Reconstruct the complex FFT
                 fft_complex = fft_re + 1j * fft_im
-
-                # Compute PSD matrix
-                # For multivariate data, we need to compute the PSD for each channel pair
                 n_channels = len(channels)
                 n_freq = len(freq)
 
-                # Initialize PSD matrix
                 psd_matrix = np.zeros(
                     (n_freq, n_channels, n_channels), dtype=np.complex128
                 )

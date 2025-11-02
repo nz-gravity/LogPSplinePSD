@@ -131,9 +131,23 @@ def coarse_grain_multivar_fft(
             )
         )
 
-    # Build the coarse FFT structure (drop raw_psd to avoid mismatched lengths)
+    # Build the coarse FFT structure and attach the aggregated PSD for diagnostics.
     u_re_coarse = u_coarse.real.astype(np.float64)
     u_im_coarse = u_coarse.imag.astype(np.float64)
+
+    # Pre-compute coarse PSD for diagnostics/plotting.
+    # Effective degrees of freedom per bin: original nu scaled by weights.
+    effective_nu = np.maximum(
+        np.asarray(weights, dtype=np.float64) * float(max(int(fft.nu), 1)),
+        1e-12,
+    )
+    y_sum = np.matmul(
+        u_coarse,
+        np.conj(np.swapaxes(u_coarse, 1, 2)),
+    )
+    norm_factor = 2 * np.pi
+    psd_coarse = (2.0 / (effective_nu[:, None, None] * norm_factor)) * y_sum
+    psd_coarse *= float(fft.scaling_factor or 1.0)
 
     fft_coarse = MultivarFFT(
         y_re=y_re_coarse.astype(np.float64),
@@ -146,8 +160,8 @@ def coarse_grain_multivar_fft(
         nu=int(fft.nu),
         scaling_factor=fft.scaling_factor,
         fs=fft.fs,
-        raw_psd=None,
-        raw_freq=None,
+        raw_psd=psd_coarse.astype(np.complex128),
+        raw_freq=np.asarray(spec.f_coarse, dtype=np.float64),
     )
 
     return fft_coarse, weights

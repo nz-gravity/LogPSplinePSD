@@ -6,9 +6,11 @@ import pytest
 from log_psplines.coarse_grain import (
     CoarseGrainConfig,
     apply_coarse_graining_univar,
+    coarse_grain_multivar_fft,
     compute_binning_structure,
     plot_coarse_vs_original,
 )
+from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.plotting import plot_pdgrm
 
 
@@ -81,6 +83,71 @@ def test_coarse_weights_properties_log_bins():
     assert np.isclose(
         weights.sum(), spec.mask_low.sum() + spec.bin_counts.sum()
     )
+
+
+def test_multivar_coarse_psd_matches_bin_average():
+    rng = np.random.default_rng(12)
+    n = 512
+    t = np.arange(n)
+    base = rng.normal(size=n)
+    y = np.column_stack(
+        [
+            base + 0.1 * rng.normal(size=n),
+            0.8 * base + 0.2 * rng.normal(size=n),
+        ]
+    )
+    ts = MultivariateTimeseries(y=y, t=t)
+    fft_full = ts.to_wishart_stats(n_blocks=4)
+
+    spec = compute_binning_structure(
+        fft_full.freq,
+        f_transition=fft_full.freq[len(fft_full.freq) // 3],
+        n_log_bins=12,
+        f_min=fft_full.freq[0],
+        f_max=fft_full.freq[-1],
+    )
+
+    fft_coarse, weights = coarse_grain_multivar_fft(fft_full, spec)
+    assert np.isclose(
+        weights.sum(), spec.mask_low.sum() + spec.bin_counts.sum()
+    )
+
+    u_complex = (fft_full.u_re + 1j * fft_full.u_im)[spec.selection_mask]
+    u_low = u_complex[spec.mask_low]
+    u_high = u_complex[spec.mask_high]
+    u_high_sorted = u_high[spec.sort_indices]
+    bin_counts = spec.bin_counts.astype(int)
+
+    manual_psd = []
+    pos = 0
+    norm_factor = 2 * np.pi
+    nu = int(max(int(fft_full.nu), 1))
+
+    for idx in range(spec.f_coarse.shape[0]):
+        if idx < spec.n_low:
+            u_mat = u_low[idx]
+            y_sum = u_mat @ np.conj(u_mat.T)
+            eff_nu = nu
+        else:
+            count = bin_counts[idx - spec.n_low]
+            sl = slice(pos, pos + count)
+            pos += count
+            u_block = u_high_sorted[sl]
+            y_sum = np.zeros(
+                (fft_full.n_dim, fft_full.n_dim), dtype=np.complex128
+            )
+            for u_mat in u_block:
+                y_sum += u_mat @ np.conj(u_mat.T)
+            eff_nu = nu * count
+        psd = (2.0 / (eff_nu * norm_factor)) * y_sum
+        manual_psd.append(psd)
+
+    manual_psd = np.stack(manual_psd, axis=0)
+    assert manual_psd.shape == fft_coarse.raw_psd.shape
+    max_rel = np.max(
+        np.abs(manual_psd - fft_coarse.raw_psd) / (np.abs(manual_psd) + 1e-12)
+    )
+    assert max_rel < 1e-10
 
 
 @pytest.mark.skipif(

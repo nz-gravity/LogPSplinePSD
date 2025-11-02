@@ -323,14 +323,29 @@ def _create_multivar_inference_data(
     observed_fft_im_rescaled = fft_y_im * np.sqrt(config.scaling_factor)
 
     # Compute and rescale observed cross-spectral density (periodogram)
-    if fft_data.u_re is not None and fft_data.u_im is not None:
+    raw_psd = getattr(fft_data, "raw_psd", None)
+    if raw_psd is not None:
+        observed_csd = np.asarray(raw_psd, dtype=np.complex128)
+    elif fft_data.u_re is not None and fft_data.u_im is not None:
         u_re = np.asarray(fft_data.u_re, dtype=np.float64)
         u_im = np.asarray(fft_data.u_im, dtype=np.float64)
         u_complex = u_re + 1j * u_im
         Y = np.einsum("fkc,fkd->fcd", u_complex, np.conj(u_complex))
-        nu_scale = float(max(int(getattr(fft_data, "nu", 1)), 1))
-        observed_csd = np.real(Y) / nu_scale
-        observed_csd = observed_csd.astype(np.float64, copy=False)
+
+        base_nu = float(max(int(getattr(fft_data, "nu", 1)), 1))
+        if config.freq_weights is not None:
+            freq_weights = np.asarray(config.freq_weights, dtype=np.float64)
+        else:
+            freq_weights = np.ones(fft_data.n_freq, dtype=np.float64)
+        if freq_weights.shape[0] != fft_data.n_freq:
+            raise ValueError(
+                "Frequency weights length must match number of frequencies."
+            )
+        effective_nu = np.clip(freq_weights * base_nu, a_min=1e-12, a_max=None)
+
+        norm_factor = 2 * np.pi
+        observed_csd = (2.0 / (effective_nu[:, None, None] * norm_factor)) * Y
+        observed_csd = observed_csd.astype(np.complex128, copy=False)
         observed_csd *= config.scaling_factor
     else:
         y_re = observed_fft_re_rescaled
@@ -398,6 +413,7 @@ def _create_multivar_inference_data(
         {
             "fft_re": ["freq", "channels"],
             "fft_im": ["freq", "channels"],
+            "periodogram": ["freq", "channels", "channels2"],
             "psd_matrix_real": ["percentile", "freq", "channels", "channels2"],
             "psd_matrix_imag": ["percentile", "freq", "channels", "channels2"],
         }
@@ -432,6 +448,9 @@ def _create_multivar_inference_data(
         observed_data={
             "fft_re": np.array(observed_fft_data_rescaled["fft_re"]),
             "fft_im": np.array(observed_fft_data_rescaled["fft_im"]),
+            "periodogram": np.array(
+                observed_psd_rescaled["periodogram"], dtype=np.complex128
+            ),
         },
         dims={
             k: v

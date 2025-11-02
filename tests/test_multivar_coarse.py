@@ -5,6 +5,7 @@ import pytest
 
 from log_psplines.coarse_grain import (
     CoarseGrainConfig,
+    coarse_grain_multivar_fft,
     compute_binning_structure,
 )
 from log_psplines.example_datasets.varma_data import VARMAData
@@ -102,6 +103,10 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
             q50_full, freqs_full, freqs_coarse[:n_low]
         )
         q50_coarse_low = q50_coarse[:n_low]
+        true_psd_full = varma.get_true_psd()
+        true_low = _interp_psd_array(
+            true_psd_full, varma.freq, freqs_coarse[:n_low]
+        )
 
     # Require reasonable relative agreement on the diagonal elements.
     # Use a symmetric relative error to avoid blow-ups near zeros.
@@ -110,6 +115,10 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     denom = np.abs(diag_full) + np.abs(diag_coarse) + 1e-12
     rel_err = 2.0 * np.abs(diag_full - diag_coarse) / denom
     assert np.nanmedian(rel_err) < 0.25  # coarse ≈ full within 25% median
+    true_diag = np.diagonal(true_low, axis1=1, axis2=2)
+    denom_true = np.abs(true_diag) + np.abs(diag_coarse) + 1e-12
+    rel_err_true = 2.0 * np.abs(diag_coarse - true_diag) / denom_true
+    assert np.nanmedian(rel_err_true) < 0.3
 
     # Overlay posterior matrices together with the true PSD for quick inspection
     true_psd = varma.get_true_psd()
@@ -131,3 +140,30 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         close=False,
     )
     fig.savefig(os.path.join(outdir, "psd_matrix_overlay.png"), dpi=150)
+
+    # Diagnostics: empirical PSD stored in the coarse run should match the
+    # coarse-grained Wishart statistics computed directly from the data.
+    n_blocks = 2 if test_mode != "fast" else 1
+    standardized_ts = ts.standardise_for_psd()
+    fft_full = standardized_ts.to_wishart_stats(
+        n_blocks=n_blocks,
+        fmin=None,
+        fmax=None,
+    )
+    spec_manual = compute_binning_structure(
+        fft_full.freq,
+        f_transition=coarse_cfg.f_transition,
+        n_log_bins=coarse_cfg.n_log_bins,
+        f_min=coarse_cfg.f_min,
+        f_max=coarse_cfg.f_max,
+    )
+    fft_manual_coarse, weights_manual = coarse_grain_multivar_fft(
+        fft_full, spec_manual
+    )
+    periodogram_obs = idata_coarse.observed_data["periodogram"].values
+
+    assert periodogram_obs.shape == fft_manual_coarse.raw_psd.shape
+    diff = np.abs(periodogram_obs - fft_manual_coarse.raw_psd)
+    denom = np.abs(fft_manual_coarse.raw_psd) + 1e-12
+    rel_max = np.max(diff / denom)
+    assert rel_max < 5e-6

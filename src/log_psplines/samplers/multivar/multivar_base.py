@@ -157,8 +157,15 @@ class MultivarBaseSampler(BaseSampler):
         u_complex = u_re + 1j * u_im
         Y = np.einsum("fkc,fkd->fcd", u_complex, np.conj(u_complex))
         norm_factor = 2 * np.pi
-        nu_scale = float(max(int(self.fft_data.nu), 1))
-        S = (2.0 / nu_scale) * Y / norm_factor
+        base_nu = float(max(int(self.fft_data.nu), 1))
+
+        freq_weights = np.asarray(self.freq_weights, dtype=np.float64)
+        if freq_weights.shape != (self.n_freq,):
+            raise ValueError(
+                "Frequency weights must have same length as frequency grid."
+            )
+        effective_nu = np.clip(freq_weights * base_nu, a_min=1e-12, a_max=None)
+        S = (2.0 / effective_nu[:, None, None]) * Y / norm_factor
         S *= float(self.fft_data.scaling_factor or 1.0)
         coherence = _get_coherence(S)
         freq = np.array(self.freq, dtype=np.float64)

@@ -24,7 +24,7 @@ repos:
     hooks:
       - id: vulture-local
         name: Vulture (Dead Code Check)
-        entry: bash -c 'vulture "$@" || true'
+        entry: bash -c 'vulture "$@" 2>&1 || true'
         language: system
         types: [python]
         files: '\.py$'

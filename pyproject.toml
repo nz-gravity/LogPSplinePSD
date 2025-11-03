@@ -151,3 +151,12 @@ ignore_missing_imports = true
 
 [project.scripts]
 log_psplines_benchmark = "log_psplines.benchmark.cli:main"
+
+
+[tool.vulture]
+# List all directories/files that define code (src) AND use it (tests, docs, studies).
+paths = ["src/", "tests/", "docs/"]
+
+# Set the minimum confidence level to report dead code.
+# 80-90 is a good range to reduce false positives from dynamic code.
+min_confidence = 80

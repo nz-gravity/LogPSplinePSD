@@ -26,6 +26,7 @@ from ...plotting import (
     save_vi_diagnostics_multivariate,
 )
 from ...psplines.multivar_psplines import MultivariateLogPSplines
+from ...spectrum_utils import u_to_wishart_matrix, wishart_matrix_to_psd
 from ..base_sampler import BaseSampler, SamplerConfig
 
 
@@ -155,18 +156,17 @@ class MultivarBaseSampler(BaseSampler):
         u_re = np.asarray(self.fft_data.u_re, dtype=np.float64)
         u_im = np.asarray(self.fft_data.u_im, dtype=np.float64)
         u_complex = u_re + 1j * u_im
-        Y = np.einsum("fkc,fkd->fcd", u_complex, np.conj(u_complex))
-        norm_factor = 2 * np.pi
-        base_nu = float(max(int(self.fft_data.nu), 1))
-
-        freq_weights = np.asarray(self.freq_weights, dtype=np.float64)
-        if freq_weights.shape != (self.n_freq,):
+        weights = np.asarray(self.freq_weights, dtype=np.float64)
+        if weights.shape != (self.n_freq,):
             raise ValueError(
                 "Frequency weights must have same length as frequency grid."
             )
-        effective_nu = np.clip(freq_weights * base_nu, a_min=1e-12, a_max=None)
-        S = (2.0 / effective_nu[:, None, None]) * Y / norm_factor
-        S *= float(self.fft_data.scaling_factor or 1.0)
+        S = wishart_matrix_to_psd(
+            u_to_wishart_matrix(u_complex),
+            nu=self.fft_data.nu,
+            scaling_factor=float(self.fft_data.scaling_factor or 1.0),
+            weights=weights,
+        )
         coherence = _get_coherence(S)
         freq = np.array(self.freq, dtype=np.float64)
         channels = np.arange(S.shape[1])

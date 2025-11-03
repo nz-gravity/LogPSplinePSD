@@ -20,3 +20,11 @@ repos:
     rev: "25.1.0"
     hooks:
       - id: black-jupyter
+  - repo: local
+    hooks:
+      - id: vulture-local
+        name: Vulture (Dead Code Check)
+        entry: bash -c 'vulture "$@" || true'
+        language: system
+        types: [python]
+        files: '\.py$'

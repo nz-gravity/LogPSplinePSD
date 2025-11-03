@@ -12,6 +12,10 @@ from log_psplines.coarse_grain import (
 )
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.plotting import plot_pdgrm
+from log_psplines.spectrum_utils import (
+    sum_wishart_outer_products,
+    wishart_matrix_to_psd,
+)
 
 
 def test_compute_binning_structure_simple():
@@ -120,26 +124,28 @@ def test_multivar_coarse_psd_matches_bin_average():
 
     manual_psd = []
     pos = 0
-    norm_factor = 2 * np.pi
-    nu = int(max(int(fft_full.nu), 1))
+    base_nu = int(max(int(fft_full.nu), 1))
+    scaling = float(fft_full.scaling_factor or 1.0)
 
     for idx in range(spec.f_coarse.shape[0]):
         if idx < spec.n_low:
-            u_mat = u_low[idx]
-            y_sum = u_mat @ np.conj(u_mat.T)
-            eff_nu = nu
+            u_stack = u_low[idx][None, ...]
+            weight = np.array([1.0])
         else:
             count = bin_counts[idx - spec.n_low]
+            if count <= 0:
+                continue
             sl = slice(pos, pos + count)
             pos += count
-            u_block = u_high_sorted[sl]
-            y_sum = np.zeros(
-                (fft_full.n_dim, fft_full.n_dim), dtype=np.complex128
-            )
-            for u_mat in u_block:
-                y_sum += u_mat @ np.conj(u_mat.T)
-            eff_nu = nu * count
-        psd = (2.0 / (eff_nu * norm_factor)) * y_sum
+            u_stack = u_high_sorted[sl]
+            weight = np.array([float(count)])
+        y_sum = sum_wishart_outer_products(u_stack)
+        psd = wishart_matrix_to_psd(
+            y_sum[None, ...],
+            nu=base_nu,
+            scaling_factor=scaling,
+            weights=weight,
+        )[0]
         manual_psd.append(psd)
 
     manual_psd = np.stack(manual_psd, axis=0)

@@ -14,6 +14,7 @@ from xarray import DataArray, Dataset
 from log_psplines.datatypes import MultivarFFT, Periodogram
 
 from ..logger import logger
+from ..spectrum_utils import wishart_u_to_psd
 
 warnings.filterwarnings("ignore", module="arviz")
 
@@ -330,23 +331,21 @@ def _create_multivar_inference_data(
         u_re = np.asarray(fft_data.u_re, dtype=np.float64)
         u_im = np.asarray(fft_data.u_im, dtype=np.float64)
         u_complex = u_re + 1j * u_im
-        Y = np.einsum("fkc,fkd->fcd", u_complex, np.conj(u_complex))
-
-        base_nu = float(max(int(getattr(fft_data, "nu", 1)), 1))
-        if config.freq_weights is not None:
-            freq_weights = np.asarray(config.freq_weights, dtype=np.float64)
-        else:
-            freq_weights = np.ones(fft_data.n_freq, dtype=np.float64)
-        if freq_weights.shape[0] != fft_data.n_freq:
+        weights = (
+            np.asarray(config.freq_weights, dtype=np.float64)
+            if config.freq_weights is not None
+            else None
+        )
+        if weights is not None and weights.shape != (fft_data.n_freq,):
             raise ValueError(
                 "Frequency weights length must match number of frequencies."
             )
-        effective_nu = np.clip(freq_weights * base_nu, a_min=1e-12, a_max=None)
-
-        norm_factor = 2 * np.pi
-        observed_csd = (2.0 / (effective_nu[:, None, None] * norm_factor)) * Y
-        observed_csd = observed_csd.astype(np.complex128, copy=False)
-        observed_csd *= config.scaling_factor
+        observed_csd = wishart_u_to_psd(
+            u_complex,
+            nu=getattr(fft_data, "nu", 1),
+            scaling_factor=float(getattr(fft_data, "scaling_factor", 1.0)),
+            weights=weights,
+        )
     else:
         y_re = observed_fft_re_rescaled
         y_im = observed_fft_im_rescaled

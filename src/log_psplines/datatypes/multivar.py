@@ -5,6 +5,7 @@ import numpy as np
 from scipy.signal import csd, welch
 
 from ..logger import logger
+from ..spectrum_utils import u_to_wishart_matrix, wishart_matrix_to_psd
 
 
 def _interp_complex_matrix(
@@ -67,6 +68,51 @@ class MultivarFFT:
     fs: float = field(default=1.0, repr=False)
     raw_psd: Optional[np.ndarray] = None
     raw_freq: Optional[np.ndarray] = None
+
+    def __post_init__(self) -> None:
+        self.y_re = np.asarray(self.y_re, dtype=np.float64)
+        self.y_im = np.asarray(self.y_im, dtype=np.float64)
+        self.u_re = np.asarray(self.u_re, dtype=np.float64)
+        self.u_im = np.asarray(self.u_im, dtype=np.float64)
+        self.freq = np.asarray(self.freq, dtype=np.float64)
+
+        expected_fft_shape = (self.n_freq, self.n_dim)
+        if self.y_re.shape != expected_fft_shape:
+            raise ValueError(
+                f"y_re must have shape {expected_fft_shape}, got {self.y_re.shape}"
+            )
+        if self.y_im.shape != expected_fft_shape:
+            raise ValueError(
+                f"y_im must have shape {expected_fft_shape}, got {self.y_im.shape}"
+            )
+
+        expected_u_shape = (self.n_freq, self.n_dim, self.n_dim)
+        if self.u_re.shape != expected_u_shape:
+            raise ValueError(
+                f"u_re must have shape {expected_u_shape}, got {self.u_re.shape}"
+            )
+        if self.u_im.shape != expected_u_shape:
+            raise ValueError(
+                f"u_im must have shape {expected_u_shape}, got {self.u_im.shape}"
+            )
+
+        if self.freq.shape != (self.n_freq,):
+            raise ValueError(
+                f"freq must have length {self.n_freq}, got {self.freq.shape}"
+            )
+
+        if self.raw_psd is not None:
+            self.raw_psd = np.asarray(self.raw_psd, dtype=np.complex128)
+            if self.raw_psd.shape != expected_u_shape:
+                raise ValueError(
+                    f"raw_psd must have shape {expected_u_shape}, got {self.raw_psd.shape}"
+                )
+        if self.raw_freq is not None:
+            self.raw_freq = np.asarray(self.raw_freq, dtype=np.float64)
+            if self.raw_freq.shape != (self.n_freq,):
+                raise ValueError(
+                    f"raw_freq must have length {self.n_freq}, got {self.raw_freq.shape}"
+                )
 
     @classmethod
     def compute_fft(
@@ -132,32 +178,21 @@ class MultivarFFT:
         blocks = x_centered.reshape(n_blocks, block_len, n_dim)
 
         block_ffts = np.fft.fft(blocks, axis=1) / np.sqrt(block_len)
-        freqs = np.fft.fftfreq(block_len, 1 / fs)
-        pos_mask = freqs > 0
-        freqs = freqs[pos_mask]
+        freq = np.fft.fftfreq(block_len, 1 / fs)
+        pos_mask = freq > 0
+        freq = freq[pos_mask]
         block_ffts = block_ffts[:, pos_mask, :]
 
-        # Full-length FFT for empirical PSD/CSD before blocking
-        full_fft = np.fft.fft(x_centered, axis=0) / np.sqrt(n_time)
-        full_freq = np.fft.fftfreq(n_time, 1 / fs)
-        full_mask = full_freq > 0
-        full_freq = full_freq[full_mask]
-        full_fft = full_fft[full_mask, :]
-
         if fmin is not None or fmax is not None:
-            fmin_eff = freqs[0] if fmin is None else max(fmin, freqs[0])
-            fmax_eff = freqs[-1] if fmax is None else min(fmax, freqs[-1])
+            fmin_eff = freq[0] if fmin is None else max(fmin, freq[0])
+            fmax_eff = freq[-1] if fmax is None else min(fmax, freq[-1])
             if fmax_eff < fmin_eff:
                 raise ValueError(
                     f"Invalid frequency bounds: fmin={fmin_eff}, fmax={fmax_eff}."
                 )
-            freq_mask = (freqs >= fmin_eff) & (freqs <= fmax_eff)
-            freqs = freqs[freq_mask]
+            freq_mask = (freq >= fmin_eff) & (freq <= fmax_eff)
+            freq = freq[freq_mask]
             block_ffts = block_ffts[:, freq_mask, :]
-
-            full_mask = (full_freq >= fmin_eff) & (full_freq <= fmax_eff)
-            full_freq = full_freq[full_mask]
-            full_fft = full_fft[full_mask, :]
 
         mean_fft = np.mean(block_ffts, axis=0)
         y_re = mean_fft.real
@@ -170,37 +205,22 @@ class MultivarFFT:
         U = eigvecs * sqrt_eigvals
         u_re = U.real
         u_im = U.imag
-
-        # Empirical PSD/CSD from full FFT
-        norm_factor = 2 * np.pi
-        full_psd = np.zeros(
-            (full_freq.size, n_dim, n_dim), dtype=np.complex128
+        raw_psd = wishart_matrix_to_psd(
+            u_to_wishart_matrix(U),
+            nu=n_blocks,
+            scaling_factor=float(scaling_factor or 1.0),
         )
-        for i in range(n_dim):
-            for j in range(n_dim):
-                full_psd[:, i, j] = (
-                    2
-                    * (full_fft[:, i] * np.conj(full_fft[:, j]))
-                    / norm_factor
-                )
-
-        if full_psd.shape[0] != freqs.size:
-            full_psd = _interp_complex_matrix(full_freq, freqs, full_psd)
-            full_freq = freqs
-
-        scaling = float(scaling_factor or 1.0)
-        full_psd *= scaling
 
         return cls(
             y_re=y_re,
             y_im=y_im,
-            freq=freqs,
-            n_freq=len(freqs),
+            freq=freq,
+            n_freq=len(freq),
             n_dim=n_dim,
             u_re=u_re,
             u_im=u_im,
-            raw_psd=full_psd,
-            raw_freq=full_freq,
+            raw_psd=raw_psd,
+            raw_freq=freq,
             nu=n_blocks,
             scaling_factor=scaling_factor,
             fs=fs,
@@ -254,20 +274,19 @@ class MultivarFFT:
         y_re = np.array(y_re, dtype=np.float64)
         y_im = np.array(y_im, dtype=np.float64)
         n_freq, n_dim = y_re.shape
-        _y = y_re + 1j * y_im
-        S = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex128)
-        norm_factor = 2 * np.pi
-        for i in range(n_dim):
-            for j in range(n_dim):
-                S[:, i, j] = 2 * (_y[:, i] * np.conj(_y[:, j])) / norm_factor
-
-        S *= scaling
-        coh = _get_coherence(S)
+        y_complex = y_re + 1j * y_im
+        Y = np.einsum("fi,fj->fij", y_complex, np.conj(y_complex))
+        psd = wishart_matrix_to_psd(
+            Y,
+            nu=1.0,
+            scaling_factor=float(scaling),
+        )
+        coherence = _get_coherence(psd)
         freq = np.fft.fftfreq(2 * n_freq, 1 / fs)[:n_freq]
         return EmpiricalPSD(
             freq=freq,
-            psd=S,
-            coherence=coh,
+            psd=psd,
+            coherence=coherence,
         )
 
 

@@ -5,15 +5,12 @@ from typing import Tuple
 import numpy as np
 
 from ..datatypes.multivar import MultivarFFT
+from ..spectrum_utils import (
+    sum_wishart_outer_products,
+    u_to_wishart_matrix,
+    wishart_matrix_to_psd,
+)
 from .preprocess import CoarseGrainSpec
-
-
-def _sum_outer_products(U: np.ndarray) -> np.ndarray:
-    """Sum ``U @ Uᴴ`` across a stack of matrices."""
-
-    # Correct contraction: sum over replicates (last axis) while preserving the
-    # row/column structure expected by the likelihood.
-    return np.einsum("fij,fkj->ik", U, np.conjugate(U))
 
 
 def coarse_grain_multivar_fft(
@@ -104,7 +101,7 @@ def coarse_grain_multivar_fft(
             y_im_bins[b] = np.mean(y_im_high_sorted[sl], axis=0)
 
             # Sum Y = Σ U U^H then eigendecompose
-            Y_sum = _sum_outer_products(u_high_sorted[sl])
+            Y_sum = sum_wishart_outer_products(u_high_sorted[sl])
             # Numeric guard
             try:
                 eigvals, eigvecs = np.linalg.eigh(Y_sum)
@@ -135,19 +132,12 @@ def coarse_grain_multivar_fft(
     u_re_coarse = u_coarse.real.astype(np.float64)
     u_im_coarse = u_coarse.imag.astype(np.float64)
 
-    # Pre-compute coarse PSD for diagnostics/plotting.
-    # Effective degrees of freedom per bin: original nu scaled by weights.
-    effective_nu = np.maximum(
-        np.asarray(weights, dtype=np.float64) * float(max(int(fft.nu), 1)),
-        1e-12,
+    psd_coarse = wishart_matrix_to_psd(
+        u_to_wishart_matrix(u_coarse),
+        nu=int(fft.nu),
+        scaling_factor=float(fft.scaling_factor or 1.0),
+        weights=np.asarray(weights, dtype=np.float64),
     )
-    y_sum = np.matmul(
-        u_coarse,
-        np.conj(np.swapaxes(u_coarse, 1, 2)),
-    )
-    norm_factor = 2 * np.pi
-    psd_coarse = (2.0 / (effective_nu[:, None, None] * norm_factor)) * y_sum
-    psd_coarse *= float(fft.scaling_factor or 1.0)
 
     fft_coarse = MultivarFFT(
         y_re=y_re_coarse.astype(np.float64),

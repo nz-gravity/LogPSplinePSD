@@ -312,16 +312,37 @@ def _create_multivar_inference_data(
     psd_imag_q = np.asarray(psd_imag_q, dtype=np.float32)
     coh_q = np.asarray(coh_q, dtype=np.float32) if coh_q is not None else None
 
-    psd_real_q_rescaled = psd_real_q * config.scaling_factor
-    psd_imag_q_rescaled = psd_imag_q * config.scaling_factor
+    channel_stds = getattr(config, "channel_stds", None)
+    factor_matrix = None
+    scalar_factor = None
+    sf = float(getattr(fft_data, "scaling_factor", 1.0) or 1.0)
+    if channel_stds is not None:
+        channel_stds = np.asarray(channel_stds, dtype=np.float32)
+        if channel_stds.shape[0] != fft_data.n_dim:
+            raise ValueError(
+                "channel_stds length must match number of channels in FFT data."
+            )
+        scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
+        factor_matrix = scale_matrix / sf
+        factor_4d = factor_matrix[None, None, :, :]
+        psd_real_q_rescaled = psd_real_q * factor_4d
+        psd_imag_q_rescaled = psd_imag_q * factor_4d
+    else:
+        scalar_factor = sf
+        psd_real_q_rescaled = psd_real_q * scalar_factor
+        psd_imag_q_rescaled = psd_imag_q * scalar_factor
     coherence_q_rescaled = coh_q
 
     fft_y_re = np.array(fft_data.y_re)
     fft_y_im = np.array(fft_data.y_im)
 
     # Also rescale observed FFT data
-    observed_fft_re_rescaled = fft_y_re * np.sqrt(config.scaling_factor)
-    observed_fft_im_rescaled = fft_y_im * np.sqrt(config.scaling_factor)
+    if channel_stds is not None:
+        observed_fft_re_rescaled = fft_y_re * channel_stds[None, :]
+        observed_fft_im_rescaled = fft_y_im * channel_stds[None, :]
+    else:
+        observed_fft_re_rescaled = fft_y_re * np.sqrt(config.scaling_factor)
+        observed_fft_im_rescaled = fft_y_im * np.sqrt(config.scaling_factor)
 
     # Compute and rescale observed cross-spectral density (periodogram)
     raw_psd = getattr(fft_data, "raw_psd", None)
@@ -356,8 +377,12 @@ def _create_multivar_inference_data(
                 observed_csd[:, i, j] = (
                     y_re[:, i] + 1j * y_im[:, i]
                 ) * np.conj(y_re[:, j] + 1j * y_im[:, j])
-                observed_csd[:, i, j] *= config.scaling_factor
-        observed_csd = np.real(observed_csd)
+        # Keep complex form for consistency
+
+    if channel_stds is not None and factor_matrix is not None:
+        observed_csd = observed_csd * factor_matrix[None, :, :]
+    else:
+        observed_csd = observed_csd * scalar_factor
 
     if config.verbose:
         logger.info(

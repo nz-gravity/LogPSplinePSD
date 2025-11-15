@@ -147,6 +147,7 @@ class MultivarBaseSampler(BaseSampler):
             if psd.shape[0] != self.n_freq:
                 psd = _interp_complex_matrix(freq, np.array(self.freq), psd)
                 freq = np.array(self.freq, dtype=np.float64)
+            psd = self._rescale_psd(psd)
             coherence = _get_coherence(psd)
             channels = np.arange(psd.shape[1])
             return EmpiricalPSD(
@@ -167,12 +168,24 @@ class MultivarBaseSampler(BaseSampler):
             scaling_factor=float(self.fft_data.scaling_factor or 1.0),
             weights=weights,
         )
+        S = self._rescale_psd(S)
         coherence = _get_coherence(S)
         freq = np.array(self.freq, dtype=np.float64)
         channels = np.arange(S.shape[1])
         return EmpiricalPSD(
             freq=freq, psd=S, coherence=coherence, channels=channels
         )
+
+    def _rescale_psd(self, psd: np.ndarray) -> np.ndarray:
+        channel_stds = getattr(self.fft_data, "channel_stds", None)
+        sf = float(self.fft_data.scaling_factor or 1.0)
+        four_pi = 4.0 * np.pi
+        if channel_stds is None:
+            return psd * (four_pi * sf)
+        scale_matrix = np.outer(channel_stds, channel_stds).astype(psd.dtype)
+        if sf == 0:
+            return psd
+        return psd * (four_pi * scale_matrix / sf)
 
     def _save_vi_diagnostics(
         self, *, empirical_psd: Optional[EmpiricalPSD] = None

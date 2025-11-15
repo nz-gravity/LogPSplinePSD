@@ -284,6 +284,24 @@ def test_plot_multivariate_fitted_data_blocks(
         save=True,
     )
 
+    # Plot |CSD_ij| magnitudes for lower triangle
+    ci_dict_abs = _pack_ci_dict(
+        psd_samples=psd_matrix_full[None, ...],
+        show_coherence=False,
+        show_csd_magnitude=True,
+    )
+    plot_psd_matrix(
+        ci_dict=ci_dict_abs,
+        freq=np.asarray(fft_full.freq),
+        empirical_psd=empirical_full,
+        outdir=outdir,
+        filename="psd_matrix_abs_csd.png",
+        dpi=150,
+        show_coherence=False,
+        show_csd_magnitude=True,
+        save=True,
+    )
+
     # Also save frequency weights for reference
     import matplotlib.pyplot as plt
 
@@ -319,6 +337,7 @@ def test_plot_multivariate_fitted_data_blocks(
     expected_files = [
         "psd_matrix_empirical.png",
         "psd_matrix_empirical_full.png",
+        "psd_matrix_abs_csd.png",
         "coarse_weights_multivar.png",
     ]
     for tag in ("coarse", "full"):

@@ -34,6 +34,9 @@ class SamplerConfig:
     outdir: Optional[str] = None
     compute_lnz: bool = False
     scaling_factor: float = 1.0  # To track any data scaling
+    channel_stds: Optional[np.ndarray] = (
+        None  # Per-channel stds for multivariate scaling
+    )
     true_psd: Optional[jnp.ndarray] = None  # True PSD for diagnostics
     freq_weights: Optional[np.ndarray] = None  # Optional frequency weights
     vi_psd_max_draws: int = (

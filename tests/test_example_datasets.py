@@ -44,3 +44,12 @@ def test_varma_data(outdir):
     os.makedirs(outdir, exist_ok=True)
     varma_data = VARMAData()
     varma_data.plot(fname=f"{outdir}/varma_data_analysis.png")
+
+
+def test_lisa_data(outdir):
+    outdir = f"{outdir}/{OUT}"
+    os.makedirs(outdir, exist_ok=True)
+    from log_psplines.example_datasets.lisa_data import LISAData
+
+    lisa_data = LISAData.load()
+    lisa_data.plot(f"{outdir}/lisa_spectra_triangle.png")

@@ -31,6 +31,21 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     np.random.seed(0)
     varma = VARMAData(n_samples=n)
     ts = MultivariateTimeseries(t=varma.time, y=varma.data)
+    std_ts = ts.standardise_for_psd()
+    channel_stds = std_ts.original_stds
+    scaling_factor = float(std_ts.scaling_factor or 1.0)
+    four_pi = 4.0 * np.pi
+    if channel_stds is not None:
+        scale_matrix = (
+            four_pi * np.outer(channel_stds, channel_stds) / scaling_factor
+        )
+    else:
+        scale_matrix = (
+            four_pi * scaling_factor * np.ones((ts.n_channels, ts.n_channels))
+        )
+
+    def to_physical(psd: np.ndarray) -> np.ndarray:
+        return psd * scale_matrix
 
     # Full run (baseline)
     full_dir = os.path.join(outdir, "multivar_full")
@@ -99,10 +114,10 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         # Interpolate full median PSD onto coarse frequencies in the low region
         from log_psplines.mcmc import _interp_psd_array
 
-        q50_full_low = _interp_psd_array(
-            q50_full, freqs_full, freqs_coarse[:n_low]
+        q50_full_low = to_physical(
+            _interp_psd_array(q50_full, freqs_full, freqs_coarse[:n_low])
         )
-        q50_coarse_low = q50_coarse[:n_low]
+        q50_coarse_low = to_physical(q50_coarse[:n_low])
         true_psd_full = varma.get_true_psd()
         true_low = _interp_psd_array(
             true_psd_full, varma.freq, freqs_coarse[:n_low]
@@ -118,7 +133,6 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     true_diag = np.diagonal(true_low, axis1=1, axis2=2)
     denom_true = np.abs(true_diag) + np.abs(diag_coarse) + 1e-12
     rel_err_true = 2.0 * np.abs(diag_coarse - true_diag) / denom_true
-    assert np.nanmedian(rel_err_true) < 0.3
 
     # Overlay posterior matrices together with the true PSD for quick inspection
     true_psd = varma.get_true_psd()
@@ -166,4 +180,8 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     diff = np.abs(periodogram_obs - fft_manual_coarse.raw_psd)
     denom = np.abs(fft_manual_coarse.raw_psd) + 1e-12
     rel_max = np.max(diff / denom)
-    assert rel_max < 5e-6
+
+    assert (
+        np.nanmedian(rel_err_true) < 0.3
+    ), "Coarse PSD should match true within 30% median"
+    assert rel_max < 5e-6, f"Max rel error {rel_max:.2e} too large"

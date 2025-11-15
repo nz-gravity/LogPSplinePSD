@@ -193,6 +193,8 @@ def plot_vi_initial_psd_matrix(
     psd_quantiles: Optional[Dict[str, np.ndarray]] = None,
     coherence_quantiles: Optional[Dict[str, np.ndarray]] = None,
     show_coherence: bool = True,
+    show_csd_magnitude: bool = False,
+    **plot_kwargs,
 ) -> None:
     """Plot diagonal auto-spectra implied by VI means for multivariate models."""
     # Validate inputs
@@ -206,6 +208,7 @@ def plot_vi_initial_psd_matrix(
         psd_quantiles=psd_quantiles,
         coherence_quantiles=coherence_quantiles,
         show_coherence=show_coherence,
+        show_csd_magnitude=show_csd_magnitude,
     )
 
     # Use the shared plotting function with VI-specific styling
@@ -217,7 +220,9 @@ def plot_vi_initial_psd_matrix(
         true_psd=true_psd,
         ci_dict=ci_dict,
         show_coherence=show_coherence,
+        show_csd_magnitude=show_csd_magnitude,
         dpi=150,  # Use consistent DPI
+        **plot_kwargs,
     )
 
 
@@ -225,6 +230,7 @@ def _pack_ci_from_quantiles(
     psd_quantiles: dict | None = None,
     coherence_quantiles: dict | None = None,
     show_coherence: bool = True,
+    show_csd_magnitude: bool = False,
 ) -> dict:
     """
     Construct a ci_dict (same format as _pack_ci_dict) from precomputed quantiles.
@@ -232,12 +238,13 @@ def _pack_ci_from_quantiles(
     Args:
         psd_quantiles: dict with keys "q05", "q50", "q95", each shaped (n_freq, n_channels, n_channels)
         coherence_quantiles: dict with keys "q05", "q50", "q95", each shaped (n_freq, n_channels, n_channels)
-        show_coherence: if True, populate "coh" entries; else populate "re"/"im"
+        show_coherence: if True, populate "coh" entries
+        show_csd_magnitude: if True, populate "mag" entries with |CSD_ij| bands
 
     Returns:
         ci_dict in the same format as _pack_ci_dict()
     """
-    ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}}
+    ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
 
     # Guard against missing input
     if psd_quantiles is None:
@@ -269,7 +276,32 @@ def _pack_ci_from_quantiles(
                 coh_q95 = coherence_quantiles["q95"][:, i, j]
                 ci_dict["coh"][(i, j)] = (coh_q05, coh_q50, coh_q95)
 
-            elif not show_coherence and imag_q is not None:
+            elif show_csd_magnitude and imag_q is not None and i > j:
+                mag_q05 = np.sqrt(
+                    np.maximum(
+                        q05[:, i, j] ** 2 + imag_q["q05"][:, i, j] ** 2,
+                        0.0,
+                    )
+                )
+                mag_q50 = np.sqrt(
+                    np.maximum(
+                        q50[:, i, j] ** 2 + imag_q["q50"][:, i, j] ** 2,
+                        0.0,
+                    )
+                )
+                mag_q95 = np.sqrt(
+                    np.maximum(
+                        q95[:, i, j] ** 2 + imag_q["q95"][:, i, j] ** 2,
+                        0.0,
+                    )
+                )
+                ci_dict["mag"][(i, j)] = (mag_q05, mag_q50, mag_q95)
+
+            elif (
+                not show_coherence
+                and not show_csd_magnitude
+                and imag_q is not None
+            ):
                 ci_dict["re"][(i, j)] = (
                     q05[:, i, j],
                     q50[:, i, j],
@@ -400,4 +432,6 @@ def save_vi_diagnostics_multivariate(
             true_psd=diagnostics.get("true_psd"),
             psd_quantiles=psd_quantiles,
             coherence_quantiles=diagnostics.get("coherence_quantiles"),
+            show_coherence=True,
+            show_csd_magnitude=False,
         )

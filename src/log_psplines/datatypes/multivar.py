@@ -65,6 +65,9 @@ class MultivarFFT:
     n_dim: int
     nu: int = 1
     scaling_factor: Optional[float] = 1.0  # Track the PSD scaling factor
+    channel_stds: Optional[np.ndarray] = (
+        None  # Per-channel standard deviations
+    )
     fs: float = field(default=1.0, repr=False)
     raw_psd: Optional[np.ndarray] = None
     raw_freq: Optional[np.ndarray] = None
@@ -114,6 +117,13 @@ class MultivarFFT:
                     f"raw_freq must have length {self.n_freq}, got {self.raw_freq.shape}"
                 )
 
+        if self.channel_stds is not None:
+            self.channel_stds = np.asarray(self.channel_stds, dtype=np.float64)
+            if self.channel_stds.shape != (self.n_dim,):
+                raise ValueError(
+                    "channel_stds must have length equal to number of channels"
+                )
+
     @classmethod
     def compute_fft(
         cls,
@@ -122,6 +132,7 @@ class MultivarFFT:
         fmin: float = None,
         fmax: float = None,
         scaling_factor: Optional[float] = 1.0,
+        channel_stds: Optional[np.ndarray] = None,
     ) -> "MultivarFFT":
         """Compute FFT and Wishart replicates with a single (full-length) block."""
         return cls.compute_wishart(
@@ -131,6 +142,7 @@ class MultivarFFT:
             fmin=fmin,
             fmax=fmax,
             scaling_factor=scaling_factor,
+            channel_stds=channel_stds,
         )
 
     @classmethod
@@ -142,6 +154,7 @@ class MultivarFFT:
         fmin: Optional[float] = None,
         fmax: Optional[float] = None,
         scaling_factor: Optional[float] = 1.0,
+        channel_stds: Optional[np.ndarray] = None,
     ) -> "MultivarFFT":
         """
         Compute block-averaged (Wishart) FFT statistics for multivariate series.
@@ -224,6 +237,11 @@ class MultivarFFT:
             nu=n_blocks,
             scaling_factor=scaling_factor,
             fs=fs,
+            channel_stds=(
+                None
+                if channel_stds is None
+                else np.asarray(channel_stds, dtype=np.float64)
+            ),
         )
 
     def cut(self, fmin: float, fmax: float) -> "MultivarFFT":
@@ -251,6 +269,7 @@ class MultivarFFT:
             nu=self.nu,
             scaling_factor=self.scaling_factor,
             fs=self.fs,
+            channel_stds=self.channel_stds,
         )
 
     @property
@@ -263,9 +282,19 @@ class MultivarFFT:
 
     @property
     def empirical_psd(self) -> "EmpiricalPSD":
-        return self.get_empirical_psd(
+        psd = self.get_empirical_psd(
             self.y_re, self.y_im, self.scaling_factor, self.fs
         )
+        if self.channel_stds is not None:
+            scale_matrix = np.outer(self.channel_stds, self.channel_stds)
+            sf = float(self.scaling_factor or 1.0)
+            psd = EmpiricalPSD(
+                freq=psd.freq,
+                psd=psd.psd * (scale_matrix / sf),
+                coherence=psd.coherence,
+                channels=psd.channels,
+            )
+        return psd
 
     @staticmethod
     def get_empirical_psd(
@@ -349,6 +378,7 @@ class MultivariateTimeseries:
             fmin=fmin,
             fmax=fmax,
             scaling_factor=self.scaling_factor,
+            channel_stds=self.original_stds,
         )
 
     def to_wishart_stats(
@@ -373,6 +403,7 @@ class MultivariateTimeseries:
             fmin=fmin,
             fmax=fmax,
             scaling_factor=self.scaling_factor,
+            channel_stds=self.original_stds,
         )
         log_msg = (
             f"Wishart averaging (blocks={n_blocks}): "

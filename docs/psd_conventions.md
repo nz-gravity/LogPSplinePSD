@@ -2,27 +2,24 @@
 
 ## PSD terminology
 
-The refactor introduces `log_psplines.spectrum_utils`, which centralises the
-mathematics used to convert between eigenvector-weighted Wishart statistics and
-power spectral density matrices. The key conventions are:
+`log_psplines.spectrum_utils` centralises the conversion between Wishart
+statistics and PSD matrices. The current conventions are:
 
-- **Normalisation** – All PSD matrices are one-sided and use the
-  `2/(2π)` scaling implemented by :func:`wishart_matrix_to_psd`.
-- **Degrees of freedom** – Effective ν values are obtained via
-  :func:`compute_effective_nu`, which multiplies the baseline block count by
-  any coarse-bin multiplicities.
-- **Scaling factor** – The optional `scaling_factor` tracks the variance
-  adjustment applied during timeseries standardisation and is folded into the
+- **Normalisation** – PSD matrices are **one-sided** and expressed per Hz. The
+  helper :func:`wishart_matrix_to_psd` simply divides the summed Wishart
+  matrices by the effective degrees of freedom, i.e., :math:`S(f) = Y(f) / \nu`.
+- **Degrees of freedom** – :func:`compute_effective_nu` multiplies the baseline
+  block count by any coarse-grain weights, so the PSD conversion always uses the
+  correct ``ν`` for each frequency bin.
+- **Scaling factor** – The optional ``scaling_factor`` tracks variance
+  adjustments applied during time-domain standardisation and is folded into the
   PSD conversion exactly once.
+- **Terminology** – ``U(f)`` denotes the eigenvector-weighted replicates and
+  ``Y(f) = U(f)U(f)^H`` denotes the summed Wishart matrices. Diagonal elements
+  represent auto PSDs; off-diagonal elements are cross spectral densities.
 
-- **Terminology** – ``U(f)`` denotes the eigenvector-weighted replicates that
-  arise from the Wishart factorisation, while ``Y(f) = U(f)U(f)^H`` denotes the
-  summed Wishart matrices prior to normalisation. Diagonal elements are referred to
-  as PSDs; off-diagonal elements are CSDs. coherences are computed from CSDs.
-
-Using these helpers removes a number of duplicated `np.einsum` expressions and
-makes it much easier to reason about the frequency-domain likelihood and the
-diagnostic plots derived from it.
+These helpers ensure the frequency-domain likelihood, diagnostics, and plotting
+code all consume spectra with the same units and sidedness.
 
 ## Data flow
 
@@ -30,7 +27,7 @@ The multivariate pipeline follows a fixed sequence of transformations:
 
 1. **Timeseries** – raw or standardised time-domain data.
 2. **MultivarFFT** – `to_wishart_stats` produces frequency grids, FFT means, and
-   the eigenvector replicates ``U(f)``.
+   the eigenvector replicates ``U(f)`` on the positive-frequency grid.
 3. **CoarseGrain** – optional binning combines nearby frequencies and adjusts
    the effective degrees of freedom.
 4. **Sampler** – NumPyro samplers consume the (possibly coarse) Wishart stats

@@ -190,11 +190,21 @@ class MultivarFFT:
         x_centered = x - np.mean(x, axis=0)
         blocks = x_centered.reshape(n_blocks, block_len, n_dim)
 
-        block_ffts = np.fft.fft(blocks, axis=1) / np.sqrt(block_len)
-        freq = np.fft.fftfreq(block_len, 1 / fs)
-        pos_mask = freq > 0
-        freq = freq[pos_mask]
-        block_ffts = block_ffts[:, pos_mask, :]
+        block_ffts = np.fft.rfft(blocks, axis=1)
+        freq = np.fft.rfftfreq(block_len, 1 / fs)
+        # Drop the zero-frequency bin for numerical stability
+        block_ffts = block_ffts[:, 1:, :]
+        freq = freq[1:]
+        if freq.size == 0:
+            raise ValueError(
+                "Block length too small to retain positive frequencies."
+            )
+
+        scale = np.full(freq.shape, 2.0 / (block_len * fs), dtype=np.float64)
+        if block_len % 2 == 0 and scale.size > 0:
+            scale[-1] = 1.0 / (block_len * fs)
+        sqrt_scale = np.sqrt(scale, dtype=np.float64)[None, :, None]
+        block_ffts = block_ffts * sqrt_scale
 
         if fmin is not None or fmax is not None:
             fmin_eff = freq[0] if fmin is None else max(fmin, freq[0])
@@ -311,7 +321,7 @@ class MultivarFFT:
             scaling_factor=float(scaling),
         )
         coherence = _get_coherence(psd)
-        freq = np.fft.fftfreq(2 * n_freq, 1 / fs)[:n_freq]
+        freq = np.asarray(self.freq, dtype=np.float64)
         return EmpiricalPSD(
             freq=freq,
             psd=psd,

@@ -52,11 +52,10 @@ def scale_processed_psd(
     psd: np.ndarray, scaling_factor: float, channel_stds: np.ndarray | None
 ) -> np.ndarray:
     sf = float(scaling_factor or 1.0)
-    four_pi = 4.0 * np.pi
     if channel_stds is None:
-        return psd * (four_pi * sf)
+        return psd
     scale_matrix = np.outer(channel_stds, channel_stds)
-    return psd * (four_pi * scale_matrix / sf)
+    return psd * (scale_matrix / sf)
 
 
 def interp_complex_matrix(

@@ -179,13 +179,10 @@ class MultivarBaseSampler(BaseSampler):
     def _rescale_psd(self, psd: np.ndarray) -> np.ndarray:
         channel_stds = getattr(self.fft_data, "channel_stds", None)
         sf = float(self.fft_data.scaling_factor or 1.0)
-        four_pi = 4.0 * np.pi
-        if channel_stds is None:
-            return psd * (four_pi * sf)
-        scale_matrix = np.outer(channel_stds, channel_stds).astype(psd.dtype)
-        if sf == 0:
+        if channel_stds is None or sf == 0.0:
             return psd
-        return psd * (four_pi * scale_matrix / sf)
+        scale_matrix = np.outer(channel_stds, channel_stds).astype(psd.dtype)
+        return psd * (scale_matrix / sf)
 
     def _save_vi_diagnostics(
         self, *, empirical_psd: Optional[EmpiricalPSD] = None

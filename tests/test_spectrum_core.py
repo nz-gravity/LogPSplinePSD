@@ -2,7 +2,6 @@ import numpy as np
 import pytest
 
 from log_psplines.spectrum_utils import (
-    TWO_PI,
     compute_effective_nu,
     sum_wishart_outer_products,
     u_to_wishart_matrix,
@@ -66,7 +65,7 @@ def test_wishart_matrix_to_psd_scaling_and_normalisation():
 
     psd = wishart_matrix_to_psd(Y, nu, scaling_factor=2.5, weights=weights)
     eff_nu = compute_effective_nu(nu, weights)
-    manual = (2.0 / (eff_nu[:, None, None] * TWO_PI)) * Y * 2.5
+    manual = (Y / eff_nu[:, None, None]) * 2.5
     np.testing.assert_allclose(psd, manual)
 
 

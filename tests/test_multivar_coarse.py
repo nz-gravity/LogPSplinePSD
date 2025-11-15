@@ -34,15 +34,10 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     std_ts = ts.standardise_for_psd()
     channel_stds = std_ts.original_stds
     scaling_factor = float(std_ts.scaling_factor or 1.0)
-    four_pi = 4.0 * np.pi
     if channel_stds is not None:
-        scale_matrix = (
-            four_pi * np.outer(channel_stds, channel_stds) / scaling_factor
-        )
+        scale_matrix = np.outer(channel_stds, channel_stds) / scaling_factor
     else:
-        scale_matrix = (
-            four_pi * scaling_factor * np.ones((ts.n_channels, ts.n_channels))
-        )
+        scale_matrix = scaling_factor * np.ones((ts.n_channels, ts.n_channels))
 
     def to_physical(psd: np.ndarray) -> np.ndarray:
         return psd * scale_matrix
@@ -175,10 +170,11 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         fft_full, spec_manual
     )
     periodogram_obs = idata_coarse.observed_data["periodogram"].values
+    manual_psd_physical = to_physical(fft_manual_coarse.raw_psd)
 
-    assert periodogram_obs.shape == fft_manual_coarse.raw_psd.shape
-    diff = np.abs(periodogram_obs - fft_manual_coarse.raw_psd)
-    denom = np.abs(fft_manual_coarse.raw_psd) + 1e-12
+    assert periodogram_obs.shape == manual_psd_physical.shape
+    diff = np.abs(periodogram_obs - manual_psd_physical)
+    denom = np.abs(manual_psd_physical) + 1e-12
     rel_max = np.max(diff / denom)
 
     assert (

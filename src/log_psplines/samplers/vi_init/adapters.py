@@ -134,17 +134,16 @@ def compute_vi_artifacts_multivar(
 
         scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
         channel_stds = getattr(sampler.fft_data, "channel_stds", None)
-        four_pi = 4.0 * np.pi
         if channel_stds is not None:
             channel_stds = np.asarray(channel_stds, dtype=np.float32)
             scale_matrix = np.outer(channel_stds, channel_stds).astype(
                 np.float32
             )
-            factor_matrix = four_pi * scale_matrix / scaling
+            factor_matrix = scale_matrix / scaling
             scalar_factor = None
         else:
             factor_matrix = None
-            scalar_factor = four_pi * scaling
+            scalar_factor = scaling
 
         def _rescale_psd(arr: np.ndarray) -> np.ndarray:
             if factor_matrix is not None:
@@ -391,15 +390,14 @@ def prepare_block_vi(
 
     scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
     channel_stds = getattr(sampler.fft_data, "channel_stds", None)
-    four_pi = 4.0 * np.pi
     if channel_stds is not None:
         channel_stds = np.asarray(channel_stds, dtype=np.float32)
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
-        factor_matrix = four_pi * scale_matrix / scaling
+        factor_matrix = scale_matrix / scaling
         scalar_factor = None
     else:
         factor_matrix = None
-        scalar_factor = four_pi * scaling
+        scalar_factor = scaling
 
     def _rescale_psd(arr: np.ndarray) -> np.ndarray:
         if factor_matrix is not None:
@@ -704,10 +702,8 @@ def prepare_block_vi(
                 draws_used = _cap_psd_draws(sampler.config, draws_available)
                 if draws_used < draws_available:
                     logger.debug(
-                        "Capping VI PSD reconstruction to %d draws "
-                        "(limit=%d).",
-                        draws_used,
-                        getattr(sampler.config, "vi_psd_max_draws", 0),
+                        f"Capping VI PSD reconstruction to {draws_used} draws "
+                        f"(limit={getattr(sampler.config, 'vi_psd_max_draws', 0)})."
                     )
                 log_delta_samples = jnp.asarray(
                     log_delta_draws[:draws_used], dtype=jnp.float32

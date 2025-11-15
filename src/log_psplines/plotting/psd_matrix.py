@@ -11,6 +11,17 @@ from .base import extract_plotting_data, setup_plot_style
 setup_plot_style()
 
 
+EMPIRICAL_KWGS = dict(
+    color="0.4",
+    lw=1.0,
+    alpha=0.7,
+    ls="--",
+    label="Empirical",
+    zorder=-5,
+)
+TRUE_KWGS = dict(color="k", lw=1.2, label="Analytical", zorder=-2)
+
+
 def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
     """
     Extract empirical PSD from multivariate idata for plotting.
@@ -79,9 +90,13 @@ def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
         return None
 
 
-def _pack_ci_dict(psd_samples, show_coherence: bool):
-    """Compute 5/50/95% bands for diag PSDs, and coherence OR Re/Im cross-spectra."""
-    ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}}
+def _pack_ci_dict(
+    psd_samples,
+    show_coherence: bool,
+    show_csd_magnitude: bool = False,
+):
+    """Compute 5/50/95% bands for diag PSDs and requested cross terms."""
+    ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
     _, _, n_channels, _ = psd_samples.shape
     for i in range(n_channels):
         for j in range(n_channels):
@@ -99,7 +114,13 @@ def _pack_ci_dict(psd_samples, show_coherence: bool):
                 q50 = np.percentile(coh, 50, axis=0)
                 q95 = np.percentile(coh, 95, axis=0)
                 ci_dict["coh"][(i, j)] = (q05, q50, q95)
-            elif not show_coherence:
+            elif show_csd_magnitude and i > j:
+                mag = np.abs(psd_samples[:, :, i, j])
+                q05 = np.percentile(mag, 5, axis=0)
+                q50 = np.percentile(mag, 50, axis=0)
+                q95 = np.percentile(mag, 95, axis=0)
+                ci_dict["mag"][(i, j)] = (q05, q50, q95)
+            elif not show_coherence and not show_csd_magnitude:
                 re_q05 = np.percentile(psd_samples[:, :, i, j].real, 5, axis=0)
                 re_q50 = np.percentile(
                     psd_samples[:, :, i, j].real, 50, axis=0
@@ -123,6 +144,7 @@ def _format_text(
     axes,
     channel_labels=None,
     show_coherence: bool = True,
+    show_csd_magnitude: bool = False,
     add_channel_labels: bool = True,
 ):
     p = axes.shape[0]
@@ -149,6 +171,13 @@ def _format_text(
                     lbl = f"$\\mathbf{{C}}_{{{channel_labels[i]}{channel_labels[j]}}}$"
                 else:
                     continue
+            elif show_csd_magnitude:
+                if i == j:
+                    lbl = f"$\\mathbf{{S}}_{{{channel_labels[i]}{channel_labels[j]}}}$"
+                elif i > j:
+                    lbl = f"$|\\mathbf{{S}}_{{{channel_labels[i]}{channel_labels[j]}}}|$"
+                else:
+                    continue
             else:
                 base = (
                     f"\\mathbf{{S}}_{{{channel_labels[i]}{channel_labels[j]}}}"
@@ -172,11 +201,15 @@ def _format_text(
             )
 
 
-def _ylabel_for(i: int, j: int, show_coherence: bool) -> str:
+def _ylabel_for(
+    i: int, j: int, show_coherence: bool, show_csd_magnitude: bool
+) -> str:
     if i == j:
         return "PSD [1/Hz]"
     if show_coherence and i > j:
         return "Coherence"  # unitless
+    if show_csd_magnitude and i > j:
+        return "|CSD| [1/Hz]"
     if not show_coherence and i > j:
         return "Re[PSD]"
     if not show_coherence and i < j:
@@ -194,11 +227,13 @@ def plot_psd_matrix(
     filename: str = "psd_matrix.png",
     dpi: int = 150,
     show_coherence: bool = True,
+    show_csd_magnitude: bool = False,
     channel_labels: list[str] | str | None = None,
     diag_yscale: str = "log",
+    offdiag_yscale: str = "linear",
     xscale: str = "linear",
     label: Optional[str] = None,
-    model_color: Optional[str] = None,
+    model_color: Optional[str] = "tab:blue",
     fig: Optional[plt.Figure] = None,
     ax: Optional[np.ndarray] = None,
     save: bool = True,
@@ -227,8 +262,16 @@ def plot_psd_matrix(
         Whether to close the figure at the end. Defaults to ``save`` when the
         figure is created inside this function; otherwise the figure is left
         open.
+    show_csd_magnitude : bool, optional
+        When ``True`` the lower-triangular panels display |CSD_ij| instead of
+        coherence or Re/Im parts.
     """
     # ----- Extract/validate -----
+    if show_coherence and show_csd_magnitude:
+        raise ValueError(
+            "Choose either coherence display or |CSD| magnitude, not both."
+        )
+
     if idata is not None:
         # Check for required data
         extracted = extract_plotting_data(idata)
@@ -256,7 +299,7 @@ def plot_psd_matrix(
         imag_q = quantiles["imag"]
         coh_q = quantiles.get("coherence")
 
-        ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}}
+        ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
         n_channels = real_q.shape[2]
         for i in range(n_channels):
             for j in range(n_channels):
@@ -270,6 +313,17 @@ def plot_psd_matrix(
                     q95_im = _grab(imag_q[:, :, i, j], 95.0)
                     ci_dict["re"][(i, j)] = (q05_r, q50_r, q95_r)
                     ci_dict["im"][(i, j)] = (q05_im, q50_im, q95_im)
+                    if show_csd_magnitude:
+                        mag_q05 = np.sqrt(
+                            np.maximum(q05_r**2 + q05_im**2, 0.0)
+                        )
+                        mag_q50 = np.sqrt(
+                            np.maximum(q50_r**2 + q50_im**2, 0.0)
+                        )
+                        mag_q95 = np.sqrt(
+                            np.maximum(q95_r**2 + q95_im**2, 0.0)
+                        )
+                        ci_dict["mag"][(i, j)] = (mag_q05, mag_q50, mag_q95)
 
         if coh_q is not None and show_coherence:
             for i in range(n_channels):
@@ -336,12 +390,7 @@ def plot_psd_matrix(
                     ax.plot(
                         empirical_psd.freq,
                         empirical_psd.psd[:, i, i].real,
-                        color="0.4",
-                        lw=1.0,
-                        alpha=0.7,
-                        ls="--",
-                        label="Empirical",
-                        zorder=-5,
+                        **EMPIRICAL_KWGS,
                     )
                 line_kwargs = {"lw": 1.5}
                 if label is not None:
@@ -349,10 +398,7 @@ def plot_psd_matrix(
                 else:
                     line_kwargs["label"] = "Median"
 
-                if model_color is not None:
-                    line_kwargs["color"] = model_color
-                elif label is None:
-                    line_kwargs.setdefault("color", "tab:blue")
+                line_kwargs["color"] = model_color
                 line = ax.plot(freq, q50, **line_kwargs)[0]
                 ax.fill_between(
                     freq,
@@ -366,15 +412,13 @@ def plot_psd_matrix(
                     ax.plot(
                         freq,
                         true_psd[:, i, i].real,
-                        color="k",
-                        lw=1.2,
-                        label="True",
+                        **TRUE_KWGS,
                     )
                 ax.set_yscale(diag_yscale)
                 if i == 0 and j == 0:
                     ax.legend(frameon=False, fontsize=9)
 
-            elif i > j:  # lower triangle
+            elif i > j:  # lower triangle cross terms
                 if show_coherence:
                     if "coh" in ci_dict and (i, j) in ci_dict["coh"]:
                         q05, q50, q95 = ci_dict["coh"][(i, j)]
@@ -383,21 +427,15 @@ def plot_psd_matrix(
                             ax.plot(
                                 empirical_psd.freq,
                                 empirical_psd.coherence[:, i, j],
-                                color="0.3",
-                                lw=1.0,
-                                ls="--",
-                                label="Empirical",
-                                alpha=0.6,
-                                zorder=-5,
+                                **EMPIRICAL_KWGS,
                             )
-                        coh_color = model_color or "tab:blue"
                         ax.fill_between(
-                            freq, q05, q95, color=coh_color, alpha=0.25
+                            freq, q05, q95, color=model_color, alpha=0.25
                         )
                         ax.plot(
                             freq,
                             q50,
-                            color=coh_color,
+                            color=model_color,
                             lw=1.5,
                             label="Median" if label is None else label,
                         )
@@ -407,51 +445,77 @@ def plot_psd_matrix(
                                 * np.abs(true_psd[:, j, j])
                             )
                             ax.plot(
-                                freq, true_coh, color="k", lw=1.2, label="True"
+                                freq,
+                                true_coh,
+                                **TRUE_KWGS,
                             )
                         ax.set_ylim(0, 1)
                     else:
                         raise ValueError(
                             "ci_dict missing coherence (i,j)={i,j}"
                         )
+                elif show_csd_magnitude:
+                    if "mag" not in ci_dict or (i, j) not in ci_dict["mag"]:
+                        raise ValueError(
+                            f"ci_dict missing |CSD| quantiles for (i,j)=({i},{j})"
+                        )
+                    q05, q50, q95 = ci_dict["mag"][(i, j)]
+                    ax.fill_between(
+                        freq, q05, q95, color=model_color, alpha=0.25
+                    )
+                    ax.plot(
+                        freq,
+                        q50,
+                        color=model_color,
+                        lw=1.5,
+                        label="Median" if label is None else label,
+                    )
+                    if empirical_psd is not None:
+                        ax.plot(
+                            empirical_psd.freq,
+                            np.abs(empirical_psd.psd[:, i, j]),
+                            **EMPIRICAL_KWGS,
+                        )
+                    if true_psd is not None:
+                        ax.plot(
+                            freq,
+                            np.abs(true_psd[:, i, j]),
+                            **TRUE_KWGS,
+                        )
                 else:
                     q05, q50, q95 = ci_dict["re"][(i, j)]
                     ax.fill_between(
-                        freq, q05, q95, color="tab:green", alpha=0.25
+                        freq, q05, q95, color=model_color, alpha=0.25
                     )
-                    ax.plot(freq, q50, color="tab:green", lw=1.5)
+                    ax.plot(freq, q50, color=model_color, lw=1.5)
                     if empirical_psd is not None:
                         ax.plot(
                             empirical_psd.freq,
                             empirical_psd.psd[:, i, j].real,
-                            "k--",
-                            lw=1.0,
-                            alpha=0.6,
-                            zorder=-5,
+                            **EMPIRICAL_KWGS,
                         )
                     if true_psd is not None:
-                        ax.plot(freq, true_psd[:, i, j].real, "k", lw=1.2)
+                        ax.plot(freq, true_psd[:, i, j].real, **TRUE_KWGS)
 
-            elif not show_coherence and i < j:  # upper triangle imag parts
+                ax.set_yscale(offdiag_yscale)
+
+            elif not show_coherence and not show_csd_magnitude and i < j:
                 q05, q50, q95 = ci_dict["im"][(i, j)]
-                ax.fill_between(freq, q05, q95, color="tab:orange", alpha=0.25)
-                ax.plot(freq, q50, color="tab:orange", lw=1.5)
+                ax.fill_between(freq, q05, q95, color=model_color, alpha=0.25)
+                ax.plot(freq, q50, color=model_color, lw=1.5)
                 if empirical_psd is not None:
                     ax.plot(
                         empirical_psd.freq,
                         empirical_psd.psd[:, i, j].imag,
-                        "k--",
-                        lw=1.0,
-                        alpha=0.6,
-                        zorder=-5,
+                        **EMPIRICAL_KWGS,
                     )
                 if true_psd is not None:
-                    ax.plot(freq, true_psd[:, i, j].imag, "k", lw=1.2)
+                    ax.plot(freq, true_psd[:, i, j].imag, **TRUE_KWGS)
             else:
                 ax.axis("off")
 
             # adaptive y-labels only for visible panels
-            ylab = _ylabel_for(i, j, show_coherence)
+            ylab = _ylabel_for(i, j, show_coherence, show_csd_magnitude)
             if ylab:
                 ax.set_ylabel(ylab, fontsize=11)
 
@@ -460,7 +524,10 @@ def plot_psd_matrix(
 
     if created_fig:
         _format_text(
-            axes, channel_labels=channel_labels, show_coherence=show_coherence
+            axes,
+            channel_labels=channel_labels,
+            show_coherence=show_coherence,
+            show_csd_magnitude=show_csd_magnitude,
         )
         plt.subplots_adjust(
             left=0.12,

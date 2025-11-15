@@ -502,6 +502,12 @@ def run_mcmc(
         ),  # Pass scaling info to sampler
         true_psd=scaled_true_psd,
         freq_weights=freq_weights,
+        channel_stds=(
+            processed_data.channel_stds
+            if processed_data is not None
+            and hasattr(processed_data, "channel_stds")
+            else None
+        ),
         **kwargs,
     )
 
@@ -540,6 +546,7 @@ def create_sampler(
     scaling_factor: float = 1.0,
     true_psd: Optional[jnp.ndarray] = None,
     freq_weights: Optional[np.ndarray] = None,
+    channel_stds: Optional[np.ndarray] = None,
     **kwargs,
 ):
     """Factory function to create appropriate sampler."""
@@ -558,6 +565,7 @@ def create_sampler(
         "outdir": outdir,
         "compute_lnz": compute_lnz,
         "scaling_factor": scaling_factor,
+        "channel_stds": channel_stds,
         "true_psd": true_psd,
         "freq_weights": freq_weights,
         "vi_psd_max_draws": vi_psd_max_draws,

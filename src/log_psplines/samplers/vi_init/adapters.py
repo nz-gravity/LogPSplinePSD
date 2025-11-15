@@ -133,6 +133,23 @@ def compute_vi_artifacts_multivar(
         }
 
         scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
+        channel_stds = getattr(sampler.fft_data, "channel_stds", None)
+        four_pi = 4.0 * np.pi
+        if channel_stds is not None:
+            channel_stds = np.asarray(channel_stds, dtype=np.float32)
+            scale_matrix = np.outer(channel_stds, channel_stds).astype(
+                np.float32
+            )
+            factor_matrix = four_pi * scale_matrix / scaling
+            scalar_factor = None
+        else:
+            factor_matrix = None
+            scalar_factor = four_pi * scaling
+
+        def _rescale_psd(arr: np.ndarray) -> np.ndarray:
+            if factor_matrix is not None:
+                return arr * factor_matrix
+            return arr * scalar_factor
 
         vi_psd_np = None
         psd_quantiles = None
@@ -177,7 +194,7 @@ def compute_vi_artifacts_multivar(
                 theta_im[None, ...],
                 n_samples_max=1,
             )[0]
-            vi_psd_np = np.asarray(vi_psd) * scaling
+            vi_psd_np = _rescale_psd(np.asarray(vi_psd))
 
             samples_tree = vi_result.samples or {}
             if samples_tree:
@@ -284,8 +301,8 @@ def compute_vi_artifacts_multivar(
                             compute_coherence=sampler.n_channels > 1,
                         )
                     )
-                    psd_real_q *= scaling
-                    psd_imag_q *= scaling
+                    psd_real_q = _rescale_psd(psd_real_q)
+                    psd_imag_q = _rescale_psd(psd_imag_q)
 
                     psd_quantiles = {
                         "real": {
@@ -373,6 +390,21 @@ def prepare_block_vi(
     mcmc_keys: List[jax.Array] = [jax.random.PRNGKey(0)] * n_channels
 
     scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
+    channel_stds = getattr(sampler.fft_data, "channel_stds", None)
+    four_pi = 4.0 * np.pi
+    if channel_stds is not None:
+        channel_stds = np.asarray(channel_stds, dtype=np.float32)
+        scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
+        factor_matrix = four_pi * scale_matrix / scaling
+        scalar_factor = None
+    else:
+        factor_matrix = None
+        scalar_factor = four_pi * scaling
+
+    def _rescale_psd(arr: np.ndarray) -> np.ndarray:
+        if factor_matrix is not None:
+            return arr * factor_matrix
+        return arr * scalar_factor
 
     vi_losses_blocks: List[np.ndarray] = []
     vi_guides: List[str] = []
@@ -655,7 +687,7 @@ def prepare_block_vi(
                 jnp.asarray(theta_im_vi_np)[None, ...],
                 n_samples_max=1,
             )[0]
-            vi_psd_np = np.asarray(vi_psd) * scaling
+            vi_psd_np = _rescale_psd(np.asarray(vi_psd))
         else:
             vi_psd_np = None
 
@@ -704,8 +736,8 @@ def prepare_block_vi(
                         compute_coherence=sampler.n_channels > 1,
                     )
                 )
-                psd_real_q *= scaling
-                psd_imag_q *= scaling
+                psd_real_q = _rescale_psd(psd_real_q)
+                psd_imag_q = _rescale_psd(psd_imag_q)
 
                 psd_quantiles = {
                     "real": {

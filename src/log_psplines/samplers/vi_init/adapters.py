@@ -84,6 +84,11 @@ def compute_vi_artifacts_univar(
         }
         if psd_quantiles is not None:
             diagnostics["psd_quantiles"] = psd_quantiles
+        if vi_result.samples is not None:
+            diagnostics["vi_samples"] = {
+                name: np.asarray(jax.device_get(value))
+                for name, value in vi_result.samples.items()
+            }
         return init_values, diagnostics
 
     return sampler._run_vi_initialisation(
@@ -344,6 +349,11 @@ def compute_vi_artifacts_multivar(
             diagnostics["psd_quantiles"] = psd_quantiles
         if coherence_quantiles is not None:
             diagnostics["coherence_quantiles"] = coherence_quantiles
+        if vi_result.samples is not None:
+            diagnostics["vi_samples"] = {
+                name: np.asarray(jax.device_get(value))
+                for name, value in vi_result.samples.items()
+            }
         return init_values, diagnostics
 
     return sampler._run_vi_initialisation(
@@ -416,6 +426,7 @@ def prepare_block_vi(
         else 0
     )
     store_draws = sampler.config.init_from_vi and posterior_draws > 0
+    vi_samples: Dict[str, np.ndarray] = {}
     log_delta_draws = None
     theta_re_draws = None
     theta_im_draws = None
@@ -506,6 +517,10 @@ def prepare_block_vi(
             losses_arr = np.asarray(jax.device_get(vi_result.losses))
             vi_losses_blocks.append(losses_arr)
             vi_guides.append(vi_result.guide_name)
+
+            if vi_result.samples is not None:
+                for name, value in vi_result.samples.items():
+                    vi_samples[name] = np.asarray(jax.device_get(value))
 
             weights_delta_name = f"weights_delta_{channel_index}"
             weights_delta = vi_result.means.get(weights_delta_name)
@@ -787,6 +802,10 @@ def prepare_block_vi(
             diagnostics["psd_quantiles"] = psd_quantiles
         if coherence_quantiles is not None:
             diagnostics["coherence_quantiles"] = coherence_quantiles
+
+    if vi_samples:
+        diagnostics = diagnostics or {}
+        diagnostics["vi_samples"] = vi_samples
 
     return BlockVIArtifacts(
         init_strategies=init_strategies,

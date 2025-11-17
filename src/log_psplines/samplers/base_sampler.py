@@ -42,6 +42,7 @@ class SamplerConfig:
     vi_psd_max_draws: int = (
         64  # Cap PSD reconstructions from VI/posterior draws
     )
+    only_vi: bool = False  # Skip MCMC and rely on VI draws only
 
     def __post_init__(self):
         if self.outdir is not None:
@@ -71,7 +72,12 @@ class BaseSampler(ABC):
 
     @abstractmethod
     def sample(
-        self, n_samples: int, n_warmup: int = 1000, **kwargs
+        self,
+        n_samples: int,
+        n_warmup: int = 1000,
+        *,
+        only_vi: bool = False,
+        **kwargs,
     ) -> az.InferenceData:
         """Run MCMC sampling and return inference data."""
         pass

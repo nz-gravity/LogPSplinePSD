@@ -4,13 +4,14 @@ Base class for univariate PSD samplers.
 
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import arviz as az
 import jax
 import jax.numpy as jnp
 import morphZ
 import numpy as np
+from xarray import DataArray, Dataset
 
 from ...arviz_utils.to_arviz import results_to_arviz
 from ...datatypes import Periodogram
@@ -160,3 +161,70 @@ class UnivarBaseSampler(BaseSampler):
         raise NotImplementedError(
             "Concrete sampler must implement _compute_log_posterior"
         )
+
+    def _create_vi_inference_data(
+        self,
+        samples: Dict[str, jnp.ndarray],
+        sample_stats: Dict[str, jnp.ndarray],
+        diagnostics: Optional[Dict[str, Any]],
+    ) -> az.InferenceData:
+        """Convert VI samples to ArviZ and attach VI-specific diagnostics."""
+
+        idata = self._create_inference_data(
+            samples,
+            sample_stats,
+            lnz=np.nan,
+            lnz_err=np.nan,
+        )
+
+        self._attach_vi_psd_group(idata, diagnostics)
+        return idata
+
+    def _attach_vi_psd_group(
+        self, idata: az.InferenceData, diagnostics: Optional[Dict[str, Any]]
+    ) -> None:
+        """Store VI PSD quantiles in a dedicated ArviZ group."""
+
+        if not diagnostics:
+            return
+
+        psd_quantiles = diagnostics.get("psd_quantiles")
+        freq = np.asarray(self.periodogram.freqs, dtype=np.float32)
+        if psd_quantiles:
+            entries = []
+            perc = []
+            for label, percentile in [
+                ("q05", 5.0),
+                ("q50", 50.0),
+                ("q95", 95.0),
+            ]:
+                value = psd_quantiles.get(label)
+                if value is None:
+                    continue
+                entries.append(np.asarray(value))
+                perc.append(percentile)
+            if not entries:
+                return
+            psd_array = np.stack(entries, axis=0)
+            percentiles = np.asarray(perc, dtype=np.float32)
+        else:
+            psd = diagnostics.get("psd")
+            if psd is None:
+                return
+            psd_array = np.asarray(psd)[None, :]
+            percentiles = np.asarray([50.0], dtype=np.float32)
+
+        dataset = Dataset(
+            {
+                "psd": DataArray(
+                    psd_array,
+                    dims=["percentile", "freq"],
+                    coords={
+                        "percentile": percentiles,
+                        "freq": freq,
+                    },
+                )
+            }
+        )
+
+        idata.add_groups(vi_posterior_psd=dataset)

@@ -500,17 +500,17 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             )
 
         vi_samples = diagnostics.get("vi_samples")
-        if not vi_samples:
+        if vi_samples:
+            sample_dict = {
+                name: jnp.asarray(array)
+                for name, array in vi_samples.items()
+                if name.startswith(("weights_", "phi_", "delta_"))
+            }
+        else:
             raise ValueError(
-                "Variational-only mode requires stored VI posterior draws. "
-                "Increase vi_posterior_draws to a positive value."
+                "Blocked VI diagnostics do not include posterior draws for the parameters."
             )
 
-        sample_dict = {
-            name: jnp.asarray(array)
-            for name, array in vi_samples.items()
-            if name.startswith(("weights_", "phi_", "delta_"))
-        }
         if not sample_dict:
             raise ValueError(
                 "No variational posterior draws were recorded for the model parameters."
@@ -522,4 +522,4 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 samples[key] = jnp.exp(samples[key])
 
         self.runtime = 0.0
-        return self.to_arviz(samples, {})
+        return self._create_vi_inference_data(samples, {}, diagnostics)

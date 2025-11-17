@@ -177,7 +177,12 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         return "multivariate_nuts"
 
     def sample(
-        self, n_samples: int, n_warmup: int = 500, **kwargs
+        self,
+        n_samples: int,
+        n_warmup: int = 500,
+        *,
+        only_vi: bool = False,
+        **kwargs,
     ) -> az.InferenceData:
         """Run multivariate NUTS sampling."""
         vi_artifacts = compute_vi_artifacts_multivar(
@@ -192,6 +197,10 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             self._save_vi_diagnostics(
                 empirical_psd=self._compute_empirical_psd()
             )
+
+        vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
+        if vi_only_mode:
+            return self._vi_only_inference_data(vi_artifacts)
 
         if (
             self.config.verbose
@@ -376,3 +385,37 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             else:
                 transformed[name] = array
         return float(self._logpost_fn(transformed))
+
+    def _vi_only_inference_data(
+        self, vi_artifacts: "VIInitialisationArtifacts"
+    ) -> az.InferenceData:
+        diagnostics = vi_artifacts.diagnostics or {}
+        vi_samples = diagnostics.get("vi_samples")
+        if not vi_samples:
+            raise ValueError(
+                "Variational-only mode requires stored VI posterior draws. "
+                "Increase vi_posterior_draws to a positive value."
+            )
+
+        sample_dict = {
+            name: jnp.asarray(array)
+            for name, array in vi_samples.items()
+            if name.startswith(("weights_", "phi_", "delta_"))
+        }
+        if not sample_dict:
+            raise ValueError(
+                "No variational posterior draws were recorded for the model parameters."
+            )
+
+        params_batch = self._prepare_logpost_params(sample_dict)
+        sample_stats = {
+            "lp": evaluate_log_density_batch(self._logpost_fn, params_batch)
+        }
+
+        samples = dict(sample_dict)
+        for key in list(samples):
+            if key.startswith("phi"):
+                samples[key] = jnp.exp(samples[key])
+
+        self.runtime = 0.0
+        return self.to_arviz(samples, sample_stats)

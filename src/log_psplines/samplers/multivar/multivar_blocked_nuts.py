@@ -262,7 +262,12 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         return "multivariate_blocked_nuts"
 
     def sample(
-        self, n_samples: int, n_warmup: int = 500, **kwargs
+        self,
+        n_samples: int,
+        n_warmup: int = 500,
+        *,
+        only_vi: bool = False,
+        **kwargs,
     ) -> az.InferenceData:
         """Run the blocked inference and assemble results.
 
@@ -291,6 +296,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         total_runtime = 0.0
 
+        vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
+
         vi_setup = prepare_block_vi(
             self,
             rng_key=self.rng_key,
@@ -304,6 +311,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         self.rng_key = vi_setup.rng_key
         init_strategies = vi_setup.init_strategies
         mcmc_keys = vi_setup.mcmc_keys
+
+        if vi_only_mode:
+            return self._vi_only_inference_data(vi_setup.diagnostics)
 
         if (
             self.config.verbose
@@ -479,3 +489,37 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     ) -> Tuple[float, float]:
         """LnZ is currently not computed for the multivariate samplers."""
         return super()._get_lnz(samples, sample_stats)
+
+    def _vi_only_inference_data(
+        self, diagnostics: Optional[Dict[str, Any]]
+    ) -> az.InferenceData:
+        if not diagnostics:
+            raise ValueError(
+                "Variational-only mode is unavailable because VI diagnostics "
+                "were not recorded. Ensure init_from_vi is True."
+            )
+
+        vi_samples = diagnostics.get("vi_samples")
+        if not vi_samples:
+            raise ValueError(
+                "Variational-only mode requires stored VI posterior draws. "
+                "Increase vi_posterior_draws to a positive value."
+            )
+
+        sample_dict = {
+            name: jnp.asarray(array)
+            for name, array in vi_samples.items()
+            if name.startswith(("weights_", "phi_", "delta_"))
+        }
+        if not sample_dict:
+            raise ValueError(
+                "No variational posterior draws were recorded for the model parameters."
+            )
+
+        samples = dict(sample_dict)
+        for key in list(samples):
+            if key.startswith("phi"):
+                samples[key] = jnp.exp(samples[key])
+
+        self.runtime = 0.0
+        return self.to_arviz(samples, {})

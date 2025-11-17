@@ -175,6 +175,7 @@ def run_mcmc(
     verbose: bool = True,
     outdir: Optional[str] = None,
     compute_lnz: bool = False,
+    only_vi: bool = False,
     # NUTS specific
     target_accept_prob: float = 0.8,
     max_tree_depth: int = 10,
@@ -241,6 +242,10 @@ def run_mcmc(
         Directory to save output files
     compute_lnz : bool, default=False
         Whether to compute log evidence
+    only_vi : bool, default=False
+        When ``True`` the samplers that support variational initialisation
+        (NUTS variants) skip the MCMC phase and return an approximation based on
+        VI posterior draws.
     target_accept_prob : float, default=0.8
         Target acceptance probability for NUTS
     max_tree_depth : int, default=10
@@ -267,6 +272,13 @@ def run_mcmc(
     # Map any supported aliases onto canonical sampler names
     sampler_aliases = {}
     sampler = sampler_aliases.get(sampler, sampler)
+
+    if only_vi:
+        vi_capable = {"nuts", "multivar_blocked_nuts", "multivar_nuts"}
+        if sampler not in vi_capable:
+            raise ValueError(
+                f"Sampler '{sampler}' does not support variational-only execution."
+            )
 
     if coarse_grain_config is None:
         cg_config = CoarseGrainConfig()
@@ -484,6 +496,7 @@ def run_mcmc(
         verbose=verbose,
         outdir=outdir,
         compute_lnz=compute_lnz,
+        only_vi=only_vi,
         target_accept_prob=target_accept_prob,
         max_tree_depth=max_tree_depth,
         init_from_vi=init_from_vi,
@@ -511,7 +524,9 @@ def run_mcmc(
         **kwargs,
     )
 
-    return sampler_obj.sample(n_samples=n_samples, n_warmup=n_warmup)
+    return sampler_obj.sample(
+        n_samples=n_samples, n_warmup=n_warmup, only_vi=only_vi
+    )
 
 
 def create_sampler(
@@ -532,6 +547,7 @@ def create_sampler(
     verbose: bool = True,
     outdir: Optional[str] = None,
     compute_lnz: bool = False,
+    only_vi: bool = False,
     target_accept_prob: float = 0.8,
     max_tree_depth: int = 10,
     init_from_vi: bool = True,
@@ -569,6 +585,7 @@ def create_sampler(
         "true_psd": true_psd,
         "freq_weights": freq_weights,
         "vi_psd_max_draws": vi_psd_max_draws,
+        "only_vi": only_vi,
     }
 
     if isinstance(data, Periodogram):

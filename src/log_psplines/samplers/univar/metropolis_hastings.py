@@ -250,9 +250,18 @@ class MetropolisHastingsSampler(UnivarBaseSampler):
         }
 
     def sample(
-        self, n_samples: int, n_warmup: int = 500, **kwargs
+        self,
+        n_samples: int,
+        n_warmup: int = 500,
+        *,
+        only_vi: bool = False,
+        **kwargs,
     ) -> az.InferenceData:
         """Run Metropolis-Hastings sampling."""
+        if only_vi or getattr(self.config, "only_vi", False):
+            raise ValueError(
+                "Metropolis-Hastings sampler does not support variational-only execution."
+            )
         total_iterations = n_warmup + n_samples
 
         # Initialize storage for samples and statistics

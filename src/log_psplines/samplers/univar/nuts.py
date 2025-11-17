@@ -211,34 +211,46 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         self, vi_artifacts: "VIInitialisationArtifacts"
     ) -> az.InferenceData:
         diagnostics = vi_artifacts.diagnostics or {}
-        vi_samples = diagnostics.get("vi_samples")
-        if not vi_samples:
-            raise ValueError(
-                "Variational-only mode requires stored VI posterior draws. "
-                "Increase vi_posterior_draws to a positive value."
-            )
+        posterior_draws = vi_artifacts.posterior_draws or diagnostics.get(
+            "vi_samples"
+        )
 
-        sample_dict = {
-            name: jnp.asarray(array)
-            for name, array in vi_samples.items()
-            if name in {"weights", "phi", "delta"}
-        }
+        if posterior_draws:
+            sample_dict = {
+                name: jnp.asarray(array)
+                for name, array in posterior_draws.items()
+                if name in {"weights", "phi", "delta"}
+            }
+        else:
+            means = vi_artifacts.means or {}
+            sample_dict = {
+                name: jnp.asarray(value)[None, ...]
+                for name, value in means.items()
+                if name in {"weights", "phi", "delta"}
+            }
+
         missing = {"weights", "phi", "delta"} - set(sample_dict)
         if missing:
             raise ValueError(
-                "Missing VI draws for the following latent variables: "
-                + ", ".join(sorted(missing))
+                "Variational-only mode requires VI means for weights, phi, and delta."
             )
 
         params_batch = self._prepare_logpost_params(sample_dict)
-        sample_stats = {
-            "lp": evaluate_log_density_batch(self._logpost_fn, params_batch)
-        }
+        sample_stats = {}
+        try:
+            sample_stats["lp"] = evaluate_log_density_batch(
+                self._logpost_fn, params_batch
+            )
+        except Exception:
+            sample_stats = {}
 
         samples = dict(sample_dict)
-        samples["phi"] = jnp.exp(samples["phi"])
+        if "phi" in samples:
+            samples["phi"] = jnp.exp(samples["phi"])
         self.runtime = 0.0
-        return self.to_arviz(samples, sample_stats)
+        return self._create_vi_inference_data(
+            samples, sample_stats, diagnostics
+        )
 
     @property
     def _logp_kwargs(self):

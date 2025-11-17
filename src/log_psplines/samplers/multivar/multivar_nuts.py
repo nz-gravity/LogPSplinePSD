@@ -390,27 +390,37 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         self, vi_artifacts: "VIInitialisationArtifacts"
     ) -> az.InferenceData:
         diagnostics = vi_artifacts.diagnostics or {}
-        vi_samples = diagnostics.get("vi_samples")
-        if not vi_samples:
-            raise ValueError(
-                "Variational-only mode requires stored VI posterior draws. "
-                "Increase vi_posterior_draws to a positive value."
-            )
+        posterior_draws = vi_artifacts.posterior_draws or diagnostics.get(
+            "vi_samples"
+        )
 
-        sample_dict = {
-            name: jnp.asarray(array)
-            for name, array in vi_samples.items()
-            if name.startswith(("weights_", "phi_", "delta_"))
-        }
+        if posterior_draws:
+            sample_dict = {
+                name: jnp.asarray(array)
+                for name, array in posterior_draws.items()
+                if name.startswith(("weights_", "phi_", "delta_"))
+            }
+        else:
+            means = vi_artifacts.means or {}
+            sample_dict = {
+                name: jnp.asarray(value)[None, ...]
+                for name, value in means.items()
+                if name.startswith(("weights_", "phi_", "delta_"))
+            }
+
         if not sample_dict:
             raise ValueError(
-                "No variational posterior draws were recorded for the model parameters."
+                "Variational-only mode requires VI means or draws for spline parameters."
             )
 
         params_batch = self._prepare_logpost_params(sample_dict)
-        sample_stats = {
-            "lp": evaluate_log_density_batch(self._logpost_fn, params_batch)
-        }
+        sample_stats = {}
+        try:
+            sample_stats["lp"] = evaluate_log_density_batch(
+                self._logpost_fn, params_batch
+            )
+        except Exception:
+            sample_stats = {}
 
         samples = dict(sample_dict)
         for key in list(samples):
@@ -418,4 +428,6 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
                 samples[key] = jnp.exp(samples[key])
 
         self.runtime = 0.0
-        return self.to_arviz(samples, sample_stats)
+        return self._create_vi_inference_data(
+            samples, sample_stats, diagnostics
+        )

@@ -106,33 +106,50 @@ def extract_plotting_data(idata, weights_key: str = None) -> Dict[str, Any]:
         # For VI data, weights might be stored differently
         data["weights"] = None
 
-    # Extract posterior samples if available
-    if hasattr(idata, "posterior_psd"):
-        if "psd" in idata.posterior_psd:
-            arr = idata.posterior_psd["psd"]
-            data["posterior_psd_quantiles"] = {
+    def _maybe_set_psd_quantiles(dataset, prefix: str) -> bool:
+        if dataset is None:
+            return False
+
+        added = False
+        if "psd" in dataset:
+            arr = dataset["psd"]
+            data[f"{prefix}_psd_quantiles"] = {
                 "percentile": np.asarray(arr.coords["percentile"].values),
                 "values": np.asarray(arr.values),
             }
-        if "psd_matrix_real" in idata.posterior_psd:
-            data["posterior_psd_matrix_quantiles"] = {
+            added = True
+        if "psd_matrix_real" in dataset:
+            data[f"{prefix}_psd_matrix_quantiles"] = {
                 "percentile": np.asarray(
-                    idata.posterior_psd["psd_matrix_real"]
-                    .coords["percentile"]
-                    .values
+                    dataset["psd_matrix_real"].coords["percentile"].values
                 ),
-                "real": np.asarray(
-                    idata.posterior_psd["psd_matrix_real"].values
-                ),
-                "imag": np.asarray(
-                    idata.posterior_psd["psd_matrix_imag"].values
-                ),
+                "real": np.asarray(dataset["psd_matrix_real"].values),
+                "imag": np.asarray(dataset["psd_matrix_imag"].values),
                 "coherence": (
-                    np.asarray(idata.posterior_psd["coherence"].values)
-                    if "coherence" in idata.posterior_psd
+                    np.asarray(dataset["coherence"].values)
+                    if "coherence" in dataset
                     else None
                 ),
             }
+            added = True
+        return added
+
+    psd_loaded = False
+    if hasattr(idata, "posterior_psd"):
+        psd_loaded = _maybe_set_psd_quantiles(idata.posterior_psd, "posterior")
+    if hasattr(idata, "vi_posterior_psd"):
+        _maybe_set_psd_quantiles(idata.vi_posterior_psd, "vi")
+
+    # Backwards compatibility: fall back to VI quantiles when posterior absent
+    if "posterior_psd_quantiles" not in data and "vi_psd_quantiles" in data:
+        data["posterior_psd_quantiles"] = data["vi_psd_quantiles"]
+    if (
+        "posterior_psd_matrix_quantiles" not in data
+        and "vi_psd_matrix_quantiles" in data
+    ):
+        data["posterior_psd_matrix_quantiles"] = data[
+            "vi_psd_matrix_quantiles"
+        ]
 
     # Extract true PSD if available
     if hasattr(idata, "attrs") and "true_psd" in idata.attrs:

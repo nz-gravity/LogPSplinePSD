@@ -57,41 +57,56 @@ def _select_named_channels(raw, desired_names=None):
     return selected_indices, selected_names
 
 
-def _save_time_domain_butterfly(
-    raw, selected_indices, channel_names, channel_colors=None
-):
+def _save_time_domain_butterfly(raw, selected_indices, channel_names):
     info = mne.pick_info(raw.info, sel=selected_indices)
     selected_data = raw.get_data(picks=selected_indices)
-    n_times = selected_data.shape[1]
+
     fs = int(raw.info["sfreq"])
+    n_times = selected_data.shape[1]
     n_times_plot = min(fs, n_times)
 
-    time_evoked = mne.EvokedArray(
+    # Ensure montage (otherwise spatial colors cannot be computed)
+    if info.get_montage() is None and raw.get_montage() is not None:
+        info.set_montage(raw.get_montage())
+
+    # Create evoked snippet
+    evoked = mne.EvokedArray(
         selected_data[:, :n_times_plot],
         info,
         tmin=0.0,
         comment="Time-domain snippet",
     )
 
-    if channel_colors is None:
-        channel_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    fig = None
-    with plt.rc_context(
-        {"axes.prop_cycle": cycler(color=channel_colors[: len(channel_names)])}
-    ):
-        fig = time_evoked.plot(
-            picks="eeg",
-            spatial_colors=False,
-            gfp=True,
-            window_title="Time-domain Evoked-style (selected channels)",
-            time_unit="s",
-            show=False,
-        )
+    # Plot with spatial colors
+    fig = evoked.plot(
+        picks="eeg",
+        spatial_colors=True,
+        gfp=False,
+        time_unit="s",
+        show=False,
+        window_title="Time-domain Snippet",
+    )
+
     fig.tight_layout()
+
+    # Save
     path = RESULTS_DIR / "time_domain_evoked_butterfly.png"
     fig.savefig(path, dpi=150)
+
+    # -------------------------------------------------------
+    # EXTRACT SPATIAL COLORS FROM THE PLOTTED LINES
+    # -------------------------------------------------------
+    ax = fig.axes[0]  # main butterfly axis
+    spatial_colors = {}
+
+    for line in ax.lines:
+        label = line.get_label()
+        if label in channel_names:  # MNE stores channel name as label
+            spatial_colors[label] = line.get_color()
+
     plt.close(fig)
-    return path, selected_data, fs
+
+    return path, selected_data, fs, spatial_colors
 
 
 def _run_multivar_pspline(selected_data, fs):
@@ -183,16 +198,58 @@ def _extract_posterior_psd_and_coherence(idata):
         coh_quantiles[:, idx, :] = coherence[:, :, i, j]
 
     psd_quantiles = np.clip(psd_quantiles, 1e-18, None)
-    coh_quantiles = np.clip(coh_quantiles, 1e-6, 1.0)
+    coh_quantiles = np.clip(coh_quantiles, 0.0, 1.0)
     return freq, psd_quantiles, pairs, coh_quantiles
 
 
+def _save_vi_psd_csd(idata, channel_names):
+    if not hasattr(idata, "vi_posterior_psd"):
+        print("No VI posterior PSD group found; skipping PSD/CSD export.")
+        return None
+
+    ds = idata.vi_posterior_psd
+    if (
+        "psd_matrix_real" not in ds.data_vars
+        or "psd_matrix_imag" not in ds.data_vars
+    ):
+        print("VI posterior PSD dataset missing PSD matrix entries.")
+        return None
+
+    freq = np.asarray(ds.coords["freq"].values, dtype=float)
+    percentiles = np.asarray(ds.coords["percentile"].values, dtype=float)
+    psd_real = np.asarray(ds["psd_matrix_real"].values, dtype=float)
+    psd_imag = np.asarray(ds["psd_matrix_imag"].values, dtype=float)
+    coherence = (
+        np.asarray(ds["coherence"].values, dtype=float)
+        if "coherence" in ds.data_vars
+        else None
+    )
+
+    out_path = RESULTS_DIR / "vi_posterior_psd_csd.npz"
+    np.savez(
+        out_path,
+        freq=freq,
+        percentiles=percentiles,
+        psd_matrix_real=psd_real,
+        psd_matrix_imag=psd_imag,
+        coherence=coherence,
+        channel_names=np.asarray(channel_names),
+    )
+    print(f"Saved VI posterior PSD/CSD arrays to {out_path}")
+    return out_path
+
+
 def _plot_channel_psds(freqs, psd_quantiles, channel_names, colors):
-    colors = colors[: len(channel_names)]
+    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     q05, q50, q95 = psd_quantiles
     fig, ax = plt.subplots(figsize=(10, 6))
     for idx, name in enumerate(channel_names):
-        color = colors[idx]
+        base_color = color_cycle[idx % len(color_cycle)]
+        color = (
+            colors.get(name, base_color)
+            if isinstance(colors, dict)
+            else colors[idx]
+        )
         ax.fill_between(freqs, q05[idx], q95[idx], color=color, alpha=0.2)
         ax.loglog(freqs, q50[idx], label=name, color=color)
     ax.set_title("Selected EEG Channel PSDs")
@@ -216,7 +273,7 @@ def _plot_pairwise_coherence(freqs, coh_quantiles, pairs, channel_names):
     for idx, (i, j) in enumerate(pairs):
         color = color_cycle[idx % len(color_cycle)]
         ax.fill_between(freqs, q05[idx], q95[idx], color=color, alpha=0.2)
-        ax.semilogy(
+        ax.plot(
             freqs,
             q50[idx],
             label=f"{channel_names[i]} vs {channel_names[j]}",
@@ -228,6 +285,7 @@ def _plot_pairwise_coherence(freqs, coh_quantiles, pairs, channel_names):
     ax.grid(ls=":")
     ax.legend()
     ax.set_xscale("log")
+    ax.set_ylim(0.0, 1.0)
     path = RESULTS_DIR / "selected_channel_coherence.png"
     fig.tight_layout()
     fig.savefig(path, dpi=150)
@@ -239,27 +297,27 @@ def main():
     raw = _load_sample_eeg()
     indices, names = _select_named_channels(raw)
     print("Selected EEG channels:", names)
-    base_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    channel_colors = base_colors[: len(names)]
-
-    time_path, selected_data, fs = _save_time_domain_butterfly(
-        raw, indices, names, channel_colors=channel_colors
+    time_path, selected_data, fs, spatial_colors = _save_time_domain_butterfly(
+        raw, indices, names
     )
     print(f"Saved time-domain butterfly to {time_path}")
 
     idata, plot_path = _run_multivar_pspline(selected_data, fs)
     print(f"Saved multivariate PSD matrix to {plot_path}")
+    print(idata)
 
     freqs, psd_quantiles, pairs, coh_quantiles = (
         _extract_posterior_psd_and_coherence(idata)
     )
-    psd_path = _plot_channel_psds(freqs, psd_quantiles, names, channel_colors)
+    psd_path = _plot_channel_psds(freqs, psd_quantiles, names, spatial_colors)
     print(f"Saved channel PSD overlay to {psd_path}")
 
     coherence_path = _plot_pairwise_coherence(
         freqs, coh_quantiles, pairs, names
     )
     print(f"Saved pairwise coherence overlay to {coherence_path}")
+
+    _save_vi_psd_csd(idata, names)
 
 
 if __name__ == "__main__":

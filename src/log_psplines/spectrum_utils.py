@@ -6,8 +6,6 @@ from typing import Optional
 
 import numpy as np
 
-TWO_PI = 2.0 * np.pi
-
 
 def compute_effective_nu(
     nu: float | np.ndarray, weights: Optional[np.ndarray] = None
@@ -61,7 +59,7 @@ def wishart_matrix_to_psd(
     scaling_factor: float = 1.0,
     weights: Optional[np.ndarray] = None,
 ) -> np.ndarray:
-    """Convert Wishart matrices into PSD matrices with consistent normalisation."""
+    """Convert Wishart matrices into one-sided PSD matrices."""
 
     Y = np.asarray(Y, dtype=np.complex128)
     if Y.ndim != 3:
@@ -71,12 +69,13 @@ def wishart_matrix_to_psd(
     eff_nu = np.asarray(eff_nu, dtype=np.float64)
     if eff_nu.ndim == 0:
         eff_nu = np.broadcast_to(eff_nu, (Y.shape[0],))
+
     if eff_nu.shape[0] != Y.shape[0]:
         raise ValueError(
             "Effective degrees of freedom must match the frequency dimension"
         )
 
-    psd = (2.0 / (eff_nu[:, None, None] * TWO_PI)) * Y
+    psd = Y / eff_nu[:, None, None]
     psd *= float(scaling_factor)
     return psd
 
@@ -97,7 +96,6 @@ def wishart_u_to_psd(
 
 
 __all__ = [
-    "TWO_PI",
     "compute_effective_nu",
     "sum_wishart_outer_products",
     "u_to_wishart_matrix",

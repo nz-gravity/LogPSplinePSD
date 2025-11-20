@@ -19,6 +19,7 @@ class VARMAData:
         ),
         vma_coeffs: np.ndarray = np.array([[[1.0, 0.0], [0.0, 1.0]]]),
         seed: int = None,
+        fs: float = 1.0,
     ):
         """
         Initialize the SimVARMA class.
@@ -37,11 +38,8 @@ class VARMAData:
         self.psd_scaling = 1
         self.n_freq_samples = n_samples // 2
 
-        self.fs = 2 * np.pi
-        self.freq = (
-            np.linspace(0, 0.5, self.n_freq_samples, endpoint=False)[1:]
-            * self.fs
-        )
+        self.fs = float(fs)
+        self.freq = np.fft.rfftfreq(n_samples, d=1 / self.fs)[1:]
         self.time = np.arange(n_samples) / self.fs
         self.data = None  # set in "resimulate"
         self.periodogram = None  # set in "resimulate"
@@ -50,11 +48,12 @@ class VARMAData:
         self.resimulate(seed=seed)
 
         self.psd = _calculate_true_varma_psd(
-            self.n_freq_samples,
+            self.freq,
             self.dim,
             self.var_coeffs,
             self.vma_coeffs,
             self.sigma,
+            self.fs,
         )
 
     def resimulate(self, seed=None):
@@ -110,37 +109,29 @@ class VARMAData:
 
     def get_periodogram(self):
         """
-        Return consistently scaled periodogram (PSD matrix) for the data.
-        Scaling: 2 * FFT_i * FFT_j^* / (N * 2 * pi)
-        This matches the theoretical and empirical expectations for multivariate PSD.
-        The first frequency bin is skipped for numerical stability.
+        Return a one-sided PSD matrix estimate for the simulated data.
         """
         n_freq = self.n_freq_samples
         dim = self.dim
         data = self.data
         N = data.shape[0]
         data = data - np.mean(data, axis=0)
-        fft_data = rfft(data, axis=0)[:n_freq]
-        periodogram = np.empty((n_freq, dim, dim), dtype=np.complex128)
-        for i in range(dim):
-            for j in range(dim):
-                periodogram[:, i, j] = (
-                    2
-                    * (fft_data[:, i] * np.conj(fft_data[:, j]))
-                    / (N * 2 * np.pi)
-                )
+        fft_vals = rfft(data, axis=0)[1 : n_freq + 1]
+        if fft_vals.shape[0] != self.freq.shape[0]:
+            raise ValueError("FFT output and frequency grid mismatch.")
+        scale = np.full(self.freq.shape, 2.0 / (N * self.fs), dtype=np.float64)
+        if N % 2 == 0 and scale.size > 0:
+            scale[-1] = 1.0 / (N * self.fs)
+        periodogram = scale[:, None, None] * (
+            fft_vals[:, :, None] * np.conj(fft_vals[:, None, :])
+        )
         # Add epsilon to avoid log(0) and extremely small values
         eps = 1e-12
         periodogram = np.where(np.abs(periodogram) < eps, eps, periodogram)
-        # Skip first frequency bin
-        return periodogram[1:, ...]
+        return periodogram
 
     def get_true_psd(self):
-        """
-        Return consistently scaled true PSD matrix.
-        Scaling: Already normalized by (2 * pi) in _calculate_true_varma_psd.
-        The first frequency bin is skipped for numerical stability.
-        """
+        """Return the theoretical one-sided PSD matrix."""
         eps = 1e-12
         true_psd = np.where(np.abs(self.psd) < eps, eps, self.psd)
         return true_psd
@@ -212,7 +203,7 @@ class VARMAData:
                     )
                     ax.set_title(f"Im(CSD): {i + 1},{j + 1}")
                 if i == dim - 1:
-                    ax.set_xlabel("Frequency (rad)")
+                    ax.set_xlabel("Frequency (Hz)")
                 if j == 0:
                     ax.set_ylabel("Power / CSD")
                 ax.legend(fontsize=8)
@@ -223,47 +214,41 @@ class VARMAData:
 
 
 def _calculate_true_varma_psd(
-    n_samples: int,
+    freqs: np.ndarray,
     dim: int,
     var_coeffs: np.ndarray,
     vma_coeffs: np.ndarray,
     sigma: np.ndarray,
+    fs: float,
 ) -> np.ndarray:
     """
     Calculate the spectral matrix for given frequencies.
 
     Args:
-        n_samples int: Number of samples to generate for the true PSD (up to 0.5).
-        var_coeffs (np.ndarray): VAR coefficient array.
-        vma_coeffs (np.ndarray): VMA coefficient array.
-        sigma (np.ndarray): Covariance matrix or scalar variance.
+        freqs (np.ndarray): Positive frequency grid in Hz.
+        dim (int): Process dimension.
+        var_coeffs/vma_coeffs: VAR/MA coefficient arrays.
+        sigma (np.ndarray): Innovation covariance matrix.
+        fs (float): Sampling frequency in Hz.
 
     Returns:
-        np.ndarray: VARMA spectral matrix (PSD) for freq from 0 to 0.5.
+        np.ndarray: One-sided PSD matrix evaluated at ``freqs``.
     """
-    freq = np.linspace(0, 0.5, n_samples, endpoint=False)[1:]
-    spec_matrix = np.apply_along_axis(
-        lambda f: _calculate_spec_matrix_helper(
-            f, dim, var_coeffs, vma_coeffs, sigma
-        ),
-        axis=1,
-        arr=freq.reshape(-1, 1),
-    )
-    return spec_matrix / (2 * np.pi)
+    omega = 2.0 * np.pi * freqs / fs
+    spec_matrix = np.empty((freqs.size, dim, dim), dtype=np.complex128)
+    for idx, w in enumerate(omega):
+        spec_matrix[idx] = _calculate_spec_matrix_helper(
+            float(w), dim, var_coeffs, vma_coeffs, sigma
+        )
+    return spec_matrix / fs
 
 
-def _calculate_spec_matrix_helper(f, dim, var_coeffs, vma_coeffs, sigma):
+def _calculate_spec_matrix_helper(omega, dim, var_coeffs, vma_coeffs, sigma):
     """
     Helper function to calculate spectral matrix for a single frequency.
 
     Args:
-        f (float): Single frequency value.
-        var_coeffs (np.ndarray): VAR coefficient array.
-        vma_coeffs (np.ndarray): VMA coefficient array.
-        sigma (np.ndarray): Covariance matrix or scalar variance.
-
-    Returns:
-        np.ndarray: Calculated spectral matrix for the given frequency.
+        omega (float): Angular frequency (rad/sample).
     """
     if sigma.shape[0] == 1:
         cov_matrix = np.identity(dim) * sigma
@@ -271,27 +256,17 @@ def _calculate_spec_matrix_helper(f, dim, var_coeffs, vma_coeffs, sigma):
         cov_matrix = sigma
 
     k_ar = np.arange(1, var_coeffs.shape[0] + 1)
-    A_f_re_ar = np.sum(
-        var_coeffs * np.cos(np.pi * 2 * k_ar * f)[:, np.newaxis, np.newaxis],
-        axis=0,
-    )
-    A_f_im_ar = -np.sum(
-        var_coeffs * np.sin(np.pi * 2 * k_ar * f)[:, np.newaxis, np.newaxis],
-        axis=0,
-    )
+    angles_ar = k_ar[:, np.newaxis, np.newaxis] * omega
+    A_f_re_ar = np.sum(var_coeffs * np.cos(angles_ar), axis=0)
+    A_f_im_ar = -np.sum(var_coeffs * np.sin(angles_ar), axis=0)
     A_f_ar = A_f_re_ar + 1j * A_f_im_ar
     A_bar_f_ar = np.identity(dim) - A_f_ar
     H_f_ar = np.linalg.inv(A_bar_f_ar)
 
     k_ma = np.arange(vma_coeffs.shape[0])
-    A_f_re_ma = np.sum(
-        vma_coeffs * np.cos(np.pi * 2 * k_ma * f)[:, np.newaxis, np.newaxis],
-        axis=0,
-    )
-    A_f_im_ma = -np.sum(
-        vma_coeffs * np.sin(np.pi * 2 * k_ma * f)[:, np.newaxis, np.newaxis],
-        axis=0,
-    )
+    angles_ma = k_ma[:, np.newaxis, np.newaxis] * omega
+    A_f_re_ma = np.sum(vma_coeffs * np.cos(angles_ma), axis=0)
+    A_f_im_ma = -np.sum(vma_coeffs * np.sin(angles_ma), axis=0)
     A_f_ma = A_f_re_ma + 1j * A_f_im_ma
     A_bar_f_ma = A_f_ma
     H_f_ma = A_bar_f_ma

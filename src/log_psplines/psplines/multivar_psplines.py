@@ -406,8 +406,6 @@ class MultivariateLogPSplines:
         theta_re_arr = theta_re_arr[:n_samps]
         theta_im_arr = theta_im_arr[:n_samps]
 
-        inv_two_pi = 1.0 / (2.0 * np.pi)
-
         psd = np.empty(
             (n_samps, n_freq, n_channels, n_channels), dtype=np.complex64
         )
@@ -419,7 +417,7 @@ class MultivariateLogPSplines:
             n_samps=n_samps,
             chunk_size=chunk_size,
         ):
-            psd[:, start:end] = psd_chunk * inv_two_pi
+            psd[:, start:end] = psd_chunk
 
         return psd
 
@@ -496,9 +494,8 @@ class MultivariateLogPSplines:
             n_samps=n_samps,
             chunk_size=chunk_size,
         ):
-            psd_chunk_scaled = psd_chunk / (2.0 * np.pi)
-            psd_real = psd_chunk_scaled.real
-            psd_imag = psd_chunk_scaled.imag
+            psd_real = psd_chunk.real
+            psd_imag = psd_chunk.imag
 
             real_q = np.percentile(psd_real, percentiles, axis=0).astype(
                 np.float32
@@ -512,11 +509,11 @@ class MultivariateLogPSplines:
 
             if coherence_percentiles is not None:
                 diag = np.abs(
-                    np.diagonal(psd_chunk_scaled, axis1=2, axis2=3)
+                    np.diagonal(psd_chunk, axis1=2, axis2=3)
                 )  # (samples, chunk, channels)
                 denom = diag[..., :, None] * diag[..., None, :]
                 denom = np.where(denom > 0.0, denom, np.nan)
-                coh_samples = (np.abs(psd_chunk_scaled) ** 2) / denom
+                coh_samples = (np.abs(psd_chunk) ** 2) / denom
                 coh_samples = np.nan_to_num(coh_samples, nan=0.0, posinf=0.0)
                 coh_q = np.percentile(coh_samples, percentiles, axis=0).astype(
                     np.float32

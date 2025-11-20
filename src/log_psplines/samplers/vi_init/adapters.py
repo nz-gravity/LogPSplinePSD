@@ -84,6 +84,11 @@ def compute_vi_artifacts_univar(
         }
         if psd_quantiles is not None:
             diagnostics["psd_quantiles"] = psd_quantiles
+        if vi_result.samples is not None:
+            diagnostics["vi_samples"] = {
+                name: np.asarray(jax.device_get(value))
+                for name, value in vi_result.samples.items()
+            }
         return init_values, diagnostics
 
     return sampler._run_vi_initialisation(
@@ -133,6 +138,22 @@ def compute_vi_artifacts_multivar(
         }
 
         scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
+        channel_stds = getattr(sampler.fft_data, "channel_stds", None)
+        if channel_stds is not None:
+            channel_stds = np.asarray(channel_stds, dtype=np.float32)
+            scale_matrix = np.outer(channel_stds, channel_stds).astype(
+                np.float32
+            )
+            factor_matrix = scale_matrix / scaling
+            scalar_factor = None
+        else:
+            factor_matrix = None
+            scalar_factor = scaling
+
+        def _rescale_psd(arr: np.ndarray) -> np.ndarray:
+            if factor_matrix is not None:
+                return arr * factor_matrix
+            return arr * scalar_factor
 
         vi_psd_np = None
         psd_quantiles = None
@@ -177,7 +198,7 @@ def compute_vi_artifacts_multivar(
                 theta_im[None, ...],
                 n_samples_max=1,
             )[0]
-            vi_psd_np = np.asarray(vi_psd) * scaling
+            vi_psd_np = _rescale_psd(np.asarray(vi_psd))
 
             samples_tree = vi_result.samples or {}
             if samples_tree:
@@ -284,8 +305,8 @@ def compute_vi_artifacts_multivar(
                             compute_coherence=sampler.n_channels > 1,
                         )
                     )
-                    psd_real_q *= scaling
-                    psd_imag_q *= scaling
+                    psd_real_q = _rescale_psd(psd_real_q)
+                    psd_imag_q = _rescale_psd(psd_imag_q)
 
                     psd_quantiles = {
                         "real": {
@@ -328,6 +349,11 @@ def compute_vi_artifacts_multivar(
             diagnostics["psd_quantiles"] = psd_quantiles
         if coherence_quantiles is not None:
             diagnostics["coherence_quantiles"] = coherence_quantiles
+        if vi_result.samples is not None:
+            diagnostics["vi_samples"] = {
+                name: np.asarray(jax.device_get(value))
+                for name, value in vi_result.samples.items()
+            }
         return init_values, diagnostics
 
     return sampler._run_vi_initialisation(
@@ -373,6 +399,20 @@ def prepare_block_vi(
     mcmc_keys: List[jax.Array] = [jax.random.PRNGKey(0)] * n_channels
 
     scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
+    channel_stds = getattr(sampler.fft_data, "channel_stds", None)
+    if channel_stds is not None:
+        channel_stds = np.asarray(channel_stds, dtype=np.float32)
+        scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
+        factor_matrix = scale_matrix / scaling
+        scalar_factor = None
+    else:
+        factor_matrix = None
+        scalar_factor = scaling
+
+    def _rescale_psd(arr: np.ndarray) -> np.ndarray:
+        if factor_matrix is not None:
+            return arr * factor_matrix
+        return arr * scalar_factor
 
     vi_losses_blocks: List[np.ndarray] = []
     vi_guides: List[str] = []
@@ -386,6 +426,7 @@ def prepare_block_vi(
         else 0
     )
     store_draws = sampler.config.init_from_vi and posterior_draws > 0
+    vi_samples: Dict[str, np.ndarray] = {}
     log_delta_draws = None
     theta_re_draws = None
     theta_im_draws = None
@@ -476,6 +517,10 @@ def prepare_block_vi(
             losses_arr = np.asarray(jax.device_get(vi_result.losses))
             vi_losses_blocks.append(losses_arr)
             vi_guides.append(vi_result.guide_name)
+
+            if vi_result.samples is not None:
+                for name, value in vi_result.samples.items():
+                    vi_samples[name] = np.asarray(jax.device_get(value))
 
             weights_delta_name = f"weights_delta_{channel_index}"
             weights_delta = vi_result.means.get(weights_delta_name)
@@ -655,7 +700,7 @@ def prepare_block_vi(
                 jnp.asarray(theta_im_vi_np)[None, ...],
                 n_samples_max=1,
             )[0]
-            vi_psd_np = np.asarray(vi_psd) * scaling
+            vi_psd_np = _rescale_psd(np.asarray(vi_psd))
         else:
             vi_psd_np = None
 
@@ -672,10 +717,8 @@ def prepare_block_vi(
                 draws_used = _cap_psd_draws(sampler.config, draws_available)
                 if draws_used < draws_available:
                     logger.debug(
-                        "Capping VI PSD reconstruction to %d draws "
-                        "(limit=%d).",
-                        draws_used,
-                        getattr(sampler.config, "vi_psd_max_draws", 0),
+                        f"Capping VI PSD reconstruction to {draws_used} draws "
+                        f"(limit={getattr(sampler.config, 'vi_psd_max_draws', 0)})."
                     )
                 log_delta_samples = jnp.asarray(
                     log_delta_draws[:draws_used], dtype=jnp.float32
@@ -704,8 +747,8 @@ def prepare_block_vi(
                         compute_coherence=sampler.n_channels > 1,
                     )
                 )
-                psd_real_q *= scaling
-                psd_imag_q *= scaling
+                psd_real_q = _rescale_psd(psd_real_q)
+                psd_imag_q = _rescale_psd(psd_imag_q)
 
                 psd_quantiles = {
                     "real": {
@@ -759,6 +802,10 @@ def prepare_block_vi(
             diagnostics["psd_quantiles"] = psd_quantiles
         if coherence_quantiles is not None:
             diagnostics["coherence_quantiles"] = coherence_quantiles
+
+    if vi_samples:
+        diagnostics = diagnostics or {}
+        diagnostics["vi_samples"] = vi_samples
 
     return BlockVIArtifacts(
         init_strategies=init_strategies,

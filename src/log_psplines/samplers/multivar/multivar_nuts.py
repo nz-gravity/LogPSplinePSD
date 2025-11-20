@@ -177,7 +177,12 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         return "multivariate_nuts"
 
     def sample(
-        self, n_samples: int, n_warmup: int = 500, **kwargs
+        self,
+        n_samples: int,
+        n_warmup: int = 500,
+        *,
+        only_vi: bool = False,
+        **kwargs,
     ) -> az.InferenceData:
         """Run multivariate NUTS sampling."""
         vi_artifacts = compute_vi_artifacts_multivar(
@@ -192,6 +197,10 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             self._save_vi_diagnostics(
                 empirical_psd=self._compute_empirical_psd()
             )
+
+        vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
+        if vi_only_mode:
+            return self._vi_only_inference_data(vi_artifacts)
 
         if (
             self.config.verbose
@@ -376,3 +385,49 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             else:
                 transformed[name] = array
         return float(self._logpost_fn(transformed))
+
+    def _vi_only_inference_data(
+        self, vi_artifacts: "VIInitialisationArtifacts"
+    ) -> az.InferenceData:
+        diagnostics = vi_artifacts.diagnostics or {}
+        posterior_draws = vi_artifacts.posterior_draws or diagnostics.get(
+            "vi_samples"
+        )
+
+        if posterior_draws:
+            sample_dict = {
+                name: jnp.asarray(array)
+                for name, array in posterior_draws.items()
+                if name.startswith(("weights_", "phi_", "delta_"))
+            }
+        else:
+            means = vi_artifacts.means or {}
+            sample_dict = {
+                name: jnp.asarray(value)[None, ...]
+                for name, value in means.items()
+                if name.startswith(("weights_", "phi_", "delta_"))
+            }
+
+        if not sample_dict:
+            raise ValueError(
+                "Variational-only mode requires VI means or draws for spline parameters."
+            )
+
+        params_batch = self._prepare_logpost_params(sample_dict)
+        sample_stats = {}
+        try:
+            sample_stats["lp"] = evaluate_log_density_batch(
+                self._logpost_fn, params_batch
+            )
+        except Exception:
+            sample_stats = {}
+
+        samples = dict(sample_dict)
+        for key in list(samples):
+            if key.startswith("phi"):
+                samples[key] = jnp.exp(samples[key])
+
+        self.runtime = 0.0
+        return self._create_vi_inference_data(
+            samples, sample_stats, diagnostics
+        )

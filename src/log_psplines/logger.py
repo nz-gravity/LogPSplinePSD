@@ -1,18 +1,30 @@
+import logging
 import sys
 import time
 
-from loguru import logger
+try:
+    from loguru import logger as _loguru_logger
+except ImportError:  # pragma: no cover - fallback when loguru missing
+    _loguru_logger = None
+
+if _loguru_logger is None:
+    logger = logging.getLogger("LogPSpline")
+    logger.setLevel(logging.INFO)
+else:
+    logger = _loguru_logger
 
 # Remove loguru's default handler to avoid duplicate logging outputs
-logger.remove()
+if _loguru_logger is not None:
+    logger.remove()
 
 # Configure colors for different log levels (DEBUG will be yellow as requested)
-logger.level("DEBUG", color="<d>")
-# Make INFO explicitly green (we'll render it without bold in the formatter)
-logger.level("INFO", color="<k>")
-logger.level("WARNING", color="<yellow>")
-logger.level("ERROR", color="<red>")
-logger.level("CRITICAL", color="<red>")
+if _loguru_logger is not None:
+    logger.level("DEBUG", color="<d>")
+    # Make INFO explicitly green (we'll render it without bold in the formatter)
+    logger.level("INFO", color="<k>")
+    logger.level("WARNING", color="<yellow>")
+    logger.level("ERROR", color="<red>")
+    logger.level("CRITICAL", color="<red>")
 
 # Record module start time so we can print elapsed runtime in logs
 _START_TIME = time.time()
@@ -33,15 +45,28 @@ def _format(record) -> str:
 
 
 # Add a single stdout sink; store handler id for dynamic level changes
-_handler_id = logger.add(sys.stdout, format=_format, level="INFO")
+if _loguru_logger is not None:
+    _handler_id = logger.add(sys.stdout, format=_format, level="INFO")
+else:
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter(
+        fmt="|%(asctime)s| LogPSpline | %(levelname)s | %(message)s",
+        datefmt="%M:%S",
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    _handler_id = None
 
 
 def set_level(level: str):
     global _handler_id
-    # Remove the current custom handler, then add a new one with requested level
-    try:
-        logger.remove(_handler_id)
-    except Exception:
-        # If handler removal fails (e.g., _handler_id invalid), clear all handlers
-        logger.remove()
-    _handler_id = logger.add(sys.stdout, format=_format, level=level)
+    if _loguru_logger is not None:
+        # Remove the current custom handler, then add a new one with requested level
+        try:
+            logger.remove(_handler_id)
+        except Exception:
+            # If handler removal fails (e.g., _handler_id invalid), clear all handlers
+            logger.remove()
+        _handler_id = logger.add(sys.stdout, format=_format, level=level)
+    else:
+        logger.setLevel(getattr(logging, level.upper(), logging.INFO))

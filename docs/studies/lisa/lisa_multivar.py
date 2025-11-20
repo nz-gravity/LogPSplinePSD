@@ -4,6 +4,7 @@ import numpy as np
 
 from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries
+from log_psplines.datatypes.multivar import EmpiricalPSD, _get_coherence
 from log_psplines.example_datasets.lisa_data import (
     LISAData,
     covariance_matrix,
@@ -123,9 +124,20 @@ diag_true, csd_true = tdi2_psd_and_csd(freq_plot, Spm_plot, Sop_plot)
 true_psd_physical = covariance_matrix(diag_true, csd_true)
 true_psd_standardized = true_psd_physical
 
+if fft_data.raw_psd is not None:
+    psd_array = np.asarray(fft_data.raw_psd)
+    empirical_psd = EmpiricalPSD(
+        freq=freqs,
+        psd=psd_array,
+        coherence=_get_coherence(psd_array),
+    )
+else:
+    empirical_psd = fft_data.empirical_psd
+
 plot_psd_matrix(
     idata=idata,
     freq=freq_plot,
+    empirical_psd=empirical_psd,
     true_psd=true_psd_standardized,
     outdir=str(RESULTS_DIR),
     filename="psd_matrix.png",

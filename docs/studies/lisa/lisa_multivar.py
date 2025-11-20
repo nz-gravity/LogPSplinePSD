@@ -25,7 +25,7 @@ RESULT_FN = RESULTS_DIR / "inference_data.nc"
 
 RUN_VI_ONLY = True
 
-lisa_data = LISAData.load()
+lisa_data = LISAData.load(data_path="data/tdi_full.h5")
 lisa_data.plot(f"{RESULTS_DIR}/lisa_raw.png")
 
 t = lisa_data.time

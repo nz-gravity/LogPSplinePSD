@@ -47,6 +47,8 @@ def ensure_lisa_tdi_data(
 ) -> float:
     """Download the default LISA TDI dataset if it is not present locally."""
     start_download = time.perf_counter()
+    if isinstance(destination, str):
+        destination = Path(destination)
     if destination.exists():
         print("Data file exists; download skipped.")
         return 0.0

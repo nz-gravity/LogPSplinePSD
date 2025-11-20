@@ -18,6 +18,7 @@ pyvenv.cfg
 plots/
 *.npy
 *output/
+*.code-workspace
 *.txt
 .venv
 pip-selfcheck.json

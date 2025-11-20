@@ -17,6 +17,7 @@ pyvenv.cfg
 *.DS_Store
 plots/
 *.npy
+*.npz
 *output/
 *.code-workspace
 *.txt

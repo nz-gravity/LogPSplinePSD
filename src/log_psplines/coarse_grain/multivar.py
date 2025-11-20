@@ -152,6 +152,7 @@ def coarse_grain_multivar_fft(
         fs=fft.fs,
         raw_psd=psd_coarse.astype(np.complex128),
         raw_freq=np.asarray(spec.f_coarse, dtype=np.float64),
+        channel_stds=fft.channel_stds,
     )
 
     return fft_coarse, weights

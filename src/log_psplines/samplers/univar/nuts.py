@@ -99,7 +99,12 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         return "nuts"
 
     def sample(
-        self, n_samples: int, n_warmup: int = 500, **kwargs
+        self,
+        n_samples: int,
+        n_warmup: int = 500,
+        *,
+        only_vi: bool = False,
+        **kwargs,
     ) -> az.InferenceData:
         """Run NUTS sampling."""
         vi_artifacts = compute_vi_artifacts_univar(self, model=bayesian_model)
@@ -109,6 +114,10 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         self.rng_key = vi_artifacts.rng_key
         self._vi_diagnostics = vi_artifacts.diagnostics
         self._save_vi_diagnostics()
+
+        vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
+        if vi_only_mode:
+            return self._vi_only_inference_data(vi_artifacts)
 
         if (
             self.config.verbose
@@ -197,6 +206,51 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             beta_delta=self.config.beta_delta,
         )
         return init_to_value(values=default_values)
+
+    def _vi_only_inference_data(
+        self, vi_artifacts: "VIInitialisationArtifacts"
+    ) -> az.InferenceData:
+        diagnostics = vi_artifacts.diagnostics or {}
+        posterior_draws = vi_artifacts.posterior_draws or diagnostics.get(
+            "vi_samples"
+        )
+
+        if posterior_draws:
+            sample_dict = {
+                name: jnp.asarray(array)
+                for name, array in posterior_draws.items()
+                if name in {"weights", "phi", "delta"}
+            }
+        else:
+            means = vi_artifacts.means or {}
+            sample_dict = {
+                name: jnp.asarray(value)[None, ...]
+                for name, value in means.items()
+                if name in {"weights", "phi", "delta"}
+            }
+
+        missing = {"weights", "phi", "delta"} - set(sample_dict)
+        if missing:
+            raise ValueError(
+                "Variational-only mode requires VI means for weights, phi, and delta."
+            )
+
+        params_batch = self._prepare_logpost_params(sample_dict)
+        sample_stats = {}
+        try:
+            sample_stats["lp"] = evaluate_log_density_batch(
+                self._logpost_fn, params_batch
+            )
+        except Exception:
+            sample_stats = {}
+
+        samples = dict(sample_dict)
+        if "phi" in samples:
+            samples["phi"] = jnp.exp(samples["phi"])
+        self.runtime = 0.0
+        return self._create_vi_inference_data(
+            samples, sample_stats, diagnostics
+        )
 
     @property
     def _logp_kwargs(self):

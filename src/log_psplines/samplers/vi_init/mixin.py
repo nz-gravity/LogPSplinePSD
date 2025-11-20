@@ -20,6 +20,8 @@ class VIInitialisationArtifacts:
     init_strategy: Optional[Callable[[Any], Any]]
     rng_key: jax.Array
     diagnostics: Optional[Dict[str, Any]]
+    means: Optional[Dict[str, jnp.ndarray]] = None
+    posterior_draws: Optional[Dict[str, jnp.ndarray]] = None
 
 
 class VIInitialisationMixin:
@@ -94,4 +96,10 @@ class VIInitialisationMixin:
         diagnostics.setdefault("guide", vi_result.guide_name)
         diagnostics.setdefault("losses", jnp.asarray(vi_result.losses))
 
-        return VIInitialisationArtifacts(init_strategy, key_run, diagnostics)
+        return VIInitialisationArtifacts(
+            init_strategy,
+            key_run,
+            diagnostics,
+            means=vi_result.means,
+            posterior_draws=vi_result.samples,
+        )

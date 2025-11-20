@@ -22,6 +22,55 @@ EMPIRICAL_KWGS = dict(
 TRUE_KWGS = dict(color="k", lw=1.2, label="Analytical", zorder=-2)
 
 
+def _quantiles_to_ci_dict(
+    quantiles: dict,
+    show_coherence: bool,
+    show_csd_magnitude: bool,
+) -> dict:
+    """Convert stored quantiles into CI dictionaries."""
+    percentiles = np.asarray(quantiles["percentile"])
+    real_q = np.asarray(quantiles["real"])
+    imag_q = np.asarray(quantiles["imag"])
+    coh_q = quantiles.get("coherence")
+
+    def _grab(arr: np.ndarray, target: float) -> np.ndarray:
+        idx = int(np.argmin(np.abs(percentiles - target)))
+        return arr[idx]
+
+    ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
+    n_channels = real_q.shape[2]
+    for i in range(n_channels):
+        for j in range(n_channels):
+            q05_r = _grab(real_q[:, :, i, i], 5.0) if i == j else None
+            q95_r = _grab(real_q[:, :, i, i], 95.0) if i == j else None
+            if i == j:
+                q50_r = _grab(real_q[:, :, i, i], 50.0)
+                ci_dict["psd"][(i, i)] = (q05_r, q50_r, q95_r)
+                continue
+
+            q05_re = _grab(real_q[:, :, i, j], 5.0)
+            q50_re = _grab(real_q[:, :, i, j], 50.0)
+            q95_re = _grab(real_q[:, :, i, j], 95.0)
+            q05_im = _grab(imag_q[:, :, i, j], 5.0)
+            q50_im = _grab(imag_q[:, :, i, j], 50.0)
+            q95_im = _grab(imag_q[:, :, i, j], 95.0)
+            ci_dict["re"][(i, j)] = (q05_re, q50_re, q95_re)
+            ci_dict["im"][(i, j)] = (q05_im, q50_im, q95_im)
+
+            if show_coherence and coh_q is not None and i > j:
+                coh05 = _grab(coh_q[:, :, i, j], 5.0)
+                coh50 = _grab(coh_q[:, :, i, j], 50.0)
+                coh95 = _grab(coh_q[:, :, i, j], 95.0)
+                ci_dict["coh"][(i, j)] = (coh05, coh50, coh95)
+            if show_csd_magnitude and i > j:
+                mag_q05 = np.sqrt(np.maximum(q05_re**2 + q05_im**2, 0.0))
+                mag_q50 = np.sqrt(np.maximum(q50_re**2 + q50_im**2, 0.0))
+                mag_q95 = np.sqrt(np.maximum(q95_re**2 + q95_im**2, 0.0))
+                ci_dict["mag"][(i, j)] = (mag_q05, mag_q50, mag_q95)
+
+    return ci_dict
+
+
 def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
     """
     Extract empirical PSD from multivariate idata for plotting.
@@ -238,6 +287,10 @@ def plot_psd_matrix(
     ax: Optional[np.ndarray] = None,
     save: bool = True,
     close: Optional[bool] = None,
+    overlay_vi: bool = False,
+    vi_color: Optional[str] = "tab:orange",
+    vi_label: str = "VI median",
+    vi_alpha: float = 0.2,
 ):
     """
     Publication-ready multivariate PSD matrix plotter with adaptive per-axis y-labels.
@@ -265,6 +318,13 @@ def plot_psd_matrix(
     show_csd_magnitude : bool, optional
         When ``True`` the lower-triangular panels display |CSD_ij| instead of
         coherence or Re/Im parts.
+    overlay_vi : bool, optional
+        When ``True`` and VI diagnostics are present, overlay the VI median /
+        quantile bands alongside posterior results for comparison.
+    vi_color : str, optional
+        Line/fill color for the VI overlay.
+    vi_label : str, optional
+        Legend label for the VI median when overlaying.
     """
     # ----- Extract/validate -----
     if show_coherence and show_csd_magnitude:
@@ -272,10 +332,18 @@ def plot_psd_matrix(
             "Choose either coherence display or |CSD| magnitude, not both."
         )
 
+    vi_ci_dict = None
+
     if idata is not None:
         # Check for required data
         extracted = extract_plotting_data(idata)
         quantiles = extracted.get("posterior_psd_matrix_quantiles")
+        vi_quantiles = extracted.get("vi_psd_matrix_quantiles")
+
+        using_vi_only = False
+        if quantiles is None:
+            quantiles = vi_quantiles
+            using_vi_only = quantiles is not None
 
         if quantiles is None:
             raise ValueError(
@@ -289,49 +357,22 @@ def plot_psd_matrix(
         if empirical_psd is None:
             empirical_psd = _extract_empirical_psd_from_idata(idata)
 
-        percentiles = quantiles["percentile"]
+        ci_dict = _quantiles_to_ci_dict(
+            quantiles,
+            show_coherence=show_coherence,
+            show_csd_magnitude=show_csd_magnitude,
+        )
 
-        def _grab(arr: np.ndarray, target: float) -> np.ndarray:
-            idx = int(np.argmin(np.abs(percentiles - target)))
-            return arr[idx]
-
-        real_q = quantiles["real"]
-        imag_q = quantiles["imag"]
-        coh_q = quantiles.get("coherence")
-
-        ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
-        n_channels = real_q.shape[2]
-        for i in range(n_channels):
-            for j in range(n_channels):
-                q05_r = _grab(real_q[:, :, i, j], 5.0)
-                q50_r = _grab(real_q[:, :, i, j], 50.0)
-                q95_r = _grab(real_q[:, :, i, j], 95.0)
-                ci_dict["psd"][(i, j)] = (q05_r, q50_r, q95_r)
-                if i != j:
-                    q05_im = _grab(imag_q[:, :, i, j], 5.0)
-                    q50_im = _grab(imag_q[:, :, i, j], 50.0)
-                    q95_im = _grab(imag_q[:, :, i, j], 95.0)
-                    ci_dict["re"][(i, j)] = (q05_r, q50_r, q95_r)
-                    ci_dict["im"][(i, j)] = (q05_im, q50_im, q95_im)
-                    if show_csd_magnitude:
-                        mag_q05 = np.sqrt(
-                            np.maximum(q05_r**2 + q05_im**2, 0.0)
-                        )
-                        mag_q50 = np.sqrt(
-                            np.maximum(q50_r**2 + q50_im**2, 0.0)
-                        )
-                        mag_q95 = np.sqrt(
-                            np.maximum(q95_r**2 + q95_im**2, 0.0)
-                        )
-                        ci_dict["mag"][(i, j)] = (mag_q05, mag_q50, mag_q95)
-
-        if coh_q is not None and show_coherence:
-            for i in range(n_channels):
-                for j in range(n_channels):
-                    q05_c = _grab(coh_q[:, :, i, j], 5.0)
-                    q50_c = _grab(coh_q[:, :, i, j], 50.0)
-                    q95_c = _grab(coh_q[:, :, i, j], 95.0)
-                    ci_dict["coh"][(i, j)] = (q05_c, q50_c, q95_c)
+        if overlay_vi and not using_vi_only and vi_quantiles is not None:
+            vi_ci_dict = _quantiles_to_ci_dict(
+                vi_quantiles,
+                show_coherence=show_coherence,
+                show_csd_magnitude=show_csd_magnitude,
+            )
+        elif overlay_vi and vi_quantiles is None:
+            logger.warning(
+                "overlay_vi requested but VI quantiles unavailable; ignoring."
+            )
 
     elif ci_dict is None:
         raise ValueError("Provide either `idata` or `ci_dict`.")
@@ -378,6 +419,7 @@ def plot_psd_matrix(
     axes = np.asarray(axes)
 
     # ----- Plot -----
+    vi_label_added = False
     for i in range(n_channels):
         for j in range(n_channels):
             ax = axes[i, j]
@@ -396,7 +438,9 @@ def plot_psd_matrix(
                 if label is not None:
                     line_kwargs["label"] = label
                 else:
-                    line_kwargs["label"] = "Median"
+                    line_kwargs["label"] = (
+                        "Posterior median" if overlay_vi else "Median"
+                    )
 
                 line_kwargs["color"] = model_color
                 line = ax.plot(freq, q50, **line_kwargs)[0]
@@ -414,6 +458,25 @@ def plot_psd_matrix(
                         true_psd[:, i, i].real,
                         **TRUE_KWGS,
                     )
+                if vi_ci_dict and (i, i) in vi_ci_dict["psd"]:
+                    vi_q05, vi_q50, vi_q95 = vi_ci_dict["psd"][(i, i)]
+                    ax.fill_between(
+                        freq,
+                        vi_q05,
+                        vi_q95,
+                        color=vi_color,
+                        alpha=vi_alpha,
+                        zorder=line.get_zorder() - 2,
+                    )
+                    ax.plot(
+                        freq,
+                        vi_q50,
+                        color=vi_color,
+                        lw=1.3,
+                        ls="--",
+                        label=vi_label if not vi_label_added else None,
+                    )
+                    vi_label_added = True
                 ax.set_yscale(diag_yscale)
                 if i == 0 and j == 0:
                     ax.legend(frameon=False, fontsize=9)
@@ -482,6 +545,24 @@ def plot_psd_matrix(
                             np.abs(true_psd[:, i, j]),
                             **TRUE_KWGS,
                         )
+                    if vi_ci_dict and (i, j) in vi_ci_dict["mag"]:
+                        vi_q05, vi_q50, vi_q95 = vi_ci_dict["mag"][(i, j)]
+                        ax.fill_between(
+                            freq,
+                            vi_q05,
+                            vi_q95,
+                            color=vi_color,
+                            alpha=vi_alpha,
+                        )
+                        ax.plot(
+                            freq,
+                            vi_q50,
+                            color=vi_color,
+                            lw=1.3,
+                            ls="--",
+                            label=vi_label if not vi_label_added else None,
+                        )
+                        vi_label_added = True
                 else:
                     q05, q50, q95 = ci_dict["re"][(i, j)]
                     ax.fill_between(
@@ -496,7 +577,24 @@ def plot_psd_matrix(
                         )
                     if true_psd is not None:
                         ax.plot(freq, true_psd[:, i, j].real, **TRUE_KWGS)
-
+                    if vi_ci_dict and (i, j) in vi_ci_dict["re"]:
+                        vi_q05, vi_q50, vi_q95 = vi_ci_dict["re"][(i, j)]
+                        ax.fill_between(
+                            freq,
+                            vi_q05,
+                            vi_q95,
+                            color=vi_color,
+                            alpha=vi_alpha,
+                        )
+                        ax.plot(
+                            freq,
+                            vi_q50,
+                            color=vi_color,
+                            lw=1.3,
+                            ls="--",
+                            label=vi_label if not vi_label_added else None,
+                        )
+                        vi_label_added = True
                 ax.set_yscale(offdiag_yscale)
 
             elif not show_coherence and not show_csd_magnitude and i < j:
@@ -511,6 +609,29 @@ def plot_psd_matrix(
                     )
                 if true_psd is not None:
                     ax.plot(freq, true_psd[:, i, j].imag, **TRUE_KWGS)
+                if (
+                    not show_coherence
+                    and not show_csd_magnitude
+                    and vi_ci_dict
+                    and (i, j) in vi_ci_dict["im"]
+                ):
+                    vi_q05, vi_q50, vi_q95 = vi_ci_dict["im"][(i, j)]
+                    ax.fill_between(
+                        freq,
+                        vi_q05,
+                        vi_q95,
+                        color=vi_color,
+                        alpha=vi_alpha,
+                    )
+                    ax.plot(
+                        freq,
+                        vi_q50,
+                        color=vi_color,
+                        lw=1.3,
+                        ls="--",
+                        label=vi_label if not vi_label_added else None,
+                    )
+                    vi_label_added = True
             else:
                 ax.axis("off")
 

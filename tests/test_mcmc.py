@@ -5,7 +5,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from log_psplines.arviz_utils import compare_results, get_weights
-from log_psplines.coarse_grain import CoarseGrainConfig
+from log_psplines.coarse_grain import (
+    CoarseGrainConfig,
+    compute_binning_structure,
+)
+from log_psplines.datatypes.univar import Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
@@ -282,3 +286,153 @@ def test_mcmc(outdir: str, test_mode: str):
     fig.write_html(os.path.join(outdir, "test_mcmc_interactive.html"))
 
     print(f"++++ univariate MCMC test {test_mode} COMPLETE ++++")
+
+
+def _synthetic_univariate_series():
+    rng = np.random.default_rng(12345)
+    n = 256
+    t = np.linspace(0, 4, n, endpoint=False)
+    signal = 0.05 * np.sin(2 * np.pi * 3.0 * t)
+    signal += 0.03 * np.cos(2 * np.pi * 1.3 * t)
+    y = signal + 0.02 * rng.normal(size=n)
+    return t, y
+
+
+def _expected_coarse_freq_univar(
+    ts: Timeseries,
+    fmin: float,
+    fmax: float,
+    cfg: CoarseGrainConfig,
+) -> np.ndarray:
+    standardized = ts.standardise_for_psd()
+    pdgrm = standardized.to_periodogram(fmin=fmin, fmax=fmax)
+    spec = compute_binning_structure(
+        pdgrm.freqs,
+        f_transition=cfg.f_transition,
+        n_log_bins=cfg.n_log_bins,
+        f_min=cfg.f_min,
+        f_max=cfg.f_max,
+    )
+    return np.asarray(spec.f_coarse, dtype=np.float64)
+
+
+def test_run_mcmc_coarse_grain_univariate_mcmc():
+    t, y = _synthetic_univariate_series()
+    ts_run = Timeseries(t=t.copy(), y=y.copy())
+    ts_spec = Timeseries(t=t.copy(), y=y.copy())
+    fmin, fmax = 0.02, 0.8
+    coarse_cfg = CoarseGrainConfig(
+        enabled=True,
+        f_transition=0.15,
+        n_log_bins=16,
+        f_min=fmin,
+        f_max=fmax,
+    )
+    expected_freq = _expected_coarse_freq_univar(
+        ts_spec,
+        fmin=fmin,
+        fmax=fmax,
+        cfg=coarse_cfg,
+    )
+
+    idata = run_mcmc(
+        data=ts_run,
+        sampler="nuts",
+        n_samples=6,
+        n_warmup=6,
+        n_knots=6,
+        degree=3,
+        diffMatrixOrder=2,
+        fmin=fmin,
+        fmax=fmax,
+        coarse_grain_config=coarse_cfg,
+        verbose=False,
+    )
+    freq = np.asarray(idata.posterior_psd["freq"].values)
+    assert freq.shape[0] == expected_freq.shape[0]
+    assert np.allclose(freq, expected_freq)
+
+
+def _synthetic_multivar_series():
+    rng = np.random.default_rng(67890)
+    n = 128
+    t = np.linspace(0, 4, n, endpoint=False)
+    base = np.stack(
+        (
+            np.sin(2 * np.pi * 0.25 * t),
+            np.cos(2 * np.pi * 0.3 * t),
+        ),
+        axis=1,
+    )
+    noise = 0.05 * rng.normal(size=base.shape)
+    y = base + noise
+    y[:, 1] += 0.2 * y[:, 0]
+    return t, y
+
+
+def _expected_coarse_freq_multivar(
+    ts: MultivariateTimeseries,
+    n_blocks: int,
+    fmin: float,
+    fmax: float,
+    cfg: CoarseGrainConfig,
+) -> np.ndarray:
+    standardized = ts.standardise_for_psd()
+    fft = standardized.to_wishart_stats(
+        n_blocks=n_blocks,
+        fmin=fmin,
+        fmax=fmax,
+    )
+    spec = compute_binning_structure(
+        fft.freq,
+        f_transition=cfg.f_transition,
+        n_log_bins=cfg.n_log_bins,
+        f_min=cfg.f_min,
+        f_max=cfg.f_max,
+    )
+    return np.asarray(spec.f_coarse, dtype=np.float64)
+
+
+def test_run_mcmc_coarse_grain_multivar_only_vi():
+    t, y = _synthetic_multivar_series()
+    ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
+    ts_spec = MultivariateTimeseries(y=y.copy(), t=t.copy())
+    fmin, fmax = 0.01, 0.4
+    coarse_cfg = CoarseGrainConfig(
+        enabled=True,
+        f_transition=0.08,
+        n_log_bins=12,
+        f_min=fmin,
+        f_max=fmax,
+    )
+    n_blocks = 2
+    expected_freq = _expected_coarse_freq_multivar(
+        ts_spec,
+        n_blocks=n_blocks,
+        fmin=fmin,
+        fmax=fmax,
+        cfg=coarse_cfg,
+    )
+
+    idata = run_mcmc(
+        data=ts_run,
+        sampler="multivar_blocked_nuts",
+        n_samples=8,
+        n_warmup=8,
+        n_knots=5,
+        degree=3,
+        diffMatrixOrder=2,
+        n_time_blocks=n_blocks,
+        only_vi=True,
+        vi_steps=200,
+        vi_lr=5e-3,
+        vi_progress_bar=False,
+        vi_psd_max_draws=8,
+        fmin=fmin,
+        fmax=fmax,
+        coarse_grain_config=coarse_cfg,
+        verbose=False,
+    )
+    freq = np.asarray(idata.posterior_psd["freq"].values)
+    assert freq.shape[0] == expected_freq.shape[0]
+    assert np.allclose(freq, expected_freq)

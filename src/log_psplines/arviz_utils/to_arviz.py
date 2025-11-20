@@ -313,8 +313,6 @@ def _create_multivar_inference_data(
     coh_q = np.asarray(coh_q, dtype=np.float32) if coh_q is not None else None
 
     channel_stds = getattr(config, "channel_stds", None)
-    factor_matrix = None
-    scalar_factor = None
     sf = float(getattr(fft_data, "scaling_factor", 1.0) or 1.0)
     if channel_stds is not None:
         channel_stds = np.asarray(channel_stds, dtype=np.float32)
@@ -323,14 +321,12 @@ def _create_multivar_inference_data(
                 "channel_stds length must match number of channels in FFT data."
             )
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
-        factor_matrix = scale_matrix / sf
-        factor_4d = factor_matrix[None, None, :, :]
+        factor_4d = scale_matrix[None, None, :, :]
         psd_real_q_rescaled = psd_real_q * factor_4d
         psd_imag_q_rescaled = psd_imag_q * factor_4d
     else:
-        scalar_factor = sf
-        psd_real_q_rescaled = psd_real_q * scalar_factor
-        psd_imag_q_rescaled = psd_imag_q * scalar_factor
+        psd_real_q_rescaled = psd_real_q * sf
+        psd_imag_q_rescaled = psd_imag_q * sf
     coherence_q_rescaled = coh_q
 
     fft_y_re = np.array(fft_data.y_re)

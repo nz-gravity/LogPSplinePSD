@@ -513,6 +513,29 @@ def plot_psd_matrix(
                                 **TRUE_KWGS,
                             )
                         ax.set_ylim(0, 1)
+                        if (
+                            vi_ci_dict
+                            and "coh" in vi_ci_dict
+                            and (i, j) in vi_ci_dict["coh"]
+                        ):
+                            vi_q05, vi_q50, vi_q95 = vi_ci_dict["coh"][(i, j)]
+                            ax.fill_between(
+                                freq,
+                                vi_q05,
+                                vi_q95,
+                                color=vi_color,
+                                alpha=vi_alpha,
+                                zorder=1,
+                            )
+                            ax.plot(
+                                freq,
+                                vi_q50,
+                                color=vi_color,
+                                lw=1.2,
+                                ls="--",
+                                label=vi_label if not vi_label_added else None,
+                            )
+                            vi_label_added = True
                     else:
                         raise ValueError(
                             "ci_dict missing coherence (i,j)={i,j}"

@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import mne
 import numpy as np
 from cycler import cycler
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from log_psplines.coarse_grain.config import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries
@@ -17,6 +18,14 @@ from log_psplines.plotting.psd_matrix import plot_psd_matrix
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+CUSTOM_CHANNEL_COLORS = {
+    "EEG 005": "tab:orange",
+    "EEG 021": "tab:blue",
+    "EEG 041": "tab:green",
+    "EEG 050": "tab:red",
+    "EEG 058": "tab:purple",
+}
 
 
 def _load_sample_eeg():
@@ -34,11 +43,11 @@ def _select_named_channels(raw, desired_names=None):
     available = raw.ch_names
     if desired_names is None:
         desired_names = [
-            "EEG 001",
+            "EEG 005",
             "EEG 021",  # frontal/right
             "EEG 041",  # vertex
             "EEG 050",  # parietal
-            "EEG 060",  # occipital
+            "EEG 058",  # occipital
         ]
     selected_indices = []
     selected_names = []
@@ -57,6 +66,45 @@ def _select_named_channels(raw, desired_names=None):
     return selected_indices, selected_names
 
 
+def _add_sensor_inset(
+    ax,
+    info,
+    channel_names,
+    color_map,
+    width="18%",
+    height="45%",
+    loc="upper left",
+    **kwargs,
+):
+    dummy_data = np.zeros((len(channel_names), 1))
+    info_copy = info.copy()
+    evoked = mne.EvokedArray(dummy_data, info_copy, tmin=0.0)
+    inset = inset_axes(ax, width=width, height=height, loc=loc, **kwargs)
+    evoked.plot_sensors(
+        axes=inset,
+        kind="topomap",
+        show_names=False,
+        title="",
+        show=False,
+        to_sphere=False,
+    )
+    scatter = None
+    for artist in inset.collections:
+        if hasattr(artist, "get_offsets"):
+            scatter = artist
+            break
+    if scatter is not None:
+        colors = np.array(
+            [
+                color_map.get(ch, CUSTOM_CHANNEL_COLORS.get(ch, "k"))
+                for ch in channel_names
+            ]
+        )
+        scatter.set_facecolors(colors)
+        scatter.set_edgecolors(colors)
+    return inset
+
+
 def _save_time_domain_butterfly(raw, selected_indices, channel_names):
     info = mne.pick_info(raw.info, sel=selected_indices)
     selected_data = raw.get_data(picks=selected_indices)
@@ -65,48 +113,41 @@ def _save_time_domain_butterfly(raw, selected_indices, channel_names):
     n_times = selected_data.shape[1]
     n_times_plot = min(fs, n_times)
 
-    # Ensure montage (otherwise spatial colors cannot be computed)
     if info.get_montage() is None and raw.get_montage() is not None:
         info.set_montage(raw.get_montage())
 
-    # Create evoked snippet
-    evoked = mne.EvokedArray(
-        selected_data[:, :n_times_plot],
-        info,
-        tmin=0.0,
-        comment="Time-domain snippet",
+    snippet = selected_data[:, :n_times_plot]
+    times = np.arange(n_times_plot) / fs
+    data_uv = snippet * 1e6
+
+    fig, ax = plt.subplots(figsize=(12, 5.5))
+    color_map = {}
+    for idx, ch_name in enumerate(channel_names):
+        color = CUSTOM_CHANNEL_COLORS.get(ch_name, f"C{idx}")
+        color_map[ch_name] = color
+        ax.plot(times, data_uv[idx], color=color, label=ch_name, linewidth=1.5)
+
+    ax.set_title("EEG (selected channels)", fontsize=18)
+    ax.set_xlabel("Time (s)", fontsize=16)
+    ax.set_ylabel("µV", fontsize=16)
+    ax.tick_params(labelsize=13)
+    ax.set_xlim(times[0], times[-1])
+    ax.grid(True, which="both", linestyle=":", alpha=0.3)
+    leg = ax.legend(
+        loc="upper right",
+        ncol=2,
+        fontsize=11,
+        frameon=False,
     )
 
-    # Plot with spatial colors
-    fig = evoked.plot(
-        picks="eeg",
-        spatial_colors=True,
-        gfp=False,
-        time_unit="s",
-        show=False,
-        window_title="Time-domain Snippet",
-    )
+    _add_sensor_inset(ax, info, channel_names, color_map)
 
     fig.tight_layout()
-
-    # Save
     path = RESULTS_DIR / "time_domain_evoked_butterfly.png"
     fig.savefig(path, dpi=150)
-
-    # -------------------------------------------------------
-    # EXTRACT SPATIAL COLORS FROM THE PLOTTED LINES
-    # -------------------------------------------------------
-    ax = fig.axes[0]  # main butterfly axis
-    spatial_colors = {}
-
-    for line in ax.lines:
-        label = line.get_label()
-        if label in channel_names:  # MNE stores channel name as label
-            spatial_colors[label] = line.get_color()
-
     plt.close(fig)
 
-    return path, selected_data, fs, spatial_colors
+    return path, selected_data, fs, color_map, info
 
 
 def _run_multivar_pspline(selected_data, fs):
@@ -239,56 +280,71 @@ def _save_vi_psd_csd(idata, channel_names):
     return out_path
 
 
-def _plot_channel_psds(freqs, psd_quantiles, channel_names, colors):
-    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    q05, q50, q95 = psd_quantiles
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for idx, name in enumerate(channel_names):
-        base_color = color_cycle[idx % len(color_cycle)]
-        color = (
-            colors.get(name, base_color)
-            if isinstance(colors, dict)
-            else colors[idx]
-        )
-        ax.fill_between(freqs, q05[idx], q95[idx], color=color, alpha=0.2)
-        ax.loglog(freqs, q50[idx], label=name, color=color)
-    ax.set_title("Selected EEG Channel PSDs")
-    ax.set_xlabel("Frequency [Hz]")
-    ax.set_ylabel("Power Spectral Density")
-    ax.grid(True, which="both", ls=":")
-    ax.legend()
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    path = RESULTS_DIR / "selected_channel_psds.png"
-    fig.tight_layout()
-    fig.savefig(path, dpi=150)
-    plt.close(fig)
-    return path
-
-
-def _plot_pairwise_coherence(freqs, coh_quantiles, pairs, channel_names):
-    fig, ax = plt.subplots(figsize=(10, 6))
+def _plot_pairwise_coherence(
+    freqs, coh_quantiles, pairs, channel_names, channel_colors, channel_info
+):
+    fig, ax = plt.subplots(figsize=(12, 5.5))
     q05, q50, q95 = coh_quantiles
-    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     for idx, (i, j) in enumerate(pairs):
-        color = color_cycle[idx % len(color_cycle)]
-        ax.fill_between(freqs, q05[idx], q95[idx], color=color, alpha=0.2)
+        color_i = channel_colors.get(
+            channel_names[i],
+            CUSTOM_CHANNEL_COLORS.get(channel_names[i], f"C{i % 10}"),
+        )
+        color_j = channel_colors.get(
+            channel_names[j],
+            CUSTOM_CHANNEL_COLORS.get(channel_names[j], f"C{j % 10}"),
+        )
+        ax.fill_between(
+            freqs, q05[idx], q95[idx], color=color_i, alpha=0.7, lw=0
+        )
         ax.plot(
             freqs,
             q50[idx],
             label=f"{channel_names[i]} vs {channel_names[j]}",
-            color=color,
+            color=color_j,
+            alpha=0.5,
+            linewidth=2,
         )
-    ax.set_title("Channel-to-channel Coherence")
-    ax.set_xlabel("Frequency [Hz]")
-    ax.set_ylabel("Coherence")
+
+    # custom legend (one entry per channel)
+    handles = []
+    labels = []
+    for ch_name in channel_names:
+        color = channel_colors.get(
+            ch_name, CUSTOM_CHANNEL_COLORS.get(ch_name, "C0")
+        )
+        handles.append(plt.Line2D([0], [0], color=color, lw=2))
+        labels.append(ch_name)
+    # ax.legend(handles, labels, title="Channels", fontsize=11, ncol=2, frameon=False)
+    _add_sensor_inset(
+        ax,
+        channel_info,
+        channel_names,
+        channel_colors,
+        width=2.0,
+        height=1.5,
+        loc="lower left",
+    )
+
+    ax.set_title("Channel-to-channel Coherence", fontsize=18)
+    ax.set_xlabel("Frequency [Hz]", fontsize=16)
+    ax.set_ylabel("Coherence", fontsize=16)
+    ax.tick_params(labelsize=13)
     ax.grid(ls=":")
-    ax.legend()
     ax.set_xscale("log")
-    ax.set_ylim(0.0, 1.0)
+    ax.set_yscale("log")
+    xticks = np.array([1, 2, 5, 10, 20, 40, 80], dtype=float)
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([f"{int(x)}" for x in xticks])
+    ax.set_xlim(1, 80)
+    ticks = [0.03, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0]
+    ax.set_yticks(ticks)
+    ax.set_yticklabels([f"{t}" for t in ticks])
+
+    ax.set_ylim(top=1.0)
     path = RESULTS_DIR / "selected_channel_coherence.png"
     fig.tight_layout()
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return path
 
@@ -297,9 +353,13 @@ def main():
     raw = _load_sample_eeg()
     indices, names = _select_named_channels(raw)
     print("Selected EEG channels:", names)
-    time_path, selected_data, fs, spatial_colors = _save_time_domain_butterfly(
-        raw, indices, names
-    )
+    (
+        time_path,
+        selected_data,
+        fs,
+        spatial_colors,
+        channel_info,
+    ) = _save_time_domain_butterfly(raw, indices, names)
     print(f"Saved time-domain butterfly to {time_path}")
 
     idata, plot_path = _run_multivar_pspline(selected_data, fs)
@@ -309,11 +369,9 @@ def main():
     freqs, psd_quantiles, pairs, coh_quantiles = (
         _extract_posterior_psd_and_coherence(idata)
     )
-    psd_path = _plot_channel_psds(freqs, psd_quantiles, names, spatial_colors)
-    print(f"Saved channel PSD overlay to {psd_path}")
 
     coherence_path = _plot_pairwise_coherence(
-        freqs, coh_quantiles, pairs, names
+        freqs, coh_quantiles, pairs, names, spatial_colors, channel_info
     )
     print(f"Saved pairwise coherence overlay to {coherence_path}")
 

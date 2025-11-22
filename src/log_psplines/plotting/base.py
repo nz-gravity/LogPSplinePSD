@@ -2,6 +2,7 @@
 Base plotting utilities for shared functionality across plotting modules.
 """
 
+import copy
 import os
 from dataclasses import dataclass
 from functools import wraps
@@ -113,12 +114,23 @@ def extract_plotting_data(idata, weights_key: str = None) -> Dict[str, Any]:
         added = False
         if "psd" in dataset:
             arr = dataset["psd"]
+            if "freq" in arr.coords and "frequencies" not in data:
+                data["frequencies"] = np.asarray(arr.coords["freq"].values)
             data[f"{prefix}_psd_quantiles"] = {
                 "percentile": np.asarray(arr.coords["percentile"].values),
                 "values": np.asarray(arr.values),
             }
             added = True
         if "psd_matrix_real" in dataset:
+            freq_coord = dataset["psd_matrix_real"].coords
+            if (
+                "freq" in freq_coord
+                and "frequencies" not in data
+                and freq_coord["freq"] is not None
+            ):
+                data["frequencies"] = np.asarray(
+                    freq_coord["freq"].values, dtype=float
+                )
             data[f"{prefix}_psd_matrix_quantiles"] = {
                 "percentile": np.asarray(
                     dataset["psd_matrix_real"].coords["percentile"].values
@@ -134,30 +146,53 @@ def extract_plotting_data(idata, weights_key: str = None) -> Dict[str, Any]:
             added = True
         return added
 
-    psd_loaded = False
     if hasattr(idata, "posterior_psd"):
-        psd_loaded = _maybe_set_psd_quantiles(idata.posterior_psd, "posterior")
+        _maybe_set_psd_quantiles(idata.posterior_psd, "posterior")
     if hasattr(idata, "vi_posterior_psd"):
         _maybe_set_psd_quantiles(idata.vi_posterior_psd, "vi")
 
+    idata_attrs = getattr(idata, "attrs", {}) or {}
+    only_vi_mode = bool(idata_attrs.get("only_vi"))
+
     # Backwards compatibility: fall back to VI quantiles when posterior absent
     if "posterior_psd_quantiles" not in data and "vi_psd_quantiles" in data:
-        data["posterior_psd_quantiles"] = data["vi_psd_quantiles"]
+        data["posterior_psd_quantiles"] = copy.deepcopy(
+            data["vi_psd_quantiles"]
+        )
+    elif only_vi_mode and "vi_psd_quantiles" in data:
+        data["posterior_psd_quantiles"] = copy.deepcopy(
+            data["vi_psd_quantiles"]
+        )
     if (
         "posterior_psd_matrix_quantiles" not in data
         and "vi_psd_matrix_quantiles" in data
     ):
-        data["posterior_psd_matrix_quantiles"] = data[
-            "vi_psd_matrix_quantiles"
-        ]
+        data["posterior_psd_matrix_quantiles"] = copy.deepcopy(
+            data["vi_psd_matrix_quantiles"]
+        )
+    elif only_vi_mode and "vi_psd_matrix_quantiles" in data:
+        data["posterior_psd_matrix_quantiles"] = copy.deepcopy(
+            data["vi_psd_matrix_quantiles"]
+        )
+    elif (
+        "posterior_psd_matrix_quantiles" in data
+        and "vi_psd_matrix_quantiles" in data
+    ):
+        posterior_q = data["posterior_psd_matrix_quantiles"]
+        vi_q = data["vi_psd_matrix_quantiles"]
+        if (
+            posterior_q.get("coherence") is None
+            and vi_q.get("coherence") is not None
+        ):
+            posterior_q["coherence"] = np.asarray(vi_q["coherence"])
 
     # Extract true PSD if available
-    if hasattr(idata, "attrs") and "true_psd" in idata.attrs:
-        data["true_psd"] = idata.attrs["true_psd"]
+    if "true_psd" in idata_attrs:
+        data["true_psd"] = idata_attrs["true_psd"]
 
     # Extract frequencies if available
-    if hasattr(idata, "attrs") and "frequencies" in idata.attrs:
-        data["frequencies"] = idata.attrs["frequencies"]
+    if "frequencies" in idata_attrs:
+        data["frequencies"] = idata_attrs["frequencies"]
 
     return data
 

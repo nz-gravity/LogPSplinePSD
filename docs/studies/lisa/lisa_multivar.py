@@ -25,7 +25,7 @@ RESULT_FN = RESULTS_DIR / "inference_data.nc"
 
 RUN_VI_ONLY = True
 
-lisa_data = LISAData.load(data_path="data/tdi_full.h5")
+lisa_data = LISAData.load(data_path="data/tdi.h5")
 lisa_data.plot(f"{RESULTS_DIR}/lisa_raw.png")
 
 t = lisa_data.time
@@ -51,7 +51,7 @@ logger.info(
 )
 
 
-FMIN, FMAX = 10**-4, 10**-1
+FMIN, FMAX = 10**-4, 3 * 10**-2
 
 fft_data = standardized_ts.to_wishart_stats(
     n_blocks=n_blocks,
@@ -102,9 +102,9 @@ else:
         coarse_grain_config=coarse_cfg,
         fmin=FMIN,
         fmax=FMAX,
-        true_psd=dict(freq=freqs, psd=true_psd_standardized_data),
+        # true_psd=dict(freq=freqs, psd=true_psd_standardized_data),
         only_vi=RUN_VI_ONLY,
-        vi_steps=10_000 if RUN_VI_ONLY else 1_500,
+        vi_steps=30_000 if RUN_VI_ONLY else 1_500,
         vi_lr=1e-3 if RUN_VI_ONLY else 1e-2,
         vi_progress_bar=True,
     )
@@ -138,7 +138,7 @@ plot_psd_matrix(
     idata=idata,
     freq=freq_plot,
     empirical_psd=empirical_psd,
-    true_psd=true_psd_standardized,
+    # true_psd=true_psd_standardized,
     outdir=str(RESULTS_DIR),
     filename="psd_matrix.png",
     diag_yscale="log",

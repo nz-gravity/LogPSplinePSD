@@ -436,17 +436,21 @@ def run_mcmc(
         freq_attr = (
             "freqs" if isinstance(processed_data, Periodogram) else "freq"
         )
-        freqs = getattr(processed_data, freq_attr)
-        lower = freqs[0] if fmin is None else fmin
-        upper = freqs[-1] if fmax is None else fmax
+        freqs = np.asarray(getattr(processed_data, freq_attr), dtype=float)
+        if freqs.size == 0:
+            raise ValueError("Processed data contains no frequencies.")
+
+        freq_min = float(freqs[0])
+        freq_max = float(freqs[-1])
+        lower = freq_min if fmin is None else float(fmin)
+        upper = freq_max if fmax is None else float(fmax)
+
+        lower = min(max(lower, freq_min), freq_max)
+        upper = min(max(upper, freq_min), freq_max)
         if upper < lower:
-            raise ValueError(
-                f"Invalid frequency bounds supplied: fmin={lower}, fmax={upper}."
-            )
-        if isinstance(processed_data, Periodogram):
-            processed_data = processed_data.cut(lower, upper)
-        else:  # MultivarFFT
-            processed_data = processed_data.cut(lower, upper)
+            upper = lower
+
+        processed_data = processed_data.cut(lower, upper)
 
         n_points = (
             processed_data.n

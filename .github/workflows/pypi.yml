@@ -1,21 +1,26 @@
 name: Release
 
 on:
-  workflow_run:
-    # workflows: ["Tests and Coverage"]
-    # types: [completed]
+  push:
     branches:
       - main
-  # workflow_dispatch:
-  #   inputs:
-  #     force_release:
-  #       description: 'Force release even if no semantic commit'
-  #       type: boolean
-  #       default: false
-  #     dry_run:
-  #       description: 'Dry run (no tag or publish)'
-  #       type: boolean
-  #       default: false
+
+# on:
+#   workflow_run:
+#     workflows: ["Tests and Coverage"]
+#     types: [completed]
+#     branches:
+#       - main
+#   workflow_dispatch:
+#     inputs:
+#       force_release:
+#         description: 'Force release even if no semantic commit'
+#         type: boolean
+#         default: false
+#       dry_run:
+#         description: 'Dry run (no tag or publish)'
+#         type: boolean
+#         default: false
 
 
 

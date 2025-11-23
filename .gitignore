@@ -11,6 +11,7 @@
 pyvenv.cfg
 *.hdf5
 *.nc
+*.gif
 *.csv
 *.pdf
 *.png

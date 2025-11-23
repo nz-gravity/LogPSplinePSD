@@ -14,7 +14,7 @@ setup_plot_style()
 EMPIRICAL_KWGS = dict(
     color="0.4",
     lw=1.0,
-    alpha=0.7,
+    alpha=0.3,
     ls="--",
     label="Empirical",
     zorder=-5,

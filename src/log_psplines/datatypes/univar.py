@@ -40,13 +40,25 @@ class Timeseries:
         power = power[1:]
 
         if fmin is not None or fmax is not None:
-            lower = freq[0] if fmin is None else fmin
-            upper = freq[-1] if fmax is None else fmax
+            if freq.size == 0:
+                raise ValueError("No positive frequencies available.")
+
+            freq_min = float(freq[0])
+            freq_max = float(freq[-1])
+            lower = freq_min if fmin is None else float(fmin)
+            upper = freq_max if fmax is None else float(fmax)
+
+            lower = min(max(lower, freq_min), freq_max)
+            upper = min(max(upper, freq_min), freq_max)
             if upper < lower:
-                raise ValueError(
-                    f"Invalid frequency bounds: fmin={lower}, fmax={upper}."
-                )
+                # Snap to the closest available bin to avoid empty selections
+                lower = upper
+
             mask = (freq >= lower) & (freq <= upper)
+            if not np.any(mask):
+                raise ValueError(
+                    "Frequency truncation removed all bins; check fmin/fmax."
+                )
             freq = freq[mask]
             power = power[mask]
 

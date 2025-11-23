@@ -207,13 +207,21 @@ class MultivarFFT:
         block_ffts = block_ffts * sqrt_scale
 
         if fmin is not None or fmax is not None:
-            fmin_eff = freq[0] if fmin is None else max(fmin, freq[0])
-            fmax_eff = freq[-1] if fmax is None else min(fmax, freq[-1])
+            freq_min = float(freq[0])
+            freq_max = float(freq[-1])
+            fmin_eff = freq_min if fmin is None else float(fmin)
+            fmax_eff = freq_max if fmax is None else float(fmax)
+
+            fmin_eff = min(max(fmin_eff, freq_min), freq_max)
+            fmax_eff = min(max(fmax_eff, freq_min), freq_max)
             if fmax_eff < fmin_eff:
-                raise ValueError(
-                    f"Invalid frequency bounds: fmin={fmin_eff}, fmax={fmax_eff}."
-                )
+                fmax_eff = fmin_eff
+
             freq_mask = (freq >= fmin_eff) & (freq <= fmax_eff)
+            if not np.any(freq_mask):
+                raise ValueError(
+                    "Frequency truncation removed all bins; check fmin/fmax."
+                )
             freq = freq[freq_mask]
             block_ffts = block_ffts[:, freq_mask, :]
 

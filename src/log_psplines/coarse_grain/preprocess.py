@@ -42,10 +42,14 @@ def compute_binning_structure(
     if f_transition <= 0:
         raise ValueError("f_transition must be positive")
 
-    f_min = freqs[0] if f_min is None else max(f_min, freqs[0])
-    f_max = freqs[-1] if f_max is None else min(f_max, freqs[-1])
-    if f_max <= f_min:
-        raise ValueError("f_max must be greater than f_min after clamping")
+    freq_min = float(freqs[0])
+    freq_max = float(freqs[-1])
+    f_min = freq_min if f_min is None else float(f_min)
+    f_max = freq_max if f_max is None else float(f_max)
+    f_min = min(max(f_min, freq_min), freq_max)
+    f_max = min(max(f_max, freq_min), freq_max)
+    if f_max < f_min:
+        f_max = f_min
 
     in_range = (freqs >= f_min) & (freqs <= f_max)
     if not np.any(in_range):

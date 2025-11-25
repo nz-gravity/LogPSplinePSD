@@ -39,6 +39,9 @@ class Timeseries:
         freq = freq[1:]
         power = power[1:]
 
+        if fmin is not None and fmax is not None and float(fmin) > float(fmax):
+            raise ValueError("fmin must be less than or equal to fmax.")
+
         if fmin is not None or fmax is not None:
             if freq.size == 0:
                 raise ValueError("No positive frequencies available.")

@@ -102,9 +102,14 @@ class MultivariateLogPSplines:
         n_channels = fft_data.n_dim
 
         # Create frequency grid for knot placement (normalized to [0,1])
-        freq_norm = (fft_data.freq - fft_data.freq.min()) / (
-            fft_data.freq.max() - fft_data.freq.min()
-        )
+        freq = np.asarray(fft_data.freq, dtype=np.float64)
+        freq_min = freq.min()
+        freq_max = freq.max()
+        denom = freq_max - freq_min
+        if denom <= 0:
+            freq_norm = np.zeros_like(freq)
+        else:
+            freq_norm = (freq - freq_min) / denom
 
         # Initialize knots (same for all components for now, linear spacing)
         knot_method = knot_kwargs.get("method", "linear")

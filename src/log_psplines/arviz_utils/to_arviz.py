@@ -324,13 +324,13 @@ def _create_multivar_inference_data(
                 "channel_stds length must match number of channels in FFT data."
             )
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
-        factor_matrix = scale_matrix
+        factor_matrix = scale_matrix / sf if sf != 0 else scale_matrix
         factor_4d = factor_matrix[None, None, :, :]
         psd_real_q_rescaled = psd_real_q * factor_4d
         psd_imag_q_rescaled = psd_imag_q * factor_4d
     else:
-        psd_real_q_rescaled = psd_real_q * sf
-        psd_imag_q_rescaled = psd_imag_q * sf
+        psd_real_q_rescaled = psd_real_q
+        psd_imag_q_rescaled = psd_imag_q
     coherence_q_rescaled = coh_q
     scalar_factor = float(getattr(config, "scaling_factor", 1.0) or 1.0)
 
@@ -342,8 +342,8 @@ def _create_multivar_inference_data(
         observed_fft_re_rescaled = fft_y_re * channel_stds[None, :]
         observed_fft_im_rescaled = fft_y_im * channel_stds[None, :]
     else:
-        observed_fft_re_rescaled = fft_y_re * np.sqrt(config.scaling_factor)
-        observed_fft_im_rescaled = fft_y_im * np.sqrt(config.scaling_factor)
+        observed_fft_re_rescaled = fft_y_re
+        observed_fft_im_rescaled = fft_y_im
 
     # Compute and rescale observed cross-spectral density (periodogram)
     raw_psd = getattr(fft_data, "raw_psd", None)
@@ -393,7 +393,7 @@ def _create_multivar_inference_data(
         observed_csd = observed_csd * factor_matrix[None, :, :]
     else:
         if not psd_has_global_scale:
-            observed_csd = observed_csd * scalar_factor
+            observed_csd = observed_csd
 
     if config.verbose:
         logger.info(

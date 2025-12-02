@@ -146,6 +146,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             num_warmup=n_warmup,
             num_samples=n_samples,
             num_chains=self.config.num_chains,
+            chain_method=self.chain_method,
             progress_bar=self.config.verbose,
             jit_model_args=True,
         )
@@ -184,13 +185,19 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             logger.info(f"Sampling completed in {self.runtime:.2f} seconds")
 
         # Extract samples and convert to ArviZ
-        samples = mcmc.get_samples()
-        stats = mcmc.get_extra_fields()
+        samples = mcmc.get_samples(group_by_chain=True)
+        stats = mcmc.get_extra_fields(group_by_chain=True)
 
         params_batch = self._prepare_logpost_params(samples)
         stats["lp"] = evaluate_log_density_batch(
             self._logpost_fn, params_batch
         )
+        lp_arr = jnp.asarray(stats.get("lp"))
+        if lp_arr.ndim == 1:
+            n_chains = int(self.config.num_chains)
+            n_draws = int(samples["weights"].shape[1])
+            if lp_arr.size == n_chains * n_draws:
+                stats["lp"] = lp_arr.reshape((n_chains, n_draws))
 
         if "phi" in samples:
             samples["phi"] = jnp.exp(samples["phi"])
@@ -241,6 +248,10 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             sample_stats["lp"] = evaluate_log_density_batch(
                 self._logpost_fn, params_batch
             )
+            lp_arr = jnp.asarray(sample_stats.get("lp"))
+            n_chains = int(self.config.num_chains)
+            if lp_arr.ndim == 1 and lp_arr.size % n_chains == 0:
+                sample_stats["lp"] = lp_arr.reshape((n_chains, -1))
         except Exception:
             sample_stats = {}
 
@@ -310,8 +321,21 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
 
     def _prepare_logpost_params(self, samples: Dict[str, jnp.ndarray]):
         """Stack posterior samples into a pytree for log-density evaluation."""
+        weights = jnp.asarray(samples["weights"])
+        if weights.ndim == 1:
+            weights = weights[None, :]
+        elif weights.ndim >= 3:
+            # Flatten chain and draw dimensions into a single batch axis
+            weights = weights.reshape((-1, weights.shape[-1]))
+
+        phi = jnp.asarray(samples["phi"])
+        phi = phi.reshape(-1) if phi.ndim else phi.reshape(1)
+
+        delta = jnp.asarray(samples["delta"])
+        delta = delta.reshape(-1) if delta.ndim else delta.reshape(1)
+
         return {
-            "weights": jnp.asarray(samples["weights"]),
-            "phi": jnp.asarray(samples["phi"]),
-            "delta": jnp.asarray(samples["delta"]),
+            "weights": weights,
+            "phi": phi,
+            "delta": delta,
         }

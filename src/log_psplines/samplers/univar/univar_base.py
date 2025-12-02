@@ -116,9 +116,22 @@ class UnivarBaseSampler(BaseSampler):
 
         # Combine all parameters into single posterior sample array
         weights = np.asarray(samples["weights"])
+        if weights.ndim >= 3:
+            weights = weights.reshape((-1, weights.shape[-1]))
+        elif weights.ndim == 2 and weights.shape[0] == self.config.num_chains:
+            weights = weights.reshape((-1, weights.shape[-1]))
+
         phi = np.asarray(samples["phi"])
+        if phi.ndim >= 2:
+            phi = phi.reshape(-1)
+
         delta = np.asarray(samples["delta"])
+        if delta.ndim >= 2:
+            delta = delta.reshape(-1)
+
         lp = np.asarray(sample_stats["lp"])
+        if lp.ndim >= 2:
+            lp = lp.reshape(-1)
 
         post_smp = np.concatenate(
             [weights, phi[:, None], delta[:, None]],

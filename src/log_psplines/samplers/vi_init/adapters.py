@@ -287,10 +287,8 @@ def compute_vi_artifacts_multivar(
                     )
                     if n_psd_draws < log_delta_samples.shape[0]:
                         logger.debug(
-                            "Capping VI PSD reconstruction to %d draws "
-                            "(limit=%d).",
-                            n_psd_draws,
-                            getattr(sampler.config, "vi_psd_max_draws", 0),
+                            f"Capping VI PSD reconstruction to {n_psd_draws} draws "
+                            f"(limit={getattr(sampler.config, 'vi_psd_max_draws', 0)})."
                         )
                     log_delta_samples = log_delta_samples[:n_psd_draws]
                     theta_re_samples = theta_re_samples[:n_psd_draws]

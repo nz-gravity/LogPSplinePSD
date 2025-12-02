@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pytest
 
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
@@ -41,6 +42,29 @@ def test_univariate_vi_initialisation_smoke(outdir):
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd.png")
     assert os.path.exists(f"{outdir}/diagnostics/vi_elbo_trace.png")
+
+
+@pytest.mark.parametrize("num_chains", [1, 2])
+def test_univariate_arviz_chain_dims(outdir, num_chains):
+    ar_data = ARData(order=1, duration=0.25, fs=32, sigma=0.25, seed=1)
+    outdir = f"{outdir}/univar_arviz_chains_{num_chains}"
+
+    idata = run_mcmc(
+        ar_data.ts,
+        sampler="nuts",
+        n_knots=3,
+        n_samples=8,
+        n_warmup=8,
+        num_chains=num_chains,
+        vi_steps=50,
+        vi_posterior_draws=32,
+        verbose=False,
+        compute_lnz=False,
+        outdir=str(outdir),
+    )
+
+    assert idata.posterior.sizes.get("chain") == num_chains
+    assert idata.sample_stats.sizes.get("chain") == num_chains
 
 
 def test_multivariate_vi_initialisation_smoke(outdir):

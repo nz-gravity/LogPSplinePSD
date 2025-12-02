@@ -3,6 +3,7 @@ import os
 import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 
 from log_psplines.arviz_utils import compare_results, get_weights
 from log_psplines.coarse_grain import (
@@ -436,3 +437,39 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
     freq = np.asarray(idata.posterior_psd["freq"].values)
     assert freq.shape[0] == expected_freq.shape[0]
     assert np.allclose(freq, expected_freq)
+
+
+@pytest.mark.parametrize(
+    ("sampler", "n_time_blocks"),
+    [
+        ("multivar_nuts", 1),
+        ("multivar_blocked_nuts", 2),
+    ],
+)
+@pytest.mark.parametrize("num_chains", [1, 2])
+def test_multivariate_arviz_chain_dims(
+    outdir, num_chains, sampler, n_time_blocks
+):
+    varma = VARMAData(n_samples=64, seed=123)
+    timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
+    outdir = os.path.join(
+        outdir, f"multivar_arviz_{sampler}_chains_{num_chains}"
+    )
+
+    idata = run_mcmc(
+        data=timeseries,
+        sampler=sampler,
+        n_knots=3,
+        n_samples=4,
+        n_warmup=4,
+        num_chains=num_chains,
+        vi_steps=50,
+        vi_posterior_draws=32,
+        verbose=False,
+        compute_lnz=False,
+        outdir=outdir,
+        n_time_blocks=n_time_blocks,
+    )
+
+    assert idata.posterior.sizes.get("chain") == num_chains
+    assert idata.sample_stats.sizes.get("chain") == num_chains

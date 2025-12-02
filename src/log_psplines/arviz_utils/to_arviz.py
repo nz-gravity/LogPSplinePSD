@@ -60,19 +60,18 @@ def results_to_arviz(
     return idata
 
 
-def _add_chain_dim(data_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Add chain dimension to sample arrays (shared utility)."""
+def _add_chain_dim(
+    data_dict: Dict[str, Any], num_chains: int
+) -> Dict[str, Any]:
+    """Ensure sample arrays include an explicit chain dimension."""
     result = {}
     for k, v in data_dict.items():
         v_array = np.array(v)
-        # Keep concise: only handle shapes without verbose logging
-        if v_array.ndim == 1:
-            result[k] = v_array[None, :]
-        elif v_array.ndim == 2:
-            result[k] = v_array[None, :, :]
-        elif v_array.ndim == 3:
-            result[k] = v_array[None, :, :, :]
-        elif v_array.ndim == 4:
+        # If the leading dimension already matches the configured number of chains,
+        # keep the array as-is; otherwise, add a singleton chain dimension.
+        if v_array.ndim >= 2 and v_array.shape[0] == num_chains:
+            result[k] = v_array
+        elif v_array.ndim == 0:
             result[k] = v_array
         else:
             result[k] = v_array[None, ...]
@@ -80,13 +79,12 @@ def _add_chain_dim(data_dict: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _prepare_samples_and_stats(
-    samples: Dict[str, Any], sample_stats: Dict[str, Any]
+    samples: Dict[str, Any], sample_stats: Dict[str, Any], num_chains: int
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Prepare samples and sample_stats by adding chain dimensions."""
-    # keep a single concise debug indicating preparation
-    logger.debug("_prepare_samples_and_stats: adding chain dims if missing")
-    samples = _add_chain_dim(samples)
-    sample_stats = _add_chain_dim(sample_stats)
+    logger.debug("_prepare_samples_and_stats: ensuring chain dims present")
+    samples = _add_chain_dim(samples, num_chains)
+    sample_stats = _add_chain_dim(sample_stats, num_chains)
     return samples, sample_stats
 
 
@@ -202,7 +200,9 @@ def _create_univar_inference_data(
 ) -> az.InferenceData:
     """Create InferenceData for univariate case."""
     # Prepare samples and stats with chain dimensions
-    samples, sample_stats = _prepare_samples_and_stats(samples, sample_stats)
+    samples, sample_stats = _prepare_samples_and_stats(
+        samples, sample_stats, config.num_chains
+    )
     logger.debug("_create_univar_inference_data: entry")
 
     # Extract dimensions
@@ -291,7 +291,9 @@ def _create_multivar_inference_data(
 ) -> az.InferenceData:
     """Create InferenceData for multivariate case."""
     # Prepare samples and stats with chain dimensions
-    samples, sample_stats = _prepare_samples_and_stats(samples, sample_stats)
+    samples, sample_stats = _prepare_samples_and_stats(
+        samples, sample_stats, config.num_chains
+    )
     logger.debug("_create_multivar_inference_data: entry")
 
     # Extract dimensions from a standard sample
@@ -330,6 +332,7 @@ def _create_multivar_inference_data(
         psd_real_q_rescaled = psd_real_q * sf
         psd_imag_q_rescaled = psd_imag_q * sf
     coherence_q_rescaled = coh_q
+    scalar_factor = float(getattr(config, "scaling_factor", 1.0) or 1.0)
 
     fft_y_re = np.array(fft_data.y_re)
     fft_y_im = np.array(fft_data.y_im)

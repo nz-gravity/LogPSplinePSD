@@ -33,17 +33,21 @@ def compare_results(
         raise ValueError("No common variables found in the two runs.")
 
     ### 1) Plot density
-    az.plot_density(
-        [run1["posterior"], run2["posterior"]],
-        data_labels=labels,
-        shade=0.2,
-        hdi_prob=0.94,
-        colors=colors,
-    )
-    plt.suptitle("Density Comparison", fontsize=14)
-    plt.tight_layout()
-    plt.savefig(f"{outdir}/density_comparison.png")
-    plt.close()
+    try:
+        az.plot_density(
+            [run1["posterior"], run2["posterior"]],
+            data_labels=labels,
+            shade=0.2,
+            hdi_prob=0.94,
+            colors=colors,
+        )
+        plt.suptitle("Density Comparison", fontsize=14)
+        plt.tight_layout()
+        plt.savefig(f"{outdir}/density_comparison.png")
+    except Exception as exc:  # pragma: no cover - plotting safeguard
+        logger.warning(f"Density comparison failed: {exc}")
+    finally:
+        plt.close()
 
     ### 2) Plot ESS
     ess1 = _get_ess(run1)

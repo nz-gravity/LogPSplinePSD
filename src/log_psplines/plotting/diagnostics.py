@@ -1791,6 +1791,9 @@ def generate_diagnostics_summary(idata, outdir):
     summary = []
     summary.append("=== MCMC Diagnostics Summary ===\n")
 
+    ess_values = None
+    rhat_good = None
+
     # Basic info
     attrs = getattr(idata, "attrs", {}) or {}
     if not hasattr(attrs, "get"):
@@ -1827,6 +1830,22 @@ def generate_diagnostics_summary(idata, outdir):
             summary.append(f"ESS ≥ 400: {(ess_values >= 400).mean()*100:.1f}%")
     except Exception as e:
         summary.append(f"\nESS: unavailable")
+
+    # Rhat
+    try:
+        rhat = az.rhat(idata)
+        rhat_vals = np.asarray(rhat.to_array()).ravel()
+        rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
+        if rhat_vals.size:
+            summary.append(
+                f"Rhat: min={rhat_vals.min():.3f}, mean={rhat_vals.mean():.3f}, max={rhat_vals.max():.3f}"
+            )
+            rhat_good = (rhat_vals <= 1.01).mean() * 100
+            summary.append(f"Rhat ≤ 1.01: {rhat_good:.1f}%")
+        else:
+            summary.append("Rhat: unavailable (needs ≥2 chains)")
+    except Exception:
+        summary.append("Rhat: unavailable")
 
     # Acceptance
     accept_key = None
@@ -1922,14 +1941,21 @@ def generate_diagnostics_summary(idata, outdir):
 
     # Overall assessment
     try:
-        # rhat_values = []
-        # rhat_good = (rhat_values <= 1.01).mean() * 100
-        if len(ess_values) > 0:
-            ess_good = (ess_values >= 400).mean() * 100
-            summary.append(f"\nOverall Convergence Assessment:")
-            if ess_good >= 90:  # and rhat_good >= 90:
+        ess_good = (
+            (ess_values >= 400).mean() * 100
+            if ess_values is not None
+            else None
+        )
+        summary.append(f"\nOverall Convergence Assessment:")
+        if ess_good is None:
+            summary.append("  Status: UNKNOWN (insufficient diagnostics)")
+        else:
+            meets_rhat = (
+                rhat_good is None or rhat_good >= 90
+            )  # treat missing rhat as neutral
+            if ess_good >= 90 and meets_rhat:
                 summary.append("  Status: EXCELLENT ✓")
-            elif ess_good >= 75:  # and rhat_good >= 75:
+            elif ess_good >= 75 and meets_rhat:
                 summary.append("  Status: GOOD ✓")
             else:
                 summary.append("  Status: NEEDS ATTENTION ⚠")

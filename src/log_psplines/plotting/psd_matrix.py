@@ -271,6 +271,9 @@ def plot_psd_matrix(
     ci_dict: dict | None = None,
     freq: np.ndarray | None = None,
     empirical_psd: EmpiricalPSD | None = None,
+    extra_empirical_psd: list[EmpiricalPSD] | None = None,
+    extra_empirical_labels: list[str] | None = None,
+    extra_empirical_styles: list[dict] | None = None,
     true_psd: np.ndarray | None = None,
     outdir: str = ".",
     filename: str = "psd_matrix.png",
@@ -291,6 +294,7 @@ def plot_psd_matrix(
     vi_color: Optional[str] = "tab:orange",
     vi_label: str = "VI median",
     vi_alpha: float = 0.2,
+    freq_range: Optional[tuple[float, float]] = None,
 ):
     """
     Publication-ready multivariate PSD matrix plotter with adaptive per-axis y-labels.
@@ -384,9 +388,7 @@ def plot_psd_matrix(
         true_psd = np.asarray(true_psd)
         if true_psd.shape[0] != len(freq):
             logger.warning(
-                "Skipping true PSD overlay: expected %d frequency bins, got %d.",
-                len(freq),
-                true_psd.shape[0],
+                f"Skipping true PSD overlay: expected {len(freq)} frequency bins, got {true_psd.shape[0]}.",
             )
             true_psd = None
 
@@ -419,6 +421,14 @@ def plot_psd_matrix(
     axes = np.asarray(axes)
 
     # ----- Plot -----
+    # Normalise optional extra empirical inputs
+    if extra_empirical_psd is None:
+        extra_empirical_psd = []
+    if extra_empirical_labels is None:
+        extra_empirical_labels = []
+    if extra_empirical_styles is None:
+        extra_empirical_styles = []
+
     vi_label_added = False
     for i in range(n_channels):
         for j in range(n_channels):
@@ -433,6 +443,20 @@ def plot_psd_matrix(
                         empirical_psd.freq,
                         empirical_psd.psd[:, i, i].real,
                         **EMPIRICAL_KWGS,
+                    )
+                # Additional empirical overlays (e.g. Welch PSD)
+                for idx, extra_emp in enumerate(extra_empirical_psd):
+                    kw = dict(EMPIRICAL_KWGS)
+                    if idx < len(extra_empirical_styles):
+                        kw.update(extra_empirical_styles[idx] or {})
+                    if idx < len(extra_empirical_labels):
+                        kw["label"] = extra_empirical_labels[idx]
+                    else:
+                        kw.setdefault("label", f"Empirical {idx + 2}")
+                    ax.plot(
+                        extra_emp.freq,
+                        extra_emp.psd[:, i, i].real,
+                        **kw,
                     )
                 line_kwargs = {"lw": 1.5}
                 if label is not None:
@@ -491,6 +515,19 @@ def plot_psd_matrix(
                                 empirical_psd.freq,
                                 empirical_psd.coherence[:, i, j],
                                 **EMPIRICAL_KWGS,
+                            )
+                        for idx, extra_emp in enumerate(extra_empirical_psd):
+                            kw = dict(EMPIRICAL_KWGS)
+                            if idx < len(extra_empirical_styles):
+                                kw.update(extra_empirical_styles[idx] or {})
+                            if idx < len(extra_empirical_labels):
+                                kw["label"] = extra_empirical_labels[idx]
+                            else:
+                                kw.setdefault("label", f"Empirical {idx + 2}")
+                            ax.plot(
+                                extra_emp.freq,
+                                extra_emp.coherence[:, i, j],
+                                **kw,
                             )
                         ax.fill_between(
                             freq, q05, q95, color=model_color, alpha=0.25
@@ -562,6 +599,19 @@ def plot_psd_matrix(
                             np.abs(empirical_psd.psd[:, i, j]),
                             **EMPIRICAL_KWGS,
                         )
+                    for idx, extra_emp in enumerate(extra_empirical_psd):
+                        kw = dict(EMPIRICAL_KWGS)
+                        if idx < len(extra_empirical_styles):
+                            kw.update(extra_empirical_styles[idx] or {})
+                        if idx < len(extra_empirical_labels):
+                            kw["label"] = extra_empirical_labels[idx]
+                        else:
+                            kw.setdefault("label", f"Empirical {idx + 2}")
+                        ax.plot(
+                            extra_emp.freq,
+                            np.abs(extra_emp.psd[:, i, j]),
+                            **kw,
+                        )
                     if true_psd is not None:
                         ax.plot(
                             freq,
@@ -598,6 +648,19 @@ def plot_psd_matrix(
                             empirical_psd.psd[:, i, j].real,
                             **EMPIRICAL_KWGS,
                         )
+                    for idx, extra_emp in enumerate(extra_empirical_psd):
+                        kw = dict(EMPIRICAL_KWGS)
+                        if idx < len(extra_empirical_styles):
+                            kw.update(extra_empirical_styles[idx] or {})
+                        if idx < len(extra_empirical_labels):
+                            kw["label"] = extra_empirical_labels[idx]
+                        else:
+                            kw.setdefault("label", f"Empirical {idx + 2}")
+                        ax.plot(
+                            extra_emp.freq,
+                            extra_emp.psd[:, i, j].real,
+                            **kw,
+                        )
                     if true_psd is not None:
                         ax.plot(freq, true_psd[:, i, j].real, **TRUE_KWGS)
                     if vi_ci_dict and (i, j) in vi_ci_dict["re"]:
@@ -629,6 +692,19 @@ def plot_psd_matrix(
                         empirical_psd.freq,
                         empirical_psd.psd[:, i, j].imag,
                         **EMPIRICAL_KWGS,
+                    )
+                for idx, extra_emp in enumerate(extra_empirical_psd):
+                    kw = dict(EMPIRICAL_KWGS)
+                    if idx < len(extra_empirical_styles):
+                        kw.update(extra_empirical_styles[idx] or {})
+                    if idx < len(extra_empirical_labels):
+                        kw["label"] = extra_empirical_labels[idx]
+                    else:
+                        kw.setdefault("label", f"Empirical {idx + 2}")
+                    ax.plot(
+                        extra_emp.freq,
+                        extra_emp.psd[:, i, j].imag,
+                        **kw,
                     )
                 if true_psd is not None:
                     ax.plot(freq, true_psd[:, i, j].imag, **TRUE_KWGS)
@@ -665,6 +741,13 @@ def plot_psd_matrix(
 
             if i == n_channels - 1:
                 ax.set_xlabel("Frequency [Hz]", fontsize=11)
+
+    if freq_range is not None:
+        for i in range(n_channels):
+            for j in range(n_channels):
+                ax = axes[i, j]
+                if ax.axison:
+                    ax.set_xlim(freq_range)
 
     if created_fig:
         _format_text(

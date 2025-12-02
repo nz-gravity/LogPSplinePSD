@@ -1,8 +1,17 @@
+import os
 from pathlib import Path
 
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
+
+# Print number of JAX devices
+import jax
 import numpy as np
 
-from log_psplines.coarse_grain import CoarseGrainConfig
+from log_psplines.coarse_grain import (
+    CoarseGrainConfig,
+    coarse_grain_multivar_fft,
+    compute_binning_structure,
+)
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.datatypes.multivar import EmpiricalPSD, _get_coherence
 from log_psplines.example_datasets.lisa_data import (
@@ -15,6 +24,8 @@ from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting.psd_matrix import plot_psd_matrix
 
+logger.info(f"JAX devices: {jax.devices()}")
+
 set_level("DEBUG")
 
 HERE = Path(__file__).resolve().parent
@@ -26,26 +37,36 @@ RESULT_FN = RESULTS_DIR / "inference_data.nc"
 RUN_VI_ONLY = False
 REUSE_EXISTING = False  # set True to skip sampling when results already exist
 
+# Hyperparameters and spline configuration for this study
+ALPHA_DELTA = 1.0
+BETA_DELTA = 1.0
+N_KNOTS = 50
+TARGET_ACCEPT = 0.95
+MAX_TREE_DEPTH = 12
+
 lisa_data = LISAData.load(data_path="data/tdi.h5")
 lisa_data.plot(f"{RESULTS_DIR}/lisa_raw.png")
 
-t = lisa_data.time
-raw_series = MultivariateTimeseries(y=lisa_data.data, t=t)
+# Trim data so that n_time is divisible by the desired number of blocks.
+desired_blocks = 4
+t_full = lisa_data.time
+y_full = lisa_data.data
+n_time = y_full.shape[0]
+remainder = n_time % desired_blocks
+if remainder != 0:
+    n_trim = remainder
+    logger.info(
+        f"Trimming {n_trim} samples from end to make n_time divisible by {desired_blocks} blocks."
+    )
+    t_full = t_full[:-n_trim]
+    y_full = y_full[:-n_trim]
+
+t = t_full
+raw_series = MultivariateTimeseries(y=y_full, t=t)
 standardized_ts = raw_series.standardise_for_psd()
 
-# detrmine number of time blocks based on data length
 n = raw_series.y.shape[0]
-
-# make n_blocks so each block is ~ 1week long, power of 2
-target_blocks = max(1, 2 ** int(np.round(np.log2(n / (24 * 7)))))
-while target_blocks > 1 and n % target_blocks != 0:
-    target_blocks //= 2
-
-# Require each block to contain at least one quarter of the samples.
-while target_blocks > 4:
-    target_blocks //= 2
-
-n_blocks = target_blocks
+n_blocks = desired_blocks
 n_inside_block = n // n_blocks
 logger.info(
     f"Using n_blocks={n_blocks} x {n_inside_block} (n_time={n})",
@@ -64,11 +85,22 @@ logger.info(fft_data)
 freqs = np.asarray(fft_data.freq)
 coarse_cfg = CoarseGrainConfig(
     enabled=True,
-    f_transition=5e-3,
+    f_transition=1e-3,
     n_log_bins=200,
     f_min=FMIN,
     f_max=FMAX,
 )
+
+# Build an explicit coarse-grained FFT on the same grid that the sampler sees.
+spec = compute_binning_structure(
+    freqs,
+    f_transition=coarse_cfg.f_transition,
+    n_log_bins=coarse_cfg.n_log_bins,
+    f_min=coarse_cfg.f_min,
+    f_max=coarse_cfg.f_max,
+)
+fft_coarse, freq_weights = coarse_grain_multivar_fft(fft_data, spec)
+logger.info(fft_coarse)
 
 dt = t[1] - t[0]
 fs = 1.0 / dt
@@ -88,30 +120,29 @@ if RESULT_FN.exists() and REUSE_EXISTING:
 
 else:
     logger.info(f"No existing {RESULT_FN} found, running inference...")
-    n_knots = 50 if RUN_VI_ONLY else 30
     idata = run_mcmc(
-        data=fft_data,
+        data=fft_coarse,
         sampler="multivar_blocked_nuts",
         n_samples=1500,
         n_warmup=1500,
-        num_chains=3,
-        n_knots=n_knots,
-        degree=3,
+        num_chains=4,
+        n_knots=N_KNOTS,
+        degree=2,
         diffMatrixOrder=2,
         knot_kwargs=dict(strategy="log"),
         outdir=str(RESULTS_DIR),
         verbose=True,
-        coarse_grain_config=coarse_cfg,
         fmin=FMIN,
         fmax=FMAX,
-        # true_psd=dict(freq=freqs, psd=true_psd_standardized_data),
-        only_vi=RUN_VI_ONLY,
-        vi_steps=30_000 if RUN_VI_ONLY else 5_000,
-        vi_lr=1e-3 if RUN_VI_ONLY else 5e-3,
+        alpha_delta=ALPHA_DELTA,
+        beta_delta=BETA_DELTA,
+        only_vi=False,
+        vi_steps=30_000,
+        vi_lr=1e-3,
         vi_posterior_draws=256,
         vi_progress_bar=True,
-        target_accept_prob=0.9,
-        max_tree_depth=12,
+        target_accept_prob=TARGET_ACCEPT,
+        max_tree_depth=MAX_TREE_DEPTH,
     )
 
 if idata is None:
@@ -129,21 +160,29 @@ diag_true, csd_true = tdi2_psd_and_csd(freq_plot, Spm_plot, Sop_plot)
 true_psd_physical = covariance_matrix(diag_true, csd_true)
 true_psd_standardized = true_psd_physical
 
-if fft_data.raw_psd is not None:
-    psd_array = np.asarray(fft_data.raw_psd)
-    empirical_psd = EmpiricalPSD(
-        freq=freqs,
+# Empirical PSD on the *coarse Wishart grid* (what the likelihood fits)
+if fft_coarse.raw_psd is not None:
+    psd_array = np.asarray(fft_coarse.raw_psd)
+    empirical_wishart = EmpiricalPSD(
+        freq=np.asarray(fft_coarse.freq),
         psd=psd_array,
         coherence=_get_coherence(psd_array),
     )
 else:
-    empirical_psd = fft_data.empirical_psd
+    empirical_wishart = fft_coarse.empirical_psd
+
+# Traditional Welch-style empirical PSD on the original (unstandardised) data
+empirical_welch = EmpiricalPSD.from_timeseries_data(
+    data=raw_series.y,
+    fs=raw_series.fs,
+)
 
 plot_psd_matrix(
     idata=idata,
     freq=freq_plot,
-    empirical_psd=empirical_psd,
-    # true_psd=true_psd_standardized,
+    empirical_psd=empirical_wishart,
+    extra_empirical_psd=[empirical_welch],
+    extra_empirical_labels=["Welch"],
     outdir=str(RESULTS_DIR),
     filename="psd_matrix.png",
     diag_yscale="log",
@@ -152,4 +191,5 @@ plot_psd_matrix(
     show_csd_magnitude=True,
     show_coherence=False,
     overlay_vi=True,
+    freq_range=(FMIN, FMAX),
 )

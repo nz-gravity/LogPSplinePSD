@@ -324,7 +324,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             if losses.size:
                 guide = self._vi_diagnostics.get("guide", "vi")
                 logger.info(
-                    f"VI block init -> guide={guide}, final ELBO {float(losses[-1]):.3f}"
+                    f"VI block init completed -> guide={guide}, final ELBO {float(losses[-1]):.3f}"
                 )
 
         for channel_index in range(self.n_channels):

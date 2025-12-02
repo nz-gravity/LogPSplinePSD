@@ -15,6 +15,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from ..arviz_utils.rhat import extract_rhat_values
 from ..arviz_utils.to_arviz import results_to_arviz
 from ..logger import logger
 from ..plotting import plot_diagnostics, plot_pdgrm
@@ -128,6 +129,20 @@ class BaseSampler(ABC):
                 logger.warning(f"Could not attach VI diagnostics: {exc}")
 
         # Summary statistics
+        rhat_vals = None
+
+        # Compute and store Rhat when multiple chains are available
+        if (
+            self.config.num_chains > 1
+            and idata.posterior.sizes.get("chain", 1) > 1
+        ):
+            try:
+                rhat_vals = extract_rhat_values(idata)
+                if rhat_vals.size:
+                    idata.attrs["rhat"] = rhat_vals
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.debug(f"  Could not compute Rhat: {exc}")
+
         if self.config.verbose:
             if not (np.isnan(lnz) or np.isnan(lnz_err)):
                 logger.info(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
@@ -138,6 +153,18 @@ class BaseSampler(ABC):
                     ess = idata.attrs["ess"]
                     logger.info(
                         f"  ESS min: {np.min(ess):.1f}, max: {np.max(ess):.1f}"
+                    )
+
+                if rhat_vals is not None and rhat_vals.size:
+                    logger.info(
+                        "  Rhat: min=%.3f, mean=%.3f, max=%.3f",
+                        np.min(rhat_vals),
+                        np.mean(rhat_vals),
+                        np.max(rhat_vals),
+                    )
+                    logger.info(
+                        "  Rhat ≤ 1.01: %.1f%%",
+                        (rhat_vals <= 1.01).mean() * 100,
                     )
 
                 if "riae" in idata.attrs:

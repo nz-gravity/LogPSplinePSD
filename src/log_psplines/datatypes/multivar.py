@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
 import numpy as np
-from scipy.signal import csd, welch
+from scipy.signal import csd, welch, windows
 
 from ..logger import logger
 from ..spectrum_utils import u_to_wishart_matrix, wishart_matrix_to_psd
@@ -133,6 +133,7 @@ class MultivarFFT:
         fmax: float = None,
         scaling_factor: Optional[float] = 1.0,
         channel_stds: Optional[np.ndarray] = None,
+        window: Optional[str | tuple] = "hann",
     ) -> "MultivarFFT":
         """Compute FFT and Wishart replicates with a single (full-length) block."""
         return cls.compute_wishart(
@@ -143,6 +144,7 @@ class MultivarFFT:
             fmax=fmax,
             scaling_factor=scaling_factor,
             channel_stds=channel_stds,
+            window=window,
         )
 
     @classmethod
@@ -155,6 +157,7 @@ class MultivarFFT:
         fmax: Optional[float] = None,
         scaling_factor: Optional[float] = 1.0,
         channel_stds: Optional[np.ndarray] = None,
+        window: Optional[str | tuple] = "hann",
     ) -> "MultivarFFT":
         """
         Compute block-averaged (Wishart) FFT statistics for multivariate series.
@@ -171,6 +174,9 @@ class MultivarFFT:
             Optional frequency truncation applied after blocking.
         scaling_factor : float, optional
             PSD scaling factor carried through sampling.
+        window : str or tuple, optional
+            Taper applied to each block before the FFT. Defaults to Hann.
+            Set to ``None`` to recover the previous rectangular-window behavior.
         """
         if n_blocks < 1:
             raise ValueError("n_blocks must be positive.")
@@ -190,6 +196,16 @@ class MultivarFFT:
         x_centered = x - np.mean(x, axis=0)
         blocks = x_centered.reshape(n_blocks, block_len, n_dim)
 
+        if window is None:
+            taper = np.ones(block_len, dtype=np.float64)
+        else:
+            taper = windows.get_window(window, block_len, fftbins=True)
+            taper = np.asarray(taper, dtype=np.float64)
+        taper_energy = float(np.sum(taper**2))
+        if taper_energy <= 0.0:
+            raise ValueError("Window energy must be positive.")
+        blocks = blocks * taper[None, :, None]
+
         block_ffts = np.fft.rfft(blocks, axis=1)
         freq = np.fft.rfftfreq(block_len, 1 / fs)
         # Drop the zero-frequency bin for numerical stability
@@ -200,9 +216,11 @@ class MultivarFFT:
                 "Block length too small to retain positive frequencies."
             )
 
-        scale = np.full(freq.shape, 2.0 / (block_len * fs), dtype=np.float64)
+        scale = np.full(
+            freq.shape, 2.0 / (taper_energy * fs), dtype=np.float64
+        )
         if block_len % 2 == 0 and scale.size > 0:
-            scale[-1] = 1.0 / (block_len * fs)
+            scale[-1] = 1.0 / (taper_energy * fs)
         sqrt_scale = np.sqrt(scale, dtype=np.float64)[None, :, None]
         block_ffts = block_ffts * sqrt_scale
 
@@ -404,6 +422,7 @@ class MultivariateTimeseries:
         n_blocks: int,
         fmin: Optional[float] = None,
         fmax: Optional[float] = None,
+        window: Optional[str | tuple] = "hann",
     ) -> "MultivarFFT":
         n_time = self.y.shape[0]
         if n_blocks <= 0:
@@ -422,6 +441,7 @@ class MultivariateTimeseries:
             fmax=fmax,
             scaling_factor=self.scaling_factor,
             channel_stds=self.original_stds,
+            window=window,
         )
         log_msg = (
             f"Wishart averaging (blocks={n_blocks}): "

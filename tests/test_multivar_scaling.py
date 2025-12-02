@@ -30,7 +30,9 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
     rng = np.random.default_rng(1234)
     var_coeffs = np.array([[[0.45, 0.0], [0.08, 0.28]]], dtype=float)
     vma_coeffs = np.array([[[1.0, 0.0], [0.0, 1.0]]], dtype=float)
-    sigma = np.array([[1.0, 0.15], [0.15, 0.7]], dtype=float)
+    sigma_base = np.array([[1.0, 0.15], [0.15, 0.7]], dtype=float)
+    amplitude = 5.0
+    sigma = sigma_base * amplitude**2
 
     n_time = 240
     n_time_blocks = 3
@@ -51,6 +53,9 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
 
     # Mirror the preprocessing in run_mcmc to validate the internal PSD rescaling
     standardized = timeseries.standardise_for_psd()
+    assert (
+        standardized.scaling_factor > 5.0
+    )  # ensure non-trivial global scaling
     fft_data = standardized.to_wishart_stats(n_blocks=n_time_blocks)
     processed_data, _, _ = _coarse_grain_processed_data(
         fft_data, coarse_cfg, scaled_true_psd=None

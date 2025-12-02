@@ -39,7 +39,8 @@ class VARMAData:
         self.n_freq_samples = n_samples // 2
 
         self.fs = float(fs)
-        self.freq = np.fft.rfftfreq(n_samples, d=1 / self.fs)[1:]
+        # Frequency grid in Hz (drop the DC bin to match PSD plotting expectations)
+        self.freq = np.fft.rfftfreq(n_samples, d=1.0 / self.fs)[1:]
         self.time = np.arange(n_samples) / self.fs
         self.data = None  # set in "resimulate"
         self.periodogram = None  # set in "resimulate"
@@ -150,7 +151,7 @@ class VARMAData:
         dim = self.dim
         periodogram = self.get_periodogram()
         true_psd = self.get_true_psd()
-        freq = self.freq
+        freq_hz = self.freq
         # Setup axes
         if axs is None:
             fig, axs = plt.subplots(
@@ -165,13 +166,13 @@ class VARMAData:
                 ax = axs[i, j]
                 if i == j:
                     ax.plot(
-                        freq,
+                        freq_hz,
                         true_psd[:, i, i].real,
                         label="True PSD",
                         **true_kwgs,
                     )
                     ax.plot(
-                        freq,
+                        freq_hz,
                         periodogram[:, i, i].real,
                         label="Periodogram",
                         **data_kwgs,
@@ -180,13 +181,13 @@ class VARMAData:
                     ax.set_yscale("log")
                 elif i > j:
                     ax.plot(
-                        freq,
+                        freq_hz,
                         true_psd[:, i, j].real,
                         label="True Re(CSD)",
                         **true_kwgs,
                     )
                     ax.plot(
-                        freq,
+                        freq_hz,
                         periodogram[:, i, j].real,
                         label="Periodogram Re(CSD)",
                         **data_kwgs,
@@ -194,13 +195,13 @@ class VARMAData:
                     ax.set_title(f"Re(CSD): {i + 1},{j + 1}")
                 else:
                     ax.plot(
-                        freq,
+                        freq_hz,
                         true_psd[:, i, j].imag,
                         label="True Im(CSD)",
                         **true_kwgs,
                     )
                     ax.plot(
-                        freq,
+                        freq_hz,
                         periodogram[:, i, j].imag,
                         label="Periodogram Im(CSD)",
                         **data_kwgs,
@@ -218,7 +219,7 @@ class VARMAData:
 
 
 def _calculate_true_varma_psd(
-    freqs: np.ndarray,
+    freqs_hz: np.ndarray,
     dim: int,
     var_coeffs: np.ndarray,
     vma_coeffs: np.ndarray,
@@ -231,17 +232,26 @@ def _calculate_true_varma_psd(
     Calculate the spectral matrix for given frequencies.
 
     Args:
-        freqs (np.ndarray): Positive frequency grid in Hz.
+        freqs_hz (np.ndarray): Positive frequency grid in Hz.
         dim (int): Process dimension.
         var_coeffs/vma_coeffs: VAR/MA coefficient arrays.
         sigma (np.ndarray): Innovation covariance matrix.
         fs (float): Sampling frequency in Hz.
 
     Returns:
-        np.ndarray: One-sided PSD matrix evaluated at ``freqs``.
+        np.ndarray: One-sided PSD matrix evaluated at ``freqs_hz``.
     """
-    omega = 2.0 * np.pi * freqs / fs
-    spec_matrix = np.empty((freqs.size, dim, dim), dtype=np.complex128)
+    freqs_hz = np.asarray(freqs_hz, dtype=np.float64)
+    if freqs_hz.size:
+        nyquist = fs / 2.0
+        if freqs_hz.max() > nyquist + 1e-12:
+            raise ValueError(
+                "Frequency grid should be in Hz (0 .. fs/2). "
+                "Angular-frequency input detected."
+            )
+
+    omega = 2.0 * np.pi * freqs_hz / fs  # radians per sample
+    spec_matrix = np.empty((freqs_hz.size, dim, dim), dtype=np.complex128)
     for idx, w in enumerate(omega):
         spec_matrix[idx] = _calculate_spec_matrix_helper(
             float(w), dim, var_coeffs, vma_coeffs, sigma
@@ -249,7 +259,7 @@ def _calculate_true_varma_psd(
 
     # Convert to one-sided PSD: double positive frequencies except Nyquist
     psd = (2.0 * spec_matrix) / fs
-    if freqs.size and np.isclose(freqs[-1], fs / 2.0):
+    if freqs_hz.size and np.isclose(freqs_hz[-1], fs / 2.0):
         psd[-1] *= 0.5
     if channel_stds is not None and scaling_factor not in (None, 0):
         scale_matrix = np.outer(channel_stds, channel_stds) / float(

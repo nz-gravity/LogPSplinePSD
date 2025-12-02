@@ -6,7 +6,7 @@ import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..arviz_utils.rhat import extract_rhat_values
+from ..diagnostics import run_all_diagnostics
 from ..logger import logger
 from .base import PlotConfig, safe_plot, setup_plot_style
 
@@ -1788,14 +1788,10 @@ def _group_parameters_simple(idata):
 
 
 def generate_diagnostics_summary(idata, outdir):
-    """Generate comprehensive text summary."""
+    """Generate comprehensive text summary using computed diagnostics."""
     summary = []
     summary.append("=== MCMC Diagnostics Summary ===\n")
 
-    ess_values = None
-    rhat_good = None
-
-    # Basic info
     attrs = getattr(idata, "attrs", {}) or {}
     if not hasattr(attrs, "get"):
         attrs = dict(attrs)
@@ -1811,7 +1807,6 @@ def generate_diagnostics_summary(idata, outdir):
     )
     summary.append(f"Parameters: {n_params}")
 
-    # Parameter breakdown
     param_groups = _group_parameters_simple(idata)
     if param_groups:
         param_summary = ", ".join(
@@ -1819,150 +1814,61 @@ def generate_diagnostics_summary(idata, outdir):
         )
         summary.append(f"Parameter groups: {param_summary}")
 
-    # ESS
-    try:
-        ess = idata.attrs.get("ess")
-        ess_values = ess[~np.isnan(ess)]
+    diag_results = run_all_diagnostics(
+        idata=idata,
+        truth=attrs.get("true_psd"),
+        psd_ref=attrs.get("true_psd"),
+    )
 
-        if len(ess_values) > 0:
+    mcmc_diag = diag_results.get("mcmc", {})
+    if mcmc_diag:
+        ess_min = mcmc_diag.get("ess_bulk_min")
+        ess_med = mcmc_diag.get("ess_bulk_median")
+        if ess_min is not None:
             summary.append(
-                f"\nESS: min={ess_values.min():.0f}, mean={ess_values.mean():.0f}, max={ess_values.max():.0f}"
+                f"\nESS bulk: min={ess_min:.0f}"
+                + (f", median={ess_med:.0f}" if ess_med is not None else "")
             )
-            summary.append(f"ESS ≥ 400: {(ess_values >= 400).mean()*100:.1f}%")
-    except Exception as e:
-        summary.append(f"\nESS: unavailable")
-
-    # Rhat
-    try:
-        if idata.posterior.sizes.get("chain", 1) > 1:
-            rhat_vals = extract_rhat_values(idata)
-        else:
-            rhat_vals = np.array([])
-        if rhat_vals.size:
+        rhat_max = mcmc_diag.get("rhat_max")
+        rhat_mean = mcmc_diag.get("rhat_mean")
+        if rhat_max is not None:
             summary.append(
-                f"Rhat: min={rhat_vals.min():.3f}, mean={rhat_vals.mean():.3f}, max={rhat_vals.max():.3f}"
+                f"Rhat: max={rhat_max:.3f}"
+                + (f", mean={rhat_mean:.3f}" if rhat_mean is not None else "")
             )
-            rhat_good = (rhat_vals <= 1.01).mean() * 100
-            summary.append(f"Rhat ≤ 1.01: {rhat_good:.1f}%")
-        else:
-            summary.append("Rhat: unavailable (needs ≥2 chains)")
-    except Exception:
-        summary.append("Rhat: unavailable")
+        acc = mcmc_diag.get("acceptance_rate_mean")
+        if acc is not None:
+            summary.append(f"Acceptance rate: {acc:.3f}")
+        div_frac = mcmc_diag.get("divergence_fraction")
+        if div_frac is not None:
+            summary.append(f"Divergence fraction: {div_frac*100:.2f}%")
+        khat = mcmc_diag.get("psis_khat_max")
+        if khat is not None:
+            summary.append(f"PSIS k-hat (max): {khat:.3f}")
 
-    # Acceptance
-    accept_key = None
-    if "accept_prob" in idata.sample_stats:
-        accept_key = "accept_prob"
-    elif "acceptance_rate" in idata.sample_stats:
-        accept_key = "acceptance_rate"
-
-    if accept_key is not None:
-        accept_rate = idata.sample_stats[accept_key].values.mean()
-        target_rate = attrs.get(
-            "target_accept_rate", attrs.get("target_accept_prob", 0.44)
-        )
-        summary.append(
-            f"Acceptance rate: {accept_rate:.3f} (target: {target_rate:.3f})"
-        )
-    else:
-        # Blocked NUTS: compute a combined mean from per‑channel keys if present
-        channel_means = []
-        for key in idata.sample_stats:
-            if isinstance(key, str) and key.startswith("accept_prob_channel_"):
-                try:
-                    channel_means.append(
-                        float(idata.sample_stats[key].values.mean())
-                    )
-                except Exception:
-                    pass
-        if channel_means:
-            target_rate = attrs.get(
-                "target_accept_rate", attrs.get("target_accept_prob", 0.8)
-            )
-            summary.append(
-                f"Acceptance rate (per-channel mean): {np.mean(channel_means):.3f} (target: {target_rate:.3f})"
-            )
-
-    # PSD accuracy diagnostics (requires true_psd in attrs)
-    has_true_psd = "true_psd" in attrs
-
-    if has_true_psd:
-        coverage_level = attrs.get("coverage_level")
-        coverage_label = (
-            f"{int(round(coverage_level * 100))}% interval coverage"
-            if coverage_level is not None
-            else "Interval coverage"
-        )
-
-        def _format_riae_line(value, errorbars, prefix="  "):
-            line = f"{prefix}RIAE: {value:.3f}"
-            if errorbars:
-                q05, q25, median, q75, q95 = errorbars
-                line += f" (median {median:.3f}, 5-95% [{q05:.3f}, {q95:.3f}])"
-            summary.append(line)
-
-        def _format_coverage_line(value, prefix="  "):
-            if value is None:
-                return
-            summary.append(f"{prefix}{coverage_label}: {value * 100:.1f}%")
-
+    psd_diag = diag_results.get("psd_compare", {})
+    if psd_diag:
         summary.append("\nPSD accuracy diagnostics:")
+        if "riae" in psd_diag:
+            summary.append(f"  RIAE: {psd_diag['riae']:.3f}")
+        if "riae_matrix" in psd_diag:
+            summary.append(f"  RIAE (matrix): {psd_diag['riae_matrix']:.3f}")
+        if "coverage" in psd_diag:
+            summary.append(f"  Coverage: {psd_diag['coverage']*100:.1f}%")
 
-        if "riae" in attrs:
-            _format_riae_line(attrs["riae"], attrs.get("riae_errorbars"))
-        if "coverage" in attrs:
-            _format_coverage_line(attrs["coverage"])
-
-        channel_indices = sorted(
-            int(key.replace("riae_ch", ""))
-            for key in attrs.keys()
-            if key.startswith("riae_ch")
-        )
-
-        for idx in channel_indices:
-            metrics = []
-            riae_key = f"riae_ch{idx}"
-            cov_key = f"coverage_ch{idx}"
-            error_key = f"riae_errorbars_ch{idx}"
-
-            if riae_key in attrs:
-                riae_line = f"RIAE {attrs[riae_key]:.3f}"
-                errorbars = attrs.get(error_key)
-                if errorbars:
-                    q05, _, median, _, q95 = errorbars
-                    riae_line += (
-                        f" (median {median:.3f}, 5-95% [{q05:.3f}, {q95:.3f}])"
-                    )
-                metrics.append(riae_line)
-
-            if cov_key in attrs:
-                metrics.append(f"{coverage_label} {attrs[cov_key] * 100:.1f}%")
-
-            if metrics:
-                summary.append(f"  Channel {idx}: " + "; ".join(metrics))
-
-    # Overall assessment
-    try:
-        ess_good = (
-            (ess_values >= 400).mean() * 100
-            if ess_values is not None
-            else None
-        )
-        summary.append(f"\nOverall Convergence Assessment:")
-        if ess_good is None:
-            summary.append("  Status: UNKNOWN (insufficient diagnostics)")
+    # Overall assessment (best-effort)
+    summary.append("\nOverall Convergence Assessment:")
+    if mcmc_diag:
+        ess_ok = mcmc_diag.get("ess_bulk_min", 0) >= 400
+        rhat_ok = mcmc_diag.get("rhat_max", 0) <= 1.01
+        if ess_ok and rhat_ok:
+            summary.append("  Status: EXCELLENT ✓")
+        elif ess_ok or rhat_ok:
+            summary.append("  Status: GOOD ✓")
         else:
-            meets_rhat = (
-                rhat_good is None or rhat_good >= 90
-            )  # treat missing rhat as neutral
-            if ess_good >= 90 and meets_rhat:
-                summary.append("  Status: EXCELLENT ✓")
-            elif ess_good >= 75 and meets_rhat:
-                summary.append("  Status: GOOD ✓")
-            else:
-                summary.append("  Status: NEEDS ATTENTION ⚠")
-    except:
-        pass
+            summary.append("  Status: NEEDS ATTENTION ⚠")
+    else:
+        summary.append("  Status: UNKNOWN (insufficient diagnostics)")
 
     summary_text = "\n".join(summary)
 

@@ -26,7 +26,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 RESULT_FN = RESULTS_DIR / "inference_data.nc"
 
-RUN_VI_ONLY = True
+RUN_VI_ONLY = False
 REUSE_EXISTING = False  # set True to skip sampling when results already exist
 
 # Hyperparameters and spline configuration for this study
@@ -112,12 +112,14 @@ else:
         vi_progress_bar=True,
         target_accept_prob=TARGET_ACCEPT,
         max_tree_depth=MAX_TREE_DEPTH,
+        true_psd=(lisa_data.freq, lisa_data.true_matrix),
     )
+    idata.to_netcdf(str(RESULT_FN))
 
 if idata is None:
     raise RuntimeError("Inference data was not produced or loaded.")
 
-idata.to_netcdf(str(RESULT_FN))
+
 logger.info(f"Saved results to {RESULT_FN}")
 
 logger.info(idata)
@@ -162,62 +164,6 @@ empirical_welch = EmpiricalPSD.from_timeseries_data(
 )
 
 
-def _compute_coherence(psd: np.ndarray) -> np.ndarray:
-    n_freq, n_chan, _ = psd.shape
-    coh = np.zeros((n_freq, n_chan, n_chan))
-    for i in range(n_chan):
-        coh[:, i, i] = 1.0
-        for j in range(i + 1, n_chan):
-            denom = np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
-            coh[:, i, j] = np.abs(psd[:, i, j]) ** 2 / denom
-            coh[:, j, i] = coh[:, i, j]
-    return coh
-
-
-def plot_coherence_matrix(
-    freq: np.ndarray,
-    coh_true: np.ndarray,
-    coh_emp: np.ndarray,
-    out_path: Path,
-) -> None:
-    fig, axes = plt.subplots(3, 3, figsize=(10, 8), sharex=True, sharey=True)
-    labels = ["X", "Y", "Z"]
-    for i in range(3):
-        for j in range(3):
-            ax = axes[i, j]
-            if i < j:
-                ax.axis("off")
-                continue
-            if i == j:
-                ax.text(
-                    0.5,
-                    0.5,
-                    labels[i],
-                    ha="center",
-                    va="center",
-                    fontsize=12,
-                    transform=ax.transAxes,
-                )
-                ax.set_axis_off()
-                continue
-            ax.semilogx(freq, coh_true[:, i, j], label="True")
-            ax.semilogx(freq, coh_emp[:, i, j], label="Welch", alpha=0.7)
-            ax.set_ylim(0, 1.05)
-            ax.grid(alpha=0.3, which="both")
-            ax.set_title(f"{labels[i]}–{labels[j]}")
-            if i == 2 and j == 0:
-                ax.set_xlabel("Frequency [Hz]")
-            if i == 2 and j == 1:
-                ax.set_xlabel("Frequency [Hz]")
-            if i == 1 and j == 0:
-                ax.set_ylabel("Coherence")
-            if i == 1 and j == 0:
-                ax.legend()
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=200)
-    plt.close(fig)
-
-
 plot_psd_matrix(
     idata=idata,
     freq=freq_plot,
@@ -227,7 +173,7 @@ plot_psd_matrix(
     outdir=str(RESULTS_DIR),
     filename="psd_matrix.png",
     diag_yscale="log",
-    offdiag_yscale="log",
+    offdiag_yscale="linear",
     xscale="log",
     show_csd_magnitude=False,
     show_coherence=True,

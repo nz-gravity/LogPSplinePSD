@@ -28,11 +28,6 @@ def results_to_arviz(
     attributes: Dict[str, Any],
 ) -> az.InferenceData:
     """Unified ArviZ conversion for both univar and multivar cases."""
-    logger.debug(f"results_to_arviz: entry")
-    logger.debug(f"results_to_arviz: samples keys={list(samples.keys())}")
-    logger.debug(
-        f"results_to_arviz: sample_stats keys={list(sample_stats.keys())}"
-    )
 
     if isinstance(data, Periodogram):
         logger.debug("results_to_arviz: detected Periodogram")
@@ -49,14 +44,9 @@ def results_to_arviz(
 
     # Compute diagnostics if true_psd is provided (using posterior_psd from idata)
     if config.true_psd is not None:
-        logger.debug(
-            "results_to_arviz: computing PSD diagnostics (true_psd provided)"
-        )
         idata.attrs.update(
             _compute_psd_diagnostics(idata, config, data, model)
         )
-
-    logger.debug("results_to_arviz: exit")
     return idata
 
 
@@ -886,6 +876,152 @@ def _compute_matrix_riae(
     return float(numerator / denominator) if denominator != 0 else float("nan")
 
 
+def _compute_multivar_riae_diagnostics(
+    vi_psd: np.ndarray,
+    true_psd_real: np.ndarray,
+    freqs: np.ndarray,
+    psd_quantiles: Optional[Dict[str, Dict[str, np.ndarray]]] = None,
+) -> Dict[str, Any]:
+    """Collect multivariate RIAE-style diagnostics for VI outputs."""
+    diagnostics: Dict[str, Any] = {}
+    coverage_interval = [5.0, 95.0]
+    coverage_level = 0.90
+    coverage_value: Optional[float] = None
+
+    riae_matrix = _compute_matrix_riae(vi_psd, true_psd_real, freqs)
+    diagnostics["riae_matrix"] = float(riae_matrix)
+
+    per_channel_riae = []
+    for channel_idx in range(true_psd_real.shape[1]):
+        vi_diag = np.real(vi_psd[:, channel_idx, channel_idx])
+        true_diag = np.real(true_psd_real[:, channel_idx, channel_idx])
+        per_channel_riae.append(
+            float(_compute_riae(vi_diag, true_diag, freqs))
+        )
+    diagnostics["riae_per_channel"] = per_channel_riae
+
+    offdiag_mask = ~np.eye(true_psd_real.shape[1], dtype=bool)
+    diff_offdiag = np.linalg.norm(
+        (vi_psd - true_psd_real)[:, offdiag_mask], axis=1
+    )
+    true_offdiag = np.linalg.norm(true_psd_real[:, offdiag_mask], axis=1)
+    numerator_offdiag = float(simpson(diff_offdiag, x=freqs))
+    denominator_offdiag = float(simpson(true_offdiag, x=freqs))
+    diagnostics["riae_offdiag"] = (
+        float(numerator_offdiag / denominator_offdiag)
+        if denominator_offdiag != 0
+        else float("nan")
+    )
+
+    def _compute_coherence(psd_matrix: np.ndarray) -> np.ndarray:
+        diag_entries = np.real(np.diagonal(psd_matrix, axis1=1, axis2=2))
+        denom = np.sqrt(
+            np.maximum(diag_entries[..., None] * diag_entries[:, None, :], 0.0)
+        )
+        coherence = np.zeros_like(psd_matrix, dtype=np.float64)
+        valid = denom > 0
+        coherence[valid] = np.abs(psd_matrix[valid]) ** 2 / denom[valid] ** 2
+        return coherence
+
+    vi_coh = _compute_coherence(vi_psd)
+    true_coh = _compute_coherence(true_psd_real)
+    coh_diff = np.linalg.norm((vi_coh - true_coh)[:, offdiag_mask], axis=1)
+    coh_true = np.linalg.norm(true_coh[:, offdiag_mask], axis=1)
+    coh_num = float(simpson(coh_diff, x=freqs))
+    coh_den = float(simpson(coh_true, x=freqs))
+    diagnostics["coherence_riae"] = (
+        float(coh_num / coh_den) if coh_den != 0 else float("nan")
+    )
+
+    freq_quantiles = np.quantile(freqs, [0.0, 0.25, 0.5, 0.75, 1.0])
+    freq_edges = np.unique(freq_quantiles)
+    riae_bands = []
+    for start, end in zip(freq_edges[:-1], freq_edges[1:]):
+        mask = (freqs >= start) & (freqs <= end)
+        if np.count_nonzero(mask) < 2 or end <= start:
+            continue
+        riae_band = _compute_matrix_riae(
+            vi_psd[mask], true_psd_real[mask], freqs[mask]
+        )
+        riae_bands.append(
+            {
+                "start": float(start),
+                "end": float(end),
+                "value": float(riae_band),
+            }
+        )
+    if riae_bands:
+        diagnostics["riae_bands"] = riae_bands
+
+    real_quantiles = psd_quantiles.get("real") if psd_quantiles else None
+    imag_quantiles = psd_quantiles.get("imag") if psd_quantiles else None
+    if real_quantiles:
+        q05_real = real_quantiles.get("q05")
+        q50_real = real_quantiles.get("q50")
+        q95_real = real_quantiles.get("q95")
+        q05_imag = imag_quantiles.get("q05") if imag_quantiles else None
+        q50_imag = imag_quantiles.get("q50") if imag_quantiles else None
+        q95_imag = imag_quantiles.get("q95") if imag_quantiles else None
+
+        if (
+            q05_real is not None
+            and q95_real is not None
+            and q50_real is not None
+        ):
+            riae_low = _compute_matrix_riae(q05_real, true_psd_real, freqs)
+            riae_med = _compute_matrix_riae(q50_real, true_psd_real, freqs)
+            riae_high = _compute_matrix_riae(q95_real, true_psd_real, freqs)
+            diagnostics["riae_matrix_errorbars"] = [
+                float(riae_low),
+                float(riae_low),
+                float(riae_med),
+                float(riae_high),
+                float(riae_high),
+            ]
+
+        if q05_real is not None and q95_real is not None:
+            q05_im = (
+                np.asarray(q05_imag)
+                if q05_imag is not None
+                else np.zeros_like(q05_real)
+            )
+            q50_im = (
+                np.asarray(q50_imag)
+                if q50_imag is not None
+                else np.zeros_like(
+                    q50_real if q50_real is not None else q05_real
+                )
+            )
+            q95_im = (
+                np.asarray(q95_imag)
+                if q95_imag is not None
+                else np.zeros_like(q95_real)
+            )
+
+            q50_real_array = (
+                np.asarray(q50_real) if q50_real is not None else vi_psd
+            )
+            percentiles_stack = np.stack(
+                [
+                    np.asarray(q05_real) + 1j * q05_im,
+                    q50_real_array + 1j * q50_im,
+                    np.asarray(q95_real) + 1j * q95_im,
+                ],
+                axis=0,
+            )
+            coverage_value = _compute_ci_coverage_multivar(
+                percentiles_stack, true_psd_real
+            )
+
+    if coverage_value is not None and np.isfinite(coverage_value):
+        diagnostics["coverage"] = float(coverage_value)
+        diagnostics["ci_coverage"] = float(coverage_value)
+        diagnostics["coverage_interval"] = coverage_interval
+        diagnostics["coverage_level"] = coverage_level
+
+    return diagnostics
+
+
 def _compute_riae_errorbars(
     psd_samples: np.ndarray, true_psd: np.ndarray, freqs: np.ndarray
 ) -> Dict[str, float]:
@@ -949,5 +1085,19 @@ def _compute_ci_coverage_multivar(
 
 # Helper to transform complex matrices to a real-valued representation for CI checks
 def _complex_to_real(mat: np.ndarray) -> np.ndarray:
-    """Convert complex matrix into a real-valued stacked representation."""
-    return np.concatenate([np.real(mat), np.imag(mat)], axis=-1)
+    """Convert complex matrix into a real-valued matrix keeping original shape.
+
+    Real parts stay on/above the diagonal; imaginary parts are placed in the
+    strictly lower-triangular entries. Real inputs are returned unchanged.
+    """
+    arr = np.asarray(mat)
+    if not np.iscomplexobj(arr):
+        return arr
+
+    n = arr.shape[-1]
+    upper = np.triu(np.ones((n, n), dtype=bool))
+    lower = np.tril(np.ones((n, n), dtype=bool), k=-1)
+
+    out = np.where(upper, arr.real, 0.0)
+    out = np.where(lower, arr.imag, out)
+    return out

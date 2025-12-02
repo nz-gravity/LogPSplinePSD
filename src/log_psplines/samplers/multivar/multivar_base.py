@@ -23,6 +23,7 @@ from ...datatypes.multivar import (
 )
 from ...logger import logger
 from ...plotting import (
+    generate_vi_diagnostics_summary,
     plot_psd_matrix,
     save_vi_diagnostics_multivariate,
 )
@@ -131,7 +132,9 @@ class MultivarBaseSampler(BaseSampler):
                 outdir=self.config.outdir,
             )
 
-            self._save_vi_diagnostics(empirical_psd=empirical_psd)
+            self._save_vi_diagnostics(
+                empirical_psd=empirical_psd, log_summary=False
+            )
         except Exception as e:
             if self.config.verbose:
                 logger.warning(
@@ -188,7 +191,10 @@ class MultivarBaseSampler(BaseSampler):
         return psd * scale_matrix
 
     def _save_vi_diagnostics(
-        self, *, empirical_psd: Optional[EmpiricalPSD] = None
+        self,
+        *,
+        empirical_psd: Optional[EmpiricalPSD] = None,
+        log_summary: bool = True,
     ) -> None:
         """Persist VI diagnostics if available."""
         vi_diag = getattr(self, "_vi_diagnostics", None)
@@ -200,6 +206,9 @@ class MultivarBaseSampler(BaseSampler):
             freq=np.array(self.freq),
             empirical_psd=empirical_psd,
             diagnostics=vi_diag,
+        )
+        generate_vi_diagnostics_summary(
+            vi_diag, outdir=self.config.outdir, log=log_summary
         )
 
     def _create_vi_inference_data(
@@ -305,6 +314,24 @@ class MultivarBaseSampler(BaseSampler):
                 )
 
         dataset = Dataset(data_vars)
+        attr_keys = [
+            "riae_matrix",
+            "riae_per_channel",
+            "riae_offdiag",
+            "coherence_riae",
+            "coverage",
+            "ci_coverage",
+            "coverage_interval",
+            "coverage_level",
+            "riae_matrix_errorbars",
+        ]
+        attrs = {
+            key: diagnostics[key]
+            for key in attr_keys
+            if diagnostics.get(key) is not None
+        }
+        if attrs:
+            dataset.attrs.update(attrs)
         idata.add_groups(vi_posterior_psd=dataset)
 
     def _get_lnz(

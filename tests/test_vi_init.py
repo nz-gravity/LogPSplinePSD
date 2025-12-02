@@ -1,4 +1,5 @@
 import os
+import re
 
 import numpy as np
 import pytest
@@ -42,6 +43,15 @@ def test_univariate_vi_initialisation_smoke(outdir):
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd.png")
     assert os.path.exists(f"{outdir}/diagnostics/vi_elbo_trace.png")
+    summary_file = os.path.join(outdir, "vi_diagnostics_summary.txt")
+    assert os.path.exists(summary_file)
+    with open(summary_file) as f:
+        summary_text = f.read()
+    assert "PSIS k-hat" in summary_text
+    match = re.search(r"PSIS k-hat \(max\): ([0-9eE+\-.]+)", summary_text)
+    assert match is not None
+    khat_val = float(match.group(1))
+    assert ("PSIS alert" in summary_text) == (khat_val > 0.7)
 
 
 @pytest.mark.parametrize("num_chains", [1, 2])
@@ -95,6 +105,15 @@ def test_multivariate_vi_initialisation_smoke(outdir):
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd_matrix.png")
     assert os.path.exists(f"{outdir}/diagnostics/vi_elbo_trace.png")
+    summary_file = os.path.join(outdir, "vi_diagnostics_summary.txt")
+    assert os.path.exists(summary_file)
+    with open(summary_file) as f:
+        summary_text = f.read()
+    assert "PSIS k-hat" in summary_text
+    match = re.search(r"PSIS k-hat \(max\): ([0-9eE+\-.]+)", summary_text)
+    assert match is not None
+    khat_val = float(match.group(1))
+    assert ("PSIS alert" in summary_text) == (khat_val > 0.7)
 
 
 def test_multivariate_blocked_vi_initialisation_smoke(outdir):

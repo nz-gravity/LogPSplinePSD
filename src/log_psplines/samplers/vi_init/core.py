@@ -30,6 +30,8 @@ class VIResult:
     losses: jnp.ndarray
     params: Dict[str, Any]
     guide_name: str
+    guide: Any
+    latent_samples: Optional[jnp.ndarray] = None
     samples: Optional[Dict[str, jnp.ndarray]] = None
 
 
@@ -164,13 +166,11 @@ def fit_vi(
     state_key = getattr(run_result.state, "rng_key", rng_key)
     if posterior_draws and posterior_draws > 0:
         sample_key, _ = jax.random.split(state_key)
-        vi_samples = guide_obj.sample_posterior(
-            sample_key,
-            params,
-            sample_shape=(posterior_draws,),
-            *model_args,
-            **model_kwargs,
+        posterior_dist = guide_obj.get_posterior(params)
+        latent_samples = posterior_dist.sample(
+            sample_key, sample_shape=(posterior_draws,)
         )
+        vi_samples = guide_obj._unpack_and_constrain(latent_samples, params)
         means = _reduce_tree(vi_samples, lambda value: jnp.mean(value, axis=0))
         scales = _reduce_tree(vi_samples, lambda value: jnp.std(value, axis=0))
         samples = {
@@ -186,6 +186,7 @@ def fit_vi(
         }
         scales = {name: jnp.zeros_like(array) for name, array in means.items()}
         samples = None
+        latent_samples = None
 
     return VIResult(
         means=means,
@@ -193,5 +194,7 @@ def fit_vi(
         losses=losses,
         params=params,
         guide_name=guide_name,
+        guide=guide_obj,
+        latent_samples=latent_samples,
         samples=samples,
     )

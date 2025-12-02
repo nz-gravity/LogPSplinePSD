@@ -9,7 +9,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from numpyro.infer.util import init_to_value
+from scipy.integrate import simpson
 
+from ...arviz_utils.to_arviz import _compute_multivar_riae_diagnostics
 from ...logger import logger
 from ..utils import pspline_hyperparameter_initials
 from .core import fit_vi
@@ -22,7 +24,11 @@ from .guide import (
     suggest_guide_multivar,
     suggest_guide_univar,
 )
-from .mixin import VIInitialisationArtifacts
+from .mixin import (
+    VIInitialisationArtifacts,
+    _compute_psis_khat,
+    _interpret_khat,
+)
 
 
 def _cap_psd_draws(config, desired: int) -> int:
@@ -358,6 +364,7 @@ def compute_vi_artifacts_multivar(
         true_psd = None
         if sampler.config.true_psd is not None:
             true_psd = np.asarray(jax.device_get(sampler.config.true_psd))
+            true_psd = _rescale_psd(true_psd)
 
         diagnostics = {
             "psd_matrix": vi_psd_np,
@@ -372,6 +379,19 @@ def compute_vi_artifacts_multivar(
                 name: np.asarray(jax.device_get(value))
                 for name, value in vi_result.samples.items()
             }
+
+        if true_psd is not None and vi_psd_np is not None:
+            freqs = np.asarray(sampler.freq, dtype=np.float64)
+            true_psd_real = np.real(true_psd)
+            diagnostics.update(
+                _compute_multivar_riae_diagnostics(
+                    vi_psd_np,
+                    true_psd_real,
+                    freqs,
+                    psd_quantiles=psd_quantiles,
+                )
+            )
+
         return init_values, diagnostics
 
     return sampler._run_vi_initialisation(
@@ -454,6 +474,7 @@ def prepare_block_vi(
     vi_log_delta_means: List[np.ndarray] = []
     vi_theta_re_mean: Optional[np.ndarray] = None
     vi_theta_im_mean: Optional[np.ndarray] = None
+    psis_khat_values: List[float] = []
 
     posterior_draws = (
         sampler.config.vi_posterior_draws
@@ -603,30 +624,32 @@ def prepare_block_vi(
                     }
                 )
 
+            model_args = (
+                channel_index,
+                u_re_channel,
+                u_im_channel,
+                u_re_prev,
+                u_im_prev,
+                delta_basis,
+                delta_penalty,
+                sampler._theta_basis,
+                sampler._theta_penalty,
+                sampler.config.alpha_phi,
+                sampler.config.beta_phi,
+                alpha_phi_theta,
+                beta_phi_theta,
+                sampler.config.alpha_delta,
+                sampler.config.beta_delta,
+                sampler.nu,
+                sampler.freq_weights,
+            )
+
             vi_result = fit_vi(
                 model=block_model,
                 rng_key=vi_key,
                 vi_steps=sampler.config.vi_steps,
                 optimizer_lr=sampler.config.vi_lr,
-                model_args=(
-                    channel_index,
-                    u_re_channel,
-                    u_im_channel,
-                    u_re_prev,
-                    u_im_prev,
-                    delta_basis,
-                    delta_penalty,
-                    sampler._theta_basis,
-                    sampler._theta_penalty,
-                    sampler.config.alpha_phi,
-                    sampler.config.beta_phi,
-                    alpha_phi_theta,
-                    beta_phi_theta,
-                    sampler.config.alpha_delta,
-                    sampler.config.beta_delta,
-                    sampler.nu,
-                    sampler.freq_weights,
-                ),
+                model_args=model_args,
                 guide=guide_spec,
                 posterior_draws=sampler.config.vi_posterior_draws,
                 progress_bar=progress_bar,
@@ -646,6 +669,18 @@ def prepare_block_vi(
             if vi_result.samples is not None:
                 for name, value in vi_result.samples.items():
                     vi_samples[name] = np.asarray(jax.device_get(value))
+
+            psis_diag = _compute_psis_khat(
+                model=block_model,
+                model_args=model_args,
+                model_kwargs={},
+                guide=vi_result.guide,
+                guide_params=vi_result.params,
+                vi_samples=vi_result.samples,
+                latent_samples=vi_result.latent_samples,
+            )
+            if psis_diag is not None:
+                psis_khat_values.append(psis_diag["psis_khat_max"])
 
             weights_delta_name = f"weights_delta_{channel_index}"
             weights_delta = vi_result.means.get(weights_delta_name)
@@ -931,6 +966,33 @@ def prepare_block_vi(
     if vi_samples:
         diagnostics = diagnostics or {}
         diagnostics["vi_samples"] = vi_samples
+
+    if psis_khat_values:
+        diagnostics = diagnostics or {}
+        khat_array = np.asarray(psis_khat_values, dtype=float)
+        khat_max = float(np.nanmax(khat_array))
+        status, status_msg = _interpret_khat(khat_max)
+        diagnostics.update(
+            {
+                "psis_khat_per_block": khat_array,
+                "psis_khat_max": khat_max,
+                "psis_khat_status": status,
+                "psis_status_message": status_msg,
+                "psis_khat_threshold": 0.7,
+                "psis_flag_warn": status in ("warn", "fail"),
+                "psis_flag_critical": status == "fail",
+            }
+        )
+        log_psis = sampler.config.verbose or status in ("warn", "fail")
+        if log_psis:
+            logger.info(
+                f"VI PSIS k-hat max (blocked) = {khat_max:.3f} ({status_msg})"
+            )
+        if status == "fail":
+            logger.warning(
+                "VI PSIS diagnostic (blocked) indicates poor posterior fit. "
+                "Consider adjusting the guide or VI settings."
+            )
 
     return BlockVIArtifacts(
         init_strategies=init_strategies,

@@ -1,69 +1,82 @@
-import os
-from typing import Tuple
-
-import matplotlib.pyplot as plt
+import arviz as az
 import numpy as np
-import scipy
+from xarray import DataArray, Dataset
 
-from log_psplines.example_datasets.ar_data import ARData
-from log_psplines.psd_diagnostics import PSDDiagnostics
+from log_psplines.diagnostics import psd_compare, run_all_diagnostics
+from log_psplines.diagnostics._utils import compute_riae
 
 
-def test_plot_whitening_ar2(outdir):
-    outdir = os.path.join(outdir, "out_psd_diagnostics")
-    os.makedirs(outdir, exist_ok=True)
+def _build_idata_with_psd(truth: np.ndarray, q50_scale: float = 1.1):
+    freqs = np.linspace(0.0, 1.0, truth.size)
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=float)
+    q05 = truth * 0.9
+    q50 = truth * q50_scale
+    q95 = truth * 1.2
+    psd_values = np.stack([q05, q50, q95], axis=0)
 
-    ar_data = ARData(order=2, duration=4.0, fs=512.0, sigma=1.0, seed=42)
-
-    # add 0 element to freq, psd, and reference_psd
-    freqs = np.concatenate(([0], ar_data.periodogram.freqs))
-    psd = np.concatenate(
-        (
-            [ar_data.periodogram.power[0]],
-            np.atleast_1d(ar_data.periodogram.power),
-        )
+    posterior_psd = Dataset(
+        {
+            "psd": DataArray(
+                psd_values,
+                dims=["percentile", "freq"],
+                coords={"percentile": percentiles, "freq": freqs},
+            )
+        }
     )
-    reference_psd = np.concatenate(
-        ([ar_data.psd_theoretical[0]], ar_data.psd_theoretical)
+
+    idata = az.from_dict(
+        posterior={"x": np.random.randn(2, 20)},
+        sample_stats={
+            "diverging": np.zeros((2, 20)),
+            "acceptance_rate": np.full((2, 20), 0.8),
+        },
+    )
+    idata.add_groups(posterior_psd=posterior_psd)
+    return idata, freqs, psd_values
+
+
+def test_psd_compare_matches_manual_riae():
+    truth = np.linspace(1.0, 2.0, 5)
+    idata, freqs, psd_values = _build_idata_with_psd(truth)
+    result = psd_compare.run(idata=idata, truth=truth)
+
+    expected_riae = compute_riae(psd_values[1], truth, freqs)
+    assert np.isclose(result["riae"], expected_riae)
+    assert 0.0 < result["coverage"] <= 1.0
+
+
+def test_run_all_orchestrates_modules():
+    rng = np.random.default_rng(0)
+    truth = np.linspace(1.0, 2.0, 5)
+    idata, _, _ = _build_idata_with_psd(truth, q50_scale=1.05)
+
+    signals = rng.normal(size=100)
+    vi_diag = {
+        "losses": np.array([0.0, -0.5, -0.7]),
+        "psis_khat_max": 0.6,
+        "psis_moment_summary": {
+            "hyperparameters": [{"bias_pct": 12.0, "var_ratio": 0.9}],
+            "weights": {"var_ratio_median": 1.1},
+        },
+    }
+
+    result = run_all_diagnostics(
+        idata=idata,
+        truth=truth,
+        signals=signals,
+        idata_vi=vi_diag,
     )
 
-    psd_diag = PSDDiagnostics(
-        ts_data=ar_data.ts.y,
-        fs=ar_data.fs,
-        psd=psd,
-        freqs=freqs,
-        reference_psd=reference_psd,
-        fftlength=1.0,
-        overlap=0.5,
-    )
-    psd_diag.plot_diagnostics(f"{outdir}/ar_psd_diagostics.png")
+    expected_modules = {
+        "mcmc",
+        "psd_compare",
+        "psd_bands",
+        "time_domain",
+        "whitening",
+        "vi",
+    }
+    assert expected_modules.issubset(set(result.keys()))
 
-
-def test_lvk_psd_diagnostics(outdir):
-    from log_psplines.example_datasets.lvk_data import LVKData
-
-    outdir = os.path.join(outdir, "out_psd_diagnostics")
-    os.makedirs(outdir, exist_ok=True)
-
-    lvk_data = LVKData.download_data(
-        detector="L1", gps_start=1126259462, duration=4, fmin=20, fmax=2048
-    )
-    lvk_data.plot_psd(fname=os.path.join(outdir, "lvk_psd_analysis.png"))
-    ref_psd = scipy.signal.medfilt(lvk_data.psd, kernel_size=65)
-    ref_psd = np.where(np.isnan(ref_psd), 0, ref_psd)
-
-    fmask = (lvk_data.freqs >= 20) & (lvk_data.freqs <= 2048)
-    freqs = lvk_data.freqs[fmask]
-    psd = lvk_data.psd[fmask]
-    ref_psd = ref_psd[fmask]
-
-    psd_diag = PSDDiagnostics(
-        ts_data=lvk_data.strain,
-        fs=4096,
-        psd=psd,
-        freqs=freqs,
-        reference_psd=ref_psd,
-        fftlength=0.5,
-        overlap=0,
-    )
-    psd_diag.plot_diagnostics(f"{outdir}/lvk_psd_diagostics.png")
+    for module_metrics in result.values():
+        assert isinstance(module_metrics, dict)
+        assert all(isinstance(v, float) for v in module_metrics.values())

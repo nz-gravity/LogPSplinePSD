@@ -324,7 +324,7 @@ def _create_multivar_inference_data(
                 "channel_stds length must match number of channels in FFT data."
             )
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
-        factor_matrix = scale_matrix / sf if sf != 0 else scale_matrix
+        factor_matrix = scale_matrix
         factor_4d = factor_matrix[None, None, :, :]
         psd_real_q_rescaled = psd_real_q * factor_4d
         psd_imag_q_rescaled = psd_imag_q * factor_4d

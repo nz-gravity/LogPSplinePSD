@@ -164,11 +164,6 @@ def compute_vi_artifacts_multivar(
             scale_matrix = np.outer(channel_stds, channel_stds).astype(
                 np.float32
             )
-            scale_matrix = (
-                scale_matrix / scaling
-                if float(scaling or 1.0) != 0
-                else scale_matrix
-            )
             factor_matrix = scale_matrix
             scalar_factor = None
         else:
@@ -443,11 +438,6 @@ def prepare_block_vi(
     if channel_stds is not None:
         channel_stds = np.asarray(channel_stds, dtype=np.float32)
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
-        scale_matrix = (
-            scale_matrix / scaling
-            if float(scaling or 1.0) != 0
-            else scale_matrix
-        )
         factor_matrix = scale_matrix
         scalar_factor = None
     else:

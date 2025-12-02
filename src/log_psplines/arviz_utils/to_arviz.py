@@ -325,7 +325,7 @@ def _create_multivar_inference_data(
             )
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
         factor_matrix = scale_matrix
-        factor_4d = scale_matrix[None, None, :, :]
+        factor_4d = factor_matrix[None, None, :, :]
         psd_real_q_rescaled = psd_real_q * factor_4d
         psd_imag_q_rescaled = psd_imag_q * factor_4d
     else:
@@ -349,6 +349,9 @@ def _create_multivar_inference_data(
     raw_psd = getattr(fft_data, "raw_psd", None)
     if raw_psd is not None:
         observed_csd = np.asarray(raw_psd, dtype=np.complex128)
+        # raw_psd already has scaling_factor applied, so remove it before rescaling
+        if channel_stds is not None:
+            observed_csd = observed_csd / sf
     elif fft_data.u_re is not None and fft_data.u_im is not None:
         u_re = np.asarray(fft_data.u_re, dtype=np.float64)
         u_im = np.asarray(fft_data.u_im, dtype=np.float64)
@@ -368,6 +371,9 @@ def _create_multivar_inference_data(
             scaling_factor=float(getattr(fft_data, "scaling_factor", 1.0)),
             weights=weights,
         )
+        # wishart_u_to_psd already has scaling_factor applied, so remove it before rescaling
+        if channel_stds is not None:
+            observed_csd = observed_csd / sf
     else:
         y_re = observed_fft_re_rescaled
         y_im = observed_fft_im_rescaled
@@ -381,7 +387,7 @@ def _create_multivar_inference_data(
         # Keep complex form for consistency
 
     if channel_stds is not None and factor_matrix is not None:
-        observed_csd = observed_csd * (factor_matrix[None, :, :] / sf)
+        observed_csd = observed_csd * factor_matrix[None, :, :]
     else:
         observed_csd = observed_csd * scalar_factor
 

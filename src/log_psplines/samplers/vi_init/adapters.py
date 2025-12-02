@@ -426,9 +426,7 @@ def prepare_block_vi(
     if channel_stds is not None:
         channel_stds = np.asarray(channel_stds, dtype=np.float32)
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
-        # Match multivariate rescaling used in samplers/arviz: undo global
-        # standardisation via ``scaling_factor`` and restore per-channel units.
-        factor_matrix = scale_matrix / scaling
+        factor_matrix = scale_matrix
         scalar_factor = None
     else:
         factor_matrix = None

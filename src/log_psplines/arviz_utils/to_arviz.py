@@ -347,8 +347,10 @@ def _create_multivar_inference_data(
 
     # Compute and rescale observed cross-spectral density (periodogram)
     raw_psd = getattr(fft_data, "raw_psd", None)
+    psd_has_global_scale = False
     if raw_psd is not None:
         observed_csd = np.asarray(raw_psd, dtype=np.complex128)
+        psd_has_global_scale = True
         # raw_psd already has scaling_factor applied, so remove it before rescaling
         if channel_stds is not None:
             observed_csd = observed_csd / sf
@@ -371,6 +373,7 @@ def _create_multivar_inference_data(
             scaling_factor=float(getattr(fft_data, "scaling_factor", 1.0)),
             weights=weights,
         )
+        psd_has_global_scale = True
         # wishart_u_to_psd already has scaling_factor applied, so remove it before rescaling
         if channel_stds is not None:
             observed_csd = observed_csd / sf
@@ -389,7 +392,8 @@ def _create_multivar_inference_data(
     if channel_stds is not None and factor_matrix is not None:
         observed_csd = observed_csd * factor_matrix[None, :, :]
     else:
-        observed_csd = observed_csd * scalar_factor
+        if not psd_has_global_scale:
+            observed_csd = observed_csd * scalar_factor
 
     if config.verbose:
         logger.info(

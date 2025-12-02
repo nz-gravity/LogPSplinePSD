@@ -6,6 +6,7 @@ import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..arviz_utils.rhat import extract_rhat_values
 from ..logger import logger
 from .base import PlotConfig, safe_plot, setup_plot_style
 
@@ -1833,9 +1834,10 @@ def generate_diagnostics_summary(idata, outdir):
 
     # Rhat
     try:
-        rhat = az.rhat(idata)
-        rhat_vals = np.asarray(rhat.to_array()).ravel()
-        rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
+        if idata.posterior.sizes.get("chain", 1) > 1:
+            rhat_vals = extract_rhat_values(idata)
+        else:
+            rhat_vals = np.array([])
         if rhat_vals.size:
             summary.append(
                 f"Rhat: min={rhat_vals.min():.3f}, mean={rhat_vals.mean():.3f}, max={rhat_vals.max():.3f}"

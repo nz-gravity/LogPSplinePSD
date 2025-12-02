@@ -56,6 +56,8 @@ def _blocked_channel_model(
     penalty_theta: jnp.ndarray,
     alpha_phi: float,
     beta_phi: float,
+    alpha_phi_theta: float,
+    beta_phi_theta: float,
     alpha_delta: float,
     beta_delta: float,
     nu: int,
@@ -124,8 +126,8 @@ def _blocked_channel_model(
                 phi_name=f"phi_{theta_prefix}",
                 weights_name=f"weights_{theta_prefix}",
                 penalty_matrix=penalty_theta,
-                alpha_phi=alpha_phi,
-                beta_phi=beta_phi,
+                alpha_phi=alpha_phi_theta,
+                beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
             )
@@ -140,8 +142,8 @@ def _blocked_channel_model(
                 phi_name=f"phi_{theta_im_prefix}",
                 weights_name=f"weights_{theta_im_prefix}",
                 penalty_matrix=penalty_theta,
-                alpha_phi=alpha_phi,
-                beta_phi=beta_phi,
+                alpha_phi=alpha_phi_theta,
+                beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
             )
@@ -214,6 +216,19 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     vi_guide: Optional[str] = None
     vi_posterior_draws: int = 256
     vi_progress_bar: Optional[bool] = None
+
+    # Optional separate hyperparameters for off-diagonal theta P-spline blocks.
+    # When left as ``None`` they default to the diagonal hyperparameters
+    # ``alpha_phi`` and ``beta_phi``.
+    alpha_phi_theta: Optional[float] = None
+    beta_phi_theta: Optional[float] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.alpha_phi_theta is None:
+            self.alpha_phi_theta = self.alpha_phi
+        if self.beta_phi_theta is None:
+            self.beta_phi_theta = self.beta_phi
 
 
 class MultivarBlockedNUTSSampler(MultivarBaseSampler):
@@ -374,6 +389,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self._theta_penalty,
                 self.config.alpha_phi,
                 self.config.beta_phi,
+                self.config.alpha_phi_theta,
+                self.config.beta_phi_theta,
                 self.config.alpha_delta,
                 self.config.beta_delta,
                 self.nu,

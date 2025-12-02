@@ -509,16 +509,37 @@ def prepare_block_vi(
             u_im_prev = sampler.u_im[:, :channel_index, :]
 
             # Build init values consistent with NUTS defaults (non-centred phi)
-            delta_init, phi_init = pspline_hyperparameter_initials(
-                sampler.config.alpha_phi,
-                sampler.config.beta_phi,
+            # Use diagonal hyperparameters for delta_j and theta-specific ones
+            # for the off-diagonal blocks.
+            alpha_phi_delta = sampler.config.alpha_phi
+            beta_phi_delta = sampler.config.beta_phi
+            alpha_phi_theta = getattr(
+                sampler.config, "alpha_phi_theta", sampler.config.alpha_phi
+            )
+            beta_phi_theta = getattr(
+                sampler.config, "beta_phi_theta", sampler.config.beta_phi
+            )
+
+            delta_init, phi_delta_init = pspline_hyperparameter_initials(
+                alpha_phi_delta,
+                beta_phi_delta,
                 sampler.config.alpha_delta,
                 sampler.config.beta_delta,
                 divide_phi_by_delta=True,
             )
+            _, phi_theta_init = pspline_hyperparameter_initials(
+                alpha_phi_theta,
+                beta_phi_theta,
+                sampler.config.alpha_delta,
+                sampler.config.beta_delta,
+                divide_phi_by_delta=True,
+            )
+
             init_values = {
                 f"delta_{channel_index}": jnp.asarray(delta_init),
-                f"phi_delta_{channel_index}": jnp.log(jnp.asarray(phi_init)),
+                f"phi_delta_{channel_index}": jnp.log(
+                    jnp.asarray(phi_delta_init)
+                ),
                 f"weights_delta_{channel_index}": delta_weights_init,
             }
             if theta_count > 0:
@@ -536,7 +557,7 @@ def prepare_block_vi(
                 init_values.update(
                     {
                         f"phi_theta_re_{channel_index}_{theta_idx}": jnp.log(
-                            jnp.asarray(phi_init)
+                            jnp.asarray(phi_theta_init)
                         )
                         for theta_idx in range(theta_count)
                     }
@@ -558,7 +579,7 @@ def prepare_block_vi(
                 init_values.update(
                     {
                         f"phi_theta_im_{channel_index}_{theta_idx}": jnp.log(
-                            jnp.asarray(phi_init)
+                            jnp.asarray(phi_theta_init)
                         )
                         for theta_idx in range(theta_count)
                     }
@@ -589,6 +610,8 @@ def prepare_block_vi(
                     sampler._theta_penalty,
                     sampler.config.alpha_phi,
                     sampler.config.beta_phi,
+                    alpha_phi_theta,
+                    beta_phi_theta,
                     sampler.config.alpha_delta,
                     sampler.config.beta_delta,
                     sampler.nu,

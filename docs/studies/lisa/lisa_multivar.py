@@ -73,7 +73,7 @@ logger.info(
 )
 
 
-FMIN, FMAX = 10**-4, 3 * 10**-2
+FMIN, FMAX = 10**-4, 10**-1
 
 fft_data = standardized_ts.to_wishart_stats(
     n_blocks=n_blocks,
@@ -85,7 +85,7 @@ logger.info(fft_data)
 freqs = np.asarray(fft_data.freq)
 coarse_cfg = CoarseGrainConfig(
     enabled=True,
-    f_transition=1e-3,
+    f_transition=5 * 10**-4,
     n_log_bins=200,
     f_min=FMIN,
     f_max=FMAX,

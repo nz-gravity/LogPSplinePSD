@@ -2000,6 +2000,83 @@ def generate_vi_diagnostics_summary(
             lines.append(
                 f"PSIS alert: k-hat exceeds {threshold:.1f} -> posterior may be unreliable"
             )
+    moment_summary = diagnostics.get("psis_moment_summary") or {}
+    weight_stats = moment_summary.get("weights")
+    if weight_stats:
+        frac = weight_stats.get("frac_outside")
+        lines.append(
+            "Weight var_ratio "
+            + ", ".join(
+                [
+                    f"min={weight_stats.get('var_ratio_min', np.nan):.2f}",
+                    f"median={weight_stats.get('var_ratio_median', np.nan):.2f}",
+                    f"max={weight_stats.get('var_ratio_max', np.nan):.2f}",
+                    (
+                        f"outside[0.7,1.3]={frac*100:.1f}%"
+                        if frac is not None
+                        else "outside[0.7,1.3]=n/a"
+                    ),
+                ]
+            )
+        )
+    hyper_params = moment_summary.get("hyperparameters") or []
+    if hyper_params:
+        lines.append("PSIS moments (hyperparameters):")
+        for entry in hyper_params:
+            status = diagnostics.get("psis_status_message") or ""
+            var_ratio = entry["var_ratio"]
+            bias_pct = entry["bias_pct"]
+            thresholds = moment_summary.get("thresholds", {})
+            bias_thr = thresholds.get("bias_threshold", 0.05) * 100.0
+            var_low = thresholds.get("var_low", 0.7)
+            var_high = thresholds.get("var_high", 1.3)
+            status_label = "OK"
+            if abs(bias_pct) > bias_thr:
+                status_label = f"⚠ bias>{bias_thr:.0f}%"
+            if var_ratio < var_low:
+                status_label = "⚠ under-dispersed"
+            elif var_ratio > var_high:
+                status_label = "⚠ over-dispersed"
+            lines.append(
+                f"  {entry['param']}: "
+                f"μ_vi={entry['vi_mean']:.3g}, μ_psis={entry['psis_mean']:.3g}, "
+                f"bias={entry['bias_pct']:.1f}%, "
+                f"σ_vi={entry['vi_std']:.3g}, σ_psis={entry['psis_std']:.3g}, "
+                f"var_ratio={entry['var_ratio']:.2f} {status_label}"
+            )
+    corr_summary = diagnostics.get("psis_correlation_summary") or {}
+    for label, stats in corr_summary.items():
+        if not stats:
+            continue
+        line = (
+            f"Corr ({label}): max|r|={stats.get('max_abs', np.nan):.3f}, "
+            f"median|r|={stats.get('median_abs', np.nan):.3f}"
+        )
+        if "mean_corr_diff" in stats:
+            line += f", mean|Δ| vs ref={stats['mean_corr_diff']:.3f}"
+        lines.append(line)
+
+    # Overall quality indicator
+    quality = "OK"
+    if diagnostics.get("psis_flag_critical"):
+        quality = "❌ NOT TRUSTWORTHY"
+    elif diagnostics.get("psis_flag_warn"):
+        quality = "⚠ USE WITH CAUTION"
+    else:
+        # Escalate if hyperparameter moments look off
+        for entry in hyper_params:
+            thresholds = moment_summary.get("thresholds", {})
+            bias_thr = thresholds.get("bias_threshold", 0.05) * 100.0
+            var_low = thresholds.get("var_low", 0.7)
+            var_high = thresholds.get("var_high", 1.3)
+            if (
+                abs(entry["bias_pct"]) > bias_thr
+                or entry["var_ratio"] < var_low
+                or entry["var_ratio"] > var_high
+            ):
+                quality = "⚠ USE WITH CAUTION"
+                break
+    lines.append(f"Overall VI Quality: {quality}")
 
     losses = diagnostics.get("losses")
     if losses is not None:

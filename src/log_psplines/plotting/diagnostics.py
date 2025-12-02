@@ -865,6 +865,20 @@ def _plot_acceptance_diagnostics_blockaware(idata, config):
     plt.tight_layout()
 
 
+def _get_channel_indices(sample_stats, base_key: str) -> set:
+    """Return set of channel indices for the given ``base_key`` prefix."""
+
+    prefix = f"{base_key}_channel_"
+    indices = set()
+    for key in sample_stats:
+        if isinstance(key, str) and key.startswith(prefix):
+            try:
+                indices.add(int(key.replace(prefix, "")))
+            except Exception:
+                continue
+    return indices
+
+
 def _plot_nuts_diagnostics_blockaware(idata, config):
     """NUTS diagnostics supporting per‑channel (blocked) diagnostics fields.
 
@@ -1010,6 +1024,104 @@ def _plot_nuts_diagnostics_blockaware(idata, config):
     plt.tight_layout()
 
 
+def _plot_single_nuts_block(idata, config, channel_idx: int):
+    """NUTS diagnostics for a single blocked channel."""
+
+    def _get(key):
+        full_key = f"{key}_channel_{channel_idx}"
+        return (
+            idata.sample_stats[full_key].values.flatten()
+            if full_key in idata.sample_stats
+            else None
+        )
+
+    energy = _get("energy")
+    potential = _get("potential_energy")
+    num_steps = _get("num_steps")
+    accept_prob = _get("accept_prob")
+
+    fig, axes = plt.subplots(2, 2, figsize=config.figsize)
+
+    # Energy traces
+    ax = axes[0, 0]
+    plotted = False
+    if energy is not None:
+        ax.plot(energy, alpha=0.7, lw=1, label="H")
+        plotted = True
+    if potential is not None:
+        ax.plot(potential, alpha=0.7, lw=1, label="P")
+        plotted = True
+    if not plotted:
+        ax.text(0.5, 0.5, "Energy data\nunavailable", ha="center", va="center")
+    ax.set_title(f"Channel {channel_idx} Energy")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Energy")
+    ax.grid(True, alpha=0.3)
+    if plotted:
+        ax.legend(loc="best", fontsize="small")
+
+    # Acceptance trace
+    ax = axes[0, 1]
+    if accept_prob is not None:
+        ax.axhspan(0.7, 0.9, alpha=0.1, color="green")
+        ax.axhspan(0.0, 0.6, alpha=0.1, color="red")
+        ax.axhspan(0.9, 1.0, alpha=0.1, color="orange")
+        ax.plot(accept_prob, alpha=0.8, lw=1, color="purple")
+        ax.axhline(0.8, color="red", linestyle="--", lw=1.5, label="target")
+        ax.set_ylim(0, 1)
+        ax.legend(loc="best", fontsize="small")
+        ax.grid(True, alpha=0.3)
+    else:
+        ax.text(
+            0.5, 0.5, "Acceptance data\nunavailable", ha="center", va="center"
+        )
+    ax.set_title(f"Channel {channel_idx} Acceptance")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("accept_prob")
+
+    # Steps histogram
+    ax = axes[1, 0]
+    if num_steps is not None and num_steps.size:
+        ax.hist(num_steps, bins=20, alpha=0.7, edgecolor="black")
+        ax.set_xlabel("Steps")
+        ax.set_ylabel("Trajectories")
+        ax.grid(True, alpha=0.3)
+    else:
+        ax.text(0.5, 0.5, "Steps data\nunavailable", ha="center", va="center")
+    ax.set_title(f"Channel {channel_idx} Leapfrog Steps")
+
+    # Summary stats
+    ax = axes[1, 1]
+    stats_lines = [f"Channel {channel_idx} summary:"]
+    if energy is not None:
+        stats_lines.append(
+            f"  H μ={np.mean(energy):.2f}, σ={np.std(energy):.2f}"
+        )
+    if potential is not None:
+        stats_lines.append(
+            f"  P μ={np.mean(potential):.2f}, σ={np.std(potential):.2f}"
+        )
+    if num_steps is not None:
+        stats_lines.append(
+            f"  steps μ={np.mean(num_steps):.1f}, max={np.max(num_steps):.0f}"
+        )
+    if accept_prob is not None:
+        stats_lines.append(f"  accept μ={np.mean(accept_prob):.3f}")
+
+    ax.text(
+        0.05,
+        0.95,
+        "\n".join(stats_lines),
+        transform=ax.transAxes,
+        va="top",
+        family="monospace",
+    )
+    ax.axis("off")
+    ax.set_title("Summary")
+
+    plt.tight_layout()
+
+
 def _create_sampler_diagnostics(idata, diag_dir, config):
     """Create sampler-specific diagnostics."""
 
@@ -1044,6 +1156,29 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
             _plot_nuts_diagnostics_blockaware(idata, config)
 
         plot_nuts()
+
+        # Per‑channel NUTS diagnostics for blocked samplers
+        channel_indices = _get_channel_indices(
+            idata.sample_stats, "accept_prob"
+        )
+        channel_indices |= _get_channel_indices(idata.sample_stats, "energy")
+        channel_indices |= _get_channel_indices(
+            idata.sample_stats, "potential_energy"
+        )
+        channel_indices |= _get_channel_indices(
+            idata.sample_stats, "num_steps"
+        )
+
+        for channel_idx in sorted(channel_indices):
+
+            @safe_plot(
+                f"{diag_dir}/nuts_block_{channel_idx}_diagnostics.png",
+                config.dpi,
+            )
+            def plot_nuts_block(channel_idx=channel_idx):
+                _plot_single_nuts_block(idata, config, channel_idx)
+
+            plot_nuts_block()
     elif has_mh:
 
         @safe_plot(f"{diag_dir}/mh_step_sizes.png", config.dpi)

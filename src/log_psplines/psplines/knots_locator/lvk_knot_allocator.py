@@ -158,10 +158,7 @@ class LvkKnotAllocator:
             peak_count = sum(1 for _, _, t in self.bin_regions if t == "peak")
             zero_count = len(self.bin_regions) - peak_count
             logger.info(
-                "Adaptive binning (d=%d): %d peak regions, %d zero regions",
-                self.d,
-                peak_count,
-                zero_count,
+                f"Adaptive binning (d={self.d}): {peak_count} peak regions, {zero_count} zero regions"
             )
         else:
             band_idxs = np.where(band_mask)[0]

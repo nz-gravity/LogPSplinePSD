@@ -78,7 +78,7 @@ def init_knots(
 
     # Normalize to [0, 1] and ensure proper ordering
     original_knots = knots.copy()
-    knots = np.array(knots, dtype=np.float128)
+    knots = np.array(knots, dtype=np.float64)
     knots = np.sort(knots)
     knots = (knots - min_freq) / (max_freq - min_freq)
     knots = np.clip(knots, 0.0, 1.0)

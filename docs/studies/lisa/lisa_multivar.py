@@ -5,17 +5,13 @@ os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
 
 # Print number of JAX devices
 import jax
+import matplotlib.pyplot as plt
 import numpy as np
 
 from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.datatypes.multivar import EmpiricalPSD
-from log_psplines.example_datasets.lisa_data import (
-    LISAData,
-    covariance_matrix,
-    lisa_link_noises_ldc,
-    tdi2_psd_and_csd,
-)
+from log_psplines.example_datasets.lisa_data import LISAData
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting.psd_matrix import plot_psd_matrix
@@ -30,7 +26,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 RESULT_FN = RESULTS_DIR / "inference_data.nc"
 
-RUN_VI_ONLY = False
+RUN_VI_ONLY = True
 REUSE_EXISTING = False  # set True to skip sampling when results already exist
 
 # Hyperparameters and spline configuration for this study
@@ -40,7 +36,7 @@ N_KNOTS = 50
 TARGET_ACCEPT = 0.95
 MAX_TREE_DEPTH = 12
 
-lisa_data = LISAData.load(data_path="data/tdi.h5")
+lisa_data = LISAData.load()
 lisa_data.plot(f"{RESULTS_DIR}/lisa_raw.png")
 
 # Trim data so that n_time is divisible by the desired number of blocks.
@@ -94,8 +90,8 @@ else:
     idata = run_mcmc(
         data=raw_series,
         sampler="multivar_blocked_nuts",
-        n_samples=1500,
-        n_warmup=1500,
+        n_samples=300,
+        n_warmup=300,
         num_chains=4,
         n_knots=N_KNOTS,
         degree=2,
@@ -109,7 +105,7 @@ else:
         fmax=FMAX,
         alpha_delta=ALPHA_DELTA,
         beta_delta=BETA_DELTA,
-        only_vi=False,
+        only_vi=RUN_VI_ONLY,
         vi_steps=30_000,
         vi_lr=1e-3,
         vi_posterior_draws=256,
@@ -128,16 +124,99 @@ logger.info(idata)
 
 freq_plot = np.asarray(idata["posterior_psd"]["freq"].values)
 
-Spm_plot, Sop_plot = lisa_link_noises_ldc(freq_plot, fs=fs, fmin=fmin_full)
-diag_true, csd_true = tdi2_psd_and_csd(freq_plot, Spm_plot, Sop_plot)
-true_psd_physical = covariance_matrix(diag_true, csd_true)
-true_psd_standardized = true_psd_physical
+
+def _interp_matrix(
+    freq_src: np.ndarray, mat: np.ndarray, freq_tgt: np.ndarray
+):
+    if freq_src.shape == freq_tgt.shape and np.allclose(freq_src, freq_tgt):
+        return np.asarray(mat)
+    flat = mat.reshape(mat.shape[0], -1)
+    real_interp = np.vstack(
+        [
+            np.interp(freq_tgt, freq_src, flat[:, i].real)
+            for i in range(flat.shape[1])
+        ]
+    ).T
+    imag_interp = np.vstack(
+        [
+            np.interp(freq_tgt, freq_src, flat[:, i].imag)
+            for i in range(flat.shape[1])
+        ]
+    ).T
+    return (real_interp + 1j * imag_interp).reshape(
+        (freq_tgt.size,) + mat.shape[1:]
+    )
+
+
+true_psd_physical = _interp_matrix(
+    np.asarray(lisa_data.freq), np.asarray(lisa_data.true_matrix), freq_plot
+)
 
 # Traditional Welch-style empirical PSD on the original (unstandardised) data
 empirical_welch = EmpiricalPSD.from_timeseries_data(
     data=y_full,
     fs=fs,
+    nperseg=4096,
+    noverlap=0,
+    window="hann",
 )
+
+
+def _compute_coherence(psd: np.ndarray) -> np.ndarray:
+    n_freq, n_chan, _ = psd.shape
+    coh = np.zeros((n_freq, n_chan, n_chan))
+    for i in range(n_chan):
+        coh[:, i, i] = 1.0
+        for j in range(i + 1, n_chan):
+            denom = np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
+            coh[:, i, j] = np.abs(psd[:, i, j]) ** 2 / denom
+            coh[:, j, i] = coh[:, i, j]
+    return coh
+
+
+def plot_coherence_matrix(
+    freq: np.ndarray,
+    coh_true: np.ndarray,
+    coh_emp: np.ndarray,
+    out_path: Path,
+) -> None:
+    fig, axes = plt.subplots(3, 3, figsize=(10, 8), sharex=True, sharey=True)
+    labels = ["X", "Y", "Z"]
+    for i in range(3):
+        for j in range(3):
+            ax = axes[i, j]
+            if i < j:
+                ax.axis("off")
+                continue
+            if i == j:
+                ax.text(
+                    0.5,
+                    0.5,
+                    labels[i],
+                    ha="center",
+                    va="center",
+                    fontsize=12,
+                    transform=ax.transAxes,
+                )
+                ax.set_axis_off()
+                continue
+            ax.semilogx(freq, coh_true[:, i, j], label="True")
+            ax.semilogx(freq, coh_emp[:, i, j], label="Welch", alpha=0.7)
+            ax.set_ylim(0, 1.05)
+            ax.grid(alpha=0.3, which="both")
+            ax.set_title(f"{labels[i]}–{labels[j]}")
+            if i == 2 and j == 0:
+                ax.set_xlabel("Frequency [Hz]")
+            if i == 2 and j == 1:
+                ax.set_xlabel("Frequency [Hz]")
+            if i == 1 and j == 0:
+                ax.set_ylabel("Coherence")
+            if i == 1 and j == 0:
+                ax.legend()
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=200)
+    plt.close(fig)
+
 
 plot_psd_matrix(
     idata=idata,
@@ -150,8 +229,9 @@ plot_psd_matrix(
     diag_yscale="log",
     offdiag_yscale="log",
     xscale="log",
-    show_csd_magnitude=True,
-    show_coherence=False,
+    show_csd_magnitude=False,
+    show_coherence=True,
     overlay_vi=True,
     freq_range=(FMIN, FMAX),
+    true_psd=true_psd_physical,
 )

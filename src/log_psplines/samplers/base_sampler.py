@@ -157,14 +157,10 @@ class BaseSampler(ABC):
 
                 if rhat_vals is not None and rhat_vals.size:
                     logger.info(
-                        "  Rhat: min=%.3f, mean=%.3f, max=%.3f",
-                        np.min(rhat_vals),
-                        np.mean(rhat_vals),
-                        np.max(rhat_vals),
+                        f"  Rhat: min={np.min(rhat_vals):.3f}, mean={np.mean(rhat_vals):.3f}, max={np.max(rhat_vals):.3f}"
                     )
                     logger.info(
-                        "  Rhat ≤ 1.01: %.1f%%",
-                        (rhat_vals <= 1.01).mean() * 100,
+                        f"  Rhat ≤ 1.01: {(rhat_vals <= 1.01).mean() * 100:.1f}%"
                     )
 
                 if "riae" in idata.attrs:

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from log_psplines.example_datasets.ar_data import ARData
+from log_psplines.example_datasets.lisa_data import LISAData
 from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.example_datasets.varma_data import VARMAData
 
@@ -27,6 +28,46 @@ def test_ar(outdir):
 
     plt.tight_layout()
     plt.savefig(f"{outdir}/ar_processes.png", bbox_inches="tight", dpi=300)
+
+
+def test_lisa_data(outdir):
+    outdir = f"{outdir}/{OUT}"
+    os.makedirs(outdir, exist_ok=True)
+
+    lisa_data = LISAData.load()
+    lisa_data.plot(f"{outdir}/lisa_spectra_trri.png")
+
+    # assert that the empirical PSD is around the [10**-16] range at 10**-4 Hz and 10**-10 range at 5*10**-2 Hz
+    freq_hz = np.asarray(lisa_data.freq)
+    psd = lisa_data.true_matrix
+    idx_1e_4 = np.argmin(np.abs(freq_hz - 1e-4))
+    idx_5e_2 = np.argmin(np.abs(freq_hz - 5e-2))
+    psd_at_1e_4 = psd[idx_1e_4, 0, 0]
+    psd_at_5e_2 = psd[idx_5e_2, 0, 0]
+    print(f"PSD at 1e-4 Hz: {psd_at_1e_4}")
+    print(f"PSD at 5e-2 Hz: {psd_at_5e_2}")
+    assert np.isclose(psd_at_1e_4, 1e-16, rtol=1e-10)
+    assert np.isclose(psd_at_5e_2, 1e-10, rtol=1e-10)
+
+    # RIAE between true and empirical PSD should be small
+    # plot errors between true and empirical PSD (for all channels) and |CSD|
+    empirical_psd = lisa_data.matrix
+    riae = np.abs(empirical_psd - psd) / np.abs(psd)
+    plt.figure(figsize=(8, 6))
+    for i in range(3):
+        for j in range(3):
+            plt.loglog(
+                freq_hz,
+                riae[:, i, j],
+                label=f"RIAE PSD TDI {['X', 'Y', 'Z'][i]}-{['X', 'Y', 'Z'][j]}",
+            )
+    plt.xlabel("Frequency [Hz]")
+    plt.ylabel("Relative Integrated Absolute Error")
+    plt.title("RIAE between True and Empirical PSDs for LISA TDI Channels")
+    plt.legend()
+    plt.savefig(
+        f"{outdir}/lisa_riae_psd_trri.png", bbox_inches="tight", dpi=300
+    )
 
 
 def test_lvk_data(outdir):
@@ -62,12 +103,3 @@ def test_varma_data(outdir):
     )
     empirical_vars = np.var(varma_data.data, axis=0)
     np.testing.assert_allclose(psd_vars, empirical_vars, rtol=0.1)
-
-
-def test_lisa_data(outdir):
-    outdir = f"{outdir}/{OUT}"
-    os.makedirs(outdir, exist_ok=True)
-    from log_psplines.example_datasets.lisa_data import LISAData
-
-    lisa_data = LISAData.load()
-    lisa_data.plot(f"{outdir}/lisa_spectra_triangle.png")

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from log_psplines.coarse_grain import CoarseGrainConfig
-from log_psplines.datatypes import MultivariateTimeseries
+from log_psplines.datatypes import MultivariateTimeseries, Timeseries
 from log_psplines.datatypes.multivar import _interp_complex_matrix
 from log_psplines.example_datasets.varma_data import (
     VARMAData,
@@ -135,3 +135,77 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
         assert 0.6 < stats_pt["median"] < 1.35
         assert stats_pp["p90"] < 3.0
         assert stats_pp["p10"] > 0.25
+
+
+def _simulate_independent_ar1(
+    n: int, phi: float, sigma: float, seed: int
+) -> np.ndarray:
+    """Simulate two independent AR(1) channels with identical dynamics."""
+
+    rng = np.random.default_rng(seed)
+    eps = rng.normal(scale=sigma, size=(n + 1, 2))
+    data = np.zeros((n + 1, 2), dtype=float)
+    for idx in range(1, n + 1):
+        data[idx] = phi * data[idx - 1] + eps[idx]
+    return data[1:]
+
+
+def test_univariate_and_multivar_scaling_consistency(outdir):
+    """Diagonal PSDs in multivariate runs should match univariate runs."""
+    outdir = f"{outdir}/multivar_vs_univar_scaling"
+    n_time = 256
+    phi = 0.65
+    sigma = 0.9
+
+    # Generate an AR(1) process and an independent copy
+    data = _simulate_independent_ar1(n_time, phi=phi, sigma=sigma, seed=123)
+    ts_single = Timeseries(t=np.arange(n_time), y=data[:, 0])
+    ts_multi = MultivariateTimeseries(t=np.arange(n_time), y=data)
+
+    # Run univariate inference on channel 0 alone
+    idata_uni = run_mcmc(
+        data=ts_single,
+        sampler="nuts",
+        n_knots=5,
+        n_samples=24,
+        n_warmup=24,
+        vi_steps=100,
+        vi_posterior_draws=24,
+        vi_progress_bar=False,
+        rng_key=0,
+        verbose=False,
+        outdir=f"{outdir}/univar_ar1",
+    )
+
+    # Run multivariate inference on both channels with blocked NUTS
+    idata_multi = run_mcmc(
+        data=ts_multi,
+        sampler="multivar_blocked_nuts",
+        n_knots=5,
+        n_samples=24,
+        n_warmup=24,
+        vi_steps=100,
+        vi_posterior_draws=24,
+        vi_progress_bar=False,
+        rng_key=0,
+        verbose=False,
+        outdir=f"{outdir}/multivar_ar1",
+    )
+
+    freq_uni = np.asarray(idata_uni.posterior_psd["freq"].values)
+    freq_multi = np.asarray(idata_multi.posterior_psd["freq"].values)
+    np.testing.assert_allclose(freq_uni, freq_multi)
+
+    psd_uni = idata_uni.posterior_psd["psd"].sel(percentile=50).values
+    psd_multi = (
+        idata_multi.posterior_psd["psd_matrix_real"].sel(percentile=50).values
+    )
+
+    assert psd_multi.shape == (freq_uni.size, 2, 2)
+    assert psd_uni.shape == freq_uni.shape
+
+    for ch in (0, 1):
+        ratio_stats = _ratio_stats(psd_multi[:, ch, ch] / psd_uni)
+        assert 0.7 < ratio_stats["median"] < 1.3
+        assert 0.5 < ratio_stats["p10"] < 1.5
+        assert ratio_stats["p90"] < 1.5

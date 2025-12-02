@@ -54,7 +54,15 @@ def compute_vi_artifacts_univar(
         weights_np = None
         vi_psd = None
         psd_quantiles = None
-        scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
+        # Prefer the periodogram's scaling factor for univariate samplers; fall back
+        # to the sampler config for backward compatibility with older callers.
+        scaling = float(
+            getattr(
+                getattr(sampler, "periodogram", None), "scaling_factor", None
+            )
+            or getattr(sampler.config, "scaling_factor", 1.0)
+            or 1.0
+        )
 
         if weights is not None:
             weights_np = np.asarray(jax.device_get(weights))
@@ -156,16 +164,21 @@ def compute_vi_artifacts_multivar(
             scale_matrix = np.outer(channel_stds, channel_stds).astype(
                 np.float32
             )
+            scale_matrix = (
+                scale_matrix / scaling
+                if float(scaling or 1.0) != 0
+                else scale_matrix
+            )
             factor_matrix = scale_matrix
             scalar_factor = None
         else:
             factor_matrix = None
-            scalar_factor = scaling
+            scalar_factor = None
 
         def _rescale_psd(arr: np.ndarray) -> np.ndarray:
             if factor_matrix is not None:
                 return arr * factor_matrix
-            return arr * scalar_factor
+            return arr
 
         vi_psd_np = None
         psd_quantiles = None
@@ -421,21 +434,30 @@ def prepare_block_vi(
     init_strategies: List[Optional[Callable[[Any], Any]]] = [None] * n_channels
     mcmc_keys: List[jax.Array] = [jax.random.PRNGKey(0)] * n_channels
 
-    scaling = float(getattr(sampler.config, "scaling_factor", 1.0) or 1.0)
+    scaling = float(
+        getattr(sampler.fft_data, "scaling_factor", None)
+        or getattr(sampler.config, "scaling_factor", 1.0)
+        or 1.0
+    )
     channel_stds = getattr(sampler.fft_data, "channel_stds", None)
     if channel_stds is not None:
         channel_stds = np.asarray(channel_stds, dtype=np.float32)
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
+        scale_matrix = (
+            scale_matrix / scaling
+            if float(scaling or 1.0) != 0
+            else scale_matrix
+        )
         factor_matrix = scale_matrix
         scalar_factor = None
     else:
         factor_matrix = None
-        scalar_factor = scaling
+        scalar_factor = None
 
     def _rescale_psd(arr: np.ndarray) -> np.ndarray:
         if factor_matrix is not None:
             return arr * factor_matrix
-        return arr * scalar_factor
+        return arr
 
     vi_losses_blocks: List[np.ndarray] = []
     vi_guides: List[str] = []

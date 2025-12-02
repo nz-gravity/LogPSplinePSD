@@ -6,7 +6,7 @@ from .base import (
     safe_plot,
     setup_plot_style,
 )
-from .diagnostics import plot_diagnostics
+from .diagnostics import generate_vi_diagnostics_summary, plot_diagnostics
 from .pdgrm import plot_pdgrm
 from .psd_matrix import plot_psd_matrix
 from .utils import PlottingData, unpack_data
@@ -31,6 +31,7 @@ __all__ = [
     # Main plotting functions
     "plot_pdgrm",
     "plot_diagnostics",
+    "generate_vi_diagnostics_summary",
     "plot_psd_matrix",
     "plot_vi_elbo",
     "plot_vi_initial_psd_matrix",

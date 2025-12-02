@@ -94,9 +94,9 @@ class UnivarBaseSampler(BaseSampler):
         fig, _ = plot_pdgrm(idata=idata)
         fig.savefig(f"{self.config.outdir}/posterior_predictive.png")
 
-        self._save_vi_diagnostics()
+        self._save_vi_diagnostics(log_summary=False)
 
-    def _save_vi_diagnostics(self) -> None:
+    def _save_vi_diagnostics(self, *, log_summary: bool = True) -> None:
         """Persist VI diagnostics if available."""
         vi_diag = getattr(self, "_vi_diagnostics", None)
         if vi_diag:
@@ -106,6 +106,18 @@ class UnivarBaseSampler(BaseSampler):
                 spline_model=self.spline_model,
                 diagnostics=vi_diag,
             )
+            try:
+                from ...plotting import generate_vi_diagnostics_summary
+
+                generate_vi_diagnostics_summary(
+                    vi_diag,
+                    outdir=self.config.outdir,
+                    log=log_summary,
+                )
+            except Exception:
+                logger.debug(
+                    "Could not log VI diagnostics summary.", exc_info=True
+                )
 
     def _get_lnz(
         self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]

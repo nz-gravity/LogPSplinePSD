@@ -193,10 +193,13 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         )
         self.rng_key = vi_artifacts.rng_key
         self._vi_diagnostics = vi_artifacts.diagnostics
-        if self._vi_diagnostics and self.config.outdir is not None:
-            self._save_vi_diagnostics(
-                empirical_psd=self._compute_empirical_psd()
+        if self._vi_diagnostics:
+            empirical_psd = (
+                self._compute_empirical_psd()
+                if self.config.outdir is not None
+                else None
             )
+            self._save_vi_diagnostics(empirical_psd=empirical_psd)
 
         vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
         if vi_only_mode:

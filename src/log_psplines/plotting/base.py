@@ -49,7 +49,7 @@ def safe_plot(filename: str, dpi: int = 150):
         @wraps(plot_func)
         def wrapper(*args, **kwargs):
             try:
-                logger.debug(f"--- plotting: {os.path.basename(filename)}")
+                # logger.debug(f"--- plotting: {os.path.basename(filename)}")
                 result = plot_func(*args, **kwargs)
                 plt.savefig(filename, dpi=dpi, bbox_inches="tight")
                 plt.close()

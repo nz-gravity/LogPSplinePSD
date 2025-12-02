@@ -5,10 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Tuple
 
+import arviz as az
 import jax
 import jax.numpy as jnp
 import numpy as np
-from numpyro.infer.util import init_to_value
+from numpyro.infer.util import init_to_value, log_density
 
 from ...logger import logger
 from .core import VIResult, fit_vi
@@ -36,6 +37,7 @@ class VIInitialisationMixin:
         *,
         model: Callable[..., Any],
         model_args: Tuple[Any, ...],
+        model_kwargs: Optional[Dict[str, Any]] = None,
         guide: Optional[str],
         init_values: Optional[Dict[str, Any]] = None,
         postprocess: Callable[
@@ -50,6 +52,9 @@ class VIInitialisationMixin:
             NumPyro model to pass to :func:`fit_vi`.
         model_args:
             Positional arguments to forward to the model.
+        model_kwargs:
+            Keyword arguments forwarded to the model (used for both VI and
+            diagnostics).
         guide:
             Explicit autoguide specifier, or ``None`` to let ``fit_vi`` choose.
         init_values:
@@ -75,6 +80,7 @@ class VIInitialisationMixin:
             if getattr(self.config, "vi_progress_bar", None) is not None
             else getattr(self.config, "verbose", False)
         )
+        model_kwargs = model_kwargs or {}
 
         try:
             vi_result = fit_vi(
@@ -83,6 +89,7 @@ class VIInitialisationMixin:
                 vi_steps=self.config.vi_steps,
                 optimizer_lr=self.config.vi_lr,
                 model_args=model_args,
+                model_kwargs=model_kwargs,
                 guide=guide,
                 posterior_draws=self.config.vi_posterior_draws,
                 progress_bar=progress_bar,
@@ -135,6 +142,37 @@ class VIInitialisationMixin:
                     f"VI ELBO trend over last {window} steps: Δ={end - start:.3f}, slope/step={slope:.4f}"
                 )
 
+        psis_diag = _compute_psis_khat(
+            model=model,
+            model_args=model_args,
+            model_kwargs=model_kwargs,
+            guide=vi_result.guide,
+            guide_params=vi_result.params,
+            vi_samples=vi_result.samples,
+            latent_samples=vi_result.latent_samples,
+        )
+        if psis_diag is not None:
+            diagnostics.update(psis_diag)
+            status, status_msg = _interpret_khat(psis_diag["psis_khat_max"])
+            diagnostics["psis_khat_status"] = status
+            diagnostics["psis_status_message"] = status_msg
+            diagnostics["psis_khat_threshold"] = 0.7
+            diagnostics["psis_flag_warn"] = status in ("warn", "fail")
+            diagnostics["psis_flag_critical"] = status == "fail"
+            should_log = getattr(self.config, "verbose", False) or status in (
+                "warn",
+                "fail",
+            )
+            if should_log:
+                logger.info(
+                    f"VI PSIS k-hat max = {psis_diag['psis_khat_max']:.3f} ({status_msg})"
+                )
+            if status == "fail":
+                logger.warning(
+                    "VI PSIS diagnostic indicates poor posterior fit (k-hat > 0.7). "
+                    "Consider revisiting parametrization or VI configuration."
+                )
+
         return VIInitialisationArtifacts(
             init_strategy,
             key_run,
@@ -142,3 +180,88 @@ class VIInitialisationMixin:
             means=vi_result.means,
             posterior_draws=vi_result.samples,
         )
+
+
+def _interpret_khat(khat_max: float) -> Tuple[str, str]:
+    """Map PSIS k-hat to a compact status label and message."""
+    if not np.isfinite(khat_max):
+        return "unknown", "PSIS not available"
+    if khat_max < 0.5:
+        return "ok", "VI reliable"
+    if khat_max <= 0.7:
+        return "warn", "usable but imperfect"
+    return "fail", "not trustworthy"
+
+
+def _compute_psis_khat(
+    *,
+    model: Callable[..., Any],
+    model_args: Tuple[Any, ...],
+    model_kwargs: Dict[str, Any],
+    guide: Any,
+    guide_params: Dict[str, Any],
+    vi_samples: Optional[Dict[str, jnp.ndarray]],
+    latent_samples: Optional[jnp.ndarray],
+) -> Optional[Dict[str, Any]]:
+    """Compute PSIS k-hat on VI posterior draws to assess joint mismatch."""
+
+    if not vi_samples or latent_samples is None:
+        logger.debug("Skipping PSIS k-hat: no VI samples or latent latents.")
+        return None
+
+    try:
+        sample_tree = {
+            name: jnp.asarray(array) for name, array in vi_samples.items()
+        }
+        n_draws = None
+        for array in sample_tree.values():
+            size = int(array.shape[0]) if array.ndim > 0 else 0
+            n_draws = size if n_draws is None else min(n_draws, size)
+
+        latent_arr = jnp.asarray(latent_samples)
+        if latent_arr.ndim == 1:
+            latent_arr = latent_arr[:, None]
+        if n_draws is None:
+            n_draws = int(latent_arr.shape[0]) if latent_arr.ndim > 0 else 0
+        n_draws = min(n_draws, int(latent_arr.shape[0]))
+        if n_draws <= 0:
+            return None
+
+        sample_tree = {k: v[:n_draws] for k, v in sample_tree.items()}
+        latent_arr = latent_arr[:n_draws]
+
+        def _log_posterior(sample):
+            log_prob, _ = log_density(model, model_args, model_kwargs, sample)
+            return log_prob
+
+        log_posterior = jax.vmap(_log_posterior)(sample_tree)
+
+        latent_name = f"_{getattr(guide, 'prefix', 'auto')}_latent"
+        guide_params = dict(guide_params or {})
+
+        def _log_guide(latent):
+            params = dict(guide_params)
+            params[latent_name] = latent
+            log_prob, _ = log_density(guide, model_args, model_kwargs, params)
+            return log_prob
+
+        log_guide = jax.vmap(_log_guide)(latent_arr)
+
+        log_r = np.asarray(
+            jax.device_get(log_posterior - log_guide), dtype=np.float64
+        )
+        _, k_hat = az.psislw(log_r)
+        k_hat = np.asarray(k_hat, dtype=np.float64)
+        khat_max = float(np.max(k_hat)) if k_hat.size else np.nan
+        logger.debug(
+            f"Computed PSIS k-hat from VI draws: max={khat_max:.3f}, draws={int(n_draws)}"
+        )
+
+        return {
+            "psis_log_weights": log_r,
+            "psis_khat": k_hat,
+            "psis_khat_max": khat_max,
+        }
+    except Exception as exc:  # pragma: no cover - diagnostic best-effort
+        logger.debug(f"Could not compute PSIS k-hat for VI samples: {exc}")
+        return None

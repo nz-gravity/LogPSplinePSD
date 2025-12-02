@@ -1972,3 +1972,117 @@ def generate_diagnostics_summary(idata, outdir):
 
     logger.info(f"\n{summary_text}\n")
     return summary_text
+
+
+def generate_vi_diagnostics_summary(
+    diagnostics: dict, outdir: Optional[str] = None, log: bool = True
+) -> str:
+    """Log and optionally write a concise VI diagnostics summary."""
+    if not diagnostics:
+        return ""
+
+    lines = []
+    lines.append("=== VI Diagnostics Summary ===")
+    lines.append("")
+
+    guide = diagnostics.get("guide", "vi")
+    lines.append(f"Guide: {guide}")
+
+    khat_max = diagnostics.get("psis_khat_max")
+    if khat_max is not None and np.isfinite(khat_max):
+        status = diagnostics.get("psis_status_message") or diagnostics.get(
+            "psis_khat_status", ""
+        )
+        status_suffix = f" ({status})" if status else ""
+        lines.append(f"PSIS k-hat (max): {float(khat_max):.3f}{status_suffix}")
+        threshold = diagnostics.get("psis_khat_threshold", 0.7)
+        if khat_max > threshold:
+            lines.append(
+                f"PSIS alert: k-hat exceeds {threshold:.1f} -> posterior may be unreliable"
+            )
+
+    losses = diagnostics.get("losses")
+    if losses is not None:
+        loss_arr = np.asarray(losses)
+        if loss_arr.size:
+            lines.append(f"Final ELBO: {float(loss_arr.reshape(-1)[-1]):.3f}")
+
+    vi_samples = diagnostics.get("vi_samples")
+    if vi_samples:
+        first = next(iter(vi_samples.values()))
+        n_draws = np.asarray(first).shape[0]
+        lines.append(f"Posterior draws (VI): {n_draws}")
+
+    psd_shape = None
+    if "psd_matrix" in diagnostics and diagnostics["psd_matrix"] is not None:
+        psd_shape = np.asarray(diagnostics["psd_matrix"]).shape
+    else:
+        real_q = diagnostics.get("psd_quantiles", {}).get("real") or {}
+        q50 = real_q.get("q50")
+        if q50 is not None:
+            psd_shape = np.asarray(q50).shape
+    if psd_shape is not None and len(psd_shape) >= 3:
+        lines.append(
+            f"PSD shape: {psd_shape[0]} freq × {psd_shape[1]} × {psd_shape[2]}"
+        )
+
+    # Accuracy metrics
+    riae_matrix = diagnostics.get("riae_matrix")
+    riae_err = diagnostics.get("riae_matrix_errorbars")
+    if riae_matrix is not None:
+        line = f"RIAE (matrix): {float(riae_matrix):.3f}"
+        if riae_err and len(riae_err) >= 5:
+            line += f" (5-95% [{riae_err[0]:.3f}, {riae_err[4]:.3f}])"
+        lines.append(line)
+
+    per_ch = diagnostics.get("riae_per_channel")
+    if per_ch:
+        formatted = ", ".join(
+            f"{idx}:{val:.3f}" for idx, val in enumerate(per_ch)
+        )
+        lines.append(f"RIAE per channel: {formatted}")
+
+    offdiag = diagnostics.get("riae_offdiag")
+    if offdiag is not None:
+        lines.append(f"RIAE off-diagonal: {float(offdiag):.3f}")
+
+    coh_riae = diagnostics.get("coherence_riae")
+    if coh_riae is not None:
+        lines.append(f"Coherence RIAE: {float(coh_riae):.3f}")
+
+    bands = diagnostics.get("riae_bands")
+    if bands:
+        band_str = "; ".join(
+            f"[{b['start']:.2e},{b['end']:.2e}]:{b['value']:.3f}"
+            for b in bands
+        )
+        lines.append(f"RIAE by frequency bands: {band_str}")
+
+    coverage = diagnostics.get("coverage") or diagnostics.get("ci_coverage")
+    coverage_level = diagnostics.get("coverage_level")
+    if coverage is not None:
+        label = (
+            f"{int(round(coverage_level * 100))}% interval coverage"
+            if coverage_level is not None
+            else "Interval coverage"
+        )
+        lines.append(f"{label}: {float(coverage) * 100:.1f}%")
+
+    summary_text = "\n".join(lines)
+
+    if outdir:
+        try:
+            os.makedirs(outdir, exist_ok=True)
+            with open(
+                os.path.join(outdir, "vi_diagnostics_summary.txt"), "w"
+            ) as f:
+                f.write(summary_text)
+        except Exception:
+            logger.debug(
+                "Could not write VI diagnostics summary to disk.",
+                exc_info=True,
+            )
+
+    if log:
+        logger.info(f"\n{summary_text}\n")
+    return summary_text

@@ -108,7 +108,7 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
         n_knots=5,
         n_samples=30,
         n_warmup=80,
-        num_chains=1,
+        num_chains=2,
         vi_steps=400,
         vi_lr=1e-2,
         vi_posterior_draws=128,
@@ -119,7 +119,11 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
         outdir=str(outdir),
     )
 
+    print(idata)
+
     assert "posterior" in idata.groups()
+    assert "vi_posterior_psd" in idata.groups()
+    assert "posterior_psd" in idata.groups()
     assert any(
         name.startswith("weights_delta_") for name in idata.posterior.data_vars
     )

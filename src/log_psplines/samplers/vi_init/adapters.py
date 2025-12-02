@@ -11,7 +11,12 @@ import numpy as np
 from numpyro.infer.util import init_to_value
 
 from ...logger import logger
+from ..utils import pspline_hyperparameter_initials
 from .core import fit_vi
+from .defaults import (
+    default_init_values_multivar,
+    default_init_values_univar,
+)
 from .guide import (
     suggest_guide_block,
     suggest_guide_multivar,
@@ -105,6 +110,13 @@ def compute_vi_artifacts_univar(
             sampler.config.beta_delta,
         ),
         guide=guide_spec,
+        init_values=default_init_values_univar(
+            sampler.spline_model,
+            alpha_phi=sampler.config.alpha_phi,
+            beta_phi=sampler.config.beta_phi,
+            alpha_delta=sampler.config.alpha_delta,
+            beta_delta=sampler.config.beta_delta,
+        ),
         postprocess=_postprocess,
     )
 
@@ -369,6 +381,13 @@ def compute_vi_artifacts_multivar(
             sampler.config.beta_delta,
         ),
         guide=guide_spec,
+        init_values=default_init_values_multivar(
+            sampler.spline_model,
+            alpha_phi=sampler.config.alpha_phi,
+            beta_phi=sampler.config.beta_phi,
+            alpha_delta=sampler.config.alpha_delta,
+            beta_delta=sampler.config.beta_delta,
+        ),
         postprocess=_postprocess,
     )
 
@@ -391,7 +410,13 @@ def prepare_block_vi(
 ) -> BlockVIArtifacts:
     """Run VI per block for blocked multivariate samplers."""
 
-    logger.info("Running VI initialisation per block...")
+    guide_cfg = getattr(sampler.config, "vi_guide", None) or "auto(block)"
+    steps = int(getattr(sampler.config, "vi_steps", 0) or 0)
+    draws = int(getattr(sampler.config, "vi_posterior_draws", 0) or 0)
+    logger.info(
+        "Running VI initialisation per block "
+        f"(n_channels={sampler.n_channels}, guide={guide_cfg}, steps={steps}, posterior_draws={draws})..."
+    )
     n_channels = sampler.n_channels
     init_strategies: List[Optional[Callable[[Any], Any]]] = [None] * n_channels
     mcmc_keys: List[jax.Array] = [jax.random.PRNGKey(0)] * n_channels
@@ -401,7 +426,9 @@ def prepare_block_vi(
     if channel_stds is not None:
         channel_stds = np.asarray(channel_stds, dtype=np.float32)
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
-        factor_matrix = scale_matrix
+        # Match multivariate rescaling used in samplers/arviz: undo global
+        # standardisation via ``scaling_factor`` and restore per-channel units.
+        factor_matrix = scale_matrix / scaling
         scalar_factor = None
     else:
         factor_matrix = None
@@ -460,6 +487,8 @@ def prepare_block_vi(
 
         delta_basis = sampler.all_bases[channel_index]
         delta_penalty = sampler.all_penalties[channel_index]
+        delta_model = sampler.spline_model.diagonal_models[channel_index]
+        delta_weights_init = jnp.asarray(delta_model.weights)
 
         theta_start = channel_index * (channel_index - 1) // 2
         theta_count = channel_index
@@ -478,6 +507,70 @@ def prepare_block_vi(
             u_im_channel = sampler.u_im[:, channel_index, :]
             u_re_prev = sampler.u_re[:, :channel_index, :]
             u_im_prev = sampler.u_im[:, :channel_index, :]
+
+            # Build init values consistent with NUTS defaults (non-centred phi)
+            delta_init, phi_init = pspline_hyperparameter_initials(
+                sampler.config.alpha_phi,
+                sampler.config.beta_phi,
+                sampler.config.alpha_delta,
+                sampler.config.beta_delta,
+                divide_phi_by_delta=True,
+            )
+            init_values = {
+                f"delta_{channel_index}": jnp.asarray(delta_init),
+                f"phi_delta_{channel_index}": jnp.log(jnp.asarray(phi_init)),
+                f"weights_delta_{channel_index}": delta_weights_init,
+            }
+            if theta_count > 0:
+                theta_weights_init = jnp.asarray(
+                    sampler.spline_model.offdiag_re_model.weights
+                )
+                init_values.update(
+                    {
+                        f"delta_theta_re_{channel_index}_{theta_idx}": jnp.asarray(
+                            delta_init
+                        )
+                        for theta_idx in range(theta_count)
+                    }
+                )
+                init_values.update(
+                    {
+                        f"phi_theta_re_{channel_index}_{theta_idx}": jnp.log(
+                            jnp.asarray(phi_init)
+                        )
+                        for theta_idx in range(theta_count)
+                    }
+                )
+                init_values.update(
+                    {
+                        f"weights_theta_re_{channel_index}_{theta_idx}": theta_weights_init
+                        for theta_idx in range(theta_count)
+                    }
+                )
+                init_values.update(
+                    {
+                        f"delta_theta_im_{channel_index}_{theta_idx}": jnp.asarray(
+                            delta_init
+                        )
+                        for theta_idx in range(theta_count)
+                    }
+                )
+                init_values.update(
+                    {
+                        f"phi_theta_im_{channel_index}_{theta_idx}": jnp.log(
+                            jnp.asarray(phi_init)
+                        )
+                        for theta_idx in range(theta_count)
+                    }
+                )
+                init_values.update(
+                    {
+                        f"weights_theta_im_{channel_index}_{theta_idx}": jnp.asarray(
+                            sampler.spline_model.offdiag_im_model.weights
+                        )
+                        for theta_idx in range(theta_count)
+                    }
+                )
 
             vi_result = fit_vi(
                 model=block_model,
@@ -504,6 +597,7 @@ def prepare_block_vi(
                 guide=guide_spec,
                 posterior_draws=sampler.config.vi_posterior_draws,
                 progress_bar=progress_bar,
+                init_values=init_values,
             )
 
             init_values = {

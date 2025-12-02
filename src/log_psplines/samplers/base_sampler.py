@@ -119,6 +119,14 @@ class BaseSampler(ABC):
         )
         logger.debug(" InferenceData created.")
 
+        # Attach VI PSD summaries when available (from VI initialisation)
+        vi_diag = getattr(self, "_vi_diagnostics", None)
+        if vi_diag and hasattr(self, "_attach_vi_psd_group"):
+            try:
+                self._attach_vi_psd_group(idata, vi_diag)
+            except Exception as exc:  # pragma: no cover - best-effort hook
+                logger.warning(f"Could not attach VI diagnostics: {exc}")
+
         # Summary statistics
         if self.config.verbose:
             if not (np.isnan(lnz) or np.isnan(lnz_err)):
@@ -208,7 +216,23 @@ class BaseSampler(ABC):
         if self.config.num_chains <= 1:
             return "sequential"
 
-        if len(jax.devices()) >= self.config.num_chains:
+        n_devs = len(jax.devices())
+        if n_devs >= self.config.num_chains:
+            logger.info(
+                f"Running {self.config.num_chains} chains in parallel across {n_devs} device(s)."
+            )
             return "parallel"
+
+        logger.info(
+            f"Running {self.config.num_chains} chains on {n_devs} device(s) with NumPyro vectorized chaining (no multiprocessing)."
+        )
+        if n_devs > 1 and self.config.num_chains > n_devs:
+            logger.warning(
+                "num_chains (%d) exceeds available JAX devices (%d); "
+                "for true multiprocessing with chain_method='parallel', "
+                "set num_chains <= number of devices.",
+                self.config.num_chains,
+                n_devs,
+            )
 
         return "vectorized"

@@ -10,10 +10,13 @@ import jax.numpy as jnp
 import optax
 from numpyro.infer import SVI, Trace_ELBO
 from numpyro.infer.autoguide import (
+    AutoBNAFNormal,
     AutoDiagonalNormal,
+    AutoIAFNormal,
     AutoLowRankMultivariateNormal,
     AutoMultivariateNormal,
 )
+from numpyro.infer.util import init_to_value
 
 GuideSpecifier = Any  # Accept strings or callables provided by the caller.
 
@@ -31,7 +34,10 @@ class VIResult:
 
 
 def resolve_guide(
-    guide: GuideSpecifier, model: Callable[..., Any]
+    guide: GuideSpecifier,
+    model: Callable[..., Any],
+    *,
+    init_values: Optional[Dict[str, jnp.ndarray]] = None,
 ) -> Tuple[Any, str]:
     """Instantiate an autoguide for ``model``.
 
@@ -53,19 +59,43 @@ def resolve_guide(
     if guide is None:
         guide = "diag"
 
+    init_loc_fn = (
+        init_to_value(values=init_values) if init_values is not None else None
+    )
+
     if isinstance(guide, str):
         key = guide.lower()
         if key == "diag":
-            return AutoDiagonalNormal(model), "diag"
+            return AutoDiagonalNormal(model, init_loc_fn=init_loc_fn), "diag"
         if key == "mvn":
-            return AutoMultivariateNormal(model), "mvn"
+            return (
+                AutoMultivariateNormal(model, init_loc_fn=init_loc_fn),
+                "mvn",
+            )
         if key.startswith("lowrank"):
             rank = 10
             parts = key.split(":", 1)
             if len(parts) == 2 and parts[1]:
                 rank = int(parts[1])
-            guide_instance = AutoLowRankMultivariateNormal(model, rank=rank)
+            guide_instance = AutoLowRankMultivariateNormal(
+                model, rank=rank, init_loc_fn=init_loc_fn
+            )
             return guide_instance, f"lowrank:{rank}"
+        if key.startswith("flow"):
+            layers = 1
+            parts = key.split(":", 1)
+            if len(parts) == 2 and parts[1]:
+                layers = int(parts[1])
+            # Use IAF for speed; allow switching to BNAF by prefix.
+            if key.startswith("flowbnaf"):
+                guide_instance = AutoBNAFNormal(
+                    model, num_flows=layers, init_loc_fn=init_loc_fn
+                )
+                return guide_instance, f"flowbnaf:{layers}"
+            guide_instance = AutoIAFNormal(
+                model, num_flows=layers, init_loc_fn=init_loc_fn
+            )
+            return guide_instance, f"flow:{layers}"
         raise ValueError(f"Unknown VI guide specifier: {guide}")
 
     if isinstance(guide, type):
@@ -101,6 +131,7 @@ def fit_vi(
     guide: GuideSpecifier = "diag",
     posterior_draws: int = 256,
     progress_bar: bool = False,
+    init_values: Optional[Dict[str, jnp.ndarray]] = None,
 ) -> VIResult:
     """Run stochastic variational inference for ``model``.
 
@@ -114,7 +145,9 @@ def fit_vi(
     if vi_steps <= 0:
         raise ValueError("vi_steps must be positive")
 
-    guide_obj, guide_name = resolve_guide(guide, model)
+    guide_obj, guide_name = resolve_guide(
+        guide, model, init_values=init_values
+    )
     optimizer = optax.adam(optimizer_lr)
     svi = SVI(model, guide_obj, optimizer, loss=Trace_ELBO())
 

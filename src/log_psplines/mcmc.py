@@ -274,6 +274,8 @@ def run_mcmc(
     vi_psd_max_draws: int = 64,
     coarse_grain_config: Optional[CoarseGrainConfig | dict] = None,
     n_time_blocks: int = 1,
+    alpha_phi_theta: Optional[float] = None,
+    beta_phi_theta: Optional[float] = None,
     # MH specific
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
@@ -550,6 +552,8 @@ def run_mcmc(
             and hasattr(processed_data, "channel_stds")
             else None
         ),
+        alpha_phi_theta=alpha_phi_theta,
+        beta_phi_theta=beta_phi_theta,
         **kwargs,
     )
 
@@ -592,6 +596,8 @@ def create_sampler(
     true_psd: Optional[jnp.ndarray] = None,
     freq_weights: Optional[np.ndarray] = None,
     channel_stds: Optional[np.ndarray] = None,
+    alpha_phi_theta: Optional[float] = None,
+    beta_phi_theta: Optional[float] = None,
     **kwargs,
 ):
     """Factory function to create appropriate sampler."""
@@ -677,6 +683,8 @@ def create_sampler(
                 vi_guide=vi_guide,
                 vi_posterior_draws=vi_posterior_draws,
                 vi_progress_bar=vi_progress_bar,
+                alpha_phi_theta=alpha_phi_theta,
+                beta_phi_theta=beta_phi_theta,
             )
             return MultivarBlockedNUTSSampler(data, model, config)
 

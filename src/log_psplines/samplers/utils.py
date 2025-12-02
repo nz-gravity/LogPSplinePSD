@@ -55,7 +55,6 @@ def sample_pspline_block(
     factor_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Draw hierarchical Gamma-Normal P-spline weights and record log priors."""
-
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
     delta = numpyro.sample(delta_name, delta_dist)
     log_prior_delta = delta_dist.log_prob(delta)

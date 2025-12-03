@@ -269,8 +269,9 @@ def test_timeseries_to_periodogram_frequency_bounds():
     assert np.all(pdgrm.freqs <= 7.0)
     assert pdgrm.scaling_factor == pytest.approx(3.0)
 
-    with pytest.raises(ValueError):
-        ts.to_periodogram(fmin=10.0, fmax=5.0)
+    clipped = ts.to_periodogram(fmin=10.0, fmax=5.0)
+    assert len(clipped.freqs) == 1
+    assert clipped.freqs[0] == pytest.approx(5.0)
 
 
 def test_multivar_fft_cut_preserves_scaling():

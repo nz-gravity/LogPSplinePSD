@@ -38,8 +38,24 @@ jobs:
             ${{ runner.os }}-pre-commit-
 
       - name: pre-commit
-        run: pre-commit run --all-files --verbose --show-diff-on-failure
+        id: precommit
+        run: |
+          set -o pipefail
+          touch pre-commit.log
+          pre-commit run --all-files --verbose --show-diff-on-failure | tee pre-commit.log
         continue-on-error: true  # Allow failure for this step
+
+      - name: Upload pre-commit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-commit-log-${{ github.run_id }}
+          path: pre-commit.log
+
+      - name: Highlight pre-commit failures
+        if: steps.precommit.outcome == 'failure'
+        run: |
+          echo "::warning::pre-commit reported issues. See the artifact pre-commit-log-${{ github.run_id }} for full details."
 
       - name: pytest
         run: pytest --cov='log_psplines' --cov-report term-missing --cov-report=xml --durations=0

@@ -378,7 +378,7 @@ def _create_multivar_inference_data(
         # Keep complex form for consistency
 
     if channel_stds is not None and factor_matrix is not None:
-        observed_csd = observed_csd * factor_matrix[None, :, :]
+        observed_csd = observed_csd * (factor_matrix[None, :, :] / sf)
     else:
         observed_csd = observed_csd * scalar_factor
 

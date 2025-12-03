@@ -23,7 +23,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 RESULT_FN = RESULTS_DIR / "inference_data.nc"
 
-RUN_VI_ONLY = True
+RUN_VI_ONLY = False
 
 lisa_data = LISAData.load(data_path="data/tdi.h5")
 lisa_data.plot(f"{RESULTS_DIR}/lisa_raw.png")
@@ -79,7 +79,7 @@ true_psd_standardized_data = true_psd_physical_data
 
 idata = None
 
-if RESULT_FN.exists():
+if RESULT_FN.exists() and not False:
     logger.info(f"Found existing results at {RESULT_FN}, loading...")
     import arviz as az
 

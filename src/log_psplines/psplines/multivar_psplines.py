@@ -102,19 +102,28 @@ class MultivariateLogPSplines:
         n_channels = fft_data.n_dim
 
         # Create frequency grid for knot placement (normalized to [0,1])
-        freq_norm = (fft_data.freq - fft_data.freq.min()) / (
-            fft_data.freq.max() - fft_data.freq.min()
-        )
+        freq_min = float(fft_data.freq.min())
+        freq_max = float(fft_data.freq.max())
+        freq_span = freq_max - freq_min
+        if freq_span <= 0 or not np.isfinite(freq_span):
+            freq_norm = np.zeros_like(fft_data.freq, dtype=float)
+        else:
+            freq_norm = (fft_data.freq - freq_min) / freq_span
 
         # Initialize knots (same for all components for now, linear spacing)
         knot_method = knot_kwargs.get("method", "linear")
         if knot_method == "linear":
             knots = np.linspace(0, 1, n_knots)
         elif knot_method == "log":
-            knots = np.geomspace(fft_data.freq[1], fft_data.freq[-1], n_knots)
-            knots = (knots - knots.min()) / (
-                knots.max() - knots.min()
-            )  # Normalize to [0,1]
+            if n_freq < 2:
+                knots = np.linspace(0, 1, n_knots)
+            else:
+                knots_raw = np.geomspace(
+                    fft_data.freq[1], fft_data.freq[-1], n_knots
+                )
+                knots = (knots_raw - knots_raw.min()) / (
+                    knots_raw.max() - knots_raw.min()
+                )
         else:
             raise ValueError(f"Unknown knot placement method: {knot_method}")
 

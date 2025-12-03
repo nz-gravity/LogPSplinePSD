@@ -1,0 +1,1098 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>LISA demo &#8212; LogPSplinePSD</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=13237357" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=4a39c7ea"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="../../_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'studies/lisa/lisa_demo';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="prev" title="LVK Demo" href="../lvk/lvk_demo.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../README.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/logo.png" class="logo__image only-light" alt="LogPSplinePSD - Home"/>
+    <script>document.write(`<img src="../../_static/logo.png" class="logo__image only-dark" alt="LogPSplinePSD - Home"/>`);</script>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../runtime/runtime.html">Runtime</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../lvk/lvk_demo.html">LVK Demo</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">LISA demo</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-launch-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
+    <i class="fas fa-rocket"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://colab.research.google.com/github/nz-gravity/LogPsplinePSD/blob/main/docs/studies/lisa/lisa_demo.ipynb" target="_blank"
+   class="btn btn-sm dropdown-item"
+   title="Launch on Colab"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  
+    <img alt="Colab logo" src="../../_static/images/logo_colab.png">
+  </span>
+<span class="btn__text-container">Colab</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/nz-gravity/LogPsplinePSD" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fstudies/lisa/lisa_demo.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../_sources/studies/lisa/lisa_demo.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>LISA demo</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <a target="_blank" href="https://colab.research.google.com/github/nz-gravity/LogPSplinePSD/blob/main/docs/studies/lisa/lisa_demo.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+<section class="tex2jax_ignore mathjax_ignore" id="lisa-demo">
+<h1>LISA demo<a class="headerlink" href="#lisa-demo" title="Link to this heading">#</a></h1>
+<p>In this demo, we grab some simulated data from <a class="reference external" href="https://zenodo.org/doi/10.5281/zenodo.15698080">zenodo</a> and run a simple PSD estimation with P-splines.</p>
+<p>For faster testing – we use a <a class="reference external" href="https://github.com/nz-gravity/test_data/blob/main/lisa_noise/noise_4a_truncated/data/tdi.h5">10 day version</a> of the file (downloading the 1 year file may take a while).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>! pip install logPsplinePSD -q
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell tag_hide-input docutils container">
+<details class="admonition hide above-input">
+<summary aria-label="Toggle hidden content">
+<p class="collapsed admonition-title">Show code cell source</p>
+<p class="expanded admonition-title">Hide code cell source</p>
+</summary>
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span># %load_ext autoreload
+# %autoreload 2
+%matplotlib inline
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<div class="cell tag_hide-input docutils container">
+<details class="admonition hide above-input">
+<summary aria-label="Toggle hidden content">
+<p class="collapsed admonition-title">Show code cell source</p>
+<p class="expanded admonition-title">Hide code cell source</p>
+</summary>
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>import dataclasses
+import h5py
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import requests
+import warnings
+
+warnings.filterwarnings(&quot;ignore&quot;, category=RuntimeWarning)
+
+
+def download(url: str, dest_folder: str):
+    if not os.path.exists(dest_folder):
+        os.makedirs(dest_folder)  # create folder if it does not exist
+
+    filename = url.split(&quot;/&quot;)[-1].replace(
+        &quot; &quot;, &quot;_&quot;
+    )  # be careful with file names
+    file_path = os.path.join(dest_folder, filename)
+
+    r = requests.get(url, stream=True)
+    if r.ok:
+        print(&quot;saving to&quot;, file_path)
+        with open(file_path, &quot;wb&quot;) as f:
+            for chunk in r.iter_content(chunk_size=1024 * 8):
+                if chunk:
+                    f.write(chunk)
+                    f.flush()
+                    os.fsync(f.fileno())
+    else:  # HTTP status code 4XX/5XX
+        print(
+            &quot;Download failed: status code {}\n{}&quot;.format(r.status_code, r.text)
+        )
+
+
+def testmass_noise_asd(
+    freq,
+    asd=2.4e-15,
+    fknee=4e-4,
+    central_freq=2.81e14,
+    duration=365.25 * 24 * 3600,
+    fs=0.5,
+):
+    &quot;&quot;&quot;
+    Test mass noise ASD in TMI carrier beatnote fluctuations.
+
+    Args:
+        freq (array): frequencies [Hz]
+        asd (float): test mass acceleration noise ASD [m/s^2/√Hz]
+        fknee (float): knee frequency [Hz]
+        central_freq (float): laser central frequency [Hz]
+        duration (float): observation duration [s]
+        fs (float): sampling frequency [Hz]
+
+    Returns:
+        array: noise ASD [Hz/√Hz]
+    &quot;&quot;&quot;
+    c = 299792458  # speed of light [m/s]
+    fmin = 1.0 / duration
+
+    # High frequency component
+    psd_highfreq = (
+        (2 * asd * central_freq / (2 * np.pi * c)) ** 2
+        * np.abs(
+            (2 * np.pi * fmin)
+            / (
+                1
+                - np.exp(-2 * np.pi * fmin / fs)
+                * np.exp(-2j * np.pi * freq / fs)
+            )
+        )
+        ** 2
+        * 1
+        / (fs * fmin) ** 2
+    )
+
+    # Low frequency component
+    psd_lowfreq = (
+        (2 * asd * central_freq * fknee / (2 * np.pi * c)) ** 2
+        * np.abs(
+            (2 * np.pi * fmin)
+            / (
+                1
+                - np.exp(-2 * np.pi * fmin / fs)
+                * np.exp(-2j * np.pi * freq / fs)
+            )
+        )
+        ** 2
+        * 1
+        / (fs * fmin) ** 2
+        * np.abs(1 / (1 - np.exp(-2j * np.pi * freq / fs))) ** 2
+        * (2 * np.pi / fs) ** 2
+    )
+
+    return np.sqrt(psd_lowfreq + psd_highfreq)
+
+
+def oms_noise_asd(
+    freq,
+    asd=7.9e-12,
+    fknee=2e-3,
+    central_freq=2.81e14,
+    duration=365.25 * 24 * 3600,
+    fs=0.5,
+):
+    &quot;&quot;&quot;
+    OMS noise ASD in ISI carrier beatnote fluctuations.
+
+    Args:
+        freq (array): frequencies [Hz]
+        asd (float): OMS displacement noise ASD [m/√Hz]
+        fknee (float): knee frequency [Hz]
+        central_freq (float): laser central frequency [Hz]
+        duration (float): observation duration [s]
+        fs (float): sampling frequency [Hz]
+
+    Returns:
+        array: noise ASD [Hz/√Hz]
+    &quot;&quot;&quot;
+    c = 299792458  # speed of light [m/s]
+    fmin = 1.0 / duration
+
+    # High frequency component
+    psd_highfreq = (asd * fs * central_freq / c) ** 2 * np.sin(
+        2 * np.pi * freq / fs
+    ) ** 2
+
+    # Low frequency component
+    psd_lowfreq = (
+        (2 * np.pi * asd * central_freq * fknee**2 / c) ** 2
+        * np.abs(
+            (2 * np.pi * fmin)
+            / (
+                1
+                - np.exp(-2 * np.pi * fmin / fs)
+                * np.exp(-2j * np.pi * freq / fs)
+            )
+        )
+        ** 2
+        * 1
+        / (fs * fmin) ** 2
+    )
+
+    return np.sqrt(psd_highfreq + psd_lowfreq)
+
+
+def tdi_transfer_functions(freq, armlength=2.5e9):
+    &quot;&quot;&quot;
+    TDI transfer functions for test mass and OMS noise.
+
+    Args:
+        freq (array): frequencies [Hz]
+        armlength (float): LISA arm length [m]
+
+    Returns:
+        tuple: (tf_testmass, tf_oms) - transfer function amplitudes
+    &quot;&quot;&quot;
+    c = 299792458  # speed of light [m/s]
+    L = armlength / c  # arm length in seconds
+
+    # Common TDI factor
+    common = (
+        16
+        * np.sin(2 * np.pi * freq * L) ** 2
+        * np.sin(4 * np.pi * freq * L) ** 2
+    )
+
+    # Test mass transfer function
+    tf_testmass = np.sqrt(common * (3 + np.cos(4 * np.pi * freq * L)))
+
+    # OMS transfer function
+    tf_oms = np.sqrt(4 * common)
+
+    return tf_testmass, tf_oms
+
+
+def TM_model(
+    freq,
+    tm_asd=2.4e-15,
+    tm_fknee=4e-4,
+    central_freq=2.81e14,
+    duration=365.25 * 24 * 3600,
+    fs=0.5,
+    armlength=2.5e9,
+):
+    &quot;&quot;&quot;
+    Complete test mass noise model in TDI.
+
+    Args:
+        freq (array): frequencies [Hz]
+        tm_asd (float): test mass acceleration noise ASD [m/s^2/√Hz]
+        tm_fknee (float): test mass knee frequency [Hz]
+        central_freq (float): laser central frequency [Hz]
+        duration (float): observation duration [s]
+        fs (float): sampling frequency [Hz]
+        armlength (float): LISA arm length [m]
+
+    Returns:
+        array: TDI test mass noise ASD [Hz/√Hz]
+    &quot;&quot;&quot;
+    noise_asd = testmass_noise_asd(
+        freq, tm_asd, tm_fknee, central_freq, duration, fs
+    )
+    tf_testmass, _ = tdi_transfer_functions(freq, armlength)
+    return tf_testmass * noise_asd
+
+
+def OMS_model(
+    freq,
+    oms_asd=7.9e-12,
+    oms_fknee=2e-3,
+    central_freq=2.81e14,
+    duration=365.25 * 24 * 3600,
+    fs=0.5,
+    armlength=2.5e9,
+):
+    &quot;&quot;&quot;
+    Complete OMS noise model in TDI.
+
+    Args:
+        freq (array): frequencies [Hz]
+        oms_asd (float): OMS displacement noise ASD [m/√Hz]
+        oms_fknee (float): OMS knee frequency [Hz]
+        central_freq (float): laser central frequency [Hz]
+        duration (float): observation duration [s]
+        fs (float): sampling frequency [Hz]
+        armlength (float): LISA arm length [m]
+
+    Returns:
+        array: TDI OMS noise ASD [Hz/√Hz]
+    &quot;&quot;&quot;
+    noise_asd = oms_noise_asd(
+        freq, oms_asd, oms_fknee, central_freq, duration, fs
+    )
+    _, tf_oms = tdi_transfer_functions(freq, armlength)
+    return tf_oms * noise_asd
+
+
+def Total_model(
+    freq,
+    tm_asd=2.4e-15,
+    tm_fknee=4e-4,
+    oms_asd=7.9e-12,
+    oms_fknee=2e-3,
+    central_freq=2.81e14,
+    duration=365.25 * 24 * 3600,
+    fs=0.5,
+    armlength=2.5e9,
+):
+    &quot;&quot;&quot;
+    Total noise model combining test mass and OMS noise in TDI.
+
+    Args:
+        freq (array): frequencies [Hz]
+        tm_asd (float): test mass acceleration noise ASD [m/s^2/√Hz]
+        tm_fknee (float): test mass knee frequency [Hz]
+        oms_asd (float): OMS displacement noise ASD [m/√Hz]
+        oms_fknee (float): OMS knee frequency [Hz]
+        central_freq (float): laser central frequency [Hz]
+        duration (float): observation duration [s]
+        fs (float): sampling frequency [Hz]
+        armlength (float): LISA arm length [m]
+
+    Returns:
+        array: Total TDI noise ASD [Hz/√Hz]
+    &quot;&quot;&quot;
+    tm_model = TM_model(
+        freq, tm_asd, tm_fknee, central_freq, duration, fs, armlength
+    )
+    oms_model = OMS_model(
+        freq, oms_asd, oms_fknee, central_freq, duration, fs, armlength
+    )
+    return np.sqrt(tm_model**2 + oms_model**2)
+
+
+@dataclasses.dataclass
+class LISAData:
+    t: np.ndarray
+    x2: np.ndarray
+    y2: np.ndarray
+    z2: np.ndarray
+    t0: float = dataclasses.field(init=False)
+    size: int = dataclasses.field(init=False)
+    dt: float = dataclasses.field(init=False)
+    fs: float = dataclasses.field(init=False)
+    data: np.ndarray = dataclasses.field(init=False)
+    duration: float = dataclasses.field(init=False)
+    oms_model: np.ndarray = None
+    tm_model: np.ndarray = None
+    total_model: np.ndarray = None
+
+    def __post_init__(self):
+        self.update_models()
+
+    def update_models(self, **kwargs):
+        self.size = len(self.t)
+        self.t0 = self.t[0]
+        self.dt = self.t[1] - self.t0
+        self.fs = 1 / self.dt
+        self.duration = self.size * self.dt
+        freq = np.fft.rfftfreq(self.size, d=self.dt)
+        self.oms_model = OMS_model(
+            freq, duration=self.duration, fs=self.fs, **kwargs
+        )
+        self.tm_model = TM_model(
+            freq, duration=self.duration, fs=self.fs, **kwargs
+        )
+        self.total_model = Total_model(
+            freq, duration=self.duration, fs=self.fs, **kwargs
+        )
+        self.data = np.vstack([self.x2, self.y2, self.z2]).T
+
+    @classmethod
+    def from_hdf5(cls, filename: str):
+        with h5py.File(filename, &quot;r&quot;) as f:
+            t = np.array(f[&quot;t&quot;][:])
+            x2 = np.array(f[&quot;X2&quot;][:])
+            y2 = np.array(f[&quot;Y2&quot;][:])
+            z2 = np.array(f[&quot;Z2&quot;][:])
+            return cls(t=t, x2=x2, y2=y2, z2=z2)
+
+    # overide the [:] operator to return a truncated version of the data
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            # ensure that the slice is valid
+            start = key.start or 0
+            stop = key.stop or self.size
+            step = key.step or 1
+            if start &lt; 0 or stop &gt; self.size or step &lt;= 0:
+                raise ValueError(f&quot;Cannot truncate.. size is {self.size}.&quot;)
+
+            return LISAData(
+                t=self.t[key],
+                x2=self.x2[key],
+                y2=self.y2[key],
+                z2=self.z2[key],
+            )
+
+    def plot_periodograms(self, axes=None, include_model=True):
+        if axes is None:
+            fig, axes = plt.subplots(3, 1, figsize=(5, 8), sharex=True)
+        for ax, data, label in zip(
+            axes,
+            [self.x2, self.y2, self.z2],
+            [&quot;X2&quot;, &quot;Y2&quot;, &quot;Z2&quot;],
+        ):
+            freqs = np.fft.rfftfreq(self.size, self.dt)
+            psd = (np.abs(np.fft.rfft(data)) ** 2) * self.dt / self.size
+            ax.loglog(
+                freqs[1:], psd[1:], color=&quot;gray&quot;, alpha=0.5, lw=2, label=label
+            )
+            ax.set_ylabel(&quot;PSD [1/Hz]&quot;)
+            ax.set_ylim(bottom=10**-21)
+
+            if include_model:
+                ax.loglog(
+                    freqs[1:],
+                    self.oms_model[1:] ** 2,
+                    &quot;r--&quot;,
+                    label=&quot;OMS model&quot;,
+                )
+                ax.loglog(
+                    freqs[1:], self.tm_model[1:] ** 2, &quot;b--&quot;, label=&quot;TM model&quot;
+                )
+                ax.loglog(
+                    freqs[1:],
+                    self.total_model[1:] ** 2,
+                    &quot;k-&quot;,
+                    label=&quot;Total model&quot;,
+                )
+                ax.legend()
+
+        axes[-1].set_xlabel(&quot;Frequency [Hz]&quot;)
+        plt.tight_layout()
+        return axes
+
+    @property
+    def duration_str(self):
+        # human readable duration
+        days = int(self.duration // (24 * 3600))
+        hours = int((self.duration % (24 * 3600)) // 3600)
+        minutes = int((self.duration % 3600) // 60)
+        seconds = int(self.duration % 60)
+        # only return a sensible unit
+        if days &gt; 0:
+            return f&quot;{days} days&quot;
+        elif hours &gt; 0:
+            return f&quot;{hours} hrs&quot;
+        elif minutes &gt; 0:
+            return f&quot;{minutes} min&quot;
+        else:
+            return f&quot;{seconds} s&quot;
+
+    def __repr__(self):
+        return (
+            f&quot;LISAData(size={self.size:,}, dt={self.dt}, &quot;
+            f&quot;fs={self.fs}, duration={self.duration_str})&quot;
+        )
+
+    def get_model(self, frange=None):
+        if frange is None:
+            return self.total_model
+        else:
+            freqs = np.fft.rfftfreq(self.size, self.dt)
+            mask = (freqs &gt;= frange[0]) &amp; (freqs &lt;= frange[1])
+            return (
+                self.total_model[mask],
+                self.oms_model[mask],
+                self.tm_model[mask],
+            )
+
+
+ONE_YEAR = &quot;https://zenodo.org/record/15698080/files/tdi.h5?download=1&quot;
+TEN_DAYS = &quot;https://raw.githubusercontent.com/nz-gravity/test_data/main/lisa_noise/noise_4a_truncated/data/tdi.h5&quot;
+
+download(TEN_DAYS, dest_folder=&quot;data&quot;)
+lisa_data = LISAData.from_hdf5(&quot;data/tdi.h5&quot;)
+axes = lisa_data.plot_periodograms()
+axes[0].set_title(f&quot;{lisa_data}&quot;, fontsize=15);
+</pre></div>
+</div>
+</div>
+</details>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>saving to data/tdi.h5
+</pre></div>
+</div>
+<img alt="../../_images/c881eaf315060c211813d3b8e01e9fe6a5807049d33243697aa8da2215c677a6.png" src="../../_images/c881eaf315060c211813d3b8e01e9fe6a5807049d33243697aa8da2215c677a6.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>from log_psplines.mcmc import run_mcmc
+from log_psplines.datatypes import Timeseries
+from log_psplines.plotting import plot_pdgrm
+
+FMIN, FMAX = 5**-5, 6**-2
+
+x2 = Timeseries(t=lisa_data.t, y=lisa_data.x2)
+x2 = x2.standardise()
+model, tm_model, oms_model = lisa_data.get_model(frange=(FMIN, FMAX))
+
+pdgrm = x2.to_periodogram()
+pdgrm = pdgrm.cut(FMIN, FMAX)
+
+
+results_no_parametric = run_mcmc(
+    pdgrm=pdgrm,
+    sampler=&quot;mh&quot;,
+    n_knots=10,
+    knot_kwargs=dict(
+        method=&quot;log&quot;,
+    ),
+    n_samples=2000,
+    n_warmup=2000,
+)
+results_with_parametric = run_mcmc(
+    pdgrm=pdgrm,
+    parametric_model=(oms_model / x2.std) ** 2,
+    sampler=&quot;mh&quot;,
+    n_knots=10,
+    knot_kwargs=dict(
+        method=&quot;log&quot;,
+    ),
+    n_samples=2000,
+    n_warmup=5000,
+)
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Metropolis-Hastings with adaptive step sizes [cpu] [1536900715  689864229]
+</pre></div>
+</div>
+<script type="application/vnd.jupyter.widget-view+json">{"model_id": "b92f61c7b09341439e20b33117b32837", "version_major": 2, "version_minor": 0}</script><div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Sampling completed in 8.13 seconds
+Final acceptance rate: 0.389 (target: 0.44)
+  ESS min: 1.3, max: 1598.1
+  Runtime: 8.13 sec
+Metropolis-Hastings with adaptive step sizes [cpu] [1536900715  689864229]
+</pre></div>
+</div>
+<script type="application/vnd.jupyter.widget-view+json">{"model_id": "7ff83f6db3304631b16b0f04db01708d", "version_major": 2, "version_minor": 0}</script><div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Sampling completed in 11.27 seconds
+Final acceptance rate: 0.449 (target: 0.44)
+  ESS min: 1.3, max: 1380.1
+  Runtime: 11.27 sec
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell tag_hide-input docutils container">
+<details class="admonition hide above-input">
+<summary aria-label="Toggle hidden content">
+<p class="collapsed admonition-title">Show code cell source</p>
+<p class="expanded admonition-title">Hide code cell source</p>
+</summary>
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>from log_psplines.arviz_utils.from_arviz import get_posterior_ci
+
+
+def plot_result(idata, show_para: bool = False):
+    fig, axes = plt.subplots(
+        2,
+        1,
+        figsize=(5, 5),
+        sharex=True,
+        gridspec_kw={&quot;height_ratios&quot;: [2, 1]},
+    )
+    fig, ax = plot_pdgrm(
+        ax=axes[0], idata=idata, yscalar=x2.std**2, show_parametric=show_para
+    )
+    ax.plot(pdgrm.freqs, model**2, &quot;k--&quot;, label=&quot;TRUE&quot;)
+    ax.set_xlim(left=10**-3)
+
+    # plot relative error from true
+    posterior_ci = get_posterior_ci(idata)
+    for ci in posterior_ci:
+        ci = ci * x2.std**2
+        lower, upper = ci
+        axes[1].fill_between(
+            pdgrm.freqs,
+            (lower - model**2) / model**2,
+            (upper - model**2) / model**2,
+            color=&quot;tab:orange&quot;,
+            alpha=0.3,
+        )
+    axes[1].axhline(0, color=&quot;k&quot;, ls=&quot;--&quot;, lw=1)
+    axes[1].set_ylabel(&quot;Relative error&quot;)
+    axes[1].set_xlabel(&quot;Frequency [Hz]&quot;)
+    axes[1].set_xscale(&quot;log&quot;)
+    axes[1].set_yscale(&quot;linear&quot;)
+    axes[1].set_xlim(left=10**-3)
+    axes[1].set_ylim(-1, 1)
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<p>No parametric model (only splines)</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>plot_result(results_no_parametric, show_para=False)
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../../_images/f4e51ea368c5be4c71a4633394225a57f574e73d391fd74d06b03033e349011b.png" src="../../_images/f4e51ea368c5be4c71a4633394225a57f574e73d391fd74d06b03033e349011b.png" />
+</div>
+</div>
+<p>With parametric model (OMS) + spline correction</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython2 notranslate"><div class="highlight"><pre><span></span>plot_result(results_with_parametric, show_para=True)
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../../_images/839d99fe7e297a88ef6b6be09598308190512f4bb15d6ab40301afe125fdf8c0.png" src="../../_images/839d99fe7e297a88ef6b6be09598308190512f4bb15d6ab40301afe125fdf8c0.png" />
+</div>
+</div>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./studies/lisa"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../lvk/lvk_demo.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">LVK Demo</p>
+      </div>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By NZ Gravity
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2025.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

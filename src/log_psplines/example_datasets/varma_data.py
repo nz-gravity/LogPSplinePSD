@@ -35,7 +35,7 @@ class VARMAData:
         self.vma_coeffs = vma_coeffs
         self.sigma = sigma
         self.dim = vma_coeffs.shape[1]
-        self.psd_scaling = 1
+        self.psd_scaling = 1.0
         self.n_freq_samples = n_samples // 2
 
         self.fs = float(fs)
@@ -47,6 +47,8 @@ class VARMAData:
         self.welch_f = None  # set in "resimulate"
         self.resimulate(seed=seed)
 
+        self.channel_stds = np.std(self.data, axis=0)
+        self.psd_scaling = float(np.std(self.data) ** 2)
         self.psd = _calculate_true_varma_psd(
             self.freq,
             self.dim,
@@ -54,6 +56,8 @@ class VARMAData:
             self.vma_coeffs,
             self.sigma,
             self.fs,
+            self.channel_stds,
+            self.psd_scaling,
         )
 
     def resimulate(self, seed=None):
@@ -220,6 +224,8 @@ def _calculate_true_varma_psd(
     vma_coeffs: np.ndarray,
     sigma: np.ndarray,
     fs: float,
+    channel_stds: np.ndarray,
+    scaling_factor: float,
 ) -> np.ndarray:
     """
     Calculate the spectral matrix for given frequencies.
@@ -240,7 +246,17 @@ def _calculate_true_varma_psd(
         spec_matrix[idx] = _calculate_spec_matrix_helper(
             float(w), dim, var_coeffs, vma_coeffs, sigma
         )
-    return spec_matrix / fs
+
+    # Convert to one-sided PSD: double positive frequencies except Nyquist
+    psd = (2.0 * spec_matrix) / fs
+    if freqs.size and np.isclose(freqs[-1], fs / 2.0):
+        psd[-1] *= 0.5
+    if channel_stds is not None and scaling_factor not in (None, 0):
+        scale_matrix = np.outer(channel_stds, channel_stds) / float(
+            scaling_factor
+        )
+        psd = psd * scale_matrix[None, :, :]
+    return psd
 
 
 def _calculate_spec_matrix_helper(omega, dim, var_coeffs, vma_coeffs, sigma):

@@ -114,10 +114,10 @@ def init_basis_and_penalty(
         # Clip to [0,1] for numerical safety
         grid_points = np.clip(grid_points, 0.0, 1.0)
 
-    # Compute basis matrix
-    basis_matrix = (
-        basis.to_basis().to_grid(grid_points).data_matrix.squeeze().T
-    )
+    # Compute basis matrix and keep it explicitly 2-D (n_grid, n_basis)
+    basis_eval = basis.to_basis().to_grid(grid_points).data_matrix
+    basis_eval = np.asarray(basis_eval, dtype=np.float64)
+    basis_matrix = np.squeeze(basis_eval, axis=-1).T
 
     # Normalize basis matrix elements for numerical stability
     # knots_with_boundary = np.concatenate(

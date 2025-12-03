@@ -229,6 +229,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             num_warmup=n_warmup,
             num_samples=n_samples,
             num_chains=self.config.num_chains,
+            chain_method=self.chain_method,
             progress_bar=self.config.verbose,
             jit_model_args=True,
         )
@@ -268,9 +269,9 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         logger.info(f"Sampling completed in {self.runtime:.2f} seconds")
 
         # Extract samples and convert to ArviZ
-        samples = mcmc.get_samples()
+        samples = mcmc.get_samples(group_by_chain=True)
         samples.pop("lp", None)
-        stats = mcmc.get_extra_fields()
+        stats = mcmc.get_extra_fields(group_by_chain=True)
 
         # Move deterministic quantities from samples to stats
         for key in [
@@ -287,6 +288,13 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         stats["lp"] = evaluate_log_density_batch(
             self._logpost_fn, params_batch
         )
+        lp_arr = jnp.asarray(stats.get("lp"))
+        if lp_arr.ndim == 1:
+            n_chains = int(self.config.num_chains)
+            sample_ref = next(iter(samples.values()))
+            n_draws = int(sample_ref.shape[1]) if sample_ref.ndim > 1 else 1
+            if lp_arr.size == n_chains * n_draws:
+                stats["lp"] = lp_arr.reshape((n_chains, n_draws))
 
         for key in list(samples):
             if key.startswith("phi"):
@@ -370,11 +378,28 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
     def _prepare_logpost_params(
         self, samples: Dict[str, jnp.ndarray]
     ) -> Dict[str, jnp.ndarray]:
-        return {
-            name: jnp.asarray(array)
-            for name, array in samples.items()
-            if name.startswith(("weights_", "phi_", "delta_"))
-        }
+        flat: Dict[str, jnp.ndarray] = {}
+
+        for name, array in samples.items():
+            if not name.startswith(("weights_", "phi_", "delta_")):
+                continue
+
+            arr = jnp.asarray(array)
+            if name.startswith("weights_"):
+                if arr.ndim == 1:
+                    arr = arr[None, :]
+                elif arr.ndim >= 3:
+                    # Flatten chain and draw dimensions
+                    arr = arr.reshape((-1, arr.shape[-1]))
+            else:
+                if arr.ndim == 0:
+                    arr = arr.reshape(1)
+                elif arr.ndim >= 2:
+                    arr = arr.reshape(-1)
+
+            flat[name] = arr
+
+        return flat
 
     def _compute_log_posterior(self, params: Dict[str, jnp.ndarray]) -> float:
         transformed = {}
@@ -419,6 +444,10 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             sample_stats["lp"] = evaluate_log_density_batch(
                 self._logpost_fn, params_batch
             )
+            lp_arr = jnp.asarray(sample_stats.get("lp"))
+            n_chains = int(self.config.num_chains)
+            if lp_arr.ndim == 1 and lp_arr.size % n_chains == 0:
+                sample_stats["lp"] = lp_arr.reshape((n_chains, -1))
         except Exception:
             sample_stats = {}
 

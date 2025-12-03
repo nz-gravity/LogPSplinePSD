@@ -24,6 +24,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 RESULT_FN = RESULTS_DIR / "inference_data.nc"
 
 RUN_VI_ONLY = False
+REUSE_EXISTING = False  # set True to skip sampling when results already exist
 
 lisa_data = LISAData.load(data_path="data/tdi.h5")
 lisa_data.plot(f"{RESULTS_DIR}/lisa_raw.png")
@@ -79,7 +80,7 @@ true_psd_standardized_data = true_psd_physical_data
 
 idata = None
 
-if RESULT_FN.exists() and not False:
+if RESULT_FN.exists() and REUSE_EXISTING:
     logger.info(f"Found existing results at {RESULT_FN}, loading...")
     import arviz as az
 
@@ -87,12 +88,13 @@ if RESULT_FN.exists() and not False:
 
 else:
     logger.info(f"No existing {RESULT_FN} found, running inference...")
-    n_knots = 50 if RUN_VI_ONLY else 20
+    n_knots = 50 if RUN_VI_ONLY else 30
     idata = run_mcmc(
         data=fft_data,
         sampler="multivar_blocked_nuts",
-        n_samples=1000,
-        n_warmup=1000,
+        n_samples=1500,
+        n_warmup=1500,
+        num_chains=3,
         n_knots=n_knots,
         degree=3,
         diffMatrixOrder=2,
@@ -104,9 +106,12 @@ else:
         fmax=FMAX,
         # true_psd=dict(freq=freqs, psd=true_psd_standardized_data),
         only_vi=RUN_VI_ONLY,
-        vi_steps=30_000 if RUN_VI_ONLY else 1_500,
-        vi_lr=1e-3 if RUN_VI_ONLY else 1e-2,
+        vi_steps=30_000 if RUN_VI_ONLY else 5_000,
+        vi_lr=1e-3 if RUN_VI_ONLY else 5e-3,
+        vi_posterior_draws=256,
         vi_progress_bar=True,
+        target_accept_prob=0.9,
+        max_tree_depth=12,
     )
 
 if idata is None:

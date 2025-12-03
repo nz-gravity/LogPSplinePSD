@@ -355,6 +355,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 num_warmup=n_warmup,
                 num_samples=n_samples,
                 num_chains=self.config.num_chains,
+                chain_method=self.chain_method,
                 progress_bar=self.config.verbose,
                 jit_model_args=False,
             )
@@ -391,13 +392,13 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             )
             total_runtime += time.time() - start_time
 
-            block_samples = mcmc.get_samples()
+            block_samples = mcmc.get_samples(group_by_chain=True)
             for sample_key in list(block_samples):
                 if sample_key.startswith("phi"):
                     block_samples[sample_key] = jnp.exp(
                         block_samples[sample_key]
                     )
-            block_stats = mcmc.get_extra_fields()
+            block_stats = mcmc.get_extra_fields(group_by_chain=True)
 
             deterministic_keys = [
                 f"log_delta_sq_{channel_index}",
@@ -437,19 +438,17 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 theta_im_block = block_stats.pop(f"theta_im_{channel_index}")
 
                 if theta_re_total is None:
-                    n_draws = theta_re_block.shape[0]
+                    n_chains, n_draws = theta_re_block.shape[:2]
                     theta_re_total = jnp.zeros(
-                        (n_draws, self.n_freq, self.n_theta)
+                        (n_chains, n_draws, self.n_freq, self.n_theta)
                     )
-                    theta_im_total = jnp.zeros(
-                        (n_draws, self.n_freq, self.n_theta)
-                    )
+                    theta_im_total = jnp.zeros_like(theta_re_total)
 
                 theta_slice = slice(theta_start, theta_start + theta_count)
-                theta_re_total = theta_re_total.at[:, :, theta_slice].set(
+                theta_re_total = theta_re_total.at[:, :, :, theta_slice].set(
                     theta_re_block
                 )
-                theta_im_total = theta_im_total.at[:, :, theta_slice].set(
+                theta_im_total = theta_im_total.at[:, :, :, theta_slice].set(
                     theta_im_block
                 )
 
@@ -467,11 +466,13 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         self.runtime = total_runtime
 
-        log_delta_sq = jnp.stack(channel_log_delta, axis=2)
+        log_delta_sq = jnp.stack(channel_log_delta, axis=-1)
 
         if theta_re_total is None:
-            theta_re_total = jnp.zeros((log_delta_sq.shape[0], self.n_freq, 0))
-            theta_im_total = jnp.zeros((log_delta_sq.shape[0], self.n_freq, 0))
+            theta_re_total = jnp.zeros(
+                (log_delta_sq.shape[0], log_delta_sq.shape[1], self.n_freq, 0)
+            )
+            theta_im_total = jnp.zeros_like(theta_re_total)
 
         combined_stats.update(
             {

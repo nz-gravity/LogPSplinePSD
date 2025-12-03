@@ -64,6 +64,7 @@ class BaseSampler(ABC):
 
         # Common attributes for all samplers
         self.rng_key = jax.random.PRNGKey(config.rng_key)
+        self.chain_method = self._select_chain_method()
         self.runtime = np.nan
         self.device = jax.devices()[0].platform
 
@@ -194,3 +195,20 @@ class BaseSampler(ABC):
     def _save_plots(self, idata: az.InferenceData) -> None:
         """Save data-type specific plots."""
         pass
+
+    def _select_chain_method(self) -> str:
+        """Choose an appropriate NumPyro chain_method based on hardware.
+
+        NumPyro defaults to ``parallel`` for ``num_chains > 1`` which fails when
+        only a single device is available. Fall back to ``vectorized`` in that
+        case so multi-chain sampling works out of the box on CPUs/GPUs with a
+        single device.
+        """
+
+        if self.config.num_chains <= 1:
+            return "sequential"
+
+        if len(jax.devices()) >= self.config.num_chains:
+            return "parallel"
+
+        return "vectorized"

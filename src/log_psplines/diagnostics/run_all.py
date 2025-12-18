@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict
 
 from . import mcmc, psd_bands, psd_compare, time_domain, vi, whitening
 

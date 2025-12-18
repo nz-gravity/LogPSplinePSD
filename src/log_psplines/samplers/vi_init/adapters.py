@@ -9,9 +9,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from numpyro.infer.util import init_to_value
-from scipy.integrate import simpson
 
-from ...arviz_utils.to_arviz import _compute_multivar_riae_diagnostics
+from ...diagnostics.psd_compare import compute_multivar_riae_diagnostics
 from ...logger import logger
 from ..utils import pspline_hyperparameter_initials
 from .core import fit_vi
@@ -384,7 +383,7 @@ def compute_vi_artifacts_multivar(
             freqs = np.asarray(sampler.freq, dtype=np.float64)
             true_psd_real = np.real(true_psd)
             diagnostics.update(
-                _compute_multivar_riae_diagnostics(
+                compute_multivar_riae_diagnostics(
                     vi_psd_np,
                     true_psd_real,
                     freqs,

@@ -10,8 +10,9 @@ import numpy as np
 def _lag_autocorr(signal: np.ndarray, lag: int) -> float:
     if signal.size <= lag:
         return np.nan
-    x0 = signal[:-lag] - np.mean(signal[:-lag])
-    x1 = signal[lag:] - np.mean(signal[lag:])
+    mean = np.mean(signal)
+    x0 = signal[:-lag] - mean
+    x1 = signal[lag:] - mean
     denom = np.std(x0) * np.std(x1)
     if denom == 0:
         return np.nan

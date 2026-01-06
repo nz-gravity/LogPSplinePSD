@@ -43,7 +43,7 @@ def _psd_variance_from_ds(psd_ds) -> Optional[float]:
         if perc.size == 0:
             perc = np.arange(values.shape[0], dtype=float)
         q50 = values[int(np.argmin(np.abs(perc - 50.0)))]
-        return float(np.trapz(q50, freqs))
+        return float(np.trapezoid(q50, freqs))
     if "psd_matrix_real" in psd_ds:
         psd = psd_ds["psd_matrix_real"]
         freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
@@ -55,7 +55,7 @@ def _psd_variance_from_ds(psd_ds) -> Optional[float]:
         diag = np.real(
             q50[:, np.arange(q50.shape[1]), np.arange(q50.shape[2])]
         )
-        var = np.trapz(diag, freqs, axis=0)
+        var = np.trapezoid(diag, freqs, axis=0)
         return float(np.mean(var))
     return None
 

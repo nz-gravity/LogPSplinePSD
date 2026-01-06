@@ -70,9 +70,24 @@ def test_lisa_data(outdir):
     )
 
 
-def test_lvk_data(outdir):
+def test_lvk_data(outdir, monkeypatch):
     outdir = f"{outdir}/{OUT}"
     os.makedirs(outdir, exist_ok=True)
+
+    def _fake_fetch_open_data(detector, gps_start, gps_end):
+        from gwpy.timeseries import TimeSeries
+
+        sample_rate = 1024
+        n_samples = int((gps_end - gps_start) * sample_rate)
+        rng = np.random.default_rng(12345)
+        data = rng.normal(scale=1e-21, size=n_samples)
+        return TimeSeries(data, sample_rate=sample_rate, t0=gps_start)
+
+    monkeypatch.setattr(
+        "log_psplines.example_datasets.lvk_data.TimeSeries.fetch_open_data",
+        _fake_fetch_open_data,
+    )
+
     lvk_data = LVKData.download_data(
         detector="L1",
         gps_start=1126259462,

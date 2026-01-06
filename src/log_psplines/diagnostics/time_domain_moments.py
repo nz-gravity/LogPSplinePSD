@@ -48,7 +48,7 @@ def compute_psd_variances(
     if freqs_arr.shape[0] != psd_arr.shape[-1]:
         raise ValueError("freqs length must match the PSD frequency dimension")
 
-    variances = np.trapz(psd_arr, freqs_arr, axis=-1)
+    variances = np.trapezoid(psd_arr, freqs_arr, axis=-1)
     return variances
 
 

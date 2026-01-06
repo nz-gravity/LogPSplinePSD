@@ -114,6 +114,9 @@ line_length = 79
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--durations=20 -s"
+markers = [
+    "slow: slow integration or end-to-end tests",
+]
 
 [tool.coverage.run]
 branch = true

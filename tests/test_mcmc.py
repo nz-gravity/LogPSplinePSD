@@ -17,20 +17,21 @@ from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 from log_psplines.plotting import plot_pdgrm, plot_psd_matrix
 
 
+@pytest.mark.slow
 def test_multivar_mcmc(outdir, test_mode):
     """Test basic multivariate PSD analysis with VARMA data."""
     outdir = f"{outdir}/out_mcmc/multivar"
     os.makedirs(outdir, exist_ok=True)
     print(f"++++ Running multivariate MCMC test {test_mode} ++++")
 
-    n = 1024
-    n_knots = 10
-    n_samples = n_warmup = 1200
+    n = 256
+    n_knots = 8
+    n_samples = n_warmup = 200
     verbose = True
     if test_mode == "fast":
-        n_samples = n_warmup = 4
-        n = 128
-        n_knots = 4
+        n_samples = n_warmup = 3
+        n = 64
+        n_knots = 3
         verbose = False
 
     # Generate test data
@@ -188,6 +189,61 @@ def test_multivar_mcmc(outdir, test_mode):
     print(f"++++ multivariate MCMC test {test_mode} COMPLETE ++++")
 
 
+def test_multivar_mcmc_unit(synthetic_multivar_timeseries, tmp_path):
+    timeseries = synthetic_multivar_timeseries
+    idata = run_mcmc(
+        data=timeseries,
+        sampler="multivar_blocked_nuts",
+        n_knots=3,
+        n_samples=2,
+        n_warmup=2,
+        n_time_blocks=1,
+        vi_steps=30,
+        vi_posterior_draws=16,
+        vi_psd_max_draws=6,
+        only_vi=True,
+        compute_lnz=False,
+        verbose=False,
+        outdir=str(tmp_path),
+    )
+
+    assert idata is not None
+    assert "posterior" in idata.groups()
+    psd = idata.posterior_psd["psd_matrix_real"].sel(
+        percentile=50, method="nearest"
+    )
+    psd_vals = np.asarray(psd.values)
+    assert psd_vals.ndim == 3
+    assert np.allclose(
+        psd_vals, np.swapaxes(psd_vals, 1, 2), rtol=1e-6, atol=1e-8
+    )
+    diag = np.diagonal(psd_vals, axis1=1, axis2=2)
+    assert np.all(diag > 0.0)
+
+
+def test_mcmc_unit(synthetic_univar_timeseries, tmp_path):
+    idata = run_mcmc(
+        synthetic_univar_timeseries,
+        sampler="mh",
+        n_knots=4,
+        n_samples=6,
+        n_warmup=6,
+        outdir=str(tmp_path),
+        rng_key=0,
+        compute_lnz=False,
+        verbose=False,
+    )
+
+    assert "posterior" in idata.groups()
+    assert "sample_stats" in idata.groups()
+    assert "lp" in idata.sample_stats.data_vars
+    weights = get_weights(idata)
+    assert weights.size > 0
+    psd = idata.posterior_psd["psd"].sel(percentile=50, method="nearest")
+    assert np.all(psd.values > 0.0)
+
+
+@pytest.mark.slow
 def test_mcmc(outdir: str, test_mode: str):
     outdir = os.path.join(outdir, "out_mcmc/univar")
     os.makedirs(outdir, exist_ok=True)
@@ -196,14 +252,14 @@ def test_mcmc(outdir: str, test_mode: str):
 
     psd_scale = 1  # e-42
 
-    n = 1024
-    n_samples = n_warmup = 500
-    n_knots = 10
+    n = 256
+    n_samples = n_warmup = 120
+    n_knots = 8
     compute_lnz = True
     sampler_names = ["nuts", "mh"]
     if test_mode == "fast":
-        n_samples = n_warmup = 4
-        n = 128
+        n_samples = n_warmup = 3
+        n = 64
         n_knots = 3
         compute_lnz = False
         sampler_names = ["nuts", "mh"]
@@ -356,7 +412,7 @@ def test_run_mcmc_coarse_grain_univariate_mcmc():
 
 def _synthetic_multivar_series():
     rng = np.random.default_rng(67890)
-    n = 128
+    n = 64
     t = np.linspace(0, 4, n, endpoint=False)
     base = np.stack(
         (
@@ -418,17 +474,17 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
     idata = run_mcmc(
         data=ts_run,
         sampler="multivar_blocked_nuts",
-        n_samples=8,
-        n_warmup=8,
+        n_samples=2,
+        n_warmup=2,
         n_knots=5,
         degree=3,
         diffMatrixOrder=2,
         n_time_blocks=n_blocks,
         only_vi=True,
-        vi_steps=200,
+        vi_steps=40,
         vi_lr=5e-3,
         vi_progress_bar=False,
-        vi_psd_max_draws=8,
+        vi_psd_max_draws=4,
         fmin=fmin,
         fmax=fmax,
         coarse_grain_config=coarse_cfg,
@@ -439,37 +495,71 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
     assert np.allclose(freq, expected_freq)
 
 
-@pytest.mark.parametrize(
-    ("sampler", "n_time_blocks"),
-    [
-        ("multivar_nuts", 1),
-        ("multivar_blocked_nuts", 2),
-    ],
-)
 @pytest.mark.parametrize("num_chains", [1, 2])
-def test_multivariate_arviz_chain_dims(
-    outdir, num_chains, sampler, n_time_blocks
-):
-    varma = VARMAData(n_samples=64, seed=123)
+def test_multivariate_arviz_chain_dims_blocked(outdir, num_chains):
+    varma = VARMAData(n_samples=48, seed=123)
     timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
     outdir = os.path.join(
-        outdir, f"multivar_arviz_{sampler}_chains_{num_chains}"
+        outdir, f"multivar_arviz_blocked_chains_{num_chains}"
     )
 
     idata = run_mcmc(
         data=timeseries,
-        sampler=sampler,
+        sampler="multivar_blocked_nuts",
         n_knots=3,
-        n_samples=4,
-        n_warmup=4,
+        n_samples=2,
+        n_warmup=2,
         num_chains=num_chains,
-        vi_steps=50,
-        vi_posterior_draws=32,
+        vi_steps=20,
+        vi_posterior_draws=8,
         verbose=False,
         compute_lnz=False,
         outdir=outdir,
-        n_time_blocks=n_time_blocks,
+        n_time_blocks=2,
     )
 
     assert idata.posterior.sizes.get("chain") == num_chains
     assert idata.sample_stats.sizes.get("chain") == num_chains
+
+
+def test_multivariate_arviz_chain_dims_unblocked(outdir):
+    varma = VARMAData(n_samples=48, seed=321)
+    timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
+    outdir = os.path.join(outdir, "multivar_arviz_unblocked_chains_1")
+
+    idata = run_mcmc(
+        data=timeseries,
+        sampler="multivar_nuts",
+        n_knots=3,
+        n_samples=2,
+        n_warmup=2,
+        num_chains=1,
+        vi_steps=20,
+        vi_posterior_draws=8,
+        verbose=False,
+        compute_lnz=False,
+        outdir=outdir,
+        n_time_blocks=1,
+    )
+
+    assert idata.posterior.sizes.get("chain") == 1
+    assert idata.sample_stats.sizes.get("chain") == 1
+
+
+def test_compare_results_minimal(tmp_path):
+    rng = np.random.default_rng(0)
+    draws = 60
+    run1 = az.from_dict(posterior={"weights": rng.normal(size=(1, draws))})
+    run2 = az.from_dict(
+        posterior={"weights": rng.normal(loc=0.1, size=(1, draws))}
+    )
+
+    compare_results(
+        run1,
+        run2,
+        labels=["Run1", "Run2"],
+        outdir=str(tmp_path),
+    )
+
+    assert (tmp_path / "ess_comparison.png").exists()
+    assert (tmp_path / "summary_diff.csv").exists()

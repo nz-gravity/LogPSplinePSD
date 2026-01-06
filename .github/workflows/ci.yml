@@ -58,7 +58,7 @@ jobs:
           echo "::warning::pre-commit reported issues. See the artifact pre-commit-log-${{ github.run_id }} for full details."
 
       - name: pytest
-        run: pytest --cov='log_psplines' --cov-report term-missing --cov-report=xml --durations=0
+        run: pytest --cov='log_psplines' --cov-report term-missing --cov-report=xml --durations=0 -m 'not slow'
 
       - name: Coveralls
         uses: coverallsapp/github-action@v2

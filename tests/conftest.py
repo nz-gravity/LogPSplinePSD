@@ -7,8 +7,10 @@ from log_psplines.datatypes import MultivariateTimeseries, Timeseries
 from log_psplines.logger import set_level
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# HARDCODE TO SLOW FOR MORE ACCURATE TESTS
-os.environ["LOG_PSPLINES_SLOW_TESTS"] = "1"
+if os.getenv("GITHUB_ACTIONS") == "true":
+    os.environ.setdefault("LOG_PSPLINES_SLOW_TESTS", "0")
+else:
+    os.environ.setdefault("LOG_PSPLINES_SLOW_TESTS", "1")
 
 set_level("DEBUG")
 
@@ -30,6 +32,15 @@ TEST_MODE = _compute_test_mode()
 def test_mode():
     """Expose the resolved test mode to tests."""
     return TEST_MODE
+
+
+def pytest_collection_modifyitems(config, items):
+    if TEST_MODE != "fast":
+        return
+    skip_slow = pytest.mark.skip(reason="Skipping slow tests in fast mode.")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)
 
 
 @pytest.fixture

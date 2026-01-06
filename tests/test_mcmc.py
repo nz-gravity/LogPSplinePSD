@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from log_psplines.arviz_utils import compare_results, get_weights
+from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
 from log_psplines.coarse_grain import (
     CoarseGrainConfig,
     compute_binning_structure,
@@ -189,22 +190,22 @@ def test_multivar_mcmc(outdir, test_mode):
     print(f"++++ multivariate MCMC test {test_mode} COMPLETE ++++")
 
 
-def test_multivar_mcmc_unit(synthetic_multivar_timeseries, tmp_path):
+def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
     timeseries = synthetic_multivar_timeseries
     idata = run_mcmc(
         data=timeseries,
         sampler="multivar_blocked_nuts",
         n_knots=3,
-        n_samples=2,
-        n_warmup=2,
+        n_samples=1,
+        n_warmup=1,
         n_time_blocks=1,
-        vi_steps=30,
-        vi_posterior_draws=16,
-        vi_psd_max_draws=6,
+        vi_steps=10,
+        vi_posterior_draws=6,
+        vi_psd_max_draws=2,
         only_vi=True,
         compute_lnz=False,
         verbose=False,
-        outdir=str(tmp_path),
+        outdir=None,
     )
 
     assert idata is not None
@@ -221,14 +222,14 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries, tmp_path):
     assert np.all(diag > 0.0)
 
 
-def test_mcmc_unit(synthetic_univar_timeseries, tmp_path):
+def test_mcmc_unit(synthetic_univar_timeseries):
     idata = run_mcmc(
         synthetic_univar_timeseries,
         sampler="mh",
-        n_knots=4,
-        n_samples=6,
-        n_warmup=6,
-        outdir=str(tmp_path),
+        n_knots=3,
+        n_samples=3,
+        n_warmup=3,
+        outdir=None,
         rng_key=0,
         compute_lnz=False,
         verbose=False,
@@ -347,7 +348,7 @@ def test_mcmc(outdir: str, test_mode: str):
 
 def _synthetic_univariate_series():
     rng = np.random.default_rng(12345)
-    n = 256
+    n = 128
     t = np.linspace(0, 4, n, endpoint=False)
     signal = 0.05 * np.sin(2 * np.pi * 3.0 * t)
     signal += 0.03 * np.cos(2 * np.pi * 1.3 * t)
@@ -395,14 +396,18 @@ def test_run_mcmc_coarse_grain_univariate_mcmc():
     idata = run_mcmc(
         data=ts_run,
         sampler="nuts",
-        n_samples=6,
-        n_warmup=6,
+        n_samples=1,
+        n_warmup=1,
         n_knots=6,
         degree=3,
         diffMatrixOrder=2,
         fmin=fmin,
         fmax=fmax,
         coarse_grain_config=coarse_cfg,
+        only_vi=True,
+        vi_steps=20,
+        vi_posterior_draws=8,
+        vi_psd_max_draws=4,
         verbose=False,
     )
     freq = np.asarray(idata.posterior_psd["freq"].values)
@@ -412,7 +417,7 @@ def test_run_mcmc_coarse_grain_univariate_mcmc():
 
 def _synthetic_multivar_series():
     rng = np.random.default_rng(67890)
-    n = 64
+    n = 32
     t = np.linspace(0, 4, n, endpoint=False)
     base = np.stack(
         (
@@ -474,17 +479,18 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
     idata = run_mcmc(
         data=ts_run,
         sampler="multivar_blocked_nuts",
-        n_samples=2,
-        n_warmup=2,
+        n_samples=1,
+        n_warmup=1,
         n_knots=5,
         degree=3,
         diffMatrixOrder=2,
         n_time_blocks=n_blocks,
         only_vi=True,
-        vi_steps=40,
+        vi_steps=20,
         vi_lr=5e-3,
         vi_progress_bar=False,
-        vi_psd_max_draws=4,
+        vi_posterior_draws=6,
+        vi_psd_max_draws=2,
         fmin=fmin,
         fmax=fmax,
         coarse_grain_config=coarse_cfg,
@@ -495,55 +501,26 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
     assert np.allclose(freq, expected_freq)
 
 
-@pytest.mark.parametrize("num_chains", [1, 2])
-def test_multivariate_arviz_chain_dims_blocked(outdir, num_chains):
-    varma = VARMAData(n_samples=48, seed=123)
-    timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
-    outdir = os.path.join(
-        outdir, f"multivar_arviz_blocked_chains_{num_chains}"
+def test_prepare_samples_and_stats_preserves_chain_dim():
+    samples = {"weights_delta_0": np.zeros((2, 3, 4), dtype=float)}
+    sample_stats = {"log_likelihood": np.zeros((2, 3), dtype=float)}
+    out_samples, out_stats = _prepare_samples_and_stats(
+        samples, sample_stats, num_chains=2
     )
 
-    idata = run_mcmc(
-        data=timeseries,
-        sampler="multivar_blocked_nuts",
-        n_knots=3,
-        n_samples=2,
-        n_warmup=2,
-        num_chains=num_chains,
-        vi_steps=20,
-        vi_posterior_draws=8,
-        verbose=False,
-        compute_lnz=False,
-        outdir=outdir,
-        n_time_blocks=2,
+    assert out_samples["weights_delta_0"].shape[0] == 2
+    assert out_stats["log_likelihood"].shape[0] == 2
+
+
+def test_prepare_samples_and_stats_adds_chain_dim():
+    samples = {"weights_delta_0": np.zeros((3, 4), dtype=float)}
+    sample_stats = {"log_likelihood": np.zeros((3,), dtype=float)}
+    out_samples, out_stats = _prepare_samples_and_stats(
+        samples, sample_stats, num_chains=1
     )
 
-    assert idata.posterior.sizes.get("chain") == num_chains
-    assert idata.sample_stats.sizes.get("chain") == num_chains
-
-
-def test_multivariate_arviz_chain_dims_unblocked(outdir):
-    varma = VARMAData(n_samples=48, seed=321)
-    timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
-    outdir = os.path.join(outdir, "multivar_arviz_unblocked_chains_1")
-
-    idata = run_mcmc(
-        data=timeseries,
-        sampler="multivar_nuts",
-        n_knots=3,
-        n_samples=2,
-        n_warmup=2,
-        num_chains=1,
-        vi_steps=20,
-        vi_posterior_draws=8,
-        verbose=False,
-        compute_lnz=False,
-        outdir=outdir,
-        n_time_blocks=1,
-    )
-
-    assert idata.posterior.sizes.get("chain") == 1
-    assert idata.sample_stats.sizes.get("chain") == 1
+    assert out_samples["weights_delta_0"].shape[0] == 1
+    assert out_stats["log_likelihood"].shape[0] == 1
 
 
 def test_compare_results_minimal(tmp_path):

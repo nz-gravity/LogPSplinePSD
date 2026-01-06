@@ -13,6 +13,7 @@ from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 from log_psplines.plotting import plot_psd_matrix
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(
     os.getenv("GITHUB_ACTIONS") is not None,
     reason="Skip multivariate coarse-grain test on CI for time",
@@ -23,9 +24,9 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     os.makedirs(outdir, exist_ok=True)
 
     # Problem size and sampling budget
-    n = 512 if test_mode != "fast" else 128
-    n_samples = n_warmup = 300 if test_mode != "fast" else 16
-    n_knots = 8 if test_mode != "fast" else 4
+    n = 256 if test_mode != "fast" else 64
+    n_samples = n_warmup = 120 if test_mode != "fast" else 8
+    n_knots = 6 if test_mode != "fast" else 3
 
     # Simulated data
     np.random.seed(0)

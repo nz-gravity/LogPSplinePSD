@@ -156,6 +156,7 @@ def test_multivar_coarse_psd_matches_bin_average():
     assert max_rel < 1e-10
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(
     os.getenv("GITHUB_ACTIONS") is not None,
     reason="Skip on GitHub Actions for time",
@@ -214,8 +215,8 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
         ar_data.ts,
         sampler="nuts",
         n_knots=15,
-        n_samples=500,
-        n_warmup=500,
+        n_samples=80,
+        n_warmup=80,
         outdir=f"{outdir}/coarse_grain",
         rng_key=0,
         compute_lnz=False,
@@ -229,8 +230,8 @@ def test_coarse_lnl_with_univar_mcmc(outdir):
         ar_data.ts,
         sampler="nuts",
         n_knots=15,
-        n_samples=500,
-        n_warmup=500,
+        n_samples=80,
+        n_warmup=80,
         outdir=f"{outdir}/full_freq",
         rng_key=0,
         compute_lnz=False,

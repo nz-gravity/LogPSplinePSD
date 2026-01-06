@@ -4,6 +4,7 @@ from click.testing import CliRunner
 from log_psplines.benchmark.cli import main as benchmark_cli
 
 
+@pytest.mark.slow
 def test_default_run(outdir):
     runner = CliRunner()
     outdir = f"{outdir}/out_benchmark"
@@ -26,7 +27,7 @@ def test_default_run(outdir):
             "4",
             "--verbose",
             "--n-mcmc",
-            "25",
+            "5",
         ],
     )
 

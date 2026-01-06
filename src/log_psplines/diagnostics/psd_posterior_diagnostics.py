@@ -96,8 +96,8 @@ def compute_riae(
             "freqs must be 1-D with length matching the PSD frequency axis"
         )
 
-    numerator = np.trapz(np.abs(est - ref), freqs_arr, axis=-1)
-    denominator = np.trapz(ref, freqs_arr, axis=-1)
+    numerator = np.trapezoid(np.abs(est - ref), freqs_arr, axis=-1)
+    denominator = np.trapezoid(ref, freqs_arr, axis=-1)
     with np.errstate(divide="ignore", invalid="ignore"):
         riae = numerator / denominator
     return riae

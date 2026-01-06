@@ -119,7 +119,7 @@ def compute_psd_functionals(
     psd_matrix = _prepare_psd_matrix(psd_samples, n_channels)
 
     # Total variance per channel
-    variance = np.trapz(
+    variance = np.trapezoid(
         psd_matrix[:, np.arange(n_channels), np.arange(n_channels), :],
         freqs,
         axis=-1,
@@ -137,7 +137,7 @@ def compute_psd_functionals(
         )
         if not np.any(mask) or band_width <= 0:
             continue
-        band_powers[:, :, band_idx] = np.trapz(
+        band_powers[:, :, band_idx] = np.trapezoid(
             psd_matrix[:, np.arange(n_channels), np.arange(n_channels), :][
                 :, :, mask
             ],
@@ -168,7 +168,7 @@ def compute_psd_functionals(
             if band_width <= 0:
                 continue
             avg = (
-                np.trapz(coh_spectrum[:, mask], band_span, axis=-1)
+                np.trapezoid(coh_spectrum[:, mask], band_span, axis=-1)
                 / band_width
             )
             coherence[:, pair_idx, band_idx] = avg

@@ -14,9 +14,11 @@ def _compute_rhat(idata) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
     try:
         rhat = az.rhat(idata)
-        vals = np.asarray(rhat.to_array())
-        metrics["rhat_max"] = float(np.nanmax(vals))
-        metrics["rhat_mean"] = float(np.nanmean(vals))
+        vals = np.asarray(rhat.to_array()).reshape(-1)
+        finite = vals[np.isfinite(vals)]
+        if finite.size:
+            metrics["rhat_max"] = float(np.max(finite))
+            metrics["rhat_mean"] = float(np.mean(finite))
     except Exception:
         pass
     return metrics

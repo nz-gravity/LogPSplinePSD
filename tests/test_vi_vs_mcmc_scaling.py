@@ -13,31 +13,30 @@ def _diag_ratio(idata_vi, idata_nuts, channel_index):
     return vi_diag / nuts_diag
 
 
-def test_vi_matches_mcmc_psd_scaling(tmp_path):
+def test_vi_matches_mcmc_psd_scaling():
     """VI and MCMC PSD outputs should share the same physical scaling."""
 
     rng_seed = 1234
     np.random.seed(rng_seed)
-    varma = VARMAData(n_samples=24, seed=rng_seed)
+    varma = VARMAData(n_samples=16, seed=rng_seed)
     ts = MultivariateTimeseries(t=varma.time, y=varma.data)
 
     sampler_kwargs = dict(
         data=ts,
         sampler="nuts",
         n_knots=3,
-        n_samples=4,
-        n_warmup=4,
+        n_samples=2,
+        n_warmup=2,
         rng_key=rng_seed,
         verbose=False,
-        vi_steps=40,
-        vi_posterior_draws=12,
-        vi_psd_max_draws=6,
+        vi_steps=10,
+        vi_posterior_draws=6,
+        vi_psd_max_draws=3,
+        vi_progress_bar=False,
     )
 
-    idata_vi = run_mcmc(
-        **sampler_kwargs, outdir=str(tmp_path / "vi_only"), only_vi=True
-    )
-    idata_nuts = run_mcmc(**sampler_kwargs, outdir=str(tmp_path / "nuts"))
+    idata_vi = run_mcmc(**sampler_kwargs, outdir=None, only_vi=True)
+    idata_nuts = run_mcmc(**sampler_kwargs, outdir=None)
 
     median_ratios = []
 

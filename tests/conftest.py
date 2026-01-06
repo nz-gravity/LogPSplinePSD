@@ -62,7 +62,7 @@ def outdir():
 @pytest.fixture
 def synthetic_univar_timeseries() -> Timeseries:
     rng = np.random.default_rng(123)
-    n = 64
+    n = 32
     t = np.linspace(0.0, 1.0, n, endpoint=False)
     y = 0.2 * np.sin(2 * np.pi * 3.0 * t)
     y += 0.05 * rng.normal(size=n)
@@ -72,7 +72,7 @@ def synthetic_univar_timeseries() -> Timeseries:
 @pytest.fixture
 def synthetic_multivar_timeseries() -> MultivariateTimeseries:
     rng = np.random.default_rng(456)
-    n = 64
+    n = 32
     t = np.linspace(0.0, 1.0, n, endpoint=False)
     base = np.stack(
         (

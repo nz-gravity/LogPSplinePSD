@@ -6,7 +6,7 @@ import scipy.signal
 import scipy.special
 import scipy.stats
 
-from .logger import logger
+from ..logger import logger
 
 
 class PSDDiagnostics:

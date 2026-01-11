@@ -46,7 +46,7 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     runtime = float(time.time()) - t0
 
     print(
-        f"LnL initial: {lnl_initial}, LnL final: {lnl_final}, runtime: {runtime:.2f} seconds"
+        f"LnL initial: {lnl_initial:.2f}, LnL final: {lnl_final:.2f}, runtime: {runtime:.2f} seconds"
     )
 
     # plotting for verification

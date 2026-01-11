@@ -123,6 +123,7 @@ branch = true
 source = [
     "log_psplines"
 ]
+omit = ["src/log_psplines/_version.py", "src/log_psplines/logger.py", "src/log_psplines/benchmark/*"]
 
 [tool.coverage.paths]
 source = [

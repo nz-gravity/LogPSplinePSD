@@ -1,6 +1,6 @@
 import numpy as np
 
-from log_psplines.time_domain_moments import (
+from log_psplines.diagnostics.time_domain_moments import (
     compute_empirical_covariances,
     compute_empirical_variances,
     compute_psd_covariances,

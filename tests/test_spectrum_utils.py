@@ -1,0 +1,111 @@
+import numpy as np
+import pytest
+
+from log_psplines.spectrum_utils import (
+    compute_effective_nu,
+    sum_wishart_outer_products,
+    u_to_wishart_matrix,
+    wishart_matrix_to_psd,
+    wishart_u_to_psd,
+)
+
+
+def test_compute_effective_nu_scalar_no_weights():
+    result = compute_effective_nu(3.5)
+    assert result.shape == ()
+    assert float(result) == pytest.approx(3.5)
+
+
+def test_compute_effective_nu_scalar_with_weights():
+    weights = np.array([0.5, 1.0, 2.0])
+    result = compute_effective_nu(4.0, weights=weights)
+    np.testing.assert_allclose(result, weights * 4.0)
+
+
+def test_compute_effective_nu_rejects_bad_inputs():
+    with pytest.raises(ValueError):
+        compute_effective_nu(np.array([[1.0, 2.0]]))
+
+    with pytest.raises(ValueError):
+        compute_effective_nu(2.0, weights=np.array([1.0, 0.0]))
+
+    with pytest.raises(ValueError):
+        compute_effective_nu(
+            np.array([1.0, 2.0]), weights=np.array([1.0, 2.0, 3.0])
+        )
+
+
+def test_u_to_wishart_matrix_matches_manual_product():
+    u = np.array(
+        [
+            [[1.0 + 1.0j, 2.0 - 1.0j], [0.5 + 0.0j, -1.0 + 2.0j]],
+            [[-1.0 + 0.5j, 0.0 + 1.0j], [2.0 - 2.0j, 1.0 + 0.0j]],
+        ],
+        dtype=np.complex128,
+    )
+    expected = np.stack([u_f @ u_f.conj().T for u_f in u], axis=0)
+    result = u_to_wishart_matrix(u)
+    np.testing.assert_allclose(result, expected)
+
+
+def test_u_to_wishart_matrix_rejects_wrong_shape():
+    with pytest.raises(ValueError):
+        u_to_wishart_matrix(np.zeros((2, 2)))
+
+
+def test_sum_wishart_outer_products_matches_manual_sum():
+    u_stack = np.array(
+        [
+            [[1.0 + 0.0j, 2.0 + 0.0j], [0.0 + 1.0j, 1.0 - 1.0j]],
+            [[-1.0 + 0.5j, 0.0 + 0.0j], [2.0 + 0.0j, 0.5 + 0.0j]],
+            [[0.0 + 1.0j, 0.0 - 1.0j], [1.0 + 0.0j, -2.0 + 0.0j]],
+        ],
+        dtype=np.complex128,
+    )
+    expected = sum(u @ u.conj().T for u in u_stack)
+    result = sum_wishart_outer_products(u_stack)
+    np.testing.assert_allclose(result, expected)
+
+
+def test_sum_wishart_outer_products_rejects_wrong_shape():
+    with pytest.raises(ValueError):
+        sum_wishart_outer_products(np.zeros((2, 2)))
+
+
+def test_wishart_matrix_to_psd_scales_and_broadcasts():
+    Y = np.arange(8.0).reshape(2, 2, 2)
+    result = wishart_matrix_to_psd(Y, 4.0, scaling_factor=2.5)
+    expected = Y / 4.0 * 2.5
+    np.testing.assert_allclose(result, expected)
+
+
+def test_wishart_matrix_to_psd_with_weights():
+    Y = np.arange(8.0).reshape(2, 2, 2)
+    weights = np.array([1.0, 2.0])
+    result = wishart_matrix_to_psd(Y, 2.0, weights=weights)
+    expected = Y / (weights * 2.0)[:, None, None]
+    np.testing.assert_allclose(result, expected)
+
+
+def test_wishart_matrix_to_psd_rejects_bad_shapes():
+    with pytest.raises(ValueError):
+        wishart_matrix_to_psd(np.zeros((2, 2)), 2.0)
+
+    with pytest.raises(ValueError):
+        wishart_matrix_to_psd(np.zeros((2, 2, 2)), np.array([1.0, 2.0, 3.0]))
+
+
+def test_wishart_u_to_psd_matches_explicit_path():
+    u = np.array(
+        [
+            [[1.0 + 0.5j, 0.0 + 1.0j], [2.0 + 0.0j, 1.0 + 0.0j]],
+            [[0.0 + 0.0j, 1.0 + 1.0j], [1.5 + 0.0j, -0.5 + 0.0j]],
+        ],
+        dtype=np.complex128,
+    )
+    weights = np.array([1.0, 0.5])
+    expected = wishart_matrix_to_psd(
+        u_to_wishart_matrix(u), 2.0, scaling_factor=1.5, weights=weights
+    )
+    result = wishart_u_to_psd(u, 2.0, scaling_factor=1.5, weights=weights)
+    np.testing.assert_allclose(result, expected)

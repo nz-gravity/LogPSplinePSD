@@ -880,6 +880,74 @@ def _get_channel_indices(sample_stats, base_key: str) -> set:
     return indices
 
 
+def _coerce_int(value) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _max_tree_depth_stats(
+    num_steps: Optional[np.ndarray],
+    tree_depth: Optional[np.ndarray],
+    max_tree_depth: Optional[int],
+) -> Optional[dict]:
+    if tree_depth is not None and tree_depth.size:
+        tree_depth = np.asarray(tree_depth)
+        tree_depth = tree_depth[np.isfinite(tree_depth)]
+        if tree_depth.size == 0:
+            return None
+        max_depth = (
+            _coerce_int(max_tree_depth)
+            if max_tree_depth is not None
+            else int(np.max(tree_depth))
+        )
+        if max_depth is None:
+            return None
+        frac = float(np.mean(tree_depth >= max_depth))
+        max_steps = int(2**max_depth - 1) if max_depth is not None else None
+        return {
+            "frac": frac,
+            "max_depth": max_depth,
+            "max_steps": max_steps,
+            "source": "tree_depth",
+        }
+
+    if num_steps is None or not np.size(num_steps):
+        return None
+
+    steps = np.asarray(num_steps)
+    steps = steps[np.isfinite(steps)]
+    if steps.size == 0:
+        return None
+
+    max_depth = _coerce_int(max_tree_depth)
+    max_steps = int(2**max_depth - 1) if max_depth is not None else None
+    if max_steps is None:
+        max_steps = int(np.max(steps))
+        max_depth = (
+            int(np.floor(np.log2(max_steps + 1))) if max_steps > 0 else None
+        )
+    frac = float(np.mean(steps >= max_steps))
+    return {
+        "frac": frac,
+        "max_steps": max_steps,
+        "max_depth": max_depth,
+        "source": "num_steps",
+    }
+
+
+def _format_max_tree_depth_message(stats: dict) -> str:
+    pct = stats["frac"] * 100
+    max_steps = stats.get("max_steps")
+    max_depth = stats.get("max_depth")
+    if max_steps is not None:
+        return f"Max tree depth hits: {pct:.1f}% (max steps {max_steps})"
+    if max_depth is not None:
+        return f"Max tree depth hits: {pct:.1f}% (max depth {max_depth})"
+    return f"Max tree depth hits: {pct:.1f}%"
+
+
 def _plot_nuts_diagnostics_blockaware(idata, config):
     """NUTS diagnostics supporting per‑channel (blocked) diagnostics fields.
 
@@ -891,6 +959,17 @@ def _plot_nuts_diagnostics_blockaware(idata, config):
     has_potential = "potential_energy" in idata.sample_stats
     has_steps = "num_steps" in idata.sample_stats
     has_accept = "accept_prob" in idata.sample_stats
+    has_tree_depth = "tree_depth" in idata.sample_stats
+
+    attrs = getattr(idata, "attrs", {}) or {}
+    if not hasattr(attrs, "get"):
+        attrs = dict(attrs)
+    max_tree_depth = _coerce_int(attrs.get("max_tree_depth"))
+    tree_depth = (
+        idata.sample_stats.tree_depth.values.flatten()
+        if has_tree_depth
+        else None
+    )
 
     # Collect per-channel data
     def _collect(base):
@@ -962,6 +1041,26 @@ def _plot_nuts_diagnostics_blockaware(idata, config):
         ax.set_xlabel("Steps")
         ax.set_ylabel("Trajectories")
         ax.grid(True, alpha=0.3)
+        max_stats = _max_tree_depth_stats(vals, tree_depth, max_tree_depth)
+        if max_stats and max_stats.get("max_steps") is not None:
+            ax.axvline(
+                max_stats["max_steps"],
+                color="red",
+                linestyle="--",
+                linewidth=1.5,
+                label="max tree depth",
+            )
+            ax.legend(loc="best", fontsize="small")
+        if max_stats:
+            ax.text(
+                0.02,
+                0.98,
+                _format_max_tree_depth_message(max_stats),
+                transform=ax.transAxes,
+                fontsize=8,
+                bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
+                verticalalignment="top",
+            )
     else:
         ax.text(0.5, 0.5, "Steps data\nunavailable", ha="center", va="center")
 
@@ -998,9 +1097,19 @@ def _plot_nuts_diagnostics_blockaware(idata, config):
         if has_steps:
             s = idata.sample_stats.num_steps.values.flatten()
             lines.append(f"  overall μ={np.mean(s):.1f}, max={np.max(s):.0f}")
+            max_stats = _max_tree_depth_stats(s, tree_depth, max_tree_depth)
+            if max_stats:
+                lines.append(
+                    f"  overall {_format_max_tree_depth_message(max_stats)}"
+                )
         for ch in sorted(steps_ch):
             s = steps_ch[ch]
             lines.append(f"  ch {ch} μ={np.mean(s):.1f}, max={np.max(s):.0f}")
+            max_stats = _max_tree_depth_stats(s, None, max_tree_depth)
+            if max_stats:
+                lines.append(
+                    f"  ch {ch} {_format_max_tree_depth_message(max_stats)}"
+                )
         lines.append("")
     if has_accept or accept_ch:
         lines.append("Acceptance summary:")
@@ -1040,6 +1149,10 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
     potential = _get("potential_energy")
     num_steps = _get("num_steps")
     accept_prob = _get("accept_prob")
+    attrs = getattr(idata, "attrs", {}) or {}
+    if not hasattr(attrs, "get"):
+        attrs = dict(attrs)
+    max_tree_depth = _coerce_int(attrs.get("max_tree_depth"))
 
     fig, axes = plt.subplots(2, 2, figsize=config.figsize)
 
@@ -1087,6 +1200,26 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
         ax.set_xlabel("Steps")
         ax.set_ylabel("Trajectories")
         ax.grid(True, alpha=0.3)
+        max_stats = _max_tree_depth_stats(num_steps, None, max_tree_depth)
+        if max_stats and max_stats.get("max_steps") is not None:
+            ax.axvline(
+                max_stats["max_steps"],
+                color="red",
+                linestyle="--",
+                linewidth=1.5,
+                label="max tree depth",
+            )
+            ax.legend(loc="best", fontsize="small")
+        if max_stats:
+            ax.text(
+                0.02,
+                0.98,
+                _format_max_tree_depth_message(max_stats),
+                transform=ax.transAxes,
+                fontsize=8,
+                bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
+                verticalalignment="top",
+            )
     else:
         ax.text(0.5, 0.5, "Steps data\nunavailable", ha="center", va="center")
     ax.set_title(f"Channel {channel_idx} Leapfrog Steps")
@@ -1106,6 +1239,11 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
         stats_lines.append(
             f"  steps μ={np.mean(num_steps):.1f}, max={np.max(num_steps):.0f}"
         )
+        max_stats = _max_tree_depth_stats(num_steps, None, max_tree_depth)
+        if max_stats:
+            stats_lines.append(
+                f"  {_format_max_tree_depth_message(max_stats)}"
+            )
     if accept_prob is not None:
         stats_lines.append(f"  accept μ={np.mean(accept_prob):.3f}")
 
@@ -1199,6 +1337,10 @@ def _plot_nuts_diagnostics(idata, config):
     has_divergences = "diverging" in idata.sample_stats
     has_tree_depth = "tree_depth" in idata.sample_stats
     has_energy_error = "energy_error" in idata.sample_stats
+    attrs = getattr(idata, "attrs", {}) or {}
+    if not hasattr(attrs, "get"):
+        attrs = dict(attrs)
+    max_tree_depth = _coerce_int(attrs.get("max_tree_depth"))
 
     # Create a 2x2 layout, potentially combining energy and potential on same plot
     fig, axes = plt.subplots(2, 2, figsize=config.figsize)
@@ -1324,6 +1466,22 @@ def _plot_nuts_diagnostics(idata, config):
                 linewidth=1,
                 label=f"2^{depth} ({max_steps})",
             )
+        tree_depth = (
+            idata.sample_stats.tree_depth.values.flatten()
+            if has_tree_depth
+            else None
+        )
+        max_stats = _max_tree_depth_stats(
+            num_steps, tree_depth, max_tree_depth
+        )
+        if max_stats and max_stats.get("max_steps") is not None:
+            steps_ax.axvline(
+                x=max_stats["max_steps"],
+                color="red",
+                linestyle="--",
+                linewidth=1.5,
+                label="max tree depth",
+            )
 
         steps_ax.set_xlabel("Leapfrog Steps")
         steps_ax.set_ylabel("Trajectories")
@@ -1335,10 +1493,13 @@ def _plot_nuts_diagnostics(idata, config):
         pct_inefficient = (num_steps > 256).mean() * 100
         pct_moderate = ((num_steps > 64) & (num_steps <= 256)).mean() * 100
         pct_efficient = (num_steps <= 64).mean() * 100
+        extra = ""
+        if max_stats:
+            extra = f"\n{_format_max_tree_depth_message(max_stats)}"
         steps_ax.text(
             0.02,
             0.98,
-            f"Efficient: {pct_efficient:.1f}%\nModerate: {pct_moderate:.1f}%\nInefficient: {pct_inefficient:.1f}%\nMean steps: {np.mean(num_steps):.1f}",
+            f"Efficient: {pct_efficient:.1f}%\nModerate: {pct_moderate:.1f}%\nInefficient: {pct_inefficient:.1f}%\nMean steps: {np.mean(num_steps):.1f}{extra}",
             transform=steps_ax.transAxes,
             fontsize=7,
             bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
@@ -1438,8 +1599,9 @@ def _plot_nuts_diagnostics(idata, config):
     if has_tree_depth:
         tree_depth = idata.sample_stats.tree_depth.values.flatten()
         stats_lines.append(f"Tree depth: μ={np.mean(tree_depth):.1f}")
-        pct_max_depth = (tree_depth >= 10).mean() * 100
-        stats_lines.append(f"Max depth (≥10): {pct_max_depth:.1f}%")
+        max_stats = _max_tree_depth_stats(None, tree_depth, max_tree_depth)
+        if max_stats:
+            stats_lines.append(_format_max_tree_depth_message(max_stats))
 
     if has_divergences:
         divergences = idata.sample_stats.diverging.values.flatten()
@@ -1800,6 +1962,7 @@ def generate_diagnostics_summary(idata, outdir):
     n_chains = idata.posterior.sizes.get("chain", 1)
     n_params = len(list(idata.posterior.data_vars))
     sampler_type = attrs.get("sampler_type", "Unknown")
+    max_tree_depth = _coerce_int(attrs.get("max_tree_depth"))
 
     summary.append(f"Sampler: {sampler_type}")
     summary.append(
@@ -1846,6 +2009,40 @@ def generate_diagnostics_summary(idata, outdir):
         if khat is not None:
             summary.append(f"PSIS k-hat (max): {khat:.3f}")
 
+    tree_depth = (
+        idata.sample_stats.tree_depth.values.flatten()
+        if "tree_depth" in idata.sample_stats
+        else None
+    )
+    num_steps = None
+    if "num_steps" in idata.sample_stats:
+        num_steps = idata.sample_stats.num_steps.values.flatten()
+    else:
+        step_values = []
+        for key in idata.sample_stats:
+            if isinstance(key, str) and key.startswith("num_steps_channel_"):
+                step_values.append(idata.sample_stats[key].values.flatten())
+        if step_values:
+            num_steps = np.concatenate(step_values)
+    max_stats = _max_tree_depth_stats(num_steps, tree_depth, max_tree_depth)
+    if max_stats:
+        pct = max_stats["frac"] * 100
+        summary.append(_format_max_tree_depth_message(max_stats))
+        if pct >= 50:
+            summary.append(
+                "  ⚠ Max tree depth hit rate is very high; consider reparameterization or increasing max_tree_depth."
+            )
+            logger.warning(
+                f"Max tree depth hit rate is {pct:.1f}% (very high)."
+            )
+        elif pct >= 10:
+            summary.append(
+                "  ⚠ Max tree depth hit rate is elevated; geometry may be challenging."
+            )
+            logger.warning(
+                f"Max tree depth hit rate is {pct:.1f}% (elevated)."
+            )
+
     psd_diag = diag_results.get("psd_compare", {})
     if psd_diag:
         summary.append("\nPSD accuracy diagnostics:")
@@ -1859,14 +2056,19 @@ def generate_diagnostics_summary(idata, outdir):
     # Overall assessment (best-effort)
     summary.append("\nOverall Convergence Assessment:")
     if mcmc_diag:
-        ess_ok = mcmc_diag.get("ess_bulk_min", 0) >= 400
-        rhat_ok = mcmc_diag.get("rhat_max", 0) <= 1.01
-        if ess_ok and rhat_ok:
-            summary.append("  Status: EXCELLENT ✓")
-        elif ess_ok or rhat_ok:
-            summary.append("  Status: GOOD ✓")
+        ess_min = mcmc_diag.get("ess_bulk_min")
+        rhat_max = mcmc_diag.get("rhat_max")
+        if ess_min is None or rhat_max is None:
+            summary.append("  Status: UNKNOWN (missing ESS/Rhat)")
         else:
-            summary.append("  Status: NEEDS ATTENTION ⚠")
+            ess_ok = ess_min >= 400
+            rhat_ok = rhat_max <= 1.01
+            if ess_ok and rhat_ok:
+                summary.append("  Status: EXCELLENT ✓")
+            elif ess_ok or rhat_ok:
+                summary.append("  Status: GOOD ✓")
+            else:
+                summary.append("  Status: NEEDS ATTENTION ⚠")
     else:
         summary.append("  Status: UNKNOWN (insufficient diagnostics)")
 

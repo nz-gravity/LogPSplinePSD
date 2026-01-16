@@ -490,14 +490,14 @@ class MultivariateLogPSplines:
 
         n_percentiles = len(percentiles)
         psd_percentiles = np.empty(
-            (n_percentiles, n_freq, n_channels, n_channels), dtype=np.float32
+            (n_percentiles, n_freq, n_channels, n_channels), dtype=np.float64
         )
         psd_imag_percentiles = np.empty_like(psd_percentiles)
 
         coherence_percentiles = (
             np.empty(
                 (n_percentiles, n_freq, n_channels, n_channels),
-                dtype=np.float32,
+                dtype=np.float64,
             )
             if compute_coherence and n_channels > 1
             else None
@@ -513,12 +513,8 @@ class MultivariateLogPSplines:
             psd_real = psd_chunk.real
             psd_imag = psd_chunk.imag
 
-            real_q = np.percentile(psd_real, percentiles, axis=0).astype(
-                np.float32
-            )
-            imag_q = np.percentile(psd_imag, percentiles, axis=0).astype(
-                np.float32
-            )
+            real_q = np.percentile(psd_real, percentiles, axis=0)
+            imag_q = np.percentile(psd_imag, percentiles, axis=0)
 
             psd_percentiles[:, start:end] = real_q
             psd_imag_percentiles[:, start:end] = imag_q
@@ -531,9 +527,7 @@ class MultivariateLogPSplines:
                 denom = np.where(denom > 0.0, denom, np.nan)
                 coh_samples = (np.abs(psd_chunk) ** 2) / denom
                 coh_samples = np.nan_to_num(coh_samples, nan=0.0, posinf=0.0)
-                coh_q = np.percentile(coh_samples, percentiles, axis=0).astype(
-                    np.float32
-                )
+                coh_q = np.percentile(coh_samples, percentiles, axis=0)
 
                 # enforce exact ones on diagonal to avoid numerical drift
                 for idx in range(n_percentiles):
@@ -556,7 +550,7 @@ class MultivariateLogPSplines:
     ) -> np.ndarray:
         arr = np.asarray(psd_matrix_samples)
         if arr.ndim == 4 and arr.shape[0] == len(percentiles):
-            return arr.astype(np.float32, copy=False)
+            return arr.astype(np.float64, copy=False)
 
         if arr.ndim == 3:
             arr = arr[None, ...]
@@ -569,7 +563,7 @@ class MultivariateLogPSplines:
         posterior_percentiles = np.percentile(
             psd_matrix_real, percentiles, axis=0
         )
-        return posterior_percentiles.astype(np.float32, copy=False)
+        return posterior_percentiles.astype(np.float64, copy=False)
 
     def get_psd_matrix_coverage(
         self, psd_matrix_samples: jnp.ndarray, empirical_psd: jnp.ndarray
@@ -600,4 +594,4 @@ def _complex_to_real_batch(mats):
 
     out = np.where(upper, mats.real, 0.0)
     out = np.where(lower, mats.imag, out)
-    return out.astype(np.float32, copy=False)
+    return out.astype(np.float64, copy=False)

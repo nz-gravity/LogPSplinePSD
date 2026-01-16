@@ -209,7 +209,7 @@ def _create_univar_inference_data(
         else slice(None)
     )
 
-    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float64)
 
     # Evaluate spline_model on a subset of draws
     pp_eval = [spline_model(w) for w in weights_chain0[pp_idx]]
@@ -302,20 +302,20 @@ def _create_multivar_inference_data(
             samples, sample_stats, spline_model, fft_data
         )
     )
-    psd_real_q = np.asarray(psd_real_q, dtype=np.float32)
-    psd_imag_q = np.asarray(psd_imag_q, dtype=np.float32)
-    coh_q = np.asarray(coh_q, dtype=np.float32) if coh_q is not None else None
+    psd_real_q = np.asarray(psd_real_q, dtype=np.float64)
+    psd_imag_q = np.asarray(psd_imag_q, dtype=np.float64)
+    coh_q = np.asarray(coh_q, dtype=np.float64) if coh_q is not None else None
 
     channel_stds = getattr(config, "channel_stds", None)
     factor_matrix = None
     sf = float(getattr(fft_data, "scaling_factor", 1.0) or 1.0)
     if channel_stds is not None:
-        channel_stds = np.asarray(channel_stds, dtype=np.float32)
+        channel_stds = np.asarray(channel_stds, dtype=np.float64)
         if channel_stds.shape[0] != fft_data.n_dim:
             raise ValueError(
                 "channel_stds length must match number of channels in FFT data."
             )
-        scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
+        scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float64)
         factor_matrix = scale_matrix
         factor_4d = factor_matrix[None, None, :, :]
         psd_real_q_rescaled = psd_real_q * factor_4d

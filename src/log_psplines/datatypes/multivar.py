@@ -193,8 +193,10 @@ class MultivarFFT:
                 "Block length must exceed number of channels for FFT stability."
             )
 
-        x_centered = x - np.mean(x, axis=0)
-        blocks = x_centered.reshape(n_blocks, block_len, n_dim)
+        blocks = x.reshape(n_blocks, block_len, n_dim)
+        # Detrend each block (Welch-style constant detrend) to reduce low-frequency
+        # leakage into the first few positive bins when using tapered windows.
+        blocks = blocks - np.mean(blocks, axis=1, keepdims=True)
 
         if window is None:
             taper = np.ones(block_len, dtype=np.float64)

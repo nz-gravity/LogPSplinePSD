@@ -501,6 +501,32 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
     assert np.allclose(freq, expected_freq)
 
 
+def test_multivar_blocked_nuts_records_step_size():
+    t, y = _synthetic_multivar_series()
+    ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
+
+    idata = run_mcmc(
+        data=ts_run,
+        sampler="multivar_blocked_nuts",
+        n_samples=1,
+        n_warmup=2,
+        num_chains=1,
+        n_knots=4,
+        degree=3,
+        diffMatrixOrder=2,
+        n_time_blocks=1,
+        init_from_vi=False,
+        verbose=False,
+    )
+
+    step_size_keys = [
+        key
+        for key in idata.sample_stats.data_vars
+        if str(key).startswith("step_size_channel_")
+    ]
+    assert step_size_keys, "Blocked NUTS should record per-channel step size."
+
+
 def test_prepare_samples_and_stats_preserves_chain_dim():
     samples = {"weights_delta_0": np.zeros((2, 3, 4), dtype=float)}
     sample_stats = {"log_likelihood": np.zeros((2, 3), dtype=float)}

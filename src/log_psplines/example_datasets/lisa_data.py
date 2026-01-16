@@ -23,11 +23,14 @@ import numpy as np
 import requests
 
 try:
+    from .lisatools_backend import ensure_lisatools_backends
+
+    ensure_lisatools_backends()
     from lisatools import detector as lisa_models
     from lisatools.sensitivity import XYZ2SensitivityMatrix
 
     _HAS_LISATOOLS = True
-except ImportError:
+except Exception:
     lisa_models = None
     XYZ2SensitivityMatrix = None
     _HAS_LISATOOLS = False
@@ -318,6 +321,8 @@ def plot_psd_coherence(
     S_true: np.ndarray,
     S_emp: Dict[str, np.ndarray],
     fname: Optional[Union[Path, str]] = None,
+    *,
+    psd_unit_label: str = "1/Hz",
 ) -> None:
     """
     Plot PSDs on the diagonal and coherences on the lower triangle.
@@ -381,7 +386,7 @@ def plot_psd_coherence(
                 ax.loglog(freq, true_psd[i], label="True PSD")
                 ax.loglog(freq, emp_psd[i], alpha=0.5, label="Welch PSD")
                 ax.set_title(f"{channels[i]} PSD")
-                ax.set_ylabel("PSD [1/Hz]")
+                ax.set_ylabel(f"PSD [{psd_unit_label}]")
                 ax.grid(True, which="both", ls="--", alpha=0.3)
                 if i == 0:
                     ax.legend()

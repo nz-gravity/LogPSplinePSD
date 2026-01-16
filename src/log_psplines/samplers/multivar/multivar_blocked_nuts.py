@@ -28,7 +28,7 @@ assembled into global arrays ``log_delta_sq`` with shape (draw, freq, p) and
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 import arviz as az
 import jax
@@ -209,6 +209,8 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     target_accept_prob: float = 0.8
     max_tree_depth: int = 10
     dense_mass: bool = True
+    target_accept_prob_by_channel: Optional[Sequence[float]] = None
+    max_tree_depth_by_channel: Optional[Sequence[int]] = None
     save_nuts_diagnostics: bool = True
     init_from_vi: bool = True
     vi_steps: int = 1500
@@ -275,6 +277,26 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     @property
     def sampler_type(self) -> str:
         return "multivariate_blocked_nuts"
+
+    def _get_channel_setting(
+        self,
+        name: str,
+        channel_index: int,
+        default_value: Any,
+    ) -> Any:
+        """Return per-channel override for a config field, with validation."""
+        values = getattr(self.config, name, None)
+        if values is None:
+            return default_value
+        if not isinstance(values, (list, tuple)):
+            raise TypeError(
+                f"{name} must be a sequence of length {self.n_channels}, got {type(values).__name__}."
+            )
+        if len(values) != self.n_channels:
+            raise ValueError(
+                f"{name} must have length {self.n_channels}, got {len(values)}."
+            )
+        return values[channel_index]
 
     def sample(
         self,
@@ -357,10 +379,20 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             u_re_prev = self.u_re[:, :channel_index, :]
             u_im_prev = self.u_im[:, :channel_index, :]
 
+            target_accept_prob = self._get_channel_setting(
+                "target_accept_prob_by_channel",
+                channel_index,
+                self.config.target_accept_prob,
+            )
+            max_tree_depth = self._get_channel_setting(
+                "max_tree_depth_by_channel",
+                channel_index,
+                self.config.max_tree_depth,
+            )
             kernel_kwargs = dict(
-                target_accept_prob=self.config.target_accept_prob,
-                max_tree_depth=self.config.max_tree_depth,
-                dense_mass=self.config.dense_mass,
+                target_accept_prob=float(target_accept_prob),
+                max_tree_depth=int(max_tree_depth),
+                dense_mass=bool(self.config.dense_mass),
             )
             init_strategy = init_strategies[channel_index]
             if init_strategy is not None:
@@ -403,6 +435,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                         "potential_energy",
                         "energy",
                         "num_steps",
+                        "adapt_state.step_size",
                         "accept_prob",
                         "diverging",
                     )
@@ -432,19 +465,20 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                     block_stats[det_key] = block_samples.pop(det_key)
 
             if self.config.save_nuts_diagnostics:
-                for diag_key in [
-                    "potential_energy",
-                    "energy",
-                    "num_steps",
-                    "accept_prob",
-                    "diverging",
-                ]:
+                diag_key_map = {
+                    "potential_energy": "potential_energy",
+                    "energy": "energy",
+                    "num_steps": "num_steps",
+                    "adapt_state.step_size": "step_size",
+                    "accept_prob": "accept_prob",
+                    "diverging": "diverging",
+                }
+
+                for diag_key, out_key in diag_key_map.items():
                     if diag_key in block_stats:
-                        renamed = (
-                            f"{diag_key}_channel_{channel_index}",
-                            block_stats.pop(diag_key),
+                        block_stats[f"{out_key}_channel_{channel_index}"] = (
+                            block_stats.pop(diag_key)
                         )
-                        block_stats[renamed[0]] = renamed[1]
 
             combined_samples.update(block_samples)
 

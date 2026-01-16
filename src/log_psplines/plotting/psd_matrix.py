@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -251,19 +251,81 @@ def _format_text(
 
 
 def _ylabel_for(
-    i: int, j: int, show_coherence: bool, show_csd_magnitude: bool
+    i: int,
+    j: int,
+    show_coherence: bool,
+    show_csd_magnitude: bool,
+    psd_unit_label: str,
 ) -> str:
     if i == j:
-        return "PSD [1/Hz]"
+        return f"PSD [{psd_unit_label}]"
     if show_coherence and i > j:
         return "Coherence"  # unitless
     if show_csd_magnitude and i > j:
-        return "|CSD| [1/Hz]"
+        return f"|CSD| [{psd_unit_label}]"
     if not show_coherence and i > j:
-        return "Re[PSD]"
+        return f"Re[PSD] [{psd_unit_label}]"
     if not show_coherence and i < j:
-        return "Im[PSD]"
+        return f"Im[PSD] [{psd_unit_label}]"
     return ""  # hidden panel
+
+
+def _resolve_scale(
+    freq: np.ndarray,
+    psd_scale: np.ndarray | float | Callable[[np.ndarray], np.ndarray] | None,
+    *,
+    base_freq: np.ndarray | None = None,
+) -> np.ndarray | None:
+    if psd_scale is None:
+        return None
+    if callable(psd_scale):
+        scale = np.asarray(psd_scale(freq))
+    else:
+        scale = np.asarray(psd_scale)
+        if scale.ndim == 0:
+            scale = np.full_like(freq, float(scale), dtype=float)
+        else:
+            if base_freq is None:
+                base_freq = freq
+            if scale.shape != base_freq.shape:
+                raise ValueError("psd_scale array must match base_freq shape.")
+            if base_freq.shape != freq.shape or not np.allclose(
+                base_freq, freq
+            ):
+                scale = np.interp(freq, base_freq, scale)
+    if scale.shape != freq.shape:
+        raise ValueError("psd_scale must match frequency shape.")
+    if np.any(scale < 0):
+        raise ValueError("psd_scale must be non-negative.")
+    if np.any(scale == 0):
+        zero_mask = scale == 0
+        if not np.allclose(freq[zero_mask], 0.0):
+            raise ValueError("psd_scale has zeros at nonzero frequencies.")
+        scale = scale.copy()
+        scale[zero_mask] = np.nan
+    return scale
+
+
+def _scale_ci_dict(ci_dict: dict, scale: np.ndarray) -> dict:
+    scaled = {key: dict(val) for key, val in ci_dict.items()}
+    for key in ("psd", "re", "im", "mag"):
+        if key not in ci_dict:
+            continue
+        for idx, (q05, q50, q95) in ci_dict[key].items():
+            scaled[key][idx] = (q05 * scale, q50 * scale, q95 * scale)
+    return scaled
+
+
+def _scale_empirical_psd(
+    empirical_psd: EmpiricalPSD, scale: np.ndarray
+) -> EmpiricalPSD:
+    psd = empirical_psd.psd * scale[:, None, None]
+    return EmpiricalPSD(
+        freq=empirical_psd.freq,
+        psd=psd,
+        coherence=empirical_psd.coherence,
+        channels=empirical_psd.channels,
+    )
 
 
 def plot_psd_matrix(
@@ -295,6 +357,10 @@ def plot_psd_matrix(
     vi_label: str = "VI median",
     vi_alpha: float = 0.2,
     freq_range: Optional[tuple[float, float]] = None,
+    psd_scale: (
+        np.ndarray | float | Callable[[np.ndarray], np.ndarray] | None
+    ) = None,
+    psd_unit_label: str = "1/Hz",
 ):
     """
     Publication-ready multivariate PSD matrix plotter with adaptive per-axis y-labels.
@@ -322,6 +388,11 @@ def plot_psd_matrix(
     show_csd_magnitude : bool, optional
         When ``True`` the lower-triangular panels display |CSD_ij| instead of
         coherence or Re/Im parts.
+    psd_scale : array-like or callable, optional
+        Scale factor applied to PSD/CSD panels. If callable, it is evaluated
+        as ``psd_scale(freq)`` for each frequency grid.
+    psd_unit_label : str, optional
+        Unit label for PSD/CSD axes, used in y-axis labels.
     overlay_vi : bool, optional
         When ``True`` and VI diagnostics are present, overlay the VI median /
         quantile bands alongside posterior results for comparison.
@@ -428,6 +499,27 @@ def plot_psd_matrix(
         extra_empirical_labels = []
     if extra_empirical_styles is None:
         extra_empirical_styles = []
+
+    scale_main = _resolve_scale(freq, psd_scale)
+    if scale_main is not None:
+        ci_dict = _scale_ci_dict(ci_dict, scale_main)
+        if vi_ci_dict is not None:
+            vi_ci_dict = _scale_ci_dict(vi_ci_dict, scale_main)
+        if true_psd is not None:
+            true_psd = true_psd * scale_main[:, None, None]
+        if empirical_psd is not None:
+            scale_emp = _resolve_scale(
+                empirical_psd.freq, psd_scale, base_freq=freq
+            )
+            empirical_psd = _scale_empirical_psd(empirical_psd, scale_emp)
+        if extra_empirical_psd:
+            scaled_extra = []
+            for extra in extra_empirical_psd:
+                scale_extra = _resolve_scale(
+                    extra.freq, psd_scale, base_freq=freq
+                )
+                scaled_extra.append(_scale_empirical_psd(extra, scale_extra))
+            extra_empirical_psd = scaled_extra
 
     vi_label_added = False
     for i in range(n_channels):
@@ -735,7 +827,13 @@ def plot_psd_matrix(
                 ax.axis("off")
 
             # adaptive y-labels only for visible panels
-            ylab = _ylabel_for(i, j, show_coherence, show_csd_magnitude)
+            ylab = _ylabel_for(
+                i,
+                j,
+                show_coherence,
+                show_csd_magnitude,
+                psd_unit_label,
+            )
             if ylab:
                 ax.set_ylabel(ylab, fontsize=11)
 

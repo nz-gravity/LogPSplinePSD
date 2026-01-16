@@ -959,6 +959,7 @@ def _plot_nuts_diagnostics_blockaware(idata, config):
     has_potential = "potential_energy" in idata.sample_stats
     has_steps = "num_steps" in idata.sample_stats
     has_accept = "accept_prob" in idata.sample_stats
+    has_step_size = "step_size" in idata.sample_stats
     has_tree_depth = "tree_depth" in idata.sample_stats
 
     attrs = getattr(idata, "attrs", {}) or {}
@@ -988,6 +989,7 @@ def _plot_nuts_diagnostics_blockaware(idata, config):
     potential_ch = _collect("potential_energy")
     steps_ch = _collect("num_steps")
     accept_ch = _collect("accept_prob")
+    step_size_ch = _collect("step_size")
 
     fig, axes = plt.subplots(2, 2, figsize=config.figsize)
 
@@ -1119,6 +1121,21 @@ def _plot_nuts_diagnostics_blockaware(idata, config):
         for ch in sorted(accept_ch):
             a = accept_ch[ch]
             lines.append(f"  ch {ch} μ={np.mean(a):.3f}")
+        lines.append("")
+    if has_step_size or step_size_ch:
+        lines.append("Step size summary:")
+        if has_step_size:
+            ss = idata.sample_stats.step_size.values.flatten()
+            if ss.size:
+                lines.append(
+                    f"  overall median={np.median(ss):.3g}, min={np.min(ss):.3g}"
+                )
+        for ch in sorted(step_size_ch):
+            ss = step_size_ch[ch]
+            if ss.size:
+                lines.append(
+                    f"  ch {ch} median={np.median(ss):.3g}, min={np.min(ss):.3g}"
+                )
     if lines:
         ax.text(
             0.05,
@@ -1148,6 +1165,7 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
     energy = _get("energy")
     potential = _get("potential_energy")
     num_steps = _get("num_steps")
+    step_size = _get("step_size")
     accept_prob = _get("accept_prob")
     attrs = getattr(idata, "attrs", {}) or {}
     if not hasattr(attrs, "get"):
@@ -1246,6 +1264,10 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
             )
     if accept_prob is not None:
         stats_lines.append(f"  accept μ={np.mean(accept_prob):.3f}")
+    if step_size is not None and step_size.size:
+        stats_lines.append(
+            f"  step_size median={np.median(step_size):.3g}, min={np.min(step_size):.3g}"
+        )
 
     ax.text(
         0.05,
@@ -1306,6 +1328,9 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
         )
         channel_indices |= _get_channel_indices(
             idata.sample_stats, "num_steps"
+        )
+        channel_indices |= _get_channel_indices(
+            idata.sample_stats, "step_size"
         )
 
         for channel_idx in sorted(channel_indices):
@@ -1983,31 +2008,57 @@ def generate_diagnostics_summary(idata, outdir):
         psd_ref=attrs.get("true_psd"),
     )
 
-    mcmc_diag = diag_results.get("mcmc", {})
-    if mcmc_diag:
-        ess_min = mcmc_diag.get("ess_bulk_min")
-        ess_med = mcmc_diag.get("ess_bulk_median")
-        if ess_min is not None:
-            summary.append(
-                f"\nESS bulk: min={ess_min:.0f}"
-                + (f", median={ess_med:.0f}" if ess_med is not None else "")
+    mcmc_diag = diag_results.get("mcmc", {}) or {}
+    ess_min = mcmc_diag.get("ess_bulk_min")
+    ess_med = mcmc_diag.get("ess_bulk_median")
+    rhat_max = mcmc_diag.get("rhat_max")
+    rhat_mean = mcmc_diag.get("rhat_mean")
+
+    # Fallback to ArviZ when summary stats were not stored by diagnostics.
+    if ess_min is None or rhat_max is None:
+        try:
+            ess = az.ess(idata, method="bulk")
+            ess_vals = np.concatenate(
+                [np.asarray(ess[v]).reshape(-1) for v in ess.data_vars]
             )
-        rhat_max = mcmc_diag.get("rhat_max")
-        rhat_mean = mcmc_diag.get("rhat_mean")
-        if rhat_max is not None:
-            summary.append(
-                f"Rhat: max={rhat_max:.3f}"
-                + (f", mean={rhat_mean:.3f}" if rhat_mean is not None else "")
+            ess_vals = ess_vals[np.isfinite(ess_vals)]
+            if ess_vals.size:
+                ess_min = float(np.min(ess_vals))
+                ess_med = float(np.median(ess_vals))
+        except Exception:
+            pass
+
+        try:
+            rhat = az.rhat(idata)
+            rhat_vals = np.concatenate(
+                [np.asarray(rhat[v]).reshape(-1) for v in rhat.data_vars]
             )
-        acc = mcmc_diag.get("acceptance_rate_mean")
-        if acc is not None:
-            summary.append(f"Acceptance rate: {acc:.3f}")
-        div_frac = mcmc_diag.get("divergence_fraction")
-        if div_frac is not None:
-            summary.append(f"Divergence fraction: {div_frac*100:.2f}%")
-        khat = mcmc_diag.get("psis_khat_max")
-        if khat is not None:
-            summary.append(f"PSIS k-hat (max): {khat:.3f}")
+            rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
+            if rhat_vals.size:
+                rhat_max = float(np.max(rhat_vals))
+                rhat_mean = float(np.mean(rhat_vals))
+        except Exception:
+            pass
+
+    if ess_min is not None:
+        summary.append(
+            f"\nESS bulk: min={ess_min:.0f}"
+            + (f", median={ess_med:.0f}" if ess_med is not None else "")
+        )
+    if rhat_max is not None:
+        summary.append(
+            f"Rhat: max={rhat_max:.3f}"
+            + (f", mean={rhat_mean:.3f}" if rhat_mean is not None else "")
+        )
+    acc = mcmc_diag.get("acceptance_rate_mean")
+    if acc is not None:
+        summary.append(f"Acceptance rate: {acc:.3f}")
+    div_frac = mcmc_diag.get("divergence_fraction")
+    if div_frac is not None:
+        summary.append(f"Divergence fraction: {div_frac*100:.2f}%")
+    khat = mcmc_diag.get("psis_khat_max")
+    if khat is not None:
+        summary.append(f"PSIS k-hat (max): {khat:.3f}")
 
     tree_depth = (
         idata.sample_stats.tree_depth.values.flatten()
@@ -2015,19 +2066,30 @@ def generate_diagnostics_summary(idata, outdir):
         else None
     )
     num_steps = None
+    steps_by_channel = {}
     if "num_steps" in idata.sample_stats:
         num_steps = idata.sample_stats.num_steps.values.flatten()
     else:
-        step_values = []
-        for key in idata.sample_stats:
-            if isinstance(key, str) and key.startswith("num_steps_channel_"):
-                step_values.append(idata.sample_stats[key].values.flatten())
-        if step_values:
-            num_steps = np.concatenate(step_values)
+        channel_indices = _get_channel_indices(idata.sample_stats, "num_steps")
+        for ch in sorted(channel_indices):
+            steps_by_channel[ch] = idata.sample_stats[
+                f"num_steps_channel_{ch}"
+            ].values.flatten()
+        if steps_by_channel:
+            num_steps = np.concatenate(list(steps_by_channel.values()))
     max_stats = _max_tree_depth_stats(num_steps, tree_depth, max_tree_depth)
     if max_stats:
         pct = max_stats["frac"] * 100
         summary.append(_format_max_tree_depth_message(max_stats))
+        if steps_by_channel:
+            for ch in sorted(steps_by_channel):
+                ch_stats = _max_tree_depth_stats(
+                    steps_by_channel[ch], None, max_tree_depth
+                )
+                if ch_stats:
+                    summary.append(
+                        f"  Channel {ch}: {_format_max_tree_depth_message(ch_stats)}"
+                    )
         if pct >= 50:
             summary.append(
                 "  ⚠ Max tree depth hit rate is very high; consider reparameterization or increasing max_tree_depth."
@@ -2043,6 +2105,50 @@ def generate_diagnostics_summary(idata, outdir):
                 f"Max tree depth hit rate is {pct:.1f}% (elevated)."
             )
 
+    step_size = None
+    step_size_by_channel = {}
+    if "step_size" in idata.sample_stats:
+        step_size = idata.sample_stats.step_size.values.flatten()
+    else:
+        channel_indices = _get_channel_indices(idata.sample_stats, "step_size")
+        for ch in sorted(channel_indices):
+            step_size_by_channel[ch] = idata.sample_stats[
+                f"step_size_channel_{ch}"
+            ].values.flatten()
+        if step_size_by_channel:
+            step_size = np.concatenate(list(step_size_by_channel.values()))
+
+    if step_size is not None and step_size.size:
+        step_size = step_size[np.isfinite(step_size)]
+        if step_size.size:
+            summary.append(
+                f"Step size: median={np.median(step_size):.3g}, min={np.min(step_size):.3g}"
+            )
+        if step_size_by_channel:
+            for ch in sorted(step_size_by_channel):
+                ss = step_size_by_channel[ch]
+                ss = ss[np.isfinite(ss)]
+                if ss.size:
+                    summary.append(
+                        f"  Channel {ch}: median={np.median(ss):.3g}, min={np.min(ss):.3g}"
+                    )
+
+    diverging_by_channel = {}
+    if "diverging" not in idata.sample_stats:
+        channel_indices = _get_channel_indices(idata.sample_stats, "diverging")
+        for ch in sorted(channel_indices):
+            diverging_by_channel[ch] = idata.sample_stats[
+                f"diverging_channel_{ch}"
+            ].values.flatten()
+    if diverging_by_channel:
+        for ch in sorted(diverging_by_channel):
+            div = np.asarray(diverging_by_channel[ch], dtype=float)
+            div = div[np.isfinite(div)]
+            if div.size:
+                summary.append(
+                    f"  Channel {ch}: divergences={np.mean(div)*100:.2f}%"
+                )
+
     psd_diag = diag_results.get("psd_compare", {})
     if psd_diag:
         summary.append("\nPSD accuracy diagnostics:")
@@ -2055,9 +2161,7 @@ def generate_diagnostics_summary(idata, outdir):
 
     # Overall assessment (best-effort)
     summary.append("\nOverall Convergence Assessment:")
-    if mcmc_diag:
-        ess_min = mcmc_diag.get("ess_bulk_min")
-        rhat_max = mcmc_diag.get("rhat_max")
+    if mcmc_diag or ess_min is not None or rhat_max is not None:
         if ess_min is None or rhat_max is None:
             summary.append("  Status: UNKNOWN (missing ESS/Rhat)")
         else:

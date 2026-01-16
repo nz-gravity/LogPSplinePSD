@@ -42,10 +42,21 @@ def plot_vi_elbo(
     fig, ax = plt.subplots(figsize=config.figsize)
     steps = np.arange(losses.size)
 
+    # Normalize losses for log scale: shift to be positive while preserving relative changes
+    # Find minimum across main losses and all components
+    min_loss = losses.min()
+    if loss_components:
+        for comp_losses in loss_components.values():
+            min_loss = min(min_loss, comp_losses.min())
+
+    # Shift so minimum is slightly above zero for log scale
+    shift_value = min_loss - 0.1 * np.abs(min_loss) if min_loss != 0 else -1.0
+    shifted_losses = losses - shift_value
+
     # Plot main ELBO loss
     ax.plot(
         steps,
-        losses,
+        shifted_losses,
         color=COLORS["model"],
         lw=2,
         alpha=0.8,
@@ -63,10 +74,11 @@ def plot_vi_elbo(
         ]
         for i, (comp_name, comp_losses) in enumerate(loss_components.items()):
             if comp_losses.size == losses.size:  # Ensure same length
+                shifted_comp_losses = comp_losses - shift_value
                 color = component_colors[i % len(component_colors)]
                 ax.plot(
                     steps,
-                    comp_losses,
+                    shifted_comp_losses,
                     color=color,
                     lw=1.5,
                     alpha=0.7,
@@ -74,7 +86,8 @@ def plot_vi_elbo(
                 )
 
     ax.set_xlabel("SVI Step", fontsize=config.labelsize)
-    ax.set_ylabel("ELBO", fontsize=config.labelsize)
+    ax.set_ylabel("ELBO (relative)", fontsize=config.labelsize)
+    ax.set_yscale("log")
     ax.set_title(f"VI Convergence: {guide_name}", fontsize=config.titlesize)
     ax.grid(True, alpha=0.3, linewidth=0.8)
     ax.legend(frameon=False, loc="best")

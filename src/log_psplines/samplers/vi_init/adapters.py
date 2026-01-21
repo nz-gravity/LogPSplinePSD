@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.linalg import solve_triangular
 from numpyro.infer.util import init_to_value
 
 from ...diagnostics.psd_compare import compute_multivar_riae_diagnostics
@@ -55,7 +56,8 @@ def compute_vi_artifacts_univar(
             name: jnp.asarray(value) for name, value in vi_result.means.items()
         }
 
-        weights = vi_result.means.get("weights")
+        weights_z = vi_result.means.get("weights_z")
+        log_phi = vi_result.means.get("phi")
         weights_np = None
         vi_psd = None
         psd_quantiles = None
@@ -69,17 +71,45 @@ def compute_vi_artifacts_univar(
             or 1.0
         )
 
-        if weights is not None:
+        if weights_z is not None and log_phi is not None:
+            phi = jnp.clip(jnp.exp(jnp.asarray(log_phi)), 1e-12, 1e12)
+            weights = solve_triangular(
+                sampler.penalty_chol,
+                jnp.asarray(weights_z),
+                lower=True,
+                trans="T",
+            ) / jnp.sqrt(phi)
             weights_np = np.asarray(jax.device_get(weights))
-            ln_psd = sampler.spline_model(vi_result.means["weights"])
+            ln_psd = sampler.spline_model(weights)
             vi_psd = np.asarray(jax.device_get(jnp.exp(ln_psd))) * scaling
 
         if vi_result.samples is not None:
-            weights_draws = vi_result.samples.get("weights")
-            if weights_draws is not None and weights_draws.size:
-                ln_psd_draws = jax.vmap(sampler.spline_model)(
-                    jnp.asarray(weights_draws)
+            z_draws = vi_result.samples.get("weights_z")
+            log_phi_draws = vi_result.samples.get("phi")
+            if (
+                z_draws is not None
+                and log_phi_draws is not None
+                and z_draws.size
+            ):
+                n_draws = int(z_draws.shape[0])
+                n_use = _cap_psd_draws(sampler.config, n_draws)
+                if n_use < n_draws:
+                    sel = np.random.choice(n_draws, n_use, replace=False)
+                    z_draws = z_draws[sel]
+                    log_phi_draws = log_phi_draws[sel]
+
+                z_draws = jnp.asarray(z_draws)
+                phi_draws = jnp.clip(
+                    jnp.exp(jnp.asarray(log_phi_draws)), 1e-12, 1e12
                 )
+
+                def _to_weights(z, phi):
+                    return solve_triangular(
+                        sampler.penalty_chol, z, lower=True, trans="T"
+                    ) / jnp.sqrt(phi)
+
+                weights_draws = jax.vmap(_to_weights)(z_draws, phi_draws)
+                ln_psd_draws = jax.vmap(sampler.spline_model)(weights_draws)
                 psd_draws = jnp.exp(ln_psd_draws)
                 psd_draws_np = np.asarray(jax.device_get(psd_draws)) * scaling
                 q05, q50, q95 = np.percentile(
@@ -114,7 +144,7 @@ def compute_vi_artifacts_univar(
         model_args=(
             sampler.log_pdgrm,
             sampler.basis_matrix,
-            sampler.penalty_matrix,
+            sampler.penalty_chol,
             sampler.log_parametric,
             sampler.freq_weights,
             sampler.config.alpha_phi,
@@ -186,10 +216,21 @@ def compute_vi_artifacts_multivar(
         try:
             log_delta_terms: List[jnp.ndarray] = []
             for channel_index in range(sampler.n_channels):
-                weights_name = f"weights_delta_{channel_index}"
-                weights = vi_result.means.get(weights_name)
-                if weights is None:
-                    raise KeyError(weights_name)
+                z_name = f"weights_delta_{channel_index}_z"
+                log_phi_name = f"phi_delta_{channel_index}"
+                z = vi_result.means.get(z_name)
+                log_phi = vi_result.means.get(log_phi_name)
+                if z is None:
+                    raise KeyError(z_name)
+                if log_phi is None:
+                    raise KeyError(log_phi_name)
+                phi = jnp.clip(jnp.exp(jnp.asarray(log_phi)), 1e-12, 1e12)
+                weights = solve_triangular(
+                    sampler.all_penalty_chols[channel_index],
+                    jnp.asarray(z),
+                    lower=True,
+                    trans="T",
+                ) / jnp.sqrt(phi)
                 basis = sampler.all_bases[channel_index]
                 component_eval = jnp.einsum("nk,k->n", basis, weights)
                 log_delta_terms.append(component_eval)
@@ -197,10 +238,35 @@ def compute_vi_artifacts_multivar(
 
             if sampler.n_theta > 0:
                 basis_theta = sampler.all_bases[sampler.n_channels]
-                weights_theta_re = vi_result.means.get("weights_theta_re")
-                weights_theta_im = vi_result.means.get("weights_theta_im")
-                if weights_theta_re is None or weights_theta_im is None:
-                    raise KeyError("theta weights")
+                z_theta_re = vi_result.means.get("weights_theta_re_z")
+                z_theta_im = vi_result.means.get("weights_theta_im_z")
+                log_phi_theta_re = vi_result.means.get("phi_theta_re")
+                log_phi_theta_im = vi_result.means.get("phi_theta_im")
+                if (
+                    z_theta_re is None
+                    or z_theta_im is None
+                    or log_phi_theta_re is None
+                    or log_phi_theta_im is None
+                ):
+                    raise KeyError("theta weights_z/phi missing")
+                phi_theta_re = jnp.clip(
+                    jnp.exp(jnp.asarray(log_phi_theta_re)), 1e-12, 1e12
+                )
+                phi_theta_im = jnp.clip(
+                    jnp.exp(jnp.asarray(log_phi_theta_im)), 1e-12, 1e12
+                )
+                weights_theta_re = solve_triangular(
+                    sampler.all_penalty_chols[sampler.n_channels],
+                    jnp.asarray(z_theta_re),
+                    lower=True,
+                    trans="T",
+                ) / jnp.sqrt(phi_theta_re)
+                weights_theta_im = solve_triangular(
+                    sampler.all_penalty_chols[sampler.n_channels + 1],
+                    jnp.asarray(z_theta_im),
+                    lower=True,
+                    trans="T",
+                ) / jnp.sqrt(phi_theta_im)
                 theta_re_base = jnp.einsum(
                     "nk,k->n", basis_theta, weights_theta_re
                 )
@@ -230,15 +296,32 @@ def compute_vi_artifacts_multivar(
                 log_delta_draws = []
                 n_draws = None
                 for channel_index in range(sampler.n_channels):
-                    weights_name = f"weights_delta_{channel_index}"
-                    weights_samples = samples_tree.get(weights_name)
-                    if weights_samples is None:
+                    z_name = f"weights_delta_{channel_index}_z"
+                    log_phi_name = f"phi_delta_{channel_index}"
+                    z_samples = samples_tree.get(z_name)
+                    log_phi_samples = samples_tree.get(log_phi_name)
+                    if z_samples is None or log_phi_samples is None:
                         log_delta_draws = []
                         break
-                    weights_samples = jnp.asarray(weights_samples)
+                    z_samples = jnp.asarray(z_samples)
+                    log_phi_samples = jnp.asarray(log_phi_samples)
                     if n_draws is None:
-                        n_draws = weights_samples.shape[0]
+                        n_draws = z_samples.shape[0]
                     basis = sampler.all_bases[channel_index]
+                    phi_samples = jnp.clip(
+                        jnp.exp(log_phi_samples), 1e-12, 1e12
+                    )
+
+                    chol = sampler.all_penalty_chols[channel_index]
+
+                    def _to_weights(z, phi):
+                        return solve_triangular(
+                            chol, z, lower=True, trans="T"
+                        ) / jnp.sqrt(phi)
+
+                    weights_samples = jax.vmap(_to_weights)(
+                        z_samples, phi_samples
+                    )
                     log_delta_draws.append(
                         weights_samples
                         @ jnp.asarray(basis, dtype=weights_samples.dtype).T
@@ -248,22 +331,70 @@ def compute_vi_artifacts_multivar(
                     log_delta_samples = jnp.stack(log_delta_draws, axis=2)
                     if sampler.n_theta > 0:
                         basis_theta = sampler.all_bases[sampler.n_channels]
-                        weights_theta_re_samples = samples_tree.get(
-                            "weights_theta_re"
+                        z_theta_re_samples = samples_tree.get(
+                            "weights_theta_re_z"
                         )
-                        weights_theta_im_samples = samples_tree.get(
-                            "weights_theta_im"
+                        z_theta_im_samples = samples_tree.get(
+                            "weights_theta_im_z"
+                        )
+                        log_phi_theta_re_samples = samples_tree.get(
+                            "phi_theta_re"
+                        )
+                        log_phi_theta_im_samples = samples_tree.get(
+                            "phi_theta_im"
                         )
                         if (
-                            weights_theta_re_samples is not None
-                            and weights_theta_im_samples is not None
+                            z_theta_re_samples is not None
+                            and z_theta_im_samples is not None
+                            and log_phi_theta_re_samples is not None
+                            and log_phi_theta_im_samples is not None
                         ):
-                            weights_theta_re_samples = jnp.asarray(
-                                weights_theta_re_samples
+                            z_theta_re_samples = jnp.asarray(
+                                z_theta_re_samples
                             )
-                            weights_theta_im_samples = jnp.asarray(
-                                weights_theta_im_samples
+                            z_theta_im_samples = jnp.asarray(
+                                z_theta_im_samples
                             )
+                            phi_theta_re_samples = jnp.clip(
+                                jnp.exp(jnp.asarray(log_phi_theta_re_samples)),
+                                1e-12,
+                                1e12,
+                            )
+                            phi_theta_im_samples = jnp.clip(
+                                jnp.exp(jnp.asarray(log_phi_theta_im_samples)),
+                                1e-12,
+                                1e12,
+                            )
+
+                            chol_re = sampler.all_penalty_chols[
+                                sampler.n_channels
+                            ]
+                            chol_im = sampler.all_penalty_chols[
+                                sampler.n_channels + 1
+                            ]
+
+                            def _to_weights_re(z, phi):
+                                return solve_triangular(
+                                    chol_re,
+                                    z,
+                                    lower=True,
+                                    trans="T",
+                                ) / jnp.sqrt(phi)
+
+                            def _to_weights_im(z, phi):
+                                return solve_triangular(
+                                    chol_im,
+                                    z,
+                                    lower=True,
+                                    trans="T",
+                                ) / jnp.sqrt(phi)
+
+                            weights_theta_re_samples = jax.vmap(
+                                _to_weights_re
+                            )(z_theta_re_samples, phi_theta_re_samples)
+                            weights_theta_im_samples = jax.vmap(
+                                _to_weights_im
+                            )(z_theta_im_samples, phi_theta_im_samples)
                             theta_re_base = (
                                 weights_theta_re_samples
                                 @ jnp.asarray(
@@ -400,7 +531,7 @@ def compute_vi_artifacts_multivar(
             sampler.u_im,
             sampler.nu,
             sampler.all_bases,
-            sampler.all_penalties,
+            sampler.all_penalty_chols,
             sampler.freq_weights,
             sampler.config.alpha_phi,
             sampler.config.beta_phi,
@@ -516,7 +647,7 @@ def prepare_block_vi(
             continue
 
         delta_basis = sampler.all_bases[channel_index]
-        delta_penalty = sampler.all_penalties[channel_index]
+        delta_penalty_chol = sampler.all_penalty_chols[channel_index]
         delta_model = sampler.spline_model.diagonal_models[channel_index]
         delta_weights_init = jnp.asarray(delta_model.weights)
 
@@ -526,6 +657,12 @@ def prepare_block_vi(
         guide_spec = sampler.config.vi_guide or suggest_guide_block(
             delta_basis.shape[1], theta_count, sampler._theta_basis.shape[1]
         )
+        if (
+            isinstance(guide_spec, str)
+            and guide_spec.startswith("flow")
+            and int(getattr(sampler.config, "vi_steps", 0) or 0) < 50
+        ):
+            guide_spec = "diag"
         progress_bar = (
             sampler.config.vi_progress_bar
             if sampler.config.vi_progress_bar is not None
@@ -565,16 +702,22 @@ def prepare_block_vi(
                 divide_phi_by_delta=True,
             )
 
+            delta_weights_init_z = jnp.zeros_like(delta_weights_init)
+
             init_values = {
                 f"delta_{channel_index}": jnp.asarray(delta_init),
                 f"phi_delta_{channel_index}": jnp.log(
                     jnp.asarray(phi_delta_init)
                 ),
-                f"weights_delta_{channel_index}": delta_weights_init,
+                f"weights_delta_{channel_index}_z": delta_weights_init_z,
             }
             if theta_count > 0:
                 theta_weights_init = jnp.asarray(
                     sampler.spline_model.offdiag_re_model.weights
+                )
+                theta_weights_init_z = jnp.zeros_like(theta_weights_init)
+                theta_weights_init_im_z = jnp.zeros_like(
+                    jnp.asarray(sampler.spline_model.offdiag_im_model.weights)
                 )
                 init_values.update(
                     {
@@ -594,7 +737,7 @@ def prepare_block_vi(
                 )
                 init_values.update(
                     {
-                        f"weights_theta_re_{channel_index}_{theta_idx}": theta_weights_init
+                        f"weights_theta_re_{channel_index}_{theta_idx}_z": theta_weights_init_z
                         for theta_idx in range(theta_count)
                     }
                 )
@@ -616,9 +759,7 @@ def prepare_block_vi(
                 )
                 init_values.update(
                     {
-                        f"weights_theta_im_{channel_index}_{theta_idx}": jnp.asarray(
-                            sampler.spline_model.offdiag_im_model.weights
-                        )
+                        f"weights_theta_im_{channel_index}_{theta_idx}_z": theta_weights_init_im_z
                         for theta_idx in range(theta_count)
                     }
                 )
@@ -630,9 +771,9 @@ def prepare_block_vi(
                 u_re_prev,
                 u_im_prev,
                 delta_basis,
-                delta_penalty,
+                delta_penalty_chol,
                 sampler._theta_basis,
-                sampler._theta_penalty,
+                sampler._theta_penalty_chol,
                 sampler.config.alpha_phi,
                 sampler.config.beta_phi,
                 alpha_phi_theta,
@@ -659,7 +800,21 @@ def prepare_block_vi(
                 name: jnp.asarray(value)
                 for name, value in vi_result.means.items()
             }
-            init_strategies[channel_index] = init_to_value(values=init_values)
+            finite_tree = jax.tree_util.tree_map(
+                lambda x: jnp.all(jnp.isfinite(jnp.asarray(x))), init_values
+            )
+            all_finite = bool(jax.tree_util.tree_all(finite_tree))
+            if all_finite:
+                init_strategies[channel_index] = init_to_value(
+                    values=init_values
+                )
+            else:
+                init_strategies[channel_index] = None
+                if sampler.config.verbose:
+                    logger.warning(
+                        "VI block initialisation produced non-finite parameters "
+                        f"for channel {channel_index}; falling back to default NUTS initialisation."
+                    )
 
             losses_arr = np.asarray(jax.device_get(vi_result.losses))
             vi_losses_blocks.append(losses_arr)
@@ -681,9 +836,20 @@ def prepare_block_vi(
             if psis_diag is not None:
                 psis_khat_values.append(psis_diag["psis_khat_max"])
 
-            weights_delta_name = f"weights_delta_{channel_index}"
-            weights_delta = vi_result.means.get(weights_delta_name)
-            if weights_delta is not None:
+            weights_delta_name = f"weights_delta_{channel_index}_z"
+            log_phi_delta_name = f"phi_delta_{channel_index}"
+            z_delta = vi_result.means.get(weights_delta_name)
+            log_phi_delta = vi_result.means.get(log_phi_delta_name)
+            if z_delta is not None and log_phi_delta is not None:
+                phi_delta = jnp.clip(
+                    jnp.exp(jnp.asarray(log_phi_delta)), 1e-12, 1e12
+                )
+                weights_delta = solve_triangular(
+                    delta_penalty_chol,
+                    jnp.asarray(z_delta),
+                    lower=True,
+                    trans="T",
+                ) / jnp.sqrt(phi_delta)
                 log_delta_vi = jnp.einsum(
                     "nk,k->n", delta_basis, weights_delta
                 )
@@ -705,14 +871,44 @@ def prepare_block_vi(
 
                 for theta_idx in range(theta_count):
                     prefix = f"{channel_index}_{theta_idx}"
-                    weights_theta_re = vi_result.means.get(
-                        f"weights_theta_re_{prefix}"
+                    z_theta_re = vi_result.means.get(
+                        f"weights_theta_re_{prefix}_z"
                     )
-                    weights_theta_im = vi_result.means.get(
-                        f"weights_theta_im_{prefix}"
+                    z_theta_im = vi_result.means.get(
+                        f"weights_theta_im_{prefix}_z"
                     )
-                    if weights_theta_re is None or weights_theta_im is None:
-                        raise KeyError(f"theta weights {prefix}")
+                    log_phi_theta_re = vi_result.means.get(
+                        f"phi_theta_re_{prefix}"
+                    )
+                    log_phi_theta_im = vi_result.means.get(
+                        f"phi_theta_im_{prefix}"
+                    )
+                    if (
+                        z_theta_re is None
+                        or z_theta_im is None
+                        or log_phi_theta_re is None
+                        or log_phi_theta_im is None
+                    ):
+                        raise KeyError(f"theta weights_z/phi {prefix}")
+
+                    phi_theta_re = jnp.clip(
+                        jnp.exp(jnp.asarray(log_phi_theta_re)), 1e-12, 1e12
+                    )
+                    phi_theta_im = jnp.clip(
+                        jnp.exp(jnp.asarray(log_phi_theta_im)), 1e-12, 1e12
+                    )
+                    weights_theta_re = solve_triangular(
+                        sampler._theta_penalty_chol,
+                        jnp.asarray(z_theta_re),
+                        lower=True,
+                        trans="T",
+                    ) / jnp.sqrt(phi_theta_re)
+                    weights_theta_im = solve_triangular(
+                        sampler._theta_penalty_chol,
+                        jnp.asarray(z_theta_im),
+                        lower=True,
+                        trans="T",
+                    ) / jnp.sqrt(phi_theta_im)
 
                     theta_re_eval = jnp.einsum(
                         "nk,k->n", sampler._theta_basis, weights_theta_re
@@ -739,18 +935,38 @@ def prepare_block_vi(
                 vi_theta_im_mean[:, theta_slice] = theta_im_block
 
             if store_draws and vi_result.samples is not None:
-                weights_delta_samples = vi_result.samples.get(
-                    weights_delta_name
+                z_delta_samples = vi_result.samples.get(weights_delta_name)
+                log_phi_delta_samples = vi_result.samples.get(
+                    log_phi_delta_name
                 )
-                if weights_delta_samples is not None:
-                    weights_delta_samples = jnp.asarray(weights_delta_samples)
-                    draw_count = min(
-                        posterior_draws, weights_delta_samples.shape[0]
-                    )
+                if (
+                    z_delta_samples is not None
+                    and log_phi_delta_samples is not None
+                ):
+                    z_delta_samples = jnp.asarray(z_delta_samples)
+                    log_phi_delta_samples = jnp.asarray(log_phi_delta_samples)
+                    draw_count = min(posterior_draws, z_delta_samples.shape[0])
                     draws_recorded = (
                         draw_count
                         if draws_recorded == 0
                         else min(draws_recorded, draw_count)
+                    )
+                    phi_delta_samples = jnp.clip(
+                        jnp.exp(log_phi_delta_samples[:draw_count]),
+                        1e-12,
+                        1e12,
+                    )
+
+                    def _to_weights(z, phi):
+                        return solve_triangular(
+                            delta_penalty_chol,
+                            z,
+                            lower=True,
+                            trans="T",
+                        ) / jnp.sqrt(phi)
+
+                    weights_delta_samples = jax.vmap(_to_weights)(
+                        z_delta_samples[:draw_count], phi_delta_samples
                     )
                     delta_basis_jnp = jnp.asarray(
                         delta_basis, dtype=weights_delta_samples.dtype
@@ -774,36 +990,73 @@ def prepare_block_vi(
                     )
                     for theta_idx in range(theta_count):
                         prefix = f"{channel_index}_{theta_idx}"
-                        weights_theta_re_samples = vi_result.samples.get(
-                            f"weights_theta_re_{prefix}"
+                        z_theta_re_samples = vi_result.samples.get(
+                            f"weights_theta_re_{prefix}_z"
                         )
-                        weights_theta_im_samples = vi_result.samples.get(
-                            f"weights_theta_im_{prefix}"
+                        z_theta_im_samples = vi_result.samples.get(
+                            f"weights_theta_im_{prefix}_z"
+                        )
+                        log_phi_theta_re_samples = vi_result.samples.get(
+                            f"phi_theta_re_{prefix}"
+                        )
+                        log_phi_theta_im_samples = vi_result.samples.get(
+                            f"phi_theta_im_{prefix}"
                         )
                         if (
-                            weights_theta_re_samples is None
-                            or weights_theta_im_samples is None
+                            z_theta_re_samples is None
+                            or z_theta_im_samples is None
+                            or log_phi_theta_re_samples is None
+                            or log_phi_theta_im_samples is None
                         ):
                             draws_missing = True
                             continue
 
-                        weights_theta_re_samples = jnp.asarray(
-                            weights_theta_re_samples
+                        z_theta_re_samples = jnp.asarray(z_theta_re_samples)
+                        z_theta_im_samples = jnp.asarray(z_theta_im_samples)
+                        log_phi_theta_re_samples = jnp.asarray(
+                            log_phi_theta_re_samples
                         )
-                        weights_theta_im_samples = jnp.asarray(
-                            weights_theta_im_samples
+                        log_phi_theta_im_samples = jnp.asarray(
+                            log_phi_theta_im_samples
                         )
                         theta_basis_jnp = jnp.asarray(
                             sampler._theta_basis,
-                            dtype=weights_theta_re_samples.dtype,
+                            dtype=z_theta_re_samples.dtype,
                         )
                         draw_count = min(
-                            posterior_draws, weights_theta_re_samples.shape[0]
+                            posterior_draws, z_theta_re_samples.shape[0]
                         )
                         draws_recorded = (
                             draw_count
                             if draws_recorded == 0
                             else min(draws_recorded, draw_count)
+                        )
+                        phi_theta_re_samples = jnp.clip(
+                            jnp.exp(log_phi_theta_re_samples[:draw_count]),
+                            1e-12,
+                            1e12,
+                        )
+                        phi_theta_im_samples = jnp.clip(
+                            jnp.exp(log_phi_theta_im_samples[:draw_count]),
+                            1e-12,
+                            1e12,
+                        )
+
+                        def _to_weights(z, phi):
+                            return solve_triangular(
+                                sampler._theta_penalty_chol,
+                                z,
+                                lower=True,
+                                trans="T",
+                            ) / jnp.sqrt(phi)
+
+                        weights_theta_re_samples = jax.vmap(_to_weights)(
+                            z_theta_re_samples[:draw_count],
+                            phi_theta_re_samples,
+                        )
+                        weights_theta_im_samples = jax.vmap(_to_weights)(
+                            z_theta_im_samples[:draw_count],
+                            phi_theta_im_samples,
                         )
                         theta_re_eval = (
                             weights_theta_re_samples[:draw_count]
@@ -879,15 +1132,25 @@ def prepare_block_vi(
                         f"Capping VI PSD reconstruction to {draws_used} draws "
                         f"(limit={getattr(sampler.config, 'vi_psd_max_draws', 0)})."
                     )
+                if draws_used < draws_available:
+                    draw_idx = np.linspace(
+                        0,
+                        draws_available - 1,
+                        draws_used,
+                        dtype=int,
+                    )
+                else:
+                    draw_idx = np.arange(draws_used, dtype=int)
+
                 log_delta_samples = jnp.asarray(
-                    log_delta_draws[:draws_used], dtype=jnp.float32
+                    log_delta_draws[draw_idx], dtype=jnp.float32
                 )
                 if sampler.n_theta > 0 and theta_re_draws is not None:
                     theta_re_samples = jnp.asarray(
-                        theta_re_draws[:draws_used], dtype=jnp.float32
+                        theta_re_draws[draw_idx], dtype=jnp.float32
                     )
                     theta_im_samples = jnp.asarray(
-                        theta_im_draws[:draws_used], dtype=jnp.float32
+                        theta_im_draws[draw_idx], dtype=jnp.float32
                     )
                 else:
                     theta_re_samples = jnp.zeros(

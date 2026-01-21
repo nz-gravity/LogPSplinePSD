@@ -1,12 +1,13 @@
 """Shared utilities for sampler implementations."""
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
+from jax.scipy.linalg import solve_triangular
 from numpyro.infer.util import log_density
 
 
@@ -44,20 +45,31 @@ def evaluate_log_density_batch(
 
 
 def sample_pspline_block(
+    *,
     delta_name: str,
     phi_name: str,
     weights_name: str,
-    penalty_matrix: jnp.ndarray,
+    penalty_chol: jnp.ndarray,
     alpha_phi: float,
     beta_phi: float,
     alpha_delta: float,
     beta_delta: float,
-    factor_name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Draw hierarchical Gamma-Normal P-spline weights and record log priors."""
+    """Draw hierarchical Gamma-Normal P-spline weights via whitening.
+
+    The induced prior on spline weights is
+
+        w | phi ~ N(0, (phi * P)^(-1)),
+
+    where P is a (jittered) positive-definite penalty matrix with Cholesky
+    factor P = L L^T. We sample whitened coefficients z ~ N(0, I) and map to
+
+        w = L^{-T} z / sqrt(phi),
+
+    recording the spline weights as a deterministic site.
+    """
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
     delta = numpyro.sample(delta_name, delta_dist)
-    log_prior_delta = delta_dist.log_prob(delta)
 
     # Moment-match the original Gamma prior with a log-normal and sample log(phi)
     # to reduce the funnel geometry seen by NUTS.
@@ -69,28 +81,19 @@ def sample_pspline_block(
         - jnp.log(delta)
         - 0.5 * sigma_sq
     )
-    phi_normal = dist.Normal(loc=mu, scale=sigma)
-    log_phi = numpyro.sample(
-        phi_name,
-        phi_normal,
-    )
+    log_phi = numpyro.sample(phi_name, dist.Normal(loc=mu, scale=sigma))
     phi = jnp.exp(log_phi)
-    log_prior_phi = phi_normal.log_prob(log_phi) - log_phi
+    phi = jnp.clip(phi, a_min=1e-12, a_max=1e12)
 
-    k = penalty_matrix.shape[0]
-    base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
-    weights = numpyro.sample(weights_name, base_normal)
-
-    wPw = jnp.dot(weights, jnp.dot(penalty_matrix, weights))
-    log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-    base_log_prob = base_normal.log_prob(weights)
-    log_prior_adjustment = log_prior_w - base_log_prob
-
-    if factor_name is None:
-        factor_name = f"weights_prior_{weights_name}"
-    numpyro.factor(factor_name, log_prior_adjustment)
-
-    log_prior_total = log_prior_delta + log_prior_phi + log_prior_adjustment
+    k = penalty_chol.shape[0]
+    z = numpyro.sample(
+        f"{weights_name}_z",
+        dist.Normal(0.0, 1.0).expand((k,)).to_event(1),
+    )
+    weights = solve_triangular(
+        penalty_chol, z, lower=True, trans="T"
+    ) / jnp.sqrt(phi)
+    numpyro.deterministic(weights_name, weights)
 
     return {
         "weights": weights,

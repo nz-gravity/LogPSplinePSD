@@ -61,6 +61,9 @@ class UnivarBaseSampler(BaseSampler):
         self.n_weights = len(self.spline_model.weights)
         self.log_pdgrm = jnp.log(self.periodogram.power)
         self.penalty_matrix = jnp.array(self.spline_model.penalty_matrix)
+        if self.spline_model.penalty_chol is None:
+            raise ValueError("Spline model is missing penalty_chol.")
+        self.penalty_chol = jnp.array(self.spline_model.penalty_chol)
         self.basis_matrix = jnp.asarray(
             self.spline_model.basis, dtype=jnp.float32
         )
@@ -127,7 +130,8 @@ class UnivarBaseSampler(BaseSampler):
             return np.nan, np.nan
 
         # Combine all parameters into single posterior sample array
-        weights = np.asarray(samples["weights"])
+        weights_key = "weights_z" if "weights_z" in samples else "weights"
+        weights = np.asarray(samples[weights_key])
         if weights.ndim >= 3:
             weights = weights.reshape((-1, weights.shape[-1]))
         elif weights.ndim == 2 and weights.shape[0] == self.config.num_chains:
@@ -172,7 +176,7 @@ class UnivarBaseSampler(BaseSampler):
             log_pdgrm=self.log_pdgrm,
             basis_matrix=self.basis_matrix,
             log_parametric=self.log_parametric,
-            penalty_matrix=self.penalty_matrix,
+            penalty_chol=self.penalty_chol,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,
             alpha_delta=self.config.alpha_delta,

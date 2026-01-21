@@ -44,7 +44,7 @@ def multivariate_psplines_model(
     u_im: jnp.ndarray,  # Wishart replicates (imag)
     nu: int,
     all_bases,
-    all_penalties,
+    all_penalty_chols,
     freq_weights: jnp.ndarray,
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
@@ -63,13 +63,13 @@ def multivariate_psplines_model(
 
     # Diagonal components (one per channel)
     for j in range(n_dim):  # Now n_dim is a concrete Python int
-        penalty = all_penalties[component_idx]
+        penalty_chol = all_penalty_chols[component_idx]
         basis = all_bases[component_idx]
         block = sample_pspline_block(
             delta_name=f"delta_{j}",
             phi_name=f"phi_delta_{j}",
             weights_name=f"weights_delta_{j}",
-            penalty_matrix=penalty,
+            penalty_chol=penalty_chol,
             alpha_phi=alpha_phi,
             beta_phi=beta_phi,
             alpha_delta=alpha_delta,
@@ -80,16 +80,17 @@ def multivariate_psplines_model(
         component_idx += 1
 
     log_delta_sq = jnp.stack(log_delta_components, axis=1)
+    log_delta_sq = jnp.clip(log_delta_sq, a_min=-80.0, a_max=80.0)
 
     # Off-diagonal components (if multivariate)
     if n_theta > 0:
-        penalty = all_penalties[component_idx]
+        penalty_chol = all_penalty_chols[component_idx]
         basis = all_bases[component_idx]
         theta_re_block = sample_pspline_block(
             delta_name="delta_theta_re",
             phi_name="phi_theta_re",
             weights_name="weights_theta_re",
-            penalty_matrix=penalty,
+            penalty_chol=penalty_chol,
             alpha_phi=alpha_phi,
             beta_phi=beta_phi,
             alpha_delta=alpha_delta,
@@ -99,13 +100,13 @@ def multivariate_psplines_model(
         component_idx += 1
         theta_re = jnp.tile(theta_re_base[:, None], (1, max(1, n_theta)))
 
-        penalty = all_penalties[component_idx]
+        penalty_chol = all_penalty_chols[component_idx]
         basis = all_bases[component_idx]
         theta_im_block = sample_pspline_block(
             delta_name="delta_theta_im",
             phi_name="phi_theta_im",
             weights_name="weights_theta_im",
-            penalty_matrix=penalty,
+            penalty_chol=penalty_chol,
             alpha_phi=alpha_phi,
             beta_phi=beta_phi,
             alpha_delta=alpha_delta,
@@ -249,7 +250,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             self.u_im,
             self.nu,
             self.all_bases,
-            self.all_penalties,
+            self.all_penalty_chols,
             self.freq_weights,
             self.config.alpha_phi,
             self.config.beta_phi,
@@ -303,6 +304,10 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             if key.startswith("phi"):
                 samples[key] = jnp.exp(samples[key])
 
+        # Keep the public posterior variables as spline weights; drop whitened latents.
+        for key in [name for name in samples if name.endswith("_z")]:
+            samples.pop(key, None)
+
         return self.to_arviz(samples, stats)
 
     def _default_init_strategy(self):
@@ -332,7 +337,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
                     u_im=self.u_im,
                     nu=self.nu,
                     all_bases=self.all_bases,
-                    all_penalties=self.all_penalties,
+                    all_penalty_chols=self.all_penalty_chols,
                     freq_weights=self.freq_weights,
                     alpha_phi=self.config.alpha_phi,
                     beta_phi=self.config.beta_phi,
@@ -370,7 +375,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             u_im=self.u_im,
             nu=self.nu,
             all_bases=self.all_bases,
-            all_penalties=self.all_penalties,
+            all_penalty_chols=self.all_penalty_chols,
             freq_weights=self.freq_weights,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,

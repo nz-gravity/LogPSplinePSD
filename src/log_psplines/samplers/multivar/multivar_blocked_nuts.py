@@ -51,9 +51,9 @@ def _blocked_channel_model(
     u_re_prev: jnp.ndarray,
     u_im_prev: jnp.ndarray,
     basis_delta: jnp.ndarray,
-    penalty_delta: jnp.ndarray,
+    penalty_delta_chol: jnp.ndarray,
     basis_theta: jnp.ndarray,
-    penalty_theta: jnp.ndarray,
+    penalty_theta_chol: jnp.ndarray,
     alpha_phi: float,
     beta_phi: float,
     alpha_phi_theta: float,
@@ -103,13 +103,14 @@ def _blocked_channel_model(
         delta_name=f"delta_{channel_label}",
         phi_name=f"phi_delta_{channel_label}",
         weights_name=f"weights_delta_{channel_label}",
-        penalty_matrix=penalty_delta,
+        penalty_chol=penalty_delta_chol,
         alpha_phi=alpha_phi,
         beta_phi=beta_phi,
         alpha_delta=alpha_delta,
         beta_delta=beta_delta,
     )
     log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
+    log_delta_sq = jnp.clip(log_delta_sq, a_min=-80.0, a_max=80.0)
 
     n_freq = u_re_channel.shape[0]
     n_theta_block = channel_index
@@ -125,7 +126,7 @@ def _blocked_channel_model(
                 delta_name=f"delta_{theta_prefix}",
                 phi_name=f"phi_{theta_prefix}",
                 weights_name=f"weights_{theta_prefix}",
-                penalty_matrix=penalty_theta,
+                penalty_chol=penalty_theta_chol,
                 alpha_phi=alpha_phi_theta,
                 beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
@@ -141,7 +142,7 @@ def _blocked_channel_model(
                 delta_name=f"delta_{theta_im_prefix}",
                 phi_name=f"phi_{theta_im_prefix}",
                 weights_name=f"weights_{theta_im_prefix}",
-                penalty_matrix=penalty_theta,
+                penalty_chol=penalty_theta_chol,
                 alpha_phi=alpha_phi_theta,
                 beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
@@ -268,8 +269,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             if self.n_theta > 0
             else jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
         )
-        self._theta_penalty = (
-            self.all_penalties[theta_basis_idx]
+        self._theta_penalty_chol = (
+            self.all_penalty_chols[theta_basis_idx]
             if self.n_theta > 0
             else jnp.zeros((0, 0))
         )
@@ -369,7 +370,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         for channel_index in range(self.n_channels):
             delta_basis = self.all_bases[channel_index]
-            delta_penalty = self.all_penalties[channel_index]
+            delta_penalty_chol = self.all_penalty_chols[channel_index]
 
             theta_start = channel_index * (channel_index - 1) // 2
             theta_count = channel_index
@@ -419,9 +420,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 u_re_prev,
                 u_im_prev,
                 delta_basis,
-                delta_penalty,
+                delta_penalty_chol,
                 self._theta_basis,
-                self._theta_penalty,
+                self._theta_penalty_chol,
                 self.config.alpha_phi,
                 self.config.beta_phi,
                 self.config.alpha_phi_theta,
@@ -451,6 +452,10 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                     block_samples[sample_key] = jnp.exp(
                         block_samples[sample_key]
                     )
+
+            # Keep deterministic spline weights only.
+            for sample_key in [k for k in block_samples if k.endswith("_z")]:
+                block_samples.pop(sample_key, None)
             block_stats = mcmc.get_extra_fields(group_by_chain=True)
 
             deterministic_keys = [

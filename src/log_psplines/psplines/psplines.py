@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 
 import jax
 import matplotlib.pyplot as plt
@@ -182,6 +182,7 @@ class LogPSplines:
     basis: jnp.ndarray
     penalty_matrix: jnp.ndarray
     knots: np.ndarray
+    penalty_chol: Optional[jnp.ndarray] = None
     weights: jnp.ndarray = None
     parametric_model: Union[jnp.ndarray, None] = None
 
@@ -209,6 +210,15 @@ class LogPSplines:
         assert (
             self.log_parametric_model is not None
         ), "parametric_model must be provided or initialized."
+
+        if self.penalty_chol is None:
+            try:
+                chol = np.linalg.cholesky(
+                    np.asarray(self.penalty_matrix, dtype=np.float64)
+                )
+                self.penalty_chol = jnp.asarray(chol)
+            except Exception:
+                self.penalty_chol = None
 
     def __repr__(self):
         return f"LogPSplines(knots={self.n_knots}, degree={self.degree}, penaltyOrder={self.diffMatrixOrder}, n={self.n})"  # , sparsity={self.basis_sparsity:.2f}, penalty_sparsity={self.penalty_sparsity:.2f})"
@@ -279,7 +289,7 @@ class LogPSplines:
         fmin, fmax = float(periodogram.freqs[0]), float(periodogram.freqs[-1])
         denom = (fmax - fmin) if fmax > fmin else 1.0
         grid = (np.asarray(periodogram.freqs) - fmin) / denom
-        basis, penalty_matrix = init_basis_and_penalty(
+        basis, penalty_matrix, penalty_chol = init_basis_and_penalty(
             knots, degree, periodogram.n, diffMatrixOrder, grid_points=grid
         )
         model = cls(
@@ -289,6 +299,7 @@ class LogPSplines:
             n=periodogram.n,
             basis=basis,
             penalty_matrix=penalty_matrix,
+            penalty_chol=penalty_chol,
             weights=jnp.zeros(basis.shape[1]),
             parametric_model=parametric_model,
         )

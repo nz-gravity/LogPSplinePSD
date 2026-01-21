@@ -28,6 +28,7 @@ def _make_sampler(num_chains=2):
     sampler.nu = 2
     sampler.all_bases = (jnp.ones((2, 1)),)
     sampler.all_penalties = (jnp.eye(1),)
+    sampler.all_penalty_chols = (jnp.eye(1),)
     sampler.freq_weights = jnp.ones((2,))
     sampler._default_init_strategy = lambda: "init"
     sampler._compute_empirical_psd = lambda: None
@@ -36,8 +37,8 @@ def _make_sampler(num_chains=2):
 
 
 def test_multivariate_model_emits_sites_univariate_and_multivar(monkeypatch):
-    def fake_block(*args, penalty_matrix=None, **kwargs):
-        k = penalty_matrix.shape[0]
+    def fake_block(*args, penalty_chol=None, **kwargs):
+        k = penalty_chol.shape[0]
         return {"weights": jnp.ones((k,))}
 
     monkeypatch.setattr(multivar_nuts, "sample_pspline_block", fake_block)
@@ -49,7 +50,7 @@ def test_multivariate_model_emits_sites_univariate_and_multivar(monkeypatch):
         all_bases = [
             jnp.ones((n_freq, 3)) for _ in range(n_dim + 2 * (n_theta > 0))
         ]
-        all_penalties = [jnp.eye(3) for _ in all_bases]
+        all_penalty_chols = [jnp.eye(3) for _ in all_bases]
         freq_weights = jnp.ones((n_freq,))
         trace = numpyro.handlers.trace(
             numpyro.handlers.seed(
@@ -60,7 +61,7 @@ def test_multivariate_model_emits_sites_univariate_and_multivar(monkeypatch):
             u_im=u_im,
             nu=2,
             all_bases=all_bases,
-            all_penalties=all_penalties,
+            all_penalty_chols=all_penalty_chols,
             freq_weights=freq_weights,
         )
 
@@ -93,7 +94,7 @@ def test_default_init_strategy_calls_default_init_values(monkeypatch):
             alpha_delta,
             beta_delta,
         )
-        return {"weights_delta_0": jnp.zeros(2)}
+        return {"weights_delta_0_z": jnp.zeros(2)}
 
     monkeypatch.setattr(
         multivar_nuts,
@@ -282,13 +283,13 @@ def test_sample_real_path_without_extra_fields(monkeypatch):
 def test_prepare_logpost_params_flattens_inputs():
     sampler = _make_sampler(num_chains=1)
     samples = {
-        "weights_delta_0": jnp.ones((2, 3, 4)),
+        "weights_delta_0_z": jnp.ones((2, 3, 4)),
         "phi_delta_0": jnp.ones((2, 3)),
         "delta_0": jnp.array(1.0),
         "other": jnp.zeros((2,)),
     }
     flat = sampler._prepare_logpost_params(samples)
-    assert flat["weights_delta_0"].shape == (6, 4)
+    assert flat["weights_delta_0_z"].shape == (6, 4)
     assert flat["phi_delta_0"].shape == (6,)
     assert flat["delta_0"].shape == (1,)
     assert "other" not in flat
@@ -303,14 +304,14 @@ def test_compute_log_posterior_logs_phi():
             np.log(np.array([2.0, 3.0])),
         )
         assert np.allclose(
-            np.asarray(params["weights_delta_0"]), np.array([1.0, 2.0])
+            np.asarray(params["weights_delta_0_z"]), np.array([1.0, 2.0])
         )
         return jnp.array(0.0)
 
     sampler._logpost_fn = fake_logpost
     params = {
         "phi_delta_0": jnp.array([2.0, 3.0]),
-        "weights_delta_0": jnp.array([1.0, 2.0]),
+        "weights_delta_0_z": jnp.array([1.0, 2.0]),
     }
     assert sampler._compute_log_posterior(params) == 0.0
 
@@ -337,7 +338,7 @@ def test_vi_only_inference_data_with_draws(monkeypatch):
     artifacts = SimpleNamespace(
         diagnostics={},
         posterior_draws={
-            "weights_delta_0": jnp.ones((2, 2)),
+            "weights_delta_0_z": jnp.ones((2, 2)),
             "phi_delta_0": jnp.ones((2,)),
             "delta_0": jnp.ones((2,)),
         },
@@ -373,7 +374,7 @@ def test_vi_only_inference_data_means_fallback_and_lp_failure(monkeypatch):
         diagnostics={},
         posterior_draws=None,
         means={
-            "weights_delta_0": jnp.ones((2,)),
+            "weights_delta_0_z": jnp.ones((2,)),
             "phi_delta_0": jnp.ones((2,)),
             "delta_0": jnp.ones((2,)),
         },
@@ -381,7 +382,7 @@ def test_vi_only_inference_data_means_fallback_and_lp_failure(monkeypatch):
 
     result = sampler._vi_only_inference_data(artifacts)
     assert result["stats"] == {}
-    assert captured["samples"]["weights_delta_0"].shape[0] == 1
+    assert captured["samples"]["weights_delta_0_z"].shape[0] == 1
 
 
 def test_vi_only_inference_data_requires_draws_or_means():

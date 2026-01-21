@@ -7,11 +7,15 @@ import numpy as np
 import pytest
 import scipy
 from scipy.interpolate import BSpline
+from skfda.misc.operators import LinearDifferentialOperator
+from skfda.misc.regularization import L2Regularization
+from skfda.representation.basis import BSplineBasis
 
 from log_psplines.datatypes import MultivarFFT, Periodogram, Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
+from log_psplines.psplines.initialisation import make_penalty_spd
 from log_psplines.samplers.univar.univar_base import log_likelihood
 
 
@@ -292,3 +296,135 @@ def test_multivar_fft_cut_preserves_scaling():
 
     with pytest.raises(ValueError):
         fft.cut(10.0, 5.0)
+
+
+def test_penalty_cholesky_possible(mock_pdgrm: Periodogram):
+    spline_model = LogPSplines.from_periodogram(
+        mock_pdgrm,
+        n_knots=10,
+        degree=3,
+        diffMatrixOrder=2,
+    )
+    P = spline_model.penalty_matrix
+
+    # 1st we check min eigenvalue is positive
+    eigvals = np.linalg.eigvalsh(P)
+    assert eigvals.min() > 0.0, "Penalty matrix is not positive definite."
+
+    # Add small jitter to ensure positive definiteness
+    P_jittered = P + 1e-6 * jnp.eye(P.shape[0])
+    # Attempt Cholesky decomposition
+    L = scipy.linalg.cholesky(P_jittered, lower=True)
+    # Reconstruct and compare
+    P_reconstructed = L @ L.T
+    assert jnp.allclose(P_jittered, P_reconstructed, atol=1e-5)
+
+
+def test_penalty_spd_vs_raw_plot(mock_pdgrm: Periodogram, outdir):
+    out = os.path.join(outdir, "out_penalty_spd_vs_raw")
+    os.makedirs(out, exist_ok=True)
+
+    spline_model = LogPSplines.from_periodogram(
+        mock_pdgrm,
+        n_knots=6,
+        degree=3,
+        diffMatrixOrder=2,
+    )
+
+    # Rebuild the raw penalty (without SPD fix) for comparison
+    bspline_basis = BSplineBasis(
+        domain_range=[0, 1],
+        order=spline_model.degree + 1,
+        knots=spline_model.knots,
+    )
+    regularization = L2Regularization(
+        LinearDifferentialOperator(spline_model.diffMatrixOrder)
+    )
+    penalty_raw = regularization.penalty_matrix(bspline_basis)
+
+    penalty_spd, penalty_chol, info = make_penalty_spd(
+        penalty_raw,
+        eps_rel=1e-6,
+        eps_abs=0.0,
+        do_eig_floor=True,
+    )
+
+    # Quick PD sanity check on the SPD matrix
+    np.testing.assert_allclose(
+        penalty_chol @ penalty_chol.T, penalty_spd, rtol=1e-6, atol=1e-8
+    )
+
+    def stats(P: np.ndarray):
+        eig = np.linalg.eigvalsh(0.5 * (P + P.T))
+        return {
+            "max_abs": float(np.max(np.abs(P))),
+            "fro": float(np.sqrt(np.sum(P**2))),
+            "trace": float(np.trace(P)),
+            "eig_min": float(eig.min()),
+            "eig_max": float(eig.max()),
+            "eig_zero_ct": int(np.sum(np.isclose(eig, 0.0, atol=1e-10))),
+        }
+
+    stats_raw = stats(penalty_raw)
+    stats_spd = stats(penalty_spd)
+
+    print("penalty_raw stats", stats_raw)
+    print("penalty_spd stats", stats_spd)
+
+    # Use independent colorbars for each matrix to see structure
+    vmax_raw = np.max(np.abs(penalty_raw))
+    vmax_raw = vmax_raw if np.isfinite(vmax_raw) and vmax_raw > 0 else 1.0
+    vmax_spd = np.max(np.abs(penalty_spd))
+    vmax_spd = vmax_spd if np.isfinite(vmax_spd) and vmax_spd > 0 else 1.0
+
+    print(f"raw_imshow_vrange=({-vmax_raw:.3g}, {vmax_raw:.3g})")
+    print(f"spd_imshow_vrange=({-vmax_spd:.3g}, {vmax_spd:.3g})")
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4), sharex=True, sharey=True)
+    im0 = axes[0].imshow(
+        penalty_raw, cmap="coolwarm", vmin=-vmax_raw, vmax=vmax_raw
+    )
+    axes[0].set_title("Raw penalty (no SPD fix)")
+    fig.colorbar(im0, ax=axes[0], shrink=0.8, label="Raw entry")
+
+    im1 = axes[1].imshow(
+        penalty_spd, cmap="coolwarm", vmin=-vmax_spd, vmax=vmax_spd
+    )
+    axes[1].set_title("SPD penalty (with fix)")
+    fig.colorbar(im1, ax=axes[1], shrink=0.8, label="SPD entry")
+
+    fig.suptitle("Penalty matrix comparison (independent scales)", y=1.02)
+    plt.tight_layout()
+    fig.savefig(f"{out}/penalty_spd_vs_raw.png", bbox_inches="tight")
+
+    tiny = 1e-12
+    log_abs_raw = np.log10(np.abs(penalty_raw) + tiny)
+    log_abs_spd = np.log10(np.abs(penalty_spd) + tiny)
+    vmin_log = float(np.min([log_abs_raw, log_abs_spd]))
+    vmax_log = float(np.max([log_abs_raw, log_abs_spd]))
+
+    print(f"log_imshow_vrange=({vmin_log:.3g}, {vmax_log:.3g})")
+
+    fig2, axes2 = plt.subplots(1, 2, figsize=(10, 4), sharex=True, sharey=True)
+    axes2[0].imshow(log_abs_raw, cmap="magma", vmin=vmin_log, vmax=vmax_log)
+    axes2[0].set_title("log10 |raw|")
+    axes2[1].imshow(log_abs_spd, cmap="magma", vmin=vmin_log, vmax=vmax_log)
+    axes2[1].set_title("log10 |SPD|")
+    fig2.colorbar(
+        axes2[1].images[0],
+        ax=axes2.ravel().tolist(),
+        shrink=0.8,
+        label="log10 |P|",
+    )
+    fig2.suptitle("Penalty matrix log-magnitude", y=1.02)
+    plt.tight_layout()
+    fig2.savefig(f"{out}/penalty_spd_vs_raw_logabs.png", bbox_inches="tight")
+    # Ensure the SPD fixed matrix is positive definite
+    eigvals = np.linalg.eigvalsh(penalty_spd)
+    assert eigvals.min() > 0.0
+
+    # print both matrices for comparison
+    print("Penalty matrix (raw):")
+    print(penalty_raw)
+    print("Penalty matrix (SPD):")
+    print(penalty_spd)

@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from typing import Dict, Optional
 
 import arviz as az
+import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
+from jax.scipy.linalg import solve_triangular
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
@@ -43,7 +45,7 @@ class NUTSConfig(SamplerConfig):
 def bayesian_model(
     log_pdgrm: jnp.ndarray,
     lnspline_basis: jnp.ndarray,
-    penalty_matrix: jnp.ndarray,
+    penalty_chol: jnp.ndarray,
     ln_parametric: jnp.ndarray,
     freq_weights: jnp.ndarray,
     alpha_phi,
@@ -56,12 +58,11 @@ def bayesian_model(
         delta_name="delta",
         phi_name="phi",
         weights_name="weights",
-        penalty_matrix=penalty_matrix,
+        penalty_chol=penalty_chol,
         alpha_phi=alpha_phi,
         beta_phi=beta_phi,
         alpha_delta=alpha_delta,
         beta_delta=beta_delta,
-        factor_name="ln_prior",
     )
 
     weights = block["weights"]
@@ -160,7 +161,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             self.rng_key,
             self.log_pdgrm,
             self.basis_matrix,
-            self.penalty_matrix,
+            self.penalty_chol,
             self.log_parametric,
             self.freq_weights,
             self.config.alpha_phi,
@@ -226,20 +227,20 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             sample_dict = {
                 name: jnp.asarray(array)
                 for name, array in posterior_draws.items()
-                if name in {"weights", "phi", "delta"}
+                if name in {"weights_z", "phi", "delta"}
             }
         else:
             means = vi_artifacts.means or {}
             sample_dict = {
                 name: jnp.asarray(value)[None, ...]
                 for name, value in means.items()
-                if name in {"weights", "phi", "delta"}
+                if name in {"weights_z", "phi", "delta"}
             }
 
-        missing = {"weights", "phi", "delta"} - set(sample_dict)
+        missing = {"weights_z", "phi", "delta"} - set(sample_dict)
         if missing:
             raise ValueError(
-                "Variational-only mode requires VI means for weights, phi, and delta."
+                "Variational-only mode requires VI means for weights_z, phi, and delta."
             )
 
         params_batch = self._prepare_logpost_params(sample_dict)
@@ -255,9 +256,25 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         except Exception:
             sample_stats = {}
 
+        log_phi = jnp.asarray(sample_dict["phi"])
+        phi = jnp.exp(log_phi)
+        phi = jnp.clip(phi, a_min=1e-12, a_max=1e12)
+        z = jnp.asarray(sample_dict["weights_z"])
+        if z.ndim == 1:
+            weights = solve_triangular(
+                self.penalty_chol, z, lower=True, trans="T"
+            ) / jnp.sqrt(phi)
+        else:
+            weights = jax.vmap(
+                lambda zi, phii: solve_triangular(
+                    self.penalty_chol, zi, lower=True, trans="T"
+                )
+                / jnp.sqrt(phii)
+            )(z, phi)
+
         samples = dict(sample_dict)
-        if "phi" in samples:
-            samples["phi"] = jnp.exp(samples["phi"])
+        samples["phi"] = phi
+        samples["weights"] = weights
         self.runtime = 0.0
         return self._create_vi_inference_data(
             samples, sample_stats, diagnostics
@@ -269,7 +286,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         return dict(
             log_pdgrm=self.log_pdgrm,
             lnspline_basis=self.basis_matrix,
-            penalty_matrix=self.penalty_matrix,
+            penalty_chol=self.penalty_chol,
             ln_parametric=self.log_parametric,
             freq_weights=self.freq_weights,
             alpha_phi=self.config.alpha_phi,
@@ -309,11 +326,11 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
                 logger.warning(f"Model pre-compilation failed: {e}")
 
     def _compute_log_posterior(
-        self, weights: jnp.ndarray, phi: float, delta: float
+        self, weights_z: jnp.ndarray, phi: float, delta: float
     ) -> float:
         """Compute log posterior for given parameters via the NumPyro model."""
         params = {
-            "weights": jnp.asarray(weights),
+            "weights_z": jnp.asarray(weights_z),
             "phi": jnp.log(jnp.asarray(phi)),
             "delta": jnp.asarray(delta),
         }
@@ -321,12 +338,12 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
 
     def _prepare_logpost_params(self, samples: Dict[str, jnp.ndarray]):
         """Stack posterior samples into a pytree for log-density evaluation."""
-        weights = jnp.asarray(samples["weights"])
-        if weights.ndim == 1:
-            weights = weights[None, :]
-        elif weights.ndim >= 3:
+        weights_z = jnp.asarray(samples["weights_z"])
+        if weights_z.ndim == 1:
+            weights_z = weights_z[None, :]
+        elif weights_z.ndim >= 3:
             # Flatten chain and draw dimensions into a single batch axis
-            weights = weights.reshape((-1, weights.shape[-1]))
+            weights_z = weights_z.reshape((-1, weights_z.shape[-1]))
 
         phi = jnp.asarray(samples["phi"])
         phi = phi.reshape(-1) if phi.ndim else phi.reshape(1)
@@ -335,7 +352,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         delta = delta.reshape(-1) if delta.ndim else delta.reshape(1)
 
         return {
-            "weights": weights,
+            "weights_z": weights_z,
             "phi": phi,
             "delta": delta,
         }

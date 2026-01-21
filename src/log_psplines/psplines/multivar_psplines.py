@@ -135,7 +135,7 @@ class MultivariateLogPSplines:
             raise ValueError(f"Unknown knot placement method: {knot_method}")
 
         # Create basis and penalty matrices (same for all components)
-        basis, penalty = init_basis_and_penalty(
+        basis, penalty, penalty_chol = init_basis_and_penalty(
             knots, degree, n_freq, diffMatrixOrder, grid_points=freq_norm
         )
 
@@ -170,6 +170,7 @@ class MultivariateLogPSplines:
                 n=n_freq,
                 basis=basis,
                 penalty_matrix=penalty,
+                penalty_chol=penalty_chol,
                 knots=knots,
                 weights=jnp.zeros(basis.shape[1]),
                 parametric_model=jnp.ones(n_freq),
@@ -186,6 +187,7 @@ class MultivariateLogPSplines:
                 n=n_freq,
                 basis=basis,
                 penalty_matrix=penalty,
+                penalty_chol=penalty_chol,
                 knots=knots,
                 weights=initial_weights,
                 parametric_model=jnp.ones(
@@ -230,6 +232,7 @@ class MultivariateLogPSplines:
                 n=n_freq,
                 basis=basis,
                 penalty_matrix=penalty,
+                penalty_chol=penalty_chol,
                 knots=knots,
                 weights=jnp.zeros(basis.shape[1]),
                 parametric_model=jnp.ones(n_freq),
@@ -242,6 +245,7 @@ class MultivariateLogPSplines:
                 n=n_freq,
                 basis=basis,
                 penalty_matrix=penalty,
+                penalty_chol=penalty_chol,
                 knots=knots,
                 weights=initial_weights_offdiag,
                 parametric_model=jnp.ones(n_freq),
@@ -253,6 +257,7 @@ class MultivariateLogPSplines:
                 n=n_freq,
                 basis=basis,
                 penalty_matrix=penalty,
+                penalty_chol=penalty_chol,
                 knots=knots,
                 weights=initial_weights_offdiag,  # Same initialization for real and imaginary
                 parametric_model=jnp.ones(n_freq),
@@ -318,6 +323,37 @@ class MultivariateLogPSplines:
 
         return all_bases, all_penalties
 
+    def get_all_bases_penalties_and_chols(
+        self,
+    ) -> Tuple[List[jnp.ndarray], List[jnp.ndarray], List[jnp.ndarray]]:
+        """Return basis, penalty, and penalty Cholesky factors for all components."""
+
+        all_bases, all_penalties = self.get_all_bases_and_penalties()
+        all_chols: List[jnp.ndarray] = []
+
+        for model in self.diagonal_models:
+            if model.penalty_chol is None:
+                raise ValueError(
+                    "Penalty Cholesky factor missing for diagonal model."
+                )
+            all_chols.append(model.penalty_chol)
+
+        if self.offdiag_re_model is not None:
+            if self.offdiag_re_model.penalty_chol is None:
+                raise ValueError(
+                    "Penalty Cholesky factor missing for off-diagonal real model."
+                )
+            all_chols.append(self.offdiag_re_model.penalty_chol)
+
+        if self.offdiag_im_model is not None:
+            if self.offdiag_im_model.penalty_chol is None:
+                raise ValueError(
+                    "Penalty Cholesky factor missing for off-diagonal imaginary model."
+                )
+            all_chols.append(self.offdiag_im_model.penalty_chol)
+
+        return all_bases, all_penalties, all_chols
+
     def _psd_chunk_iterator(
         self,
         log_delta_sq_samples: np.ndarray,
@@ -360,15 +396,28 @@ class MultivariateLogPSplines:
 
             for s in range(n_samps):
                 for local_f in range(chunk_len):
-                    diag_vals = np.exp(log_chunk[s, local_f]).astype(
-                        np.float32
+                    log_vals = np.asarray(log_chunk[s, local_f], dtype=float)
+                    log_vals = np.nan_to_num(
+                        log_vals, nan=0.0, posinf=80.0, neginf=-80.0
                     )
+                    log_vals = np.clip(log_vals, -80.0, 80.0)
+                    diag_vals = np.exp(log_vals).astype(np.float32)
                     T = np.eye(n_channels, dtype=np.complex64)
 
                     if n_theta > 0:
                         theta_complex = (
                             theta_re_chunk[s, local_f]
                             + 1j * theta_im_chunk[s, local_f]
+                        )
+                        theta_complex = np.asarray(theta_complex)
+                        theta_complex = np.nan_to_num(
+                            theta_complex, nan=0.0, posinf=0.0, neginf=0.0
+                        )
+                        theta_clip = 1e3
+                        theta_complex = np.clip(
+                            theta_complex.real, -theta_clip, theta_clip
+                        ) + 1j * np.clip(
+                            theta_complex.imag, -theta_clip, theta_clip
                         )
                         n_use = min(theta_complex.shape[0], n_lower)
                         if n_use:
@@ -520,12 +569,14 @@ class MultivariateLogPSplines:
             psd_imag_percentiles[:, start:end] = imag_q
 
             if coherence_percentiles is not None:
-                diag = np.abs(
-                    np.diagonal(psd_chunk, axis1=2, axis2=3)
+                diag = np.abs(np.diagonal(psd_chunk, axis1=2, axis2=3)).astype(
+                    np.float64
                 )  # (samples, chunk, channels)
                 denom = diag[..., :, None] * diag[..., None, :]
                 denom = np.where(denom > 0.0, denom, np.nan)
-                coh_samples = (np.abs(psd_chunk) ** 2) / denom
+                coh_samples = (
+                    np.abs(psd_chunk).astype(np.float64) ** 2
+                ) / denom
                 coh_samples = np.nan_to_num(coh_samples, nan=0.0, posinf=0.0)
                 coh_q = np.percentile(coh_samples, percentiles, axis=0)
 

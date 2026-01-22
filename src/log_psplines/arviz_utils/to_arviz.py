@@ -123,6 +123,14 @@ def _prepare_attributes_and_dims(
         summary = az.summary(samples, var_names=ess_vars, round_to=2)
         ess_vals = summary["ess_bulk"].values
         attributes.update(dict(ess=ess_vals))
+
+        ess_sorted = summary["ess_bulk"].sort_values()
+        n_low = min(5, len(ess_sorted))
+        lowest_names = [str(name) for name in ess_sorted.index[:n_low]]
+        lowest_vals = [float(val) for val in ess_sorted.iloc[:n_low]]
+        attributes.update(
+            dict(ess_lowest_names=lowest_names, ess_lowest_values=lowest_vals)
+        )
     except Exception:
         logger.exception(
             "_prepare_attributes_and_dims: ESS computation failed"
@@ -299,7 +307,7 @@ def _create_multivar_inference_data(
     # Create posterior predictive summaries
     percentiles, psd_real_q, psd_imag_q, coh_q = (
         _compute_posterior_predictive_multivar(
-            samples, sample_stats, spline_model, fft_data
+            samples, sample_stats, spline_model, fft_data, config
         )
     )
     psd_real_q = np.asarray(psd_real_q, dtype=np.float64)
@@ -624,6 +632,7 @@ def _compute_posterior_predictive_multivar(
     sample_stats: Dict[str, jnp.ndarray],
     spline_model,
     fft_data: MultivarFFT,
+    config: Optional["SamplerConfig"] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
     """Compute PSD percentiles (and optional coherence percentiles) from samples."""
     # Keep concise logging
@@ -670,13 +679,31 @@ def _compute_posterior_predictive_multivar(
         )
 
     percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
+    # Fast-diagnostics controls from config
+    n_draw_cap = 50
+    compute_coh = fft_data.n_dim > 1
+    if config is not None:
+        try:
+            value = getattr(config, "posterior_psd_max_draws", None)
+            if value is not None:
+                value_int = int(value)
+                if value_int > 0:
+                    n_draw_cap = value_int
+        except Exception:
+            pass
+        try:
+            value = getattr(config, "compute_coherence_quantiles", None)
+            if value is not None:
+                compute_coh = bool(value)
+        except Exception:
+            pass
     psd_real_q, psd_imag_q, coh_q = spline_model.compute_psd_quantiles(
         log_delta_sq,
         theta_re,
         theta_im,
         percentiles=percentiles,
-        n_samples_max=50,
-        compute_coherence=fft_data.n_dim > 1,
+        n_samples_max=n_draw_cap,
+        compute_coherence=compute_coh,
     )
     return percentiles, psd_real_q, psd_imag_q, coh_q
 

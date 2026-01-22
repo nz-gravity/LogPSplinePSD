@@ -110,6 +110,11 @@ def _blocked_channel_model(
         beta_delta=beta_delta,
     )
     log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
+    # Numerical guard:
+    # Very negative log_delta_sq implies extremely small variances, which can
+    # overflow exp(-log_delta_sq) and yield inf-inf in the likelihood/ELBO.
+    # Keep the range fairly tight to avoid exploding gradients during VI.
+    log_delta_sq_safe = jnp.clip(log_delta_sq, a_min=-20.0, a_max=20.0)
 
     n_freq = u_re_channel.shape[0]
     n_theta_block = channel_index
@@ -159,9 +164,9 @@ def _blocked_channel_model(
         theta_re = jnp.zeros((n_freq, 0))
         theta_im = jnp.zeros((n_freq, 0))
 
-    exp_neg_log_delta = jnp.exp(-log_delta_sq)
+    exp_neg_log_delta = jnp.exp(-log_delta_sq_safe)
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
-    sum_log_det = -float(nu) * jnp.sum(fw * log_delta_sq)
+    sum_log_det = -float(nu) * jnp.sum(fw * log_delta_sq_safe)
 
     if n_theta_block > 0:
         contrib_re = jnp.einsum(
@@ -183,7 +188,7 @@ def _blocked_channel_model(
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
 
-    numpyro.deterministic(f"log_delta_sq_{channel_label}", log_delta_sq)
+    numpyro.deterministic(f"log_delta_sq_{channel_label}", log_delta_sq_safe)
     if n_theta_block > 0:
         numpyro.deterministic(f"theta_re_{channel_label}", theta_re)
         numpyro.deterministic(f"theta_im_{channel_label}", theta_im)

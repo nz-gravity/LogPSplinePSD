@@ -63,10 +63,13 @@ def sample_pspline_block(
     # to reduce the funnel geometry seen by NUTS.
     sigma_sq = jnp.log1p(1.0 / alpha_phi)
     sigma = jnp.sqrt(sigma_sq)
+    # Guard against delta underflow to 0.0 in float32 which makes log(delta)
+    # diverge and can produce inf/NaN loc parameters during VI/NUTS init.
+    delta_safe = jnp.maximum(delta, jnp.asarray(1e-12, dtype=delta.dtype))
     mu = (
         jnp.log(alpha_phi)
         - jnp.log(beta_phi)
-        - jnp.log(delta)
+        - jnp.log(delta_safe)
         - 0.5 * sigma_sq
     )
     phi_normal = dist.Normal(loc=mu, scale=sigma)

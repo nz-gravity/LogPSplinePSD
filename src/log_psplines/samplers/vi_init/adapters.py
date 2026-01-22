@@ -437,6 +437,23 @@ def prepare_block_vi(
 ) -> BlockVIArtifacts:
     """Run VI per block for blocked multivariate samplers."""
 
+    def _vi_means_are_usable(means: Dict[str, Any]) -> bool:
+        """Return True if VI means are safe to use as init_to_value."""
+        if not means:
+            return False
+        for name, value in means.items():
+            try:
+                arr = np.asarray(jax.device_get(value))
+            except Exception:
+                return False
+            if arr.size and not np.all(np.isfinite(arr)):
+                return False
+            # Gamma sites: must be strictly positive.
+            if str(name).startswith("delta_"):
+                if arr.size and not np.all(arr > 0):
+                    return False
+        return True
+
     guide_cfg = getattr(sampler.config, "vi_guide", None) or "auto(block)"
     steps = int(getattr(sampler.config, "vi_steps", 0) or 0)
     draws = int(getattr(sampler.config, "vi_posterior_draws", 0) or 0)
@@ -654,16 +671,44 @@ def prepare_block_vi(
                 progress_bar=progress_bar,
                 init_values=init_values,
             )
-
-            init_values = {
-                name: jnp.asarray(value)
-                for name, value in vi_result.means.items()
-            }
-            init_strategies[channel_index] = init_to_value(values=init_values)
-
             losses_arr = np.asarray(jax.device_get(vi_result.losses))
+            if losses_arr.size and not np.isfinite(losses_arr[-1]):
+                logger.warning(
+                    f"VI returned a non-finite ELBO for block {channel_index} "
+                    f"(guide={vi_result.guide_name}); retrying with diag guide."
+                )
+                vi_result = fit_vi(
+                    model=block_model,
+                    rng_key=vi_key,
+                    vi_steps=min(int(sampler.config.vi_steps), 2000),
+                    optimizer_lr=min(float(sampler.config.vi_lr), 1e-3),
+                    model_args=model_args,
+                    guide="diag",
+                    posterior_draws=sampler.config.vi_posterior_draws,
+                    progress_bar=progress_bar,
+                    init_values=init_values,
+                )
+                losses_arr = np.asarray(jax.device_get(vi_result.losses))
+
             vi_losses_blocks.append(losses_arr)
             vi_guides.append(vi_result.guide_name)
+
+            vi_means = {
+                name: jnp.asarray(value)
+                for name, value in (vi_result.means or {}).items()
+            }
+            if losses_arr.size and not np.isfinite(losses_arr[-1]):
+                logger.warning(
+                    f"VI returned a non-finite ELBO for block {channel_index} "
+                    f"(guide={vi_result.guide_name}); skipping VI-based init."
+                )
+            elif not _vi_means_are_usable(vi_means):
+                logger.warning(
+                    f"VI produced invalid mean parameters for block {channel_index} "
+                    f"(guide={vi_result.guide_name}); skipping VI-based init."
+                )
+            else:
+                init_strategies[channel_index] = init_to_value(values=vi_means)
 
             if vi_result.samples is not None:
                 for name, value in vi_result.samples.items():
@@ -931,7 +976,11 @@ def prepare_block_vi(
                         "q95": coh_percentiles[2],
                     }
 
-        valid_losses = [arr for arr in vi_losses_blocks if arr.size]
+        valid_losses = [
+            arr
+            for arr in vi_losses_blocks
+            if arr.size and np.all(np.isfinite(arr))
+        ]
         losses_mean = None
         losses_stack = None
         if valid_losses:

@@ -12,6 +12,19 @@ from ._utils import khat_status
 
 def _compute_rhat(idata) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
+    # Prefer precomputed Rhat when available (avoids expensive ArviZ scans).
+    try:
+        attrs = getattr(idata, "attrs", {}) or {}
+        rhat_attr = attrs.get("rhat")
+        if rhat_attr is not None:
+            vals = np.asarray(rhat_attr).reshape(-1)
+            finite = vals[np.isfinite(vals)]
+            if finite.size:
+                metrics["rhat_max"] = float(np.max(finite))
+                metrics["rhat_mean"] = float(np.mean(finite))
+                return metrics
+    except Exception:
+        pass
     try:
         rhat = az.rhat(idata)
         vals = np.asarray(rhat.to_array()).reshape(-1)
@@ -26,6 +39,19 @@ def _compute_rhat(idata) -> Dict[str, float]:
 
 def _compute_ess(idata) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
+    # Prefer precomputed ESS when available (avoids expensive ArviZ scans).
+    try:
+        attrs = getattr(idata, "attrs", {}) or {}
+        ess_attr = attrs.get("ess")
+        if ess_attr is not None:
+            vals = np.asarray(ess_attr).reshape(-1)
+            finite = vals[np.isfinite(vals)]
+            if finite.size:
+                metrics["ess_bulk_min"] = float(np.min(finite))
+                metrics["ess_bulk_median"] = float(np.median(finite))
+                return metrics
+    except Exception:
+        pass
     try:
         ess = az.ess(idata, method="bulk")
         vals = np.asarray(ess.to_array())
@@ -111,13 +137,25 @@ def run(
         return {}
 
     metrics: Dict[str, float] = {}
-    for fn in (
+    # Read optional toggle from idata attrs to skip PSIS
+    attrs = getattr(idata, "attrs", {}) or {}
+    compute_psis_flag = True
+    try:
+        flag = attrs.get("compute_psis")
+        if flag is not None:
+            compute_psis_flag = bool(flag)
+    except Exception:
+        pass
+
+    fns = [
         _compute_rhat,
         _compute_ess,
         _compute_divergences,
         _compute_acceptance,
-        _compute_psis,
-    ):
+    ]
+    if compute_psis_flag:
+        fns.append(_compute_psis)
+    for fn in fns:
         metrics.update(fn(idata))
 
     return {

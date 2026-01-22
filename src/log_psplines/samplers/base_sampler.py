@@ -44,6 +44,11 @@ class SamplerConfig:
         64  # Cap PSD reconstructions from VI/posterior draws
     )
     only_vi: bool = False  # Skip MCMC and rely on VI draws only
+    # Fast-diagnostics controls
+    posterior_psd_max_draws: int = 50  # Cap posterior PSD reconstructions
+    compute_coherence_quantiles: bool = True  # Compute coherence bands
+    compute_psis: bool = True  # Enable PSIS-LOO diagnostics
+    skip_plot_diagnostics: bool = False  # Skip plotting heavy diagnostics
 
     def __post_init__(self):
         if self.outdir is not None:
@@ -154,6 +159,14 @@ class BaseSampler(ABC):
                     logger.info(
                         f"  ESS min: {np.min(ess):.1f}, max: {np.max(ess):.1f}"
                     )
+                    # Report lowest-ESS parameter names when available
+                    names = idata.attrs.get("ess_lowest_names")
+                    vals = idata.attrs.get("ess_lowest_values")
+                    if names and vals and len(names) == len(vals):
+                        pairs = ", ".join(
+                            f"{n}: {v:.1f}" for n, v in zip(names, vals)
+                        )
+                        logger.info(f"  ESS lowest: {pairs}")
 
                 if rhat_vals is not None and rhat_vals.size:
                     logger.info(
@@ -214,13 +227,23 @@ class BaseSampler(ABC):
     def _save_results(self, idata: az.InferenceData) -> None:
         """Save inference results to disk."""
         az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")
-        plot_diagnostics(idata, self.config.outdir)
-        az.summary(idata).to_csv(
-            f"{self.config.outdir}/summary_statistics.csv"
-        )
+        # Optionally skip heavy MCMC diagnostics plots/summaries.
+        if not getattr(self.config, "skip_plot_diagnostics", False):
+            plot_diagnostics(idata, self.config.outdir)
+            t0 = time.perf_counter()
+            logger.info("Writing summary_statistics.csv...")
+            az.summary(idata).to_csv(
+                f"{self.config.outdir}/summary_statistics.csv"
+            )
+            logger.info(
+                f"Wrote summary_statistics.csv in {time.perf_counter() - t0:.2f}s"
+            )
 
-        # Data-type specific plotting
-        self._save_plots(idata)
+        # Always save the main PSD plots for the given data type.
+        try:
+            self._save_plots(idata)
+        except Exception as exc:  # pragma: no cover
+            logger.warning(f"Could not save plots: {exc}")
 
     @abstractmethod
     def _save_plots(self, idata: az.InferenceData) -> None:

@@ -1,4 +1,5 @@
 import os
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -25,93 +26,186 @@ class DiagnosticsConfig:
     fontsize: int = 11
     labelsize: int = 12
     titlesize: int = 12
+    # Trace plot performance guards (important for multivariate runs)
+    max_trace_vars_per_group: int = 8
+    max_trace_dims_per_var: int = 4
+    max_trace_series_per_group: int = 12
+    max_trace_draws: int = 2000
+    trace_use_kde: bool = True
+    trace_kde_max_points: int = 1200
+    trace_max_kde_series_per_group: int = 4
 
 
-def plot_trace(idata: az.InferenceData, compact=True) -> plt.Figure:
+def _choose_flat_indices(n_dim: int, max_dim: int) -> np.ndarray:
+    if n_dim <= 0 or max_dim <= 0:
+        return np.array([], dtype=int)
+    if n_dim <= max_dim:
+        return np.arange(n_dim, dtype=int)
+    return np.unique(
+        np.linspace(0, n_dim - 1, num=max_dim, dtype=int, endpoint=True)
+    )
+
+
+def _thin_series(series: np.ndarray, max_points: int) -> np.ndarray:
+    series = np.asarray(series)
+    if max_points is None or max_points <= 0 or series.size <= max_points:
+        return series
+    step = int(np.ceil(series.size / max_points))
+    return series[::step]
+
+
+def plot_trace(
+    idata: az.InferenceData,
+    compact: bool = True,
+    config: Optional[DiagnosticsConfig] = None,
+) -> plt.Figure:
+    """Lightweight trace/hist diagnostics for key parameter groups.
+
+    Multivariate models can produce very high-dimensional parameter vectors.
+    This function intentionally subsamples variables, dimensions, and draws to
+    keep diagnostics fast and avoid generating enormous figures.
+    """
+    _ = compact  # Backwards-compatibility with older call sites.
+    if config is None:
+        config = DiagnosticsConfig()
+
     groups = {
         "delta": [
-            v for v in idata.posterior.data_vars if v.startswith("delta")
+            v for v in idata.posterior.data_vars if str(v).startswith("delta")
         ],
-        "phi": [v for v in idata.posterior.data_vars if v.startswith("phi")],
+        "phi": [
+            v for v in idata.posterior.data_vars if str(v).startswith("phi")
+        ],
         "weights": [
-            v for v in idata.posterior.data_vars if v.startswith("weights")
+            v
+            for v in idata.posterior.data_vars
+            if str(v).startswith("weights")
         ],
     }
 
-    if compact:
-        nrows = 3
-    else:
-        nrows = len(groups)
-    fig, axes = plt.subplots(nrows, 2, figsize=(7, 3 * nrows))
+    fig, axes = plt.subplots(3, 2, figsize=(7, 9))
 
-    for row, (group_name, vars) in enumerate(groups.items()):
+    for row, (group_name, var_names) in enumerate(groups.items()):
+        ax_trace = axes[row, 0]
+        ax_hist = axes[row, 1]
 
-        # if vars are more than 1, and compact, then we need to repeat the axes
-        if compact:
-            group_axes = axes[row, :].reshape(1, 2)
-            group_axes = np.repeat(group_axes, len(vars), axis=0)
-        else:
-            group_axes = axes[row, :]
-
-        group_axes[0, 0].set_title(
-            f"{group_name.capitalize()} Parameters", fontsize=14
+        ax_trace.set_title(
+            f"{group_name.capitalize()} parameters", fontsize=12
         )
+        ax_trace.set_ylabel(group_name, fontsize=9)
+        ax_trace.set_xlabel("MCMC step", fontsize=9)
+        ax_hist.set_title("Marginal", fontsize=12)
+        ax_hist.set_xlabel(group_name, fontsize=9)
+        ax_hist.set_yticks([])
+        ax_hist.spines["left"].set_visible(False)
+        ax_hist.spines["right"].set_visible(False)
+        ax_hist.spines["top"].set_visible(False)
+        ax_trace.spines["right"].set_visible(False)
+        ax_trace.spines["top"].set_visible(False)
 
-        for i, var in enumerate(vars):
-            data = idata.posterior[
-                var
-            ].values  # shape is (nchain, nsamples, ndim) if ndim>1 else (nchain, nsamples)
-            if data.ndim == 3:
-                data = data[0].T  # shape is now (ndim, nsamples)
+        series_list: list[tuple[str, np.ndarray]] = []
+        used_kde = 0
 
-            ax_trace = group_axes[i, 0] if compact else group_axes[0]
-            ax_hist = group_axes[i, 1] if compact else group_axes[1]
-            ax_trace.set_ylabel(group_name, fontsize=8)
-            ax_trace.set_xlabel("MCMC Step", fontsize=8)
-            ax_hist.set_xlabel(group_name, fontsize=8)
-            # place ylabel on right side of hist
-            ax_hist.yaxis.set_label_position("right")
-            ax_hist.set_ylabel("Density", fontsize=8, rotation=270, labelpad=0)
+        for var in list(var_names)[: config.max_trace_vars_per_group]:
+            try:
+                values = np.asarray(idata.posterior[var].values)
+            except Exception:
+                continue
 
-            # remove axes yspine for hist
-            ax_hist.spines["left"].set_visible(False)
-            ax_hist.spines["right"].set_visible(False)
-            ax_hist.spines["top"].set_visible(False)
-            ax_hist.set_yticks([])  # remove y ticks
-            ax_hist.yaxis.set_ticks_position("none")
+            if values.ndim < 2:
+                continue
 
-            ax_trace.spines["right"].set_visible(False)
-            ax_trace.spines["top"].set_visible(False)
+            # (chain, draw, ...) -> (chain, draw, flat_dim)
+            values = values.reshape((values.shape[0], values.shape[1], -1))
+            idxs = _choose_flat_indices(
+                int(values.shape[2]), config.max_trace_dims_per_var
+            )
+            if idxs.size == 0:
+                continue
 
-            color = f"C{i}"
-            label = f"{var}"
-            if group_name in ["phi", "delta"]:
+            for flat_idx in idxs:
+                if len(series_list) >= config.max_trace_series_per_group:
+                    break
+                s = np.asarray(values[0, :, int(flat_idx)])
+                s = s[np.isfinite(s)]
+                if s.size == 0:
+                    continue
+                s = _thin_series(s, config.max_trace_draws)
+                series_list.append((f"{var}[{int(flat_idx)}]", s))
+
+            if len(series_list) >= config.max_trace_series_per_group:
+                break
+
+        if not series_list:
+            ax_trace.text(
+                0.5,
+                0.5,
+                "No trace data available",
+                ha="center",
+                va="center",
+                transform=ax_trace.transAxes,
+            )
+            ax_hist.text(
+                0.5,
+                0.5,
+                "No marginal data available",
+                ha="center",
+                va="center",
+                transform=ax_hist.transAxes,
+            )
+            continue
+
+        if group_name in ("phi", "delta"):
+            all_positive = all(np.all(s > 0) for _, s in series_list)
+            if all_positive:
                 ax_trace.set_yscale("log")
                 ax_hist.set_xscale("log")
 
-            for p in data:
-                ax_trace.plot(p, color=color, alpha=0.7, label=label)
+        for idx, (label, s) in enumerate(series_list):
+            color = f"C{idx % 10}"
+            ax_trace.plot(
+                s, color=color, alpha=0.8, linewidth=1.0, label=label
+            )
 
-                # if phi or delta, use log scale for hist-x, log for trace y
-                if group_name in ["phi", "delta"]:
-                    bins = np.logspace(
-                        np.log10(np.min(p)), np.log10(np.max(p)), 30
-                    )
-                    logp = np.log(p)
-                    log_grid, log_pdf = az.kde(logp)
-                    grid = np.exp(log_grid)
-                    pdf = log_pdf / grid  # change of variables
+            if (
+                group_name in ("phi", "delta")
+                and ax_hist.get_xscale() == "log"
+            ):
+                lo = float(np.min(s))
+                hi = float(np.max(s))
+                if lo > 0 and hi > lo:
+                    bins = np.logspace(np.log10(lo), np.log10(hi), 30)
                 else:
                     bins = 30
-                    grid, pdf = az.kde(p)
-                ax_hist.plot(grid, pdf, color=color, label=label)
-                ax_hist.hist(
-                    p, bins=bins, density=True, color=color, alpha=0.3
-                )
+            else:
+                bins = 30
+            ax_hist.hist(s, bins=bins, density=True, color=color, alpha=0.25)
 
-                # KDE plot instead of histogram
+            if (
+                config.trace_use_kde
+                and used_kde < config.trace_max_kde_series_per_group
+                and s.size <= config.trace_kde_max_points
+            ):
+                try:
+                    if (
+                        group_name in ("phi", "delta")
+                        and ax_hist.get_xscale() == "log"
+                    ):
+                        log_s = np.log(s)
+                        log_grid, log_pdf = az.kde(log_s)
+                        grid = np.exp(log_grid)
+                        pdf = log_pdf / grid
+                    else:
+                        grid, pdf = az.kde(s)
+                    ax_hist.plot(grid, pdf, color=color, linewidth=1.2)
+                    used_kde += 1
+                except Exception:
+                    pass
 
-    plt.suptitle("Parameter Traces", fontsize=16)
+        if len(series_list) <= 6:
+            ax_trace.legend(loc="best", fontsize="x-small")
+
+    plt.suptitle("Parameter Traces (subsampled)", fontsize=14)
     plt.tight_layout()
     return fig
 
@@ -139,10 +233,25 @@ def plot_diagnostics(
 
     logger.info("Generating MCMC diagnostics...")
 
-    # Generate summary report
+    t0 = time.perf_counter()
+
+    t_summary = time.perf_counter()
+    logger.info("Diagnostics step: summary text")
     generate_diagnostics_summary(idata, diag_dir)
+    logger.info(
+        f"Diagnostics step: summary text done in {time.perf_counter() - t_summary:.2f}s"
+    )
+
+    t_plots = time.perf_counter()
+    logger.info("Diagnostics step: plots")
     _create_diagnostic_plots(
         idata, diag_dir, config, n_channels, n_freq, runtime
+    )
+    logger.info(
+        f"Diagnostics step: plots done in {time.perf_counter() - t_plots:.2f}s"
+    )
+    logger.info(
+        f"MCMC diagnostics finished in {time.perf_counter() - t0:.2f}s"
     )
 
 
@@ -155,36 +264,60 @@ def _create_diagnostic_plots(
     # 1. ArviZ trace plots
     @safe_plot(f"{diag_dir}/trace_plots.png", config.dpi)
     def create_trace_plots():
-        return plot_trace(idata)
+        return plot_trace(idata, config=config)
 
-    create_trace_plots()
+    t = time.perf_counter()
+    ok = create_trace_plots()
+    logger.info(
+        f"Diagnostics plot: trace_plots.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
+    )
 
     # 2. Summary dashboard with key convergence metrics
     @safe_plot(f"{diag_dir}/summary_dashboard.png", config.dpi)
     def plot_summary():
         _plot_summary_dashboard(idata, config, n_channels, n_freq, runtime)
 
-    plot_summary()
+    t = time.perf_counter()
+    ok = plot_summary()
+    logger.info(
+        f"Diagnostics plot: summary_dashboard.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
+    )
 
     # 3. Log posterior diagnostics
     @safe_plot(f"{diag_dir}/log_posterior.png", config.dpi)
     def plot_lp():
         _plot_log_posterior(idata, config)
 
-    plot_lp()
+    t = time.perf_counter()
+    ok = plot_lp()
+    logger.info(
+        f"Diagnostics plot: log_posterior.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
+    )
 
     # 4. Acceptance rate diagnostics
     @safe_plot(f"{diag_dir}/acceptance_diagnostics.png", config.dpi)
     def plot_acceptance():
         _plot_acceptance_diagnostics_blockaware(idata, config)
 
-    plot_acceptance()
+    t = time.perf_counter()
+    ok = plot_acceptance()
+    logger.info(
+        f"Diagnostics plot: acceptance_diagnostics.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
+    )
 
     # 5. Sampler-specific diagnostics
+    t = time.perf_counter()
     _create_sampler_diagnostics(idata, diag_dir, config)
+    logger.info(
+        f"Diagnostics plots: sampler-specific done in {time.perf_counter() - t:.2f}s"
+    )
 
     # 6. Divergences diagnostics (for NUTS only)
+    t = time.perf_counter()
     _create_divergences_diagnostics(idata, diag_dir, config)
+    logger.info(
+        f"Diagnostics plots: divergences done in {time.perf_counter() - t:.2f}s"
+    )
 
 
 def _plot_summary_dashboard(idata, config, n_channels, n_freq, runtime):
@@ -2294,7 +2427,11 @@ def generate_vi_diagnostics_summary(
     if losses is not None:
         loss_arr = np.asarray(losses)
         if loss_arr.size:
-            lines.append(f"Final ELBO: {float(loss_arr.reshape(-1)[-1]):.3f}")
+            final_elbo = float(loss_arr.reshape(-1)[-1])
+            if np.isfinite(final_elbo):
+                lines.append(f"Final ELBO: {final_elbo:.3f}")
+            else:
+                lines.append("Final ELBO: nan")
 
     vi_samples = diagnostics.get("vi_samples")
     if vi_samples:

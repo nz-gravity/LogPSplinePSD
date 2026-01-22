@@ -150,7 +150,12 @@ def fit_vi(
     guide_obj, guide_name = resolve_guide(
         guide, model, init_values=init_values
     )
-    optimizer = optax.adam(optimizer_lr)
+    # Gradient clipping helps avoid NaNs when the ELBO has very steep regions
+    # (common for spectral models with exp/log transforms).
+    optimizer = optax.chain(
+        optax.clip_by_global_norm(1.0),
+        optax.adam(optimizer_lr),
+    )
     svi = SVI(model, guide_obj, optimizer, loss=Trace_ELBO())
 
     run_result = svi.run(

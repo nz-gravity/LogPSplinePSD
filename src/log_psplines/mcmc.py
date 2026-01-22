@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal, Optional, Tuple, Union
 
 import arviz as az
@@ -260,6 +261,11 @@ def run_mcmc(
     rng_key: int = 42,
     verbose: bool = True,
     outdir: Optional[str] = None,
+    save_preprocessing_plots: bool = False,
+    preprocessing_plot_path: Optional[str] = None,
+    preprocessing_warn_threshold: float = 0.8,
+    preprocessing_warn_frac: float = 0.25,
+    preprocessing_min_lambda1_quantile: float = 0.0,
     compute_lnz: bool = False,
     only_vi: bool = False,
     # NUTS specific
@@ -331,6 +337,19 @@ def run_mcmc(
         Whether to print progress information
     outdir : Optional[str], default=None
         Directory to save output files
+    save_preprocessing_plots : bool, default=False
+        When ``True`` and the data is multivariate, save an eigenvalue-separation
+        plot (ratios + eigenvalues) for the empirical spectral matrix used in
+        preprocessing.
+    preprocessing_plot_path : Optional[str], default=None
+        Optional explicit output path for the preprocessing plot. When unset,
+        defaults to ``{outdir}/preprocessing_eigenvalue_ratios.png``.
+    preprocessing_warn_threshold : float, default=0.8
+        Threshold for flagging weak eigenvalue separation (ratios near 1).
+    preprocessing_warn_frac : float, default=0.25
+        Emit a warning if at least this fraction of bins exceed the threshold.
+    preprocessing_min_lambda1_quantile : float, default=0.0
+        Optional mask for summaries: ignore bins where λ1 is below this quantile.
     compute_lnz : bool, default=False
         Whether to compute log evidence
     only_vi : bool, default=False
@@ -487,6 +506,102 @@ def run_mcmc(
             )
             if aligned_true_psd is not None:
                 scaled_true_psd = aligned_true_psd
+
+    # Cheap sampler-independent preprocessing check for multivariate analyses.
+    if isinstance(processed_data, MultivarFFT):
+        try:
+            from .diagnostics.preprocessing import (
+                eigenvalue_separation_diagnostics,
+                save_eigenvalue_separation_plot,
+            )
+
+            if processed_data.raw_psd is None:
+                logger.warning(
+                    "Skipping eigenvalue separation check: processed_data.raw_psd is missing."
+                )
+            else:
+                diag = eigenvalue_separation_diagnostics(
+                    freq=np.asarray(processed_data.freq, dtype=float),
+                    matrix=np.asarray(processed_data.raw_psd),
+                    min_lambda1_quantile=float(
+                        preprocessing_min_lambda1_quantile
+                    ),
+                )
+                n_dim = int(diag.eigvals_desc.shape[1])
+                if n_dim >= 2:
+                    warn_threshold = float(preprocessing_warn_threshold)
+                    warn_frac = float(preprocessing_warn_frac)
+                    summaries = None
+                    if verbose:
+                        summaries = diag.ratio_summary(
+                            warn_threshold=warn_threshold
+                        )
+                        if diag.lambda1_cutoff is not None:
+                            kept = int(np.count_nonzero(diag.mask))
+                            logger.info(
+                                f"Eigenvalue separation mask: keep λ1 > {diag.lambda1_cutoff:.3e} ({kept}/{diag.mask.size} bins)."
+                            )
+                    for key, ratio in diag.ratios.items():
+                        ratio_m = np.asarray(ratio)[diag.mask]
+                        ratio_m = ratio_m[np.isfinite(ratio_m)]
+                        frac = (
+                            float(np.mean(ratio_m > warn_threshold))
+                            if ratio_m.size
+                            else 0.0
+                        )
+                        if frac >= warn_frac:
+                            if summaries is None:
+                                msg = (
+                                    f"Eigenvalue separation {key}: "
+                                    f"frac(>{warn_threshold:.2f})={frac*100:.1f}%"
+                                )
+                            else:
+                                msg = f"Eigenvalue separation {summaries[key]}"
+                            logger.warning(msg)
+                            worst = diag.worst_frequencies(top_k=10).get(
+                                key, []
+                            )
+                            if worst:
+                                joined = ", ".join(
+                                    [f"{f:.4g}:{v:.3f}" for f, v in worst]
+                                )
+                                logger.warning(
+                                    f"Worst-separated frequencies for {key}: {joined}"
+                                )
+                        else:
+                            if verbose and summaries is not None:
+                                logger.info(
+                                    f"Eigenvalue separation {summaries[key]}"
+                                )
+
+                    if save_preprocessing_plots:
+                        if preprocessing_plot_path is not None:
+                            out_path = Path(preprocessing_plot_path)
+                        elif outdir is not None:
+                            out_path = (
+                                Path(outdir)
+                                / "preprocessing_eigenvalue_ratios.png"
+                            )
+                        else:
+                            out_path = None
+
+                        if out_path is None:
+                            logger.warning(
+                                "Skipping preprocessing plot save: outdir is None and preprocessing_plot_path is not set."
+                            )
+                        else:
+                            out_path.parent.mkdir(parents=True, exist_ok=True)
+                            save_eigenvalue_separation_plot(
+                                diag,
+                                str(out_path),
+                                warn_threshold=warn_threshold,
+                            )
+                            if verbose:
+                                logger.info(
+                                    f"Saved preprocessing eigenvalue plot to {out_path}"
+                                )
+        except Exception as e:
+            logger.warning(f"Eigenvalue separation check failed: {e}")
 
     # Create model based on processed data type
     if isinstance(processed_data, Periodogram):

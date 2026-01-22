@@ -129,27 +129,19 @@ class MultivarBaseSampler(BaseSampler):
             # Extract true PSD if available
             true_psd = None
             if self.config.true_psd is not None:
-                true_psd = np.asarray(self.config.true_psd, dtype=np.float64)
+                true_psd = np.asarray(self.config.true_psd)
 
-            # Extract VI PSD median for overlay if available
-            extra_empirical_psd = []
-            extra_empirical_labels = []
-            vi_psd = self._extract_vi_psd_median(idata)
-            if vi_psd is not None:
-                extra_empirical_psd.append(vi_psd)
-                extra_empirical_labels.append("VI median")
+            # If VI diagnostics are attached, overlay VI quantiles on top of
+            # the posterior bands (instead of treating VI as another empirical
+            # curve which is drawn behind the posterior fill).
+            overlay_vi = bool(getattr(idata, "vi_posterior_psd", None))
 
             plot_psd_matrix(
                 idata=idata,
                 freq=np.array(self.freq),
                 empirical_psd=empirical_psd,
                 true_psd=true_psd,
-                extra_empirical_psd=(
-                    extra_empirical_psd if extra_empirical_psd else None
-                ),
-                extra_empirical_labels=(
-                    extra_empirical_labels if extra_empirical_labels else None
-                ),
+                overlay_vi=overlay_vi,
                 outdir=self.config.outdir,
             )
 

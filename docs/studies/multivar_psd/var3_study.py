@@ -85,12 +85,13 @@ def simulation_study(
         verbose=True,
         target_accept_prob=0.8,
         vi_psd_max_draws=16,
-        vi_steps=5000,
+        vi_steps=15000,
         posterior_psd_max_draws=20,
         compute_psis=False,
         compute_coherence_quantiles=True,
         skip_plot_diagnostics=skip_diagnostics,
         true_psd=varma.get_true_psd(),
+        save_preprocessing_plots=True,
     )
 
 

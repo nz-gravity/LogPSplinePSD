@@ -125,10 +125,31 @@ class MultivarBaseSampler(BaseSampler):
         try:
             # Create empirical PSD matrix for comparison
             empirical_psd = self._compute_empirical_psd()
+
+            # Extract true PSD if available
+            true_psd = None
+            if self.config.true_psd is not None:
+                true_psd = np.asarray(self.config.true_psd, dtype=np.float64)
+
+            # Extract VI PSD median for overlay if available
+            extra_empirical_psd = []
+            extra_empirical_labels = []
+            vi_psd = self._extract_vi_psd_median(idata)
+            if vi_psd is not None:
+                extra_empirical_psd.append(vi_psd)
+                extra_empirical_labels.append("VI median")
+
             plot_psd_matrix(
                 idata=idata,
                 freq=np.array(self.freq),
                 empirical_psd=empirical_psd,
+                true_psd=true_psd,
+                extra_empirical_psd=(
+                    extra_empirical_psd if extra_empirical_psd else None
+                ),
+                extra_empirical_labels=(
+                    extra_empirical_labels if extra_empirical_labels else None
+                ),
                 outdir=self.config.outdir,
             )
 
@@ -189,6 +210,52 @@ class MultivarBaseSampler(BaseSampler):
         if sf != 0:
             return psd * (scale_matrix / sf)
         return psd * scale_matrix
+
+    def _extract_vi_psd_median(
+        self, idata: az.InferenceData
+    ) -> Optional[EmpiricalPSD]:
+        """Extract VI PSD median as EmpiricalPSD for overlay plotting."""
+        if not hasattr(idata, "vi_posterior_psd"):
+            return None
+
+        vi_psd_group = idata.vi_posterior_psd
+        if "psd_matrix_real" not in vi_psd_group:
+            return None
+
+        try:
+            real_array = np.asarray(
+                vi_psd_group["psd_matrix_real"].values, dtype=np.float64
+            )
+            imag_array = np.asarray(
+                vi_psd_group["psd_matrix_imag"].values, dtype=np.float64
+            )
+            percentiles = np.asarray(
+                vi_psd_group["psd_matrix_real"].coords["percentile"].values
+            )
+
+            # Find the median (50th percentile)
+            median_idx = np.argmin(np.abs(percentiles - 50.0))
+            vi_psd_median = (
+                real_array[median_idx] + 1j * imag_array[median_idx]
+            )
+
+            freq = np.asarray(
+                vi_psd_group["psd_matrix_real"].coords["freq"].values,
+                dtype=np.float64,
+            )
+            coherence = _get_coherence(vi_psd_median)
+            channels = np.arange(vi_psd_median.shape[1])
+
+            return EmpiricalPSD(
+                freq=freq,
+                psd=vi_psd_median,
+                coherence=coherence,
+                channels=channels,
+            )
+        except Exception as e:
+            if self.config.verbose:
+                logger.debug(f"Could not extract VI PSD median: {e}")
+            return None
 
     def _save_vi_diagnostics(
         self,

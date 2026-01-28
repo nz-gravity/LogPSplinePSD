@@ -8,7 +8,7 @@ import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Literal, Optional, Tuple, Union
 
 import arviz as az
 import jax
@@ -30,6 +30,9 @@ class SamplerConfig:
     alpha_delta: float = 1e-4
     beta_delta: float = 1e-4
     num_chains: int = 1
+    chain_method: Optional[Literal["parallel", "vectorized", "sequential"]] = (
+        None
+    )
     rng_key: int = 42
     verbose: bool = True
     outdir: Optional[str] = None
@@ -49,6 +52,8 @@ class SamplerConfig:
     compute_coherence_quantiles: bool = True  # Compute coherence bands
     compute_psis: bool = True  # Enable PSIS-LOO diagnostics
     skip_plot_diagnostics: bool = False  # Skip plotting heavy diagnostics
+    diagnostics_summary_mode: Literal["off", "light", "full"] = "light"
+    diagnostics_summary_position: Literal["start", "end"] = "end"
 
     def __post_init__(self):
         if self.outdir is not None:
@@ -70,7 +75,19 @@ class BaseSampler(ABC):
 
         # Common attributes for all samplers
         self.rng_key = jax.random.PRNGKey(config.rng_key)
-        self.chain_method = self._select_chain_method()
+        if config.chain_method is not None:
+            allowed = {"parallel", "vectorized", "sequential"}
+            if config.chain_method not in allowed:
+                raise ValueError(
+                    f"Unknown chain_method='{config.chain_method}'. "
+                    f"Expected one of {sorted(allowed)}."
+                )
+            self.chain_method = config.chain_method
+            logger.info(
+                f"Using requested NumPyro chain_method='{self.chain_method}'."
+            )
+        else:
+            self.chain_method = self._select_chain_method()
         self.runtime = np.nan
         self.device = jax.devices()[0].platform
 
@@ -229,7 +246,16 @@ class BaseSampler(ABC):
         az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")
         # Optionally skip heavy MCMC diagnostics plots/summaries.
         if not getattr(self.config, "skip_plot_diagnostics", False):
-            plot_diagnostics(idata, self.config.outdir)
+            plot_diagnostics(
+                idata,
+                self.config.outdir,
+                summary_mode=getattr(
+                    self.config, "diagnostics_summary_mode", "light"
+                ),
+                summary_position=getattr(
+                    self.config, "diagnostics_summary_position", "end"
+                ),
+            )
             t0 = time.perf_counter()
             logger.info("Writing summary_statistics.csv...")
             az.summary(idata).to_csv(

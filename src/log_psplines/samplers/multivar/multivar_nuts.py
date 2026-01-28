@@ -136,7 +136,10 @@ def multivariate_psplines_model(
 
     residual_power = jnp.sum(jnp.abs(u_resid) ** 2, axis=2)
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
-    # Scale log-determinant contribution by coarse-grain frequency weights
+    # Scale log-determinant contribution by coarse-grain frequency weights.
+    # In the multivariate coarse-grain path we aggregate the sufficient
+    # statistics by summing the Wishart matrices Y across bins; the quadratic
+    # (trace) term already reflects this aggregation through the magnitude of U.
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
     sum_log_det = -nu_scale * jnp.sum(fw[:, None] * log_delta_sq)
     log_likelihood = sum_log_det - jnp.sum(residual_power * exp_neg_log_delta)

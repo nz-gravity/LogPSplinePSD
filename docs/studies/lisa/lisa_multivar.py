@@ -35,14 +35,14 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 RESULT_FN = RESULTS_DIR / "inference_data.nc"
 
 RUN_VI_ONLY = False
-INIT_FROM_VI = True
+INIT_FROM_VI = False
 REUSE_EXISTING = False  # set True to skip sampling when results already exist
 USE_LISATOOLS_SYNTH = True
 LISATOOLS_SYNTH_NPZ = RESULTS_DIR / "lisatools_synth_data.npz"
 
 # Hyperparameters and spline configuration for this study
-ALPHA_DELTA = 1.0
-BETA_DELTA = 1.0
+ALPHA_DELTA = 3.0
+BETA_DELTA = 3.0
 N_KNOTS = 30
 TARGET_ACCEPT = 0.7
 MAX_TREE_DEPTH = 10
@@ -306,8 +306,8 @@ FMIN, FMAX = 10**-4, 10**-1
 
 coarse_cfg = CoarseGrainConfig(
     enabled=True,
-    f_transition=5e-3,
-    n_log_bins=200,
+    f_transition=FMIN,
+    n_log_bins=512,
     f_min=FMIN,
     f_max=FMAX,
 )
@@ -330,8 +330,8 @@ else:
     idata = run_mcmc(
         data=raw_series,
         sampler="multivar_blocked_nuts",
-        n_samples=400,
-        n_warmup=400,
+        n_samples=4000,
+        n_warmup=4000,
         num_chains=4,
         n_knots=N_KNOTS,
         degree=2,

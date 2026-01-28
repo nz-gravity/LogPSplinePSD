@@ -244,6 +244,9 @@ def run_mcmc(
     n_samples: int = 1000,
     n_warmup: int = 500,
     num_chains: int = 1,
+    chain_method: Optional[
+        Literal["parallel", "vectorized", "sequential"]
+    ] = None,
     # Model parameters
     n_knots: int = 10,
     degree: int = 3,
@@ -261,6 +264,10 @@ def run_mcmc(
     rng_key: int = 42,
     verbose: bool = True,
     outdir: Optional[str] = None,
+    compute_psis: bool = True,
+    skip_plot_diagnostics: bool = False,
+    diagnostics_summary_mode: Literal["off", "light", "full"] = "light",
+    diagnostics_summary_position: Literal["start", "end"] = "end",
     save_preprocessing_plots: bool = False,
     preprocessing_plot_path: Optional[str] = None,
     preprocessing_warn_threshold: float = 0.8,
@@ -337,6 +344,15 @@ def run_mcmc(
         Whether to print progress information
     outdir : Optional[str], default=None
         Directory to save output files
+    compute_psis : bool, default=True
+        Whether to compute PSIS-LOO diagnostics (may be slow for large models).
+    skip_plot_diagnostics : bool, default=False
+        Skip generating diagnostic plots and text summaries.
+    diagnostics_summary_mode : {"off", "light", "full"}, default="light"
+        Control the text summary generation inside ``plot_diagnostics``.
+        ``light`` avoids expensive scans (e.g. PSIS/ArviZ ESS across all params).
+    diagnostics_summary_position : {"start", "end"}, default="end"
+        Run the diagnostics text summary before or after plots.
     save_preprocessing_plots : bool, default=False
         When ``True`` and the data is multivariate, save an eigenvalue-separation
         plot (ratios + eigenvalues) for the empirical spectral matrix used in
@@ -637,6 +653,7 @@ def run_mcmc(
         model=model,
         sampler_type=sampler,
         num_chains=num_chains,
+        chain_method=chain_method,
         alpha_phi=alpha_phi,
         beta_phi=beta_phi,
         alpha_delta=alpha_delta,
@@ -644,6 +661,10 @@ def run_mcmc(
         rng_key=rng_key,
         verbose=verbose,
         outdir=outdir,
+        compute_psis=compute_psis,
+        skip_plot_diagnostics=skip_plot_diagnostics,
+        diagnostics_summary_mode=diagnostics_summary_mode,
+        diagnostics_summary_position=diagnostics_summary_position,
         compute_lnz=compute_lnz,
         only_vi=only_vi,
         target_accept_prob=target_accept_prob,
@@ -693,6 +714,9 @@ def create_sampler(
         "multivar_nuts",
     ] = "nuts",
     num_chains: int = 1,
+    chain_method: Optional[
+        Literal["parallel", "vectorized", "sequential"]
+    ] = None,
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
     alpha_delta: float = 1e-4,
@@ -700,6 +724,10 @@ def create_sampler(
     rng_key: int = 42,
     verbose: bool = True,
     outdir: Optional[str] = None,
+    compute_psis: bool = True,
+    skip_plot_diagnostics: bool = False,
+    diagnostics_summary_mode: Literal["off", "light", "full"] = "light",
+    diagnostics_summary_position: Literal["start", "end"] = "end",
     compute_lnz: bool = False,
     only_vi: bool = False,
     target_accept_prob: float = 0.8,
@@ -735,9 +763,14 @@ def create_sampler(
         "alpha_delta": alpha_delta,
         "beta_delta": beta_delta,
         "num_chains": num_chains,
+        "chain_method": chain_method,
         "rng_key": rng_key,
         "verbose": verbose,
         "outdir": outdir,
+        "compute_psis": compute_psis,
+        "skip_plot_diagnostics": skip_plot_diagnostics,
+        "diagnostics_summary_mode": diagnostics_summary_mode,
+        "diagnostics_summary_position": diagnostics_summary_position,
         "compute_lnz": compute_lnz,
         "scaling_factor": scaling_factor,
         "channel_stds": channel_stds,

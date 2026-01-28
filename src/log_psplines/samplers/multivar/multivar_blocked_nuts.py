@@ -114,7 +114,7 @@ def _blocked_channel_model(
     # Very negative log_delta_sq implies extremely small variances, which can
     # overflow exp(-log_delta_sq) and yield inf-inf in the likelihood/ELBO.
     # Keep the range fairly tight to avoid exploding gradients during VI.
-    log_delta_sq_safe = jnp.clip(log_delta_sq, a_min=-20.0, a_max=20.0)
+    log_delta_sq_safe = jnp.clip(log_delta_sq, a_min=-80.0, a_max=80.0)
 
     n_freq = u_re_channel.shape[0]
     n_theta_block = channel_index

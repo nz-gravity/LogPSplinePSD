@@ -1,7 +1,7 @@
 import os
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 import arviz as az
 import matplotlib.pyplot as plt
@@ -217,6 +217,9 @@ def plot_diagnostics(
     n_freq: Optional[int] = None,
     runtime: Optional[float] = None,
     config: Optional[DiagnosticsConfig] = None,
+    *,
+    summary_mode: Literal["off", "light", "full"] = "light",
+    summary_position: Literal["start", "end"] = "end",
 ) -> None:
     """
     Create essential MCMC diagnostics in organized subdirectories.
@@ -235,12 +238,13 @@ def plot_diagnostics(
 
     t0 = time.perf_counter()
 
-    t_summary = time.perf_counter()
-    logger.info("Diagnostics step: summary text")
-    generate_diagnostics_summary(idata, diag_dir)
-    logger.info(
-        f"Diagnostics step: summary text done in {time.perf_counter() - t_summary:.2f}s"
-    )
+    if summary_position == "start":
+        t_summary = time.perf_counter()
+        logger.info("Diagnostics step: summary text")
+        generate_diagnostics_summary(idata, diag_dir, mode=summary_mode)
+        logger.info(
+            f"Diagnostics step: summary text done in {time.perf_counter() - t_summary:.2f}s"
+        )
 
     t_plots = time.perf_counter()
     logger.info("Diagnostics step: plots")
@@ -250,6 +254,15 @@ def plot_diagnostics(
     logger.info(
         f"Diagnostics step: plots done in {time.perf_counter() - t_plots:.2f}s"
     )
+
+    if summary_position == "end":
+        t_summary = time.perf_counter()
+        logger.info("Diagnostics step: summary text")
+        generate_diagnostics_summary(idata, diag_dir, mode=summary_mode)
+        logger.info(
+            f"Diagnostics step: summary text done in {time.perf_counter() - t_summary:.2f}s"
+        )
+
     logger.info(
         f"MCMC diagnostics finished in {time.perf_counter() - t0:.2f}s"
     )
@@ -2107,8 +2120,22 @@ def _group_parameters_simple(idata):
     return {k: v for k, v in param_groups.items() if v}
 
 
-def generate_diagnostics_summary(idata, outdir):
-    """Generate comprehensive text summary using computed diagnostics."""
+def generate_diagnostics_summary(
+    idata,
+    outdir,
+    *,
+    mode: Literal["off", "light", "full"] = "light",
+):
+    """Generate a text summary of MCMC diagnostics.
+
+    Modes:
+    - ``off``: skip generation entirely.
+    - ``light``: use cached attrs/sample_stats only (fast; avoids PSIS/ArviZ scans).
+    - ``full``: compute full diagnostics via ``run_all_diagnostics`` (may be slow).
+    """
+    if mode == "off":
+        return ""
+
     summary = []
     summary.append("=== MCMC Diagnostics Summary ===\n")
 
@@ -2135,43 +2162,73 @@ def generate_diagnostics_summary(idata, outdir):
         )
         summary.append(f"Parameter groups: {param_summary}")
 
-    diag_results = run_all_diagnostics(
-        idata=idata,
-        truth=attrs.get("true_psd"),
-        psd_ref=attrs.get("true_psd"),
-    )
+    diag_results = {}
+    mcmc_diag = {}
+    if mode == "full":
+        diag_results = run_all_diagnostics(
+            idata=idata,
+            truth=attrs.get("true_psd"),
+            psd_ref=attrs.get("true_psd"),
+        )
+        mcmc_diag = diag_results.get("mcmc", {}) or {}
 
-    mcmc_diag = diag_results.get("mcmc", {}) or {}
-    ess_min = mcmc_diag.get("ess_bulk_min")
-    ess_med = mcmc_diag.get("ess_bulk_median")
-    rhat_max = mcmc_diag.get("rhat_max")
-    rhat_mean = mcmc_diag.get("rhat_mean")
-
-    # Fallback to ArviZ when summary stats were not stored by diagnostics.
-    if ess_min is None or rhat_max is None:
-        try:
-            ess = az.ess(idata, method="bulk")
-            ess_vals = np.concatenate(
-                [np.asarray(ess[v]).reshape(-1) for v in ess.data_vars]
-            )
+    ess_min = None
+    ess_med = None
+    try:
+        ess_attr = attrs.get("ess")
+        if ess_attr is not None:
+            ess_vals = np.asarray(ess_attr).reshape(-1)
             ess_vals = ess_vals[np.isfinite(ess_vals)]
             if ess_vals.size:
                 ess_min = float(np.min(ess_vals))
                 ess_med = float(np.median(ess_vals))
-        except Exception:
-            pass
+    except Exception:
+        pass
 
-        try:
-            rhat = az.rhat(idata)
-            rhat_vals = np.concatenate(
-                [np.asarray(rhat[v]).reshape(-1) for v in rhat.data_vars]
-            )
+    rhat_max = None
+    rhat_mean = None
+    try:
+        rhat_attr = attrs.get("rhat")
+        if rhat_attr is not None:
+            rhat_vals = np.asarray(rhat_attr).reshape(-1)
             rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
             if rhat_vals.size:
                 rhat_max = float(np.max(rhat_vals))
                 rhat_mean = float(np.mean(rhat_vals))
-        except Exception:
-            pass
+    except Exception:
+        pass
+
+    if mode == "full":
+        ess_min = mcmc_diag.get("ess_bulk_min", ess_min)
+        ess_med = mcmc_diag.get("ess_bulk_median", ess_med)
+        rhat_max = mcmc_diag.get("rhat_max", rhat_max)
+        rhat_mean = mcmc_diag.get("rhat_mean", rhat_mean)
+
+        # Fallback to ArviZ scans when explicitly requested.
+        if ess_min is None or rhat_max is None:
+            try:
+                ess = az.ess(idata, method="bulk")
+                ess_vals = np.concatenate(
+                    [np.asarray(ess[v]).reshape(-1) for v in ess.data_vars]
+                )
+                ess_vals = ess_vals[np.isfinite(ess_vals)]
+                if ess_vals.size:
+                    ess_min = float(np.min(ess_vals))
+                    ess_med = float(np.median(ess_vals))
+            except Exception:
+                pass
+
+            try:
+                rhat = az.rhat(idata)
+                rhat_vals = np.concatenate(
+                    [np.asarray(rhat[v]).reshape(-1) for v in rhat.data_vars]
+                )
+                rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
+                if rhat_vals.size:
+                    rhat_max = float(np.max(rhat_vals))
+                    rhat_mean = float(np.mean(rhat_vals))
+            except Exception:
+                pass
 
     if ess_min is not None:
         summary.append(
@@ -2183,15 +2240,58 @@ def generate_diagnostics_summary(idata, outdir):
             f"Rhat: max={rhat_max:.3f}"
             + (f", mean={rhat_mean:.3f}" if rhat_mean is not None else "")
         )
-    acc = mcmc_diag.get("acceptance_rate_mean")
-    if acc is not None:
-        summary.append(f"Acceptance rate: {acc:.3f}")
-    div_frac = mcmc_diag.get("divergence_fraction")
-    if div_frac is not None:
-        summary.append(f"Divergence fraction: {div_frac*100:.2f}%")
-    khat = mcmc_diag.get("psis_khat_max")
-    if khat is not None:
-        summary.append(f"PSIS k-hat (max): {khat:.3f}")
+
+    # Acceptance rate / divergences (cheap: read directly from sample_stats).
+    try:
+        acc = None
+        if "accept_prob" in idata.sample_stats:
+            acc = float(np.mean(np.asarray(idata.sample_stats["accept_prob"])))
+        elif "acceptance_rate" in idata.sample_stats:
+            acc = float(
+                np.mean(np.asarray(idata.sample_stats["acceptance_rate"]))
+            )
+        else:
+            ch_vals = []
+            for key in idata.sample_stats:
+                if str(key).startswith("accept_prob_channel_"):
+                    ch_vals.append(
+                        float(np.mean(np.asarray(idata.sample_stats[key])))
+                    )
+            if ch_vals:
+                acc = float(np.mean(ch_vals))
+        if acc is not None and np.isfinite(acc):
+            summary.append(f"Acceptance rate: {acc:.3f}")
+    except Exception:
+        pass
+
+    try:
+        div = None
+        if "diverging" in idata.sample_stats:
+            div = np.asarray(idata.sample_stats["diverging"]).reshape(-1)
+        else:
+            div_list = []
+            for key in idata.sample_stats:
+                if str(key).startswith("diverging_channel_"):
+                    div_list.append(
+                        np.asarray(idata.sample_stats[key]).reshape(-1)
+                    )
+            if div_list:
+                div = np.concatenate(div_list)
+        if div is not None:
+            div = div[np.isfinite(div)]
+            if div.size:
+                summary.append(
+                    f"Divergence fraction: {np.mean(div) * 100:.2f}%"
+                )
+    except Exception:
+        pass
+
+    # PSIS is expensive (az.loo); only include when full diagnostics were run.
+    khat = None
+    if mode == "full":
+        khat = mcmc_diag.get("psis_khat_max")
+        if khat is not None:
+            summary.append(f"PSIS k-hat (max): {khat:.3f}")
 
     tree_depth = (
         idata.sample_stats.tree_depth.values.flatten()
@@ -2282,15 +2382,51 @@ def generate_diagnostics_summary(idata, outdir):
                     f"  Channel {ch}: divergences={np.mean(div)*100:.2f}%"
                 )
 
-    psd_diag = diag_results.get("psd_compare", {})
+    psd_diag = diag_results.get("psd_compare", {}) if mode == "full" else {}
+
+    # Prefer cached PSD diagnostics from attrs (computed during ArviZ conversion).
+    cached_psd_keys = [
+        "riae",
+        "riae_matrix",
+        "coverage",
+        "coherence_riae",
+        "riae_diag_mean",
+        "riae_diag_max",
+        "riae_offdiag",
+    ]
+    for key in cached_psd_keys:
+        if key in attrs and key not in psd_diag:
+            psd_diag[key] = attrs.get(key)
+
+    psd_lines = []
     if psd_diag:
+        riae = psd_diag.get("riae")
+        try:
+            riae = float(riae)
+        except Exception:
+            riae = None
+        if riae is not None and np.isfinite(riae):
+            psd_lines.append(f"  RIAE: {riae:.3f}")
+
+        riae_matrix = psd_diag.get("riae_matrix")
+        try:
+            riae_matrix = float(riae_matrix)
+        except Exception:
+            riae_matrix = None
+        if riae_matrix is not None and np.isfinite(riae_matrix):
+            psd_lines.append(f"  RIAE (matrix): {riae_matrix:.3f}")
+
+        coverage = psd_diag.get("coverage")
+        try:
+            coverage = float(coverage)
+        except Exception:
+            coverage = None
+        if coverage is not None and np.isfinite(coverage):
+            psd_lines.append(f"  Coverage: {coverage*100:.1f}%")
+
+    if psd_lines:
         summary.append("\nPSD accuracy diagnostics:")
-        if "riae" in psd_diag:
-            summary.append(f"  RIAE: {psd_diag['riae']:.3f}")
-        if "riae_matrix" in psd_diag:
-            summary.append(f"  RIAE (matrix): {psd_diag['riae_matrix']:.3f}")
-        if "coverage" in psd_diag:
-            summary.append(f"  Coverage: {psd_diag['coverage']*100:.1f}%")
+        summary.extend(psd_lines)
 
     # Overall assessment (best-effort)
     summary.append("\nOverall Convergence Assessment:")

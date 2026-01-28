@@ -109,19 +109,28 @@ def compute_ci_coverage_multivar(
     psd_matrix_samples: np.ndarray, true_psd_real: np.ndarray
 ) -> float:
     """Compute 90% credible interval coverage for multivariate PSD matrices."""
-    true_psd = np.zeros_like(true_psd_real)
-    for i in range(true_psd_real.shape[0]):
-        true_psd[i] = _complex_to_real(true_psd_real[i])
+    true_psd_arr = np.asarray(true_psd_real)
+    true_psd = np.zeros(true_psd_arr.shape, dtype=np.float64)
+    for i in range(true_psd_arr.shape[0]):
+        true_psd[i] = _complex_to_real(true_psd_arr[i])
 
     arr = np.asarray(psd_matrix_samples)
     if arr.ndim == 4 and arr.shape[0] == 3:
-        posterior_lower = arr[0]
-        posterior_upper = arr[-1]
+        posterior_lower_raw = arr[0]
+        posterior_upper_raw = arr[-1]
+        posterior_lower = np.zeros(posterior_lower_raw.shape, dtype=np.float64)
+        posterior_upper = np.zeros(posterior_upper_raw.shape, dtype=np.float64)
+        for i in range(posterior_lower_raw.shape[0]):
+            posterior_lower[i] = _complex_to_real(posterior_lower_raw[i])
+            posterior_upper[i] = _complex_to_real(posterior_upper_raw[i])
     else:
-        psd_matrix_real = np.zeros_like(arr, dtype=np.float64)
-        for i in range(arr.shape[0]):
-            for j in range(arr.shape[1]):
-                psd_matrix_real[i, j] = _complex_to_real(arr[i, j])
+        if np.iscomplexobj(arr):
+            psd_matrix_real = np.zeros_like(arr, dtype=np.float64)
+            for i in range(arr.shape[0]):
+                for j in range(arr.shape[1]):
+                    psd_matrix_real[i, j] = _complex_to_real(arr[i, j])
+        else:
+            psd_matrix_real = np.asarray(arr, dtype=np.float64)
         posterior_lower = np.percentile(psd_matrix_real, 5.0, axis=0)
         posterior_upper = np.percentile(psd_matrix_real, 95.0, axis=0)
 

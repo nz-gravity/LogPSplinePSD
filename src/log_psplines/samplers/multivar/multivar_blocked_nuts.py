@@ -20,10 +20,24 @@ L_j(δ_j, θ_{j,<j}). Each factor has the form
 
 The class :class:`MultivarBlockedNUTSSampler` exploits this by running a
 separate NUTS chain for each block ``j = 0,…,p-1`` (0‑based indexing). Each
-chain samples only the parameters that affect the j‑th likelihood factor and is
-therefore independent of the other chains. The per‑block results are then
-assembled into global arrays ``log_delta_sq`` with shape (draw, freq, p) and
-``theta_re|im`` with shape (draw, freq, n_theta) matching the unified sampler.
+chain samples only the parameters that affect the j‑th likelihood factor.
+Independent chains are mathematically valid **if and only if** the *prior also
+factorises across the same blocks* (i.e. there are no shared stochastic
+hyperparameters or cross-block constraints). In this implementation each block
+uses distinct NumPyro sample sites for its P-spline weights and local
+hyperparameters, so the prior is block-factorised given fixed config
+hyperparameters.
+
+Important clarification (to avoid a common pitfall): an eigendecomposition or
+rank decomposition of the Hermitian periodogram matrix ``Y`` can be used as a
+*computational identity* for evaluating ``tr(S^{-1} Y)``, but it does **not**
+create independent likelihood factors over eigenvector index. Likelihood
+factorisation here comes from parameter separation after the modified Cholesky
+decomposition, not from the algebraic form of ``Y``.
+
+The per‑block results are assembled into global arrays ``log_delta_sq`` with
+shape (draw, freq, p) and ``theta_re|im`` with shape (draw, freq, n_theta)
+matching the unified sampler.
 """
 
 import time
@@ -90,8 +104,15 @@ def _blocked_channel_model(
     -----
     - The likelihood implemented here corresponds to Eq. (likelihood_j) in your
       draft: the residual is ``u_j(f) = y_j(f) − Σ_{l<j} θ_{jl}(f) y_l(f)`` with
-      ``y`` now replaced by the eigenvector-weighted replicates ``u``. The
-      contribution to the log-likelihood is
+      ``y`` represented via a matrix factorisation of the periodogram/Wishart
+      matrix ``Y`` (e.g. ``Y = Σ_r u_r u_r^H``). The sum over ``r`` is taken
+      *inside* the block and is purely algebraic:
+
+      “A sum over eigenvectors is not a factorisation over independent data;
+      factorisation requires parameter separation, which occurs only after
+      the Cholesky decomposition.”
+
+      The contribution to the log-likelihood is
       ``−ν Σ_k log δ_j(f_k)^2 − Σ_k ||u_j(f_k)||^2 / δ_j(f_k)^2`` up to constants.
     - Deterministic nodes record the evaluated spline fields so downstream code
       can reconstruct the PSD matrix without re-evaluating the splines.

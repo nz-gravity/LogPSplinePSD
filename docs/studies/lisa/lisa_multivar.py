@@ -34,9 +34,21 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 RESULT_FN = RESULTS_DIR / "inference_data.nc"
 
-RUN_VI_ONLY = False
-INIT_FROM_VI = False
-REUSE_EXISTING = False  # set True to skip sampling when results already exist
+
+def _env_flag(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
+RUN_VI_ONLY = _env_flag("LISA_MULTIVAR_RUN_VI_ONLY", False)
+INIT_FROM_VI = _env_flag("LISA_MULTIVAR_INIT_FROM_VI", False)
+# Set True to skip sampling when results already exist.
+REUSE_EXISTING = _env_flag("LISA_MULTIVAR_REUSE_EXISTING", False)
+RECOMPUTE_POSTERIOR_PSD = _env_flag(
+    "LISA_MULTIVAR_RECOMPUTE_POSTERIOR_PSD", False
+)
 USE_LISATOOLS_SYNTH = True
 LISATOOLS_SYNTH_NPZ = RESULTS_DIR / "lisatools_synth_data.npz"
 
@@ -211,7 +223,12 @@ def _summarize_psd_metrics(
         ],
         axis=0,
     )
-    coverage = compute_ci_coverage_multivar(percentiles_stack, true_psd.real)
+    # Coverage should be assessed on the full complex matrix representation:
+    # upper triangle -> real part, strict lower triangle -> imaginary part.
+    # Passing only ``true_psd.real`` would incorrectly treat all imaginary
+    # components as zero and can drive coverage to ~0 even when the posterior
+    # is sensible.
+    coverage = compute_ci_coverage_multivar(percentiles_stack, true_psd)
 
     diag_widths = np.diagonal(q95_real - q05_real, axis1=1, axis2=2)
     width_median = float(np.median(diag_widths))
@@ -324,6 +341,93 @@ if RESULT_FN.exists() and REUSE_EXISTING:
     import arviz as az
 
     idata = az.from_netcdf(str(RESULT_FN))
+    if RECOMPUTE_POSTERIOR_PSD:
+        logger.info(
+            "Recomputing posterior PSD quantiles from stored draws "
+            "(LISA_MULTIVAR_RECOMPUTE_POSTERIOR_PSD=1)."
+        )
+        from xarray import DataArray, Dataset
+
+        from log_psplines.psplines.multivar_psplines import (
+            MultivariateLogPSplines,
+        )
+
+        sample_stats = idata.sample_stats
+        required = {"log_delta_sq", "theta_re", "theta_im"}
+        missing = [name for name in required if name not in sample_stats]
+        if missing:
+            raise KeyError(
+                "Cannot recompute posterior PSD group; missing sample_stats: "
+                + ", ".join(missing)
+            )
+
+        dummy_model = MultivariateLogPSplines.__new__(MultivariateLogPSplines)
+        percentiles = [5.0, 50.0, 95.0]
+        psd_real_q, psd_imag_q, coh_q = dummy_model.compute_psd_quantiles(
+            np.asarray(sample_stats["log_delta_sq"].values),
+            np.asarray(sample_stats["theta_re"].values),
+            np.asarray(sample_stats["theta_im"].values),
+            percentiles=percentiles,
+            n_samples_max=200,
+            compute_coherence=True,
+        )
+
+        channel_stds = idata.attrs.get("channel_stds")
+        if channel_stds is not None:
+            channel_stds = np.asarray(channel_stds, dtype=float)
+            factor_matrix = np.outer(channel_stds, channel_stds).astype(float)
+            factor_4d = factor_matrix[None, None, :, :]
+            psd_real_q = np.asarray(psd_real_q) * factor_4d
+            psd_imag_q = np.asarray(psd_imag_q) * factor_4d
+
+        freq = np.asarray(idata.observed_data["freq"].values, dtype=float)
+        channels = np.asarray(idata.observed_data["channels"].values)
+        channels2 = np.asarray(idata.observed_data["channels2"].values)
+
+        posterior_psd = Dataset(
+            {
+                "psd_matrix_real": DataArray(
+                    psd_real_q,
+                    dims=["percentile", "freq", "channels", "channels2"],
+                    coords={
+                        "percentile": np.asarray(percentiles, dtype=float),
+                        "freq": freq,
+                        "channels": channels,
+                        "channels2": channels2,
+                    },
+                ),
+                "psd_matrix_imag": DataArray(
+                    psd_imag_q,
+                    dims=["percentile", "freq", "channels", "channels2"],
+                    coords={
+                        "percentile": np.asarray(percentiles, dtype=float),
+                        "freq": freq,
+                        "channels": channels,
+                        "channels2": channels2,
+                    },
+                ),
+            }
+        )
+        if coh_q is not None:
+            posterior_psd["coherence"] = DataArray(
+                coh_q,
+                dims=["percentile", "freq", "channels", "channels2"],
+                coords={
+                    "percentile": np.asarray(percentiles, dtype=float),
+                    "freq": freq,
+                    "channels": channels,
+                    "channels2": channels2,
+                },
+            )
+        idata.posterior_psd = posterior_psd
+        tmp_fn = RESULT_FN.with_name(f"{RESULT_FN.stem}.tmp{RESULT_FN.suffix}")
+        idata.to_netcdf(str(tmp_fn))
+        try:
+            for group in idata.groups():
+                getattr(idata, group).close()
+        except Exception:
+            pass
+        os.replace(tmp_fn, RESULT_FN)
 
 else:
     logger.info(f"No existing {RESULT_FN} found, running inference...")

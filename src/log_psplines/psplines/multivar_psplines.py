@@ -404,12 +404,23 @@ class MultivariateLogPSplines:
         theta_re_arr = np.asarray(theta_re_samples)
         theta_im_arr = np.asarray(theta_im_samples)
 
+        # Accept both flattened samples (draw, freq, ...) and full MCMC output
+        # with an explicit chain dimension (chain, draw, freq, ...).
         if log_delta_sq_arr.ndim == 4:
-            log_delta_sq_arr = log_delta_sq_arr[0]
+            log_delta_sq_arr = log_delta_sq_arr.reshape(
+                (log_delta_sq_arr.shape[0] * log_delta_sq_arr.shape[1],)
+                + tuple(log_delta_sq_arr.shape[2:])
+            )
         if theta_re_arr.ndim == 4:
-            theta_re_arr = theta_re_arr[0]
+            theta_re_arr = theta_re_arr.reshape(
+                (theta_re_arr.shape[0] * theta_re_arr.shape[1],)
+                + tuple(theta_re_arr.shape[2:])
+            )
         if theta_im_arr.ndim == 4:
-            theta_im_arr = theta_im_arr[0]
+            theta_im_arr = theta_im_arr.reshape(
+                (theta_im_arr.shape[0] * theta_im_arr.shape[1],)
+                + tuple(theta_im_arr.shape[2:])
+            )
 
         n_samples, n_freq, n_channels = log_delta_sq_arr.shape
         n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
@@ -418,9 +429,16 @@ class MultivariateLogPSplines:
         if chunk_size is None or chunk_size <= 0:
             chunk_size = n_freq
 
-        log_delta_sq_arr = log_delta_sq_arr[:n_samps]
-        theta_re_arr = theta_re_arr[:n_samps]
-        theta_im_arr = theta_im_arr[:n_samps]
+        if n_samps < n_samples:
+            # Avoid using only the first draws (can be highly autocorrelated).
+            idx = np.linspace(0, n_samples - 1, n_samps, dtype=int)
+            log_delta_sq_arr = log_delta_sq_arr[idx]
+            theta_re_arr = theta_re_arr[idx]
+            theta_im_arr = theta_im_arr[idx]
+        else:
+            log_delta_sq_arr = log_delta_sq_arr[:n_samps]
+            theta_re_arr = theta_re_arr[:n_samps]
+            theta_im_arr = theta_im_arr[:n_samps]
 
         psd = np.empty(
             (n_samps, n_freq, n_channels, n_channels), dtype=np.complex64
@@ -470,12 +488,23 @@ class MultivariateLogPSplines:
         theta_re_arr = np.asarray(theta_re_samples)
         theta_im_arr = np.asarray(theta_im_samples)
 
+        # Accept both flattened samples (draw, freq, ...) and full MCMC output
+        # with an explicit chain dimension (chain, draw, freq, ...).
         if log_delta_sq_arr.ndim == 4:
-            log_delta_sq_arr = log_delta_sq_arr[0]
+            log_delta_sq_arr = log_delta_sq_arr.reshape(
+                (log_delta_sq_arr.shape[0] * log_delta_sq_arr.shape[1],)
+                + tuple(log_delta_sq_arr.shape[2:])
+            )
         if theta_re_arr.ndim == 4:
-            theta_re_arr = theta_re_arr[0]
+            theta_re_arr = theta_re_arr.reshape(
+                (theta_re_arr.shape[0] * theta_re_arr.shape[1],)
+                + tuple(theta_re_arr.shape[2:])
+            )
         if theta_im_arr.ndim == 4:
-            theta_im_arr = theta_im_arr[0]
+            theta_im_arr = theta_im_arr.reshape(
+                (theta_im_arr.shape[0] * theta_im_arr.shape[1],)
+                + tuple(theta_im_arr.shape[2:])
+            )
 
         n_samples, n_freq, n_channels = log_delta_sq_arr.shape
         n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
@@ -484,9 +513,16 @@ class MultivariateLogPSplines:
         if chunk_size is None or chunk_size <= 0:
             chunk_size = n_freq
 
-        log_delta_sq_arr = log_delta_sq_arr[:n_samps]
-        theta_re_arr = theta_re_arr[:n_samps]
-        theta_im_arr = theta_im_arr[:n_samps]
+        if n_samps < n_samples:
+            # Avoid using only the first draws (can be highly autocorrelated).
+            idx = np.linspace(0, n_samples - 1, n_samps, dtype=int)
+            log_delta_sq_arr = log_delta_sq_arr[idx]
+            theta_re_arr = theta_re_arr[idx]
+            theta_im_arr = theta_im_arr[idx]
+        else:
+            log_delta_sq_arr = log_delta_sq_arr[:n_samps]
+            theta_re_arr = theta_re_arr[:n_samps]
+            theta_im_arr = theta_im_arr[:n_samps]
 
         n_percentiles = len(percentiles)
         psd_percentiles = np.empty(

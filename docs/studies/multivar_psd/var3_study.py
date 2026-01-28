@@ -4,6 +4,13 @@ Inputs: N (data size), K (number of knots), SEED (random seed to start)
 Outputs: Estimated PSDs, coverage probabilities, and performance metrics
 """
 
+import os
+
+import jax
+
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
+jax.config.update("jax_enable_x64", True)
+
 import argparse
 import os
 
@@ -53,8 +60,8 @@ VAR_COEFFS = np.array(
 
 def simulation_study(
     outdir: str = OUT,
-    N: int = 1024,
-    K: int = 7,
+    N: int = 5024,
+    K: int = 15,
     SEED: int = 42,
     *,
     skip_diagnostics: bool = False,
@@ -77,15 +84,16 @@ def simulation_study(
         data=ts,
         sampler="multivar_blocked_nuts",
         n_knots=K,
-        degree=3,
+        degree=2,
         diffMatrixOrder=2,
-        n_samples=300,
-        n_warmup=200,
+        n_samples=1000,
+        n_warmup=1000,
+        num_chains=4,
         outdir=outdir,
         verbose=True,
         target_accept_prob=0.8,
         vi_psd_max_draws=16,
-        vi_steps=15000,
+        vi_steps=20000,
         posterior_psd_max_draws=20,
         compute_psis=False,
         compute_coherence_quantiles=True,
@@ -100,7 +108,7 @@ if __name__ == "__main__":
         description="Multivariate PSD simulation study with VARMA data"
     )
     parser.add_argument(
-        "--N", type=int, default=1024, help="Number of time points"
+        "--N", type=int, default=5024, help="Number of time points"
     )
     parser.add_argument(
         "--K", type=int, default=7, help="Number of spline knots"

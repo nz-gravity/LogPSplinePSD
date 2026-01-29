@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from . import mcmc, psd_bands, psd_compare, time_domain, vi, whitening
+from . import energy, mcmc, psd_bands, psd_compare, time_domain, vi, whitening
 
 
 def run_all_diagnostics(
@@ -30,6 +30,17 @@ def run_all_diagnostics(
         )
         if metrics:
             results["mcmc"] = metrics
+
+        energy_metrics = energy.run(
+            idata=idata,
+            config=config,
+            truth=truth,
+            signals=signals,
+            psd_ref=psd_ref,
+            idata_vi=idata_vi,
+        )
+        if energy_metrics:
+            results["energy"] = energy_metrics
 
     if truth is not None or psd_ref is not None:
         compare_metrics = psd_compare.run(

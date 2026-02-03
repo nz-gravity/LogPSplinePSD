@@ -80,3 +80,43 @@ def test_run_all_orchestrates_modules():
     for module_metrics in result.values():
         assert isinstance(module_metrics, dict)
         assert all(isinstance(v, float) for v in module_metrics.values())
+
+
+def test_run_all_includes_energy_channel_metrics():
+    rng = np.random.default_rng(123)
+    truth = np.linspace(1.0, 2.0, 5)
+    idata, _, _ = _build_idata_with_psd(truth, q50_scale=1.0)
+
+    energy = rng.normal(size=(2, 20))
+    idata.sample_stats["energy_channel_0"] = ("chain", "draw"), energy
+
+    result = run_all_diagnostics(
+        idata=idata,
+        truth=truth,
+        signals=rng.normal(size=100),
+    )
+
+    assert "energy" in result
+    energy_metrics = result["energy"]
+    assert any(
+        key.startswith("ebfmi_energy_channel_0") for key in energy_metrics
+    )
+    assert all(isinstance(v, float) for v in energy_metrics.values())
+
+
+def test_energy_histogram_falls_back_when_range_is_too_small(tmp_path):
+    from log_psplines.diagnostics.energy import plot_ebfmi_diagnostics
+
+    energy = np.stack(
+        (
+            1e16 + np.linspace(0.0, 10.0, 100),
+            1e16 + np.linspace(2.0, 12.0, 100),
+        ),
+        axis=0,
+    )
+    metrics = plot_ebfmi_diagnostics(
+        idata=None, outdir=tmp_path, energy=energy
+    )
+
+    assert metrics is not None
+    assert (tmp_path / "ebfmi_diagnostics.png").exists()

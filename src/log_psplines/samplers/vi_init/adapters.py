@@ -658,7 +658,17 @@ def prepare_block_vi(
                 sampler.config.beta_delta,
                 sampler.nu,
                 sampler.freq_weights,
+                False,
+                jnp.zeros((sampler.n_freq,), dtype=sampler.freq.dtype),
             )
+            if hasattr(sampler, "_get_noise_floor_args"):
+                apply_noise_floor, noise_floor_sq = (
+                    sampler._get_noise_floor_args(channel_index)
+                )
+                model_args = model_args[:-2] + (
+                    apply_noise_floor,
+                    noise_floor_sq,
+                )
 
             vi_result = fit_vi(
                 model=block_model,

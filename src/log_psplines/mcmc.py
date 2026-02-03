@@ -292,6 +292,14 @@ def run_mcmc(
     n_time_blocks: int = 1,
     alpha_phi_theta: Optional[float] = None,
     beta_phi_theta: Optional[float] = None,
+    # Multivariate blocked NUTS noise floor controls
+    use_noise_floor: bool = False,
+    noise_floor_mode: str = "constant",
+    noise_floor_constant: float = 0.0,
+    noise_floor_scale: float = 1e-4,
+    noise_floor_array: Optional[jnp.ndarray] = None,
+    theory_psd: Optional[jnp.ndarray] = None,
+    noise_floor_blocks: Optional[list[int] | str] = None,
     # MH specific
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
@@ -383,6 +391,26 @@ def run_mcmc(
         Number of equal-length segments used to form block-averaged (Wishart)
         periodogram statistics for multivariate timeseries input. ``1`` reduces
         to the standard full-length periodogram.
+    use_noise_floor : bool, default=False
+        Enable an innovation variance floor in the multivariate blocked NUTS
+        likelihood (helps prevent variance collapse in near-null bands).
+    noise_floor_mode : {"constant", "theory_scaled", "array"}, default="constant"
+        Strategy for constructing the innovation noise floor when enabled.
+    noise_floor_constant : float, default=0.0
+        Constant variance-space floor (already squared), used when
+        ``noise_floor_mode="constant"``.
+    noise_floor_scale : float, default=1e-4
+        Scale factor applied to ``theory_psd`` when
+        ``noise_floor_mode="theory_scaled"``.
+    noise_floor_array : Optional[jnp.ndarray], default=None
+        Per-frequency variance floor array used when
+        ``noise_floor_mode="array"``.
+    theory_psd : Optional[jnp.ndarray], default=None
+        Reference PSD (per-frequency) used when
+        ``noise_floor_mode="theory_scaled"``.
+    noise_floor_blocks : Optional[list[int] | str], default=None
+        Channel indices to apply the noise floor to, or ``"all"`` to apply to
+        every block. When ``None``, the sampler default is used.
     target_accept_rate : float, default=0.44
         Target acceptance rate for MH
     adaptation_window : int, default=50
@@ -696,6 +724,13 @@ def run_mcmc(
         ),
         alpha_phi_theta=alpha_phi_theta,
         beta_phi_theta=beta_phi_theta,
+        use_noise_floor=use_noise_floor,
+        noise_floor_mode=noise_floor_mode,
+        noise_floor_constant=noise_floor_constant,
+        noise_floor_scale=noise_floor_scale,
+        noise_floor_array=noise_floor_array,
+        theory_psd=theory_psd,
+        noise_floor_blocks=noise_floor_blocks,
         **kwargs,
     )
 
@@ -750,6 +785,13 @@ def create_sampler(
     channel_stds: Optional[np.ndarray] = None,
     alpha_phi_theta: Optional[float] = None,
     beta_phi_theta: Optional[float] = None,
+    use_noise_floor: bool = False,
+    noise_floor_mode: str = "constant",
+    noise_floor_constant: float = 0.0,
+    noise_floor_scale: float = 1e-4,
+    noise_floor_array: Optional[jnp.ndarray] = None,
+    theory_psd: Optional[jnp.ndarray] = None,
+    noise_floor_blocks: Optional[list[int] | str] = None,
     **kwargs,
 ):
     """Factory function to create appropriate sampler."""
@@ -846,6 +888,17 @@ def create_sampler(
                 vi_progress_bar=vi_progress_bar,
                 alpha_phi_theta=alpha_phi_theta,
                 beta_phi_theta=beta_phi_theta,
+                use_noise_floor=use_noise_floor,
+                noise_floor_mode=noise_floor_mode,
+                noise_floor_constant=noise_floor_constant,
+                noise_floor_scale=noise_floor_scale,
+                noise_floor_array=noise_floor_array,
+                theory_psd=theory_psd,
+                noise_floor_blocks=(
+                    noise_floor_blocks
+                    if noise_floor_blocks is not None
+                    else MultivarBlockedNUTSConfig.noise_floor_blocks
+                ),
             )
             return MultivarBlockedNUTSSampler(data, model, config)
 

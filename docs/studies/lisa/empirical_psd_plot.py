@@ -140,8 +140,7 @@ def main() -> None:
         dest="coarse",
         help="Disable coarse-graining (debug raw Wishart periodogram).",
     )
-    parser.add_argument("--coarse_f_transition", type=float, default=5e-3)
-    parser.add_argument("--coarse_n_log_bins", type=int, default=200)
+    parser.add_argument("--coarse_n_bins", type=int, default=200)
     parser.add_argument(
         "--apply_strain_to_freq_scale",
         action="store_true",
@@ -201,15 +200,13 @@ def main() -> None:
     if args.coarse:
         cfg = CoarseGrainConfig(
             enabled=True,
-            f_transition=float(args.coarse_f_transition),
-            n_log_bins=int(args.coarse_n_log_bins),
+            n_bins=int(args.coarse_n_bins),
             f_min=float(args.fmin),
             f_max=float(args.fmax),
         )
         spec = compute_binning_structure(
             fft.freq,
-            f_transition=cfg.f_transition,
-            n_log_bins=cfg.n_log_bins,
+            n_bins=cfg.n_bins,
             f_min=cfg.f_min,
             f_max=cfg.f_max,
         )

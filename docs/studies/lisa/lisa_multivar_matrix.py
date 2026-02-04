@@ -9,7 +9,7 @@ actual LISA pipeline.
 
 Key grid knobs (defaults are intentionally small-ish):
   - sampler: multivar_blocked_nuts vs multivar_nuts
-  - coarse graining: on/off (log-binning)
+  - coarse graining: on/off (linear full-band binning)
   - n_time_blocks: Wishart averaging blocks (blocked sampler only)
   - n_knots: spline complexity
   - alpha_delta (= beta_delta): prior strength on P-spline delta hyperparams
@@ -129,8 +129,8 @@ def _iter_runs(
         for coarse in coarse_grid:
             coarse_key = str(coarse).lower().strip()
             coarse_on = coarse_key in {"on", "true", "1", "yes"}
-            bins_grid = list(log_bins) if coarse_on else [0]
-            for n_log_bins in bins_grid:
+            bins_grid = list(log_bins) if coarse_on else [1]
+            for n_bins in bins_grid:
                 for n_time_blocks in blocks_grid:
                     for n_knots in knots:
                         for alpha_delta in alpha_deltas:
@@ -138,7 +138,7 @@ def _iter_runs(
                                 yield {
                                     "sampler": str(sampler),
                                     "coarse": str(coarse),
-                                    "n_log_bins": int(n_log_bins),
+                                    "n_bins": int(n_bins),
                                     "n_time_blocks": int(n_time_blocks),
                                     "n_knots": int(n_knots),
                                     "alpha_delta": float(alpha_delta),
@@ -474,7 +474,7 @@ def main() -> None:
         nargs="+",
         type=int,
         default=[512],
-        help="Only used when coarse graining is enabled.",
+        help="Linear coarse-bin counts (full-band), used when coarse graining is enabled.",
     )
     parser.add_argument(
         "--alpha-delta-grid",
@@ -584,7 +584,7 @@ def main() -> None:
             cg = str(spec["coarse"]).lower().strip()
             cg_tag = "on" if cg in {"on", "true", "1", "yes"} else "off"
             bins_tag = (
-                f"bins{int(spec['n_log_bins'])}" if cg_tag == "on" else "raw"
+                f"bins{int(spec['n_bins'])}" if cg_tag == "on" else "raw"
             )
             sampler_tag = _sanitize_tag(str(spec["sampler"]))
             run_dir = (
@@ -609,8 +609,8 @@ def main() -> None:
             ad_tag = _float_tag(float(spec["alpha_delta"]))
             cg = str(spec["coarse"]).lower().strip()
             cg_tag = "on" if cg in {"on", "true", "1", "yes"} else "off"
-            n_log_bins = int(spec["n_log_bins"])
-            bins_tag = f"bins{n_log_bins}" if cg_tag == "on" else "raw"
+            n_bins = int(spec["n_bins"])
+            bins_tag = f"bins{n_bins}" if cg_tag == "on" else "raw"
             sampler_tag = _sanitize_tag(str(spec["sampler"]))
             n_time_blocks = int(spec["n_time_blocks"])
             n_knots = int(spec["n_knots"])
@@ -753,8 +753,8 @@ def main() -> None:
         cg = str(spec["coarse"]).lower().strip()
         cg_on = cg in {"on", "true", "1", "yes"}
         cg_tag = "on" if cg_on else "off"
-        n_log_bins = int(spec["n_log_bins"])
-        bins_tag = f"bins{n_log_bins}" if cg_on else "raw"
+        n_bins = int(spec["n_bins"])
+        bins_tag = f"bins{n_bins}" if cg_on else "raw"
 
         sampler_tag = _sanitize_tag(sampler)
         ad_tag = _float_tag(alpha_delta)
@@ -787,8 +787,7 @@ def main() -> None:
 
         coarse_cfg = CoarseGrainConfig(
             enabled=bool(cg_on),
-            f_transition=FMIN,
-            n_log_bins=int(n_log_bins),
+            n_bins=int(n_bins),
             f_min=FMIN,
             f_max=FMAX,
         )
@@ -796,7 +795,7 @@ def main() -> None:
         run_config = dict(
             sampler=sampler,
             coarse_grain=bool(cg_on),
-            n_log_bins=int(n_log_bins),
+            n_bins=int(n_bins),
             n_time_blocks=int(n_time_blocks),
             n_knots=int(n_knots),
             alpha_delta=float(alpha_delta),

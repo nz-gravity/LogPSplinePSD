@@ -34,8 +34,9 @@ def log_likelihood(
 ) -> jnp.ndarray:
     """Univariate log-likelihood function."""
     ln_model = build_spline(basis_matrix, weights, log_parametric)
-    integrand = ln_model + jnp.exp(log_pdgrm - ln_model)
-    return -0.5 * jnp.sum(freq_weights * integrand)
+    sum_log_det = jnp.sum(freq_weights * ln_model)
+    quad = jnp.sum(jnp.exp(log_pdgrm - ln_model))
+    return -0.5 * (sum_log_det + quad)
 
 
 class UnivarBaseSampler(BaseSampler):

@@ -176,7 +176,7 @@ def bin_doubling_stiffness_check_from_u_stacks(
     """Finite-difference stiffness proxy comparing a bin vs a doubled member set.
 
     The log-likelihood is evaluated using aggregated U statistics and the model's
-    scaling (freq_weights=freq_bin_counts=n_members). The same parameter vector is
+    scaling (freq_weights=n_members). The same parameter vector is
     used for both (small, large) to isolate the expected N_h scaling.
     """
     u_stack_small = np.asarray(u_stack_small, dtype=np.complex128)
@@ -339,7 +339,7 @@ def multivar_cholesky_loglik(
 
     This mirrors the scaling structure used in the NumPyro multivariate models:
       - a log-det term weighted by freq_weights
-      - a quadratic term using per-bin mean sufficient statistics via freq_bin_counts
+      - a quadratic term using summed sufficient statistics (no extra weights)
     """
     u_re = np.asarray(u_re, dtype=np.float64)
     u_im = np.asarray(u_im, dtype=np.float64)
@@ -362,11 +362,6 @@ def multivar_cholesky_loglik(
     if fw.shape != (n_freq,):
         raise ValueError("freq_weights has unexpected shape.")
 
-    bc = np.asarray(freq_bin_counts, dtype=np.float64)
-    if bc.shape != (n_freq,):
-        raise ValueError("freq_bin_counts has unexpected shape.")
-    bc = np.maximum(bc, 1.0)
-
     u_resid = u_complex.copy()
     idx = 0
     for row in range(1, n_dim):
@@ -378,13 +373,10 @@ def multivar_cholesky_loglik(
         idx += count
 
     residual_power_sum = np.sum(np.abs(u_resid) ** 2, axis=2)  # (F, p)
-    residual_power_mean = residual_power_sum / bc[:, None]
 
     exp_neg_log_delta = np.exp(-log_delta_sq)
     sum_log_det = -float(nu) * float(np.sum(fw[:, None] * log_delta_sq))
-    quad = -float(
-        np.sum(fw[:, None] * residual_power_mean * exp_neg_log_delta)
-    )
+    quad = -float(np.sum(residual_power_sum * exp_neg_log_delta))
     return float(sum_log_det + quad)
 
 

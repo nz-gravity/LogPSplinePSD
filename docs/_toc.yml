@@ -2,6 +2,9 @@ format: jb-book
 root: README.rst
 chapters:
   - file: api.rst
+  - file: multivar_blocked_nuts.rst
+  - file: phi_prior_approx.rst
+  - file: multivar_implementation_notes.rst
   - file: coarse_grain.rst
   - file: studies/runtime/runtime.rst
   - file: studies/lvk/lvk_demo.ipynb

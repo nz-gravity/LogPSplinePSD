@@ -13,6 +13,7 @@ run_case() {
   local blocks="$5"
 
   echo "=== Running $tag ==="
+  PYTHONPATH="$ROOT/src" \
   LISA_RUN_TAG="$tag" \
   LISA_MAX_MONTHS="${LISA_MAX_MONTHS:-3}" \
   LISA_USE_NOISE_FLOOR=1 \
@@ -33,4 +34,4 @@ run_case "const_1e-6" "constant" "1e-4" "1e-6" "2"
 run_case "const_1e-5" "constant" "1e-4" "1e-5" "2"
 
 echo "=== Aggregate summary ==="
-"$PYTHON_BIN" "$ROOT/docs/studies/lisa/aggregate_noise_floor_runs.py"
+PYTHONPATH="$ROOT/src" "$PYTHON_BIN" "$ROOT/docs/studies/lisa/aggregate_noise_floor_runs.py"

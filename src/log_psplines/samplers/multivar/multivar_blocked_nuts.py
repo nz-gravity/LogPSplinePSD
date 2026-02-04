@@ -64,6 +64,7 @@ def compute_noise_floor_sq(
     scale: float,
     array: Optional[jnp.ndarray],
     theory_psd: Optional[jnp.ndarray],
+    tau: float = 1e-12,
 ) -> jnp.ndarray:
     """Compute innovation noise floor squared for a block.
 
@@ -71,20 +72,13 @@ def compute_noise_floor_sq(
     squared).
     """
     n_freq = freqs.shape[0]
-    if mode == "constant":
-        floor_sq = jnp.full((n_freq,), float(constant), dtype=freqs.dtype)
-    elif mode == "theory_scaled":
-        if theory_psd is None:
-            raise ValueError(
-                "theory_psd is required when noise_floor_mode='theory_scaled'."
-            )
-        theory_psd = jnp.asarray(theory_psd, dtype=freqs.dtype)
-        if theory_psd.shape[0] != n_freq:
-            raise ValueError(
-                f"theory_psd for block {block_j} has shape {theory_psd.shape}, expected ({n_freq},)."
-            )
-        floor_sq = jnp.asarray(scale, dtype=freqs.dtype) * theory_psd
-    elif mode == "array":
+    mode_norm = str(mode).strip().lower()
+
+    if mode_norm == "off":
+        floor_sq = jnp.zeros((n_freq,), dtype=freqs.dtype)
+        return jnp.maximum(floor_sq, jnp.asarray(1e-30, dtype=freqs.dtype))
+
+    if mode_norm == "array":
         if array is None:
             raise ValueError(
                 "noise_floor_array is required when noise_floor_mode='array'."
@@ -94,11 +88,77 @@ def compute_noise_floor_sq(
             raise ValueError(
                 f"noise_floor_array for block {block_j} has shape {floor_sq.shape}, expected ({n_freq},)."
             )
-    else:
+        return jnp.maximum(floor_sq, jnp.asarray(1e-30, dtype=freqs.dtype))
+
+    eps2 = compute_noise_floor_eps2(
+        mode=mode_norm,
+        theory_psd=theory_psd,
+        scale=scale,
+        constant=constant,
+        tau=tau,
+        dtype=freqs.dtype,
+    )
+    return jnp.maximum(eps2, jnp.asarray(1e-30, dtype=freqs.dtype))
+
+
+def smooth_max(a: jnp.ndarray, b: jnp.ndarray, tau: float) -> jnp.ndarray:
+    """Smooth approximation to max(a, b) using logaddexp.
+
+    For tau -> 0, this approaches max(a, b). tau must be > 0.
+    """
+    tau_val = float(tau)
+    if tau_val <= 0.0:
+        raise ValueError("tau must be positive for smooth_max.")
+    return tau_val * jnp.logaddexp(a / tau_val, b / tau_val)
+
+
+def compute_noise_floor_eps2(
+    *,
+    mode: str,
+    theory_psd: Optional[jnp.ndarray],
+    scale: float,
+    constant: float,
+    tau: float,
+    dtype: jnp.dtype,
+) -> jnp.ndarray:
+    """Compute innovation variance floor eps2 (variance-space, already squared).
+
+    Modes
+    -----
+    - off:          return zeros
+    - constant:     constant floor
+    - theory_scaled: scale * theory_psd
+    - hybrid:       smooth_max(constant, scale*theory_psd, tau)
+    """
+    mode_norm = str(mode).lower().strip()
+
+    if mode_norm == "off":
+        return jnp.asarray(0.0, dtype=dtype)
+
+    constant_val = jnp.asarray(float(constant), dtype=dtype)
+    scale_val = jnp.asarray(float(scale), dtype=dtype)
+
+    if mode_norm == "constant":
+        return jnp.maximum(constant_val, jnp.asarray(1e-30, dtype=dtype))
+
+    if theory_psd is None:
         raise ValueError(
-            f"Unknown noise_floor_mode='{mode}'. Expected 'constant', 'theory_scaled', or 'array'."
+            "theory_psd is required when noise_floor_mode is 'theory_scaled' or 'hybrid'."
         )
-    return jnp.maximum(floor_sq, jnp.asarray(1e-30, dtype=freqs.dtype))
+
+    theory_psd_arr = jnp.asarray(theory_psd, dtype=dtype)
+    scaled = scale_val * theory_psd_arr
+
+    if mode_norm == "theory_scaled":
+        return jnp.maximum(scaled, jnp.asarray(1e-30, dtype=dtype))
+
+    if mode_norm == "hybrid":
+        eps2 = smooth_max(constant_val, scaled, tau=float(tau))
+        return jnp.maximum(eps2, jnp.asarray(1e-30, dtype=dtype))
+
+    raise ValueError(
+        f"Unknown noise_floor_mode='{mode}'. Expected one of 'off', 'constant', 'theory_scaled', 'hybrid', or 'array'."
+    )
 
 
 def _blocked_channel_model(
@@ -299,9 +359,12 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
 
     # Innovation noise floor controls (variance-space floor added in likelihood).
     use_noise_floor: bool = False
-    noise_floor_mode: str = "constant"
+    noise_floor_mode: str = (
+        "constant"  # off|constant|theory_scaled|hybrid|array
+    )
     noise_floor_constant: float = 0.0
     noise_floor_scale: float = 1e-4
+    noise_floor_tau: float = 1e-12
     noise_floor_array: Optional[jnp.ndarray] = None
     theory_psd: Optional[jnp.ndarray] = None
     noise_floor_blocks: Sequence[int] | str = (3,)
@@ -359,6 +422,117 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     def sampler_type(self) -> str:
         return "multivariate_blocked_nuts"
 
+    def _postprocess_idata(self, idata: az.InferenceData) -> None:
+        """Attach per-frequency noise floor arrays + derived scalings to idata.
+
+        This avoids recomputing eps2(f) after inference and enables overlay plots.
+        """
+        if not getattr(self.config, "use_noise_floor", False):
+            return
+
+        try:
+            from xarray import Dataset
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError(
+                "xarray is required to attach noise_floor group."
+            ) from exc
+
+        n_freq = int(self.n_freq)
+        n_ch = int(self.n_channels)
+
+        eps2_std = np.zeros((n_freq, n_ch), dtype=np.float64)
+        theory_std = np.full((n_freq, n_ch), np.nan, dtype=np.float64)
+
+        # Normalise theory_psd to either (freq,) or (freq, channels) in std units.
+        theory_psd = getattr(self.config, "theory_psd", None)
+        if theory_psd is not None:
+            theory_arr = np.asarray(
+                jax.device_get(theory_psd), dtype=np.float64
+            )
+            if theory_arr.ndim == 1:
+                if theory_arr.shape[0] != n_freq:
+                    raise ValueError(
+                        f"theory_psd must have length {n_freq}, got {theory_arr.shape}"
+                    )
+                theory_std[:] = theory_arr[:, None]
+            elif theory_arr.ndim == 2:
+                if theory_arr.shape != (n_freq, n_ch):
+                    raise ValueError(
+                        f"theory_psd must have shape ({n_freq}, {n_ch}), got {theory_arr.shape}"
+                    )
+                theory_std[:] = theory_arr
+            else:
+                raise ValueError(
+                    f"theory_psd must have ndim 1 or 2, got {theory_arr.ndim}"
+                )
+
+        for ch in range(n_ch):
+            if not self._should_apply_noise_floor(ch):
+                continue
+
+            eps2 = compute_noise_floor_sq(
+                self.freq,
+                ch,
+                self.config.noise_floor_mode,
+                self.config.noise_floor_constant,
+                self.config.noise_floor_scale,
+                self.config.noise_floor_array,
+                self.config.theory_psd,
+                tau=self.config.noise_floor_tau,
+            )
+            eps2_np = np.asarray(jax.device_get(eps2), dtype=np.float64)
+            if eps2_np.shape == ():
+                eps2_np = np.full((n_freq,), float(eps2_np), dtype=np.float64)
+            if eps2_np.shape != (n_freq,):
+                raise ValueError(
+                    f"Computed eps2 floor for channel {ch} has shape {eps2_np.shape}, expected ({n_freq},)."
+                )
+            eps2_std[:, ch] = eps2_np
+
+        channel_stds = getattr(self.config, "channel_stds", None)
+        if channel_stds is None:
+            channel_stds = getattr(self.data, "channel_stds", None)
+        sf = float(getattr(self.config, "scaling_factor", 1.0) or 1.0)
+
+        if channel_stds is None or sf == 0.0:
+            factors = np.ones((n_ch,), dtype=np.float64)
+        else:
+            channel_stds = np.asarray(channel_stds, dtype=np.float64)
+            if channel_stds.shape != (n_ch,):
+                raise ValueError(
+                    f"channel_stds must have shape ({n_ch},), got {channel_stds.shape}"
+                )
+            factors = (channel_stds**2) / sf
+
+        eps2_phys = eps2_std * factors[None, :]
+        theory_phys = theory_std * factors[None, :]
+        freq = np.asarray(jax.device_get(self.freq), dtype=np.float64)
+
+        ds = Dataset(
+            data_vars=dict(
+                eps2_floor_std=(("freq", "channels"), eps2_std),
+                eps2_floor_phys=(("freq", "channels"), eps2_phys),
+                theory_psd_std=(("freq", "channels"), theory_std),
+                theory_psd_phys=(("freq", "channels"), theory_phys),
+                psd_rescale_factor=(("channels",), factors),
+            ),
+            coords=dict(
+                freq=freq,
+                channels=np.arange(n_ch, dtype=int),
+            ),
+        )
+        idata.add_groups({"noise_floor": ds})
+
+        # Ensure attrs exist for aggregation scripts.
+        idata.attrs["use_noise_floor"] = bool(self.config.use_noise_floor)
+        idata.attrs["noise_floor_mode"] = str(self.config.noise_floor_mode)
+        idata.attrs["noise_floor_scale"] = float(self.config.noise_floor_scale)
+        idata.attrs["noise_floor_constant"] = float(
+            self.config.noise_floor_constant
+        )
+        idata.attrs["noise_floor_tau"] = float(self.config.noise_floor_tau)
+        idata.attrs["noise_floor_blocks"] = str(self.config.noise_floor_blocks)
+
     def _get_channel_setting(
         self,
         name: str,
@@ -404,6 +578,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.config.noise_floor_scale,
                 self.config.noise_floor_array,
                 self.config.theory_psd,
+                tau=self.config.noise_floor_tau,
             )
         else:
             noise_floor_sq = jnp.zeros((self.n_freq,), dtype=self.freq.dtype)

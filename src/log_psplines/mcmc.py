@@ -297,6 +297,7 @@ def run_mcmc(
     noise_floor_mode: str = "constant",
     noise_floor_constant: float = 0.0,
     noise_floor_scale: float = 1e-4,
+    noise_floor_tau: float = 1e-12,
     noise_floor_array: Optional[jnp.ndarray] = None,
     theory_psd: Optional[jnp.ndarray] = None,
     noise_floor_blocks: Optional[list[int] | str] = None,
@@ -394,7 +395,7 @@ def run_mcmc(
     use_noise_floor : bool, default=False
         Enable an innovation variance floor in the multivariate blocked NUTS
         likelihood (helps prevent variance collapse in near-null bands).
-    noise_floor_mode : {"constant", "theory_scaled", "array"}, default="constant"
+    noise_floor_mode : {"constant", "theory_scaled", "hybrid", "array"}, default="constant"
         Strategy for constructing the innovation noise floor when enabled.
     noise_floor_constant : float, default=0.0
         Constant variance-space floor (already squared), used when
@@ -402,6 +403,8 @@ def run_mcmc(
     noise_floor_scale : float, default=1e-4
         Scale factor applied to ``theory_psd`` when
         ``noise_floor_mode="theory_scaled"``.
+    noise_floor_tau : float, default=1e-12
+        Smoothness parameter used when ``noise_floor_mode="hybrid"``.
     noise_floor_array : Optional[jnp.ndarray], default=None
         Per-frequency variance floor array used when
         ``noise_floor_mode="array"``.
@@ -728,6 +731,7 @@ def run_mcmc(
         noise_floor_mode=noise_floor_mode,
         noise_floor_constant=noise_floor_constant,
         noise_floor_scale=noise_floor_scale,
+        noise_floor_tau=noise_floor_tau,
         noise_floor_array=noise_floor_array,
         theory_psd=theory_psd,
         noise_floor_blocks=noise_floor_blocks,
@@ -789,6 +793,7 @@ def create_sampler(
     noise_floor_mode: str = "constant",
     noise_floor_constant: float = 0.0,
     noise_floor_scale: float = 1e-4,
+    noise_floor_tau: float = 1e-12,
     noise_floor_array: Optional[jnp.ndarray] = None,
     theory_psd: Optional[jnp.ndarray] = None,
     noise_floor_blocks: Optional[list[int] | str] = None,
@@ -892,6 +897,7 @@ def create_sampler(
                 noise_floor_mode=noise_floor_mode,
                 noise_floor_constant=noise_floor_constant,
                 noise_floor_scale=noise_floor_scale,
+                noise_floor_tau=noise_floor_tau,
                 noise_floor_array=noise_floor_array,
                 theory_psd=theory_psd,
                 noise_floor_blocks=(

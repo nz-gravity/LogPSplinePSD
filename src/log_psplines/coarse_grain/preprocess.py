@@ -26,21 +26,43 @@ class CoarseGrainSpec:
 def compute_binning_structure(
     freqs: np.ndarray,
     *,
-    f_transition: float,
-    n_log_bins: int,
+    n_bins: Optional[int] = None,
+    n_freqs_per_bin: Optional[int] = None,
     f_min: Optional[float] = None,
     f_max: Optional[float] = None,
 ) -> CoarseGrainSpec:
-    """Compute coarse-graining bins for a monotonically increasing frequency grid."""
+    """Compute full-band linear coarse-graining bins for a frequency grid.
+
+    Args:
+        freqs: Fine frequency grid (monotonically increasing).
+        n_bins: Number of coarse bins spanning the retained grid. Bin sizes are
+            as equal as possible and must be odd.
+        n_freqs_per_bin: Optional fixed-membership mode: force equal-size bins
+            containing exactly this many (odd) fine-grid frequencies each.
+        f_min: Optional lower bound on retained frequencies.
+        f_max: Optional upper bound on retained frequencies.
+    """
 
     if freqs.ndim != 1:
         raise ValueError("freqs must be a 1-D array")
     if not np.all(np.diff(freqs) >= 0):
         raise ValueError("freqs must be monotonically increasing")
-    if n_log_bins <= 0:
-        raise ValueError("n_log_bins must be positive")
-    if f_transition <= 0:
-        raise ValueError("f_transition must be positive")
+    if (n_bins is None) == (n_freqs_per_bin is None):
+        raise ValueError(
+            "Exactly one of n_bins or n_freqs_per_bin must be provided."
+        )
+    if n_bins is not None:
+        n_bins = int(n_bins)
+        if n_bins <= 0:
+            raise ValueError("n_bins must be positive when provided.")
+    if n_freqs_per_bin is not None:
+        n_freqs_per_bin = int(n_freqs_per_bin)
+        if n_freqs_per_bin <= 0:
+            raise ValueError("n_freqs_per_bin must be positive when provided")
+        if n_freqs_per_bin % 2 == 0:
+            raise ValueError(
+                "n_freqs_per_bin must be odd to define a midpoint Fourier frequency."
+            )
 
     freq_min = float(freqs[0])
     freq_max = float(freqs[-1])
@@ -56,13 +78,9 @@ def compute_binning_structure(
         raise ValueError("No frequencies fall within the requested range")
 
     selected_freqs = freqs[in_range]
-    mask_low_full = (freqs >= f_min) & (freqs <= f_transition)
-    mask_high_full = (freqs > f_transition) & (freqs <= f_max)
-
-    mask_low = mask_low_full[in_range]
-    mask_high = mask_high_full[in_range]
-
-    n_low = int(mask_low.sum())
+    mask_low = np.zeros_like(selected_freqs, dtype=bool)
+    mask_high = np.ones_like(selected_freqs, dtype=bool)
+    n_low = 0
 
     if selected_freqs.size < 2:
         fine_spacing = 1.0
@@ -75,67 +93,82 @@ def compute_binning_structure(
             )
         fine_spacing = float(np.median(positive_diffs))
 
-    high_freqs = selected_freqs[mask_high]
-    if high_freqs.size == 0:
-        # No high-frequency bins; only low frequencies retained
-        return CoarseGrainSpec(
-            f_coarse=selected_freqs,
-            selection_mask=in_range,
-            mask_low=mask_low,
-            mask_high=mask_high,
-            bin_indices=np.array([], dtype=np.int32),
-            sort_indices=np.array([], dtype=np.int32),
-            bin_counts=np.array([], dtype=np.int32),
-            bin_widths=np.array([], dtype=np.float64),
-            n_low=n_low,
-            n_bins_high=0,
-            fine_spacing=fine_spacing,
+    n_high = int(selected_freqs.size)
+    if n_high <= 0:
+        raise ValueError("No retained frequencies for coarse graining.")
+
+    if n_freqs_per_bin is not None:
+        # Fixed-size, equal-length bins on the fine grid (paper style).
+        if n_high % n_freqs_per_bin != 0:
+            raise ValueError(
+                f"Selected frequencies ({n_high}) must be divisible by "
+                f"n_freqs_per_bin ({n_freqs_per_bin}) for equal-length bins."
+            )
+        n_bins_high = int(n_high // n_freqs_per_bin)
+        bin_counts = np.full((n_bins_high,), n_freqs_per_bin, dtype=np.int32)
+    else:
+        n_bins_high = int(n_bins)
+        if n_bins_high > n_high:
+            raise ValueError(
+                f"n_bins ({n_bins_high}) exceeds retained frequency count ({n_high})."
+            )
+        if (n_high % 2) != (n_bins_high % 2):
+            raise ValueError(
+                f"Cannot partition {n_high} frequencies into {n_bins_high} bins with all bin sizes odd "
+                "(parity mismatch). Choose a different n_bins or adjust f_min/f_max."
+            )
+        base = n_high // n_bins_high
+        if base % 2 == 0:
+            base -= 1
+        if base < 1:
+            raise ValueError(
+                "n_bins is too large to form odd-sized bins (minimum bin size would be < 1)."
+            )
+        remainder = n_high - (base * n_bins_high)
+        if remainder < 0 or (remainder % 2) != 0:
+            raise ValueError(
+                "Internal error constructing odd-sized bins; check n_bins and frequency selection."
+            )
+        n_plus_two = remainder // 2
+        bin_counts = np.full((n_bins_high,), base, dtype=np.int32)
+        if n_plus_two:
+            bin_counts[:n_plus_two] += 2
+
+    if np.any(bin_counts <= 0) or np.any(bin_counts % 2 == 0):
+        raise ValueError("All bin sizes must be positive and odd.")
+    if int(np.sum(bin_counts)) != n_high:
+        raise ValueError(
+            "Bin counts must sum to the retained frequency count."
         )
 
-    # Build logarithmic bin edges for the high-frequency region
-    high_min = max(f_transition, high_freqs[0])
-    edges = np.logspace(
-        np.log10(high_min),
-        np.log10(f_max),
-        num=n_log_bins + 1,
-        base=10.0,
-    )
-    # Ensure edges cover the entire high-frequency range
-    edges[0] = min(edges[0], high_min)
-    edges[-1] = max(edges[-1], f_max)
+    sort_indices = np.arange(n_high, dtype=np.int32)
+    bin_indices = np.repeat(
+        np.arange(n_bins_high, dtype=np.int32),
+        repeats=bin_counts,
+    ).astype(np.int32)
+    if bin_indices.shape[0] != n_high:
+        raise ValueError(
+            "Bin construction failed to cover all retained frequencies."
+        )
 
-    # Assign bins (0-indexed). Points below first edge get bin -1; clamp to 0.
-    raw_indices = np.digitize(high_freqs, edges[1:-1], right=False)
-    unique_bins, reindexed = np.unique(raw_indices, return_inverse=True)
-    n_bins_high = int(unique_bins.size)
+    starts = np.concatenate(([0], np.cumsum(bin_counts)[:-1]))
+    mids = starts + (bin_counts // 2)
+    f_rep = selected_freqs[mids].astype(np.float64)
 
-    sort_indices = np.argsort(reindexed, kind="stable")
-    sorted_bins = reindexed[sort_indices]
-
-    # Count points per bin
-    bin_counts = np.bincount(sorted_bins, minlength=n_bins_high)
-
-    # Compute representative frequency per bin (mean of members)
-    bin_sums = np.zeros(n_bins_high, dtype=np.float64)
-    np.add.at(bin_sums, sorted_bins, high_freqs[sort_indices])
-    bin_means = bin_sums / np.where(bin_counts > 0, bin_counts, 1)
-    raw_widths = edges[unique_bins + 1] - edges[unique_bins]
-    min_width = np.array(fine_spacing, dtype=np.float64)
-    bin_widths = np.maximum(raw_widths, min_width)
-
-    f_coarse = np.concatenate((selected_freqs[:n_low], bin_means))
+    bin_widths = bin_counts.astype(np.float64) * float(fine_spacing)
+    f_coarse = np.asarray(f_rep, dtype=np.float64)
 
     return CoarseGrainSpec(
         f_coarse=f_coarse,
         selection_mask=in_range,
         mask_low=mask_low,
         mask_high=mask_high,
-        bin_indices=reindexed,
+        bin_indices=bin_indices,
         sort_indices=sort_indices,
         bin_counts=bin_counts,
         bin_widths=bin_widths,
         n_low=n_low,
-        n_bins_high=n_bins_high,
+        n_bins_high=int(n_bins_high),
         fine_spacing=fine_spacing,
     )
 
@@ -152,9 +185,6 @@ def apply_coarse_graining_univar(
     if power.size != spec.mask_low.size:
         raise ValueError("power length must match selected frequency count")
 
-    power_low = power[spec.mask_low]
-
-    fine_spacing = spec.fine_spacing
     if freqs is not None:
         freqs = np.asarray(freqs, dtype=np.float64)
         if freqs.ndim != 1:
@@ -163,15 +193,9 @@ def apply_coarse_graining_univar(
             raise ValueError(
                 "freqs length must match selected frequency count"
             )
-        if freqs.size >= 2:
-            diff_freqs = np.diff(freqs)
-            positive_diffs = diff_freqs[diff_freqs > 0]
-            if positive_diffs.size > 0:
-                fine_spacing = float(np.median(positive_diffs))
 
-    if spec.n_bins_high == 0:
-        weights = np.ones_like(power_low, dtype=np.float64)
-        return power_low, weights
+    if spec.n_bins_high <= 0:
+        raise ValueError("Coarse-graining spec has no bins.")
 
     power_high = power[spec.mask_high]
     power_high_sorted = power_high[spec.sort_indices]
@@ -183,36 +207,9 @@ def apply_coarse_graining_univar(
         minlength=spec.n_bins_high,
     )
     counts = spec.bin_counts.astype(np.float64)
-    means = np.divide(
-        sum_power,
-        np.where(counts > 0, counts, 1),
-        out=np.zeros_like(sum_power),
-        where=counts > 0,
-    )
+    if sum_power.shape[0] != counts.shape[0]:
+        raise ValueError("Coarse-graining bins have inconsistent sizes.")
 
-    bin_widths = spec.bin_widths.astype(np.float64, copy=False)
-    if bin_widths.size != spec.n_bins_high:
-        raise ValueError("bin_widths length must equal n_bins_high")
-
-    if fine_spacing <= 0:
-        raise ValueError("fine_spacing must be positive")
-
-    new_weights_high = bin_widths / fine_spacing
-    # Renormalize to match exact count of fine frequencies for consistency
-    total_expected = float(spec.bin_counts.sum())
-    total_current = (
-        float(new_weights_high.sum()) if new_weights_high.size else 0.0
-    )
-    if total_current > 0 and total_expected > 0:
-        new_weights_high *= total_expected / total_current
-    # Do not enforce monotonicity in weights used for likelihood; small
-    # non-monotonicity due to edge quantization is expected and correct.
-
-    power_coarse = np.concatenate((power_low, means))
-    weights = np.concatenate(
-        (
-            np.ones_like(power_low, dtype=np.float64),
-            new_weights_high,
-        )
-    )
+    power_coarse = sum_power.astype(np.float64, copy=False)
+    weights = counts
     return power_coarse, weights

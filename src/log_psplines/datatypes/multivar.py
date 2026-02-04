@@ -71,6 +71,10 @@ class MultivarFFT:
     fs: float = field(default=1.0, repr=False)
     raw_psd: Optional[np.ndarray] = None
     raw_freq: Optional[np.ndarray] = None
+    # For coarse-grained FFTs, stores the number of fine-grid frequencies that
+    # contributed to each coarse bin. This lets likelihood code compute
+    # per-bin averages independent of any subsequent weight normalization.
+    freq_bin_counts: Optional[np.ndarray] = None
 
     def __post_init__(self) -> None:
         self.y_re = np.asarray(self.y_re, dtype=np.float64)
@@ -116,6 +120,17 @@ class MultivarFFT:
                 raise ValueError(
                     f"raw_freq must have length {self.n_freq}, got {self.raw_freq.shape}"
                 )
+
+        if self.freq_bin_counts is not None:
+            self.freq_bin_counts = np.asarray(
+                self.freq_bin_counts, dtype=np.float64
+            )
+            if self.freq_bin_counts.shape != (self.n_freq,):
+                raise ValueError(
+                    f"freq_bin_counts must have length {self.n_freq}, got {self.freq_bin_counts.shape}"
+                )
+            if np.any(self.freq_bin_counts <= 0):
+                raise ValueError("freq_bin_counts must be positive")
 
         if self.channel_stds is not None:
             self.channel_stds = np.asarray(self.channel_stds, dtype=np.float64)
@@ -294,6 +309,9 @@ class MultivarFFT:
         if self.raw_psd is not None:
             raw_psd = self.raw_psd[mask]
             raw_freq = self.freq[mask]
+        freq_bin_counts = None
+        if self.freq_bin_counts is not None:
+            freq_bin_counts = np.asarray(self.freq_bin_counts)[mask]
         return MultivarFFT(
             y_re=self.y_re[mask],
             y_im=self.y_im[mask],
@@ -304,6 +322,7 @@ class MultivarFFT:
             u_im=self.u_im[mask],
             raw_psd=raw_psd,
             raw_freq=raw_freq,
+            freq_bin_counts=freq_bin_counts,
             nu=self.nu,
             scaling_factor=self.scaling_factor,
             fs=self.fs,

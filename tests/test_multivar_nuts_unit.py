@@ -29,6 +29,7 @@ def _make_sampler(num_chains=2):
     sampler.all_bases = (jnp.ones((2, 1)),)
     sampler.all_penalties = (jnp.eye(1),)
     sampler.freq_weights = jnp.ones((2,))
+    sampler.freq_bin_counts = jnp.ones((2,))
     sampler._default_init_strategy = lambda: "init"
     sampler._compute_empirical_psd = lambda: None
     sampler._save_vi_diagnostics = lambda empirical_psd=None: None
@@ -62,6 +63,7 @@ def test_multivariate_model_emits_sites_univariate_and_multivar(monkeypatch):
             all_bases=all_bases,
             all_penalties=all_penalties,
             freq_weights=freq_weights,
+            freq_bin_counts=freq_weights,
         )
 
         assert "likelihood" in trace

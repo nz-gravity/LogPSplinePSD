@@ -92,7 +92,8 @@ class MultivarBaseSampler(BaseSampler):
         self.nu = int(self.fft_data.nu)
 
         # Optional frequency weights (used to scale the log-det term in the
-        # multivariate coarse-grained likelihood.)
+        # multivariate coarse-grained likelihood). For paper-consistent coarse
+        # graining these should equal the per-bin member counts.
         if self.config.freq_weights is not None:
             fw = jnp.asarray(self.config.freq_weights, dtype=jnp.float32)
             if fw.shape[0] != self.n_freq:
@@ -102,6 +103,23 @@ class MultivarBaseSampler(BaseSampler):
             self.freq_weights = fw
         else:
             self.freq_weights = jnp.ones((self.n_freq,), dtype=jnp.float32)
+
+        # For coarse-grained multivariate FFTs, keep the *raw* bin counts
+        # (number of fine-grid frequencies per coarse bin) separate from any
+        # normalized/tempered freq_weights. This prevents PSD scale drift when
+        # adjusting weights for sampler geometry.
+        bin_counts = getattr(self.fft_data, "freq_bin_counts", None)
+        if bin_counts is not None:
+            bc = jnp.asarray(bin_counts, dtype=jnp.float32)
+            if bc.shape[0] != self.n_freq:
+                raise ValueError(
+                    "freq_bin_counts length must match number of frequencies"
+                )
+            if jnp.any(bc <= 0):
+                raise ValueError("freq_bin_counts must be positive")
+            self.freq_bin_counts = bc
+        else:
+            self.freq_bin_counts = jnp.ones((self.n_freq,), dtype=jnp.float32)
 
         if self.config.verbose:
             logger.info(
@@ -116,6 +134,11 @@ class MultivarBaseSampler(BaseSampler):
                 logger.info(
                     f"Applied coarse-grain weights; total effective count = {total:.1f}"
                 )
+                total_raw = float(jnp.sum(self.freq_bin_counts))
+                if abs(total_raw - total) > 1e-6:
+                    logger.info(
+                        f"Raw coarse-bin counts sum = {total_raw:.1f} (independent of any weight normalization)."
+                    )
 
     @property
     def data_type(self) -> str:
@@ -145,6 +168,23 @@ class MultivarBaseSampler(BaseSampler):
                 overlay_vi=overlay_vi,
                 outdir=self.config.outdir,
             )
+
+            # Noise floor overlays (if attached by sampler).
+            if getattr(self.config, "outdir", None) is not None and hasattr(
+                idata, "noise_floor"
+            ):
+                try:
+                    from ...plotting.noise_floor import (
+                        plot_noise_floor_overlay,
+                    )
+
+                    plot_noise_floor_overlay(
+                        idata=idata, outdir=self.config.outdir, block_idx=2
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Could not plot noise floor overlay: {exc}"
+                    )
 
             self._save_vi_diagnostics(
                 empirical_psd=empirical_psd, log_summary=False

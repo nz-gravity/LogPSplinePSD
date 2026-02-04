@@ -60,9 +60,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     # Coarse-grained run
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
-        # Keep half the band unaggregated to improve fidelity on the physical scale
-        f_transition=varma.freq[len(varma.freq) // 2],
-        n_log_bins=10 if test_mode != "fast" else 6,
+        n_bins=10 if test_mode != "fast" else 6,
         f_min=None,
         f_max=None,
     )
@@ -90,44 +88,32 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     if nfreq_full > 32:
         assert nfreq_coarse < nfreq_full
 
-    # Compare median PSD along diagonal channels in overlapping low-band
+    # Compare median PSD along diagonal channels on the coarse grid
     q50_full = psd_full.sel(percentile=50).values  # (freq, dim, dim)
     q50_coarse = psd_coarse.sel(percentile=50).values
 
-    # Restrict to the low (non-aggregated) region of the coarse run
-    from log_psplines.coarse_grain import compute_binning_structure as _cbs
-
     freqs_full = np.asarray(idata_full.posterior_psd["freq"].values)
     freqs_coarse = np.asarray(idata_coarse.posterior_psd["freq"].values)
-    spec = _cbs(
-        freqs_coarse,
-        f_transition=coarse_cfg.f_transition,
-        n_log_bins=coarse_cfg.n_log_bins,
-        f_min=coarse_cfg.f_min,
-        f_max=coarse_cfg.f_max,
-    )
-    n_low = int(spec.n_low)
-    if n_low > 4:  # only compare when we kept a few low bins
-        # Interpolate full median PSD onto coarse frequencies in the low region
-        from log_psplines.mcmc import _interp_psd_array
 
-        q50_full_low = to_physical(
-            _interp_psd_array(q50_full, freqs_full, freqs_coarse[:n_low])
-        )
-        q50_coarse_low = to_physical(q50_coarse[:n_low])
-        true_psd_full = varma.get_true_psd()
-        true_low = to_physical(
-            _interp_psd_array(true_psd_full, varma.freq, freqs_coarse[:n_low])
-        )
+    from log_psplines.mcmc import _interp_psd_array
+
+    q50_full_interp = to_physical(
+        _interp_psd_array(q50_full, freqs_full, freqs_coarse)
+    )
+    q50_coarse_phys = to_physical(q50_coarse)
+    true_psd_full = varma.get_true_psd()
+    true_interp = to_physical(
+        _interp_psd_array(true_psd_full, varma.freq, freqs_coarse)
+    )
 
     # Require reasonable relative agreement on the diagonal elements.
     # Use a symmetric relative error to avoid blow-ups near zeros.
-    diag_full = np.diagonal(q50_full_low, axis1=1, axis2=2)
-    diag_coarse = np.diagonal(q50_coarse_low, axis1=1, axis2=2)
+    diag_full = np.diagonal(q50_full_interp, axis1=1, axis2=2)
+    diag_coarse = np.diagonal(q50_coarse_phys, axis1=1, axis2=2)
     denom = np.abs(diag_full) + np.abs(diag_coarse) + 1e-12
     rel_err = 2.0 * np.abs(diag_full - diag_coarse) / denom
-    assert np.nanmedian(rel_err) < 0.25  # coarse ≈ full within 25% median
-    true_diag = np.diagonal(true_low, axis1=1, axis2=2)
+    assert np.nanmedian(rel_err) < 0.35  # coarse ≈ full within 35% median
+    true_diag = np.diagonal(true_interp, axis1=1, axis2=2)
     denom_true = np.abs(true_diag) + np.abs(diag_coarse) + 1e-12
     rel_err_true = 2.0 * np.abs(diag_coarse - true_diag) / denom_true
 
@@ -163,8 +149,8 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     )
     spec_manual = compute_binning_structure(
         fft_full.freq,
-        f_transition=coarse_cfg.f_transition,
-        n_log_bins=coarse_cfg.n_log_bins,
+        n_bins=coarse_cfg.n_bins,
+        n_freqs_per_bin=coarse_cfg.n_freqs_per_bin,
         f_min=coarse_cfg.f_min,
         f_max=coarse_cfg.f_max,
     )
@@ -181,8 +167,8 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
 
     # Allow a slightly looser tolerance to accommodate stochastic variation
     assert (
-        np.nanmedian(rel_err_true) < 0.35
-    ), "Coarse PSD should match true within 35% median"
+        np.nanmedian(rel_err_true) < 0.45
+    ), "Coarse PSD should match true within 45% median"
     # The coarse-grained observed periodogram should still track the manual
     # coarse computation within a modest tolerance.
     assert rel_max < 0.3, f"Max rel error {rel_max:.2e} too large"

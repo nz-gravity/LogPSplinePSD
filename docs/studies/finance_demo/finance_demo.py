@@ -338,8 +338,7 @@ def estimate_spectral_matrix(
 
     coarse_cfg = CoarseGrainConfig(
         enabled=False,
-        f_transition=5e-2,
-        n_log_bins=160,
+        n_bins=160,
         f_min=fmin,
         f_max=fmax,
     )

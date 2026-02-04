@@ -46,6 +46,7 @@ def multivariate_psplines_model(
     all_bases,
     all_penalties,
     freq_weights: jnp.ndarray,
+    freq_bin_counts: jnp.ndarray,
     alpha_phi: float = 1.0,
     beta_phi: float = 1.0,
     alpha_delta: float = 1e-4,
@@ -134,15 +135,13 @@ def multivariate_psplines_model(
             u_resid = u_resid.at[:, row, :].set(u_resid[:, row, :] - contrib)
             idx += count
 
-    residual_power = jnp.sum(jnp.abs(u_resid) ** 2, axis=2)
+    residual_power_sum = jnp.sum(jnp.abs(u_resid) ** 2, axis=2)
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
-    # Scale log-determinant contribution by coarse-grain frequency weights.
-    # In the multivariate coarse-grain path we aggregate the sufficient
-    # statistics by summing the Wishart matrices Y across bins; the quadratic
-    # (trace) term already reflects this aggregation through the magnitude of U.
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
     sum_log_det = -nu_scale * jnp.sum(fw[:, None] * log_delta_sq)
-    log_likelihood = sum_log_det - jnp.sum(residual_power * exp_neg_log_delta)
+    log_likelihood = sum_log_det - jnp.sum(
+        residual_power_sum * exp_neg_log_delta
+    )
     numpyro.factor("likelihood", log_likelihood)
 
     # Store deterministic quantities for diagnostics
@@ -254,6 +253,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             self.all_bases,
             self.all_penalties,
             self.freq_weights,
+            self.freq_bin_counts,
             self.config.alpha_phi,
             self.config.beta_phi,
             self.config.alpha_delta,
@@ -337,6 +337,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
                     all_bases=self.all_bases,
                     all_penalties=self.all_penalties,
                     freq_weights=self.freq_weights,
+                    freq_bin_counts=self.freq_bin_counts,
                     alpha_phi=self.config.alpha_phi,
                     beta_phi=self.config.beta_phi,
                     alpha_delta=self.config.alpha_delta,
@@ -375,6 +376,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             all_bases=self.all_bases,
             all_penalties=self.all_penalties,
             freq_weights=self.freq_weights,
+            freq_bin_counts=self.freq_bin_counts,
             alpha_phi=self.config.alpha_phi,
             beta_phi=self.config.beta_phi,
             alpha_delta=self.config.alpha_delta,

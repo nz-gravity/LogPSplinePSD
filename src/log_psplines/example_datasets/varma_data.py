@@ -57,8 +57,8 @@ class VARMAData:
             self.vma_coeffs,
             self.sigma,
             self.fs,
-            self.channel_stds,
-            self.psd_scaling,
+            channel_stds=None,
+            scaling_factor=1.0,
         )
 
     def resimulate(self, seed=None):
@@ -136,7 +136,7 @@ class VARMAData:
         return periodogram
 
     def get_true_psd(self):
-        """Return the theoretical one-sided PSD matrix."""
+        """Return the theoretical one-sided PSD matrix (original data units)."""
         eps = 1e-12
         true_psd = np.where(np.abs(self.psd) < eps, eps, self.psd)
         return true_psd
@@ -225,8 +225,8 @@ def _calculate_true_varma_psd(
     vma_coeffs: np.ndarray,
     sigma: np.ndarray,
     fs: float,
-    channel_stds: np.ndarray,
-    scaling_factor: float,
+    channel_stds: Optional[np.ndarray],
+    scaling_factor: Optional[float],
 ) -> np.ndarray:
     """
     Calculate the spectral matrix for given frequencies.
@@ -261,11 +261,23 @@ def _calculate_true_varma_psd(
     psd = (2.0 * spec_matrix) / fs
     if freqs_hz.size and np.isclose(freqs_hz[-1], fs / 2.0):
         psd[-1] *= 0.5
-    if channel_stds is not None and scaling_factor not in (None, 0):
-        scale_matrix = np.outer(channel_stds, channel_stds) / float(
-            scaling_factor
-        )
-        psd = psd * scale_matrix[None, :, :]
+    # Optional rescaling helpers:
+    # - If channel_stds are provided, return a channel-standardised PSD where the
+    #   corresponding time series has been divided by channel_stds.
+    # - If scaling_factor is provided, apply it as a global multiplicative PSD
+    #   scaling (useful for matching pipelines that attach an overall scaling
+    #   factor during FFT/Wishart conversion).
+    if channel_stds is not None:
+        channel_stds = np.asarray(channel_stds, dtype=np.float64)
+        if channel_stds.shape != (dim,):
+            raise ValueError(
+                f"channel_stds must have shape ({dim},), got {channel_stds.shape}."
+            )
+        denom = np.outer(channel_stds, channel_stds).astype(np.float64)
+        denom = np.where(denom == 0.0, np.nan, denom)
+        psd = psd / denom[None, :, :]
+    if scaling_factor not in (None, 0):
+        psd = psd * float(scaling_factor)
     return psd
 
 

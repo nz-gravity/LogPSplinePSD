@@ -37,8 +37,11 @@ def compute_binning_structure(
         freqs: Fine frequency grid (monotonically increasing).
         n_bins: Number of coarse bins spanning the retained grid. Bin sizes are
             as equal as possible and must be odd.
-        n_freqs_per_bin: Optional fixed-membership mode: force equal-size bins
-            containing exactly this many (odd) fine-grid frequencies each.
+        n_freqs_per_bin: Optional fixed-membership mode: aim for bins containing
+            exactly this many (odd) fine-grid frequencies each. When the
+            selected frequency count is not divisible by ``n_freqs_per_bin``,
+            the final coarse bin is adjusted to absorb the remainder while
+            preserving odd bin sizes.
         f_min: Optional lower bound on retained frequencies.
         f_max: Optional upper bound on retained frequencies.
     """
@@ -98,14 +101,44 @@ def compute_binning_structure(
         raise ValueError("No retained frequencies for coarse graining.")
 
     if n_freqs_per_bin is not None:
-        # Fixed-size, equal-length bins on the fine grid (paper style).
-        if n_high % n_freqs_per_bin != 0:
-            raise ValueError(
-                f"Selected frequencies ({n_high}) must be divisible by "
-                f"n_freqs_per_bin ({n_freqs_per_bin}) for equal-length bins."
-            )
-        n_bins_high = int(n_high // n_freqs_per_bin)
-        bin_counts = np.full((n_bins_high,), n_freqs_per_bin, dtype=np.int32)
+        # Fixed-membership bins on the fine grid (paper style).
+        # We keep all bins odd-sized so each has a well-defined midpoint
+        # Fourier frequency. When the selection is not divisible by
+        # n_freqs_per_bin, we adjust the final bin to absorb the remainder.
+        n_full = int(n_high // n_freqs_per_bin)
+        remainder = int(n_high - n_full * n_freqs_per_bin)
+
+        if n_full == 0:
+            if n_high % 2 == 0:
+                raise ValueError(
+                    f"Selected frequencies ({n_high}) cannot be partitioned into odd-sized bins "
+                    f"when n_freqs_per_bin ({n_freqs_per_bin}) exceeds the selection. "
+                    "Adjust f_min/f_max or use n_bins mode."
+                )
+            n_bins_high = 1
+            bin_counts = np.array([n_high], dtype=np.int32)
+        else:
+            if remainder == 0:
+                n_bins_high = n_full
+                bin_counts = np.full(
+                    (n_bins_high,), n_freqs_per_bin, dtype=np.int32
+                )
+            elif remainder % 2 == 1:
+                n_bins_high = n_full + 1
+                bin_counts = np.concatenate(
+                    [
+                        np.full((n_full,), n_freqs_per_bin, dtype=np.int32),
+                        np.array([remainder], dtype=np.int32),
+                    ],
+                    axis=0,
+                )
+            else:
+                # Even remainder: fold it into the final full bin (odd+even=odd).
+                n_bins_high = n_full
+                bin_counts = np.full(
+                    (n_bins_high,), n_freqs_per_bin, dtype=np.int32
+                )
+                bin_counts[-1] = int(bin_counts[-1] + remainder)
     else:
         n_bins_high = int(n_bins)
         if n_bins_high > n_high:

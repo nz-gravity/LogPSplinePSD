@@ -9,6 +9,7 @@ def _block_log_likelihood(
     delta_sq_value: float,
     residual_power: np.ndarray,
     freq_weights: np.ndarray,
+    freq_bin_counts: np.ndarray,
     nu: int,
     noise_floor_sq: np.ndarray | None = None,
 ) -> float:
@@ -18,7 +19,10 @@ def _block_log_likelihood(
     else:
         delta_eff_sq = delta_sq + noise_floor_sq
     sum_log_det = -float(nu) * np.sum(freq_weights * np.log(delta_eff_sq))
-    return float(sum_log_det - np.sum(residual_power / delta_eff_sq))
+    resid_mean = residual_power / np.maximum(freq_bin_counts, 1.0)
+    return float(
+        sum_log_det - np.sum(freq_weights * (resid_mean / delta_eff_sq))
+    )
 
 
 def test_noise_floor_plateaus_near_null_residual_block3():
@@ -26,12 +30,15 @@ def test_noise_floor_plateaus_near_null_residual_block3():
     freqs = np.linspace(0.01, 1.0, n_freq, dtype=np.float32)
     residual_power = np.full((n_freq,), 1e-12, dtype=np.float32)
     freq_weights = np.ones((n_freq,), dtype=np.float32)
+    freq_bin_counts = np.ones((n_freq,), dtype=np.float32)
     nu = 2
     delta_sq_values = np.array([1e-2, 1e-4, 1e-6, 1e-8, 1e-10], dtype=float)
 
     ll_no_floor = np.array(
         [
-            _block_log_likelihood(delta, residual_power, freq_weights, nu)
+            _block_log_likelihood(
+                delta, residual_power, freq_weights, freq_bin_counts, nu
+            )
             for delta in delta_sq_values
         ]
     )
@@ -57,6 +64,7 @@ def test_noise_floor_plateaus_near_null_residual_block3():
                 delta,
                 residual_power,
                 freq_weights,
+                freq_bin_counts,
                 nu,
                 noise_floor_sq=noise_floor_sq,
             )

@@ -9,38 +9,46 @@ realizes the theoretical approximations stated in the repository.
 Frequency bins
 --------------
 
-The fine-frequency grid \(\{f_1,\dots,f_{N_l}\}\) is split into low-frequency
-points (kept untouched) and one or more high-frequency logarithmic bins. Each bin
-contains a contiguous subset \(J_h\) with midpoint \(\bar f_h\). The binning logic
+The fine-frequency grid \(\{f_1,\dots,f_{N_l}\}\) can be coarse-grained by dividing
+it into subsequent and disjoint subsets \(J_h\). Each \(J_h\) contains \(N_h\)
+Fourier frequencies and \(\bar f_h\) denotes the *midpoint Fourier frequency* of
+interval \(J_h\) (the middle member on the discrete Fourier grid).
+
+The binning logic
 is implemented by :func:`log_psplines.coarse_grain.preprocess.compute_binning_structure`,
 which returns :class:`log_psplines.coarse_grain.preprocess.CoarseGrainSpec`.
+Bins may be constructed with logarithmic or linear spacing via
+:class:`log_psplines.coarse_grain.config.CoarseGrainConfig`. For an exact
+"paper style" discretization with equal-length bins and midpoint frequencies,
+set ``binning="linear"``, ``representative="middle"`` and choose an odd
+``n_freqs_per_bin`` that evenly divides the retained frequency count.
 
 The spec stores
 
 - the masks that select the retained frequencies,
-- the low/high boundaries,
-- indices to reorder high-frequency points into contiguous bins,
-- the count of members per bin, and
-- bin widths used for frequency-weight scaling.
+- the optional low/high split (when ``keep_low=True``),
+- indices to group points into contiguous bins,
+- the member count \(N_h\) per bin, and
+- bin widths (primarily for univariate weight construction).
 
 Aggregating FFT data
 --------------------
 
 :func:`log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft` takes the
 :class:`log_psplines.datatypes.multivar.MultivarFFT` and :class:`CoarseGrainSpec`
-and builds the coarse representation used during sampling. Low frequencies are
-copied unchanged. High frequencies are grouped by bin, the individual Wishart
-components \(\Y(f)=\U(f)\U(f)^H\) are summed within each \(J_h\) to form
+and builds the coarse representation used during sampling. The frequencies are
+grouped by bin (optionally retaining a low-frequency region unchanged when
+``keep_low=True``). Within each \(J_h\), the individual Wishart components
+\(\Y(f)=\U(f)\U(f)^H\) are summed to form
 \(\bar \Y_h = \sum_{f\in J_h}\Y(f)\), and the sum is re-diagonalized to obtain a
 single \(\U_h\) per bin. The function :func:`log_psplines.spectrum_utils.sum_wishart_outer_products`
 implements the matrix sum, and :func:`numpy.linalg.eigh` recovers the eigenvectors
 and eigenvalues that encode \(\bar \Y_h\).
 
 The returned :class:`log_psplines.datatypes.multivar.MultivarFFT` now has
-`len(spec.f_coarse)` frequencies; the first entries correspond to the unmodified
-low frequencies while the remaining entries represent the aggregated high bins.
-`coarse_grain_multivar_fft` also returns a `weights` array where low frequencies
-contribute `1` and each coarse bin contributes its member count \(N_h\).
+`len(spec.f_coarse)` frequencies. `coarse_grain_multivar_fft` also returns a
+`weights` array giving the member count \(N_h\) for each coarse bin (and `1` for
+any frequencies retained without aggregation).
 
 Likelihood scaling
 ------------------

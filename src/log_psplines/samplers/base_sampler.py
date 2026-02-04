@@ -54,6 +54,8 @@ class SamplerConfig:
     skip_plot_diagnostics: bool = False  # Skip plotting heavy diagnostics
     diagnostics_summary_mode: Literal["off", "light", "full"] = "light"
     diagnostics_summary_position: Literal["start", "end"] = "end"
+    # Whether coarse-grain weights were renormalized (diagnostic lever).
+    normalize_freq_weights: bool = False
 
     def __post_init__(self):
         if self.outdir is not None:
@@ -150,6 +152,12 @@ class BaseSampler(ABC):
             except Exception as exc:  # pragma: no cover - best-effort hook
                 logger.warning(f"Could not attach VI diagnostics: {exc}")
 
+        # Sampler-specific postprocessing hook (e.g. attach extra diagnostic groups).
+        try:
+            self._postprocess_idata(idata)
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning(f"Could not postprocess InferenceData: {exc}")
+
         # Summary statistics
         rhat_vals = None
 
@@ -216,6 +224,10 @@ class BaseSampler(ABC):
             self._save_results(idata)
 
         return idata
+
+    def _postprocess_idata(self, idata: az.InferenceData) -> None:
+        """Optional hook to mutate/augment idata before it is saved/returned."""
+        return None
 
     def _create_inference_data(
         self,

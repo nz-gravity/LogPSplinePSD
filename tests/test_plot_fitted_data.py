@@ -143,6 +143,7 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
         freqs,
         f_transition=f_transition,
         n_log_bins=n_log_bins,
+        keep_low=True,
         f_min=None,
         f_max=None,
     )
@@ -229,6 +230,7 @@ def test_plot_multivariate_fitted_data_blocks(
         fft_full.freq,
         f_transition=fft_full.freq[len(fft_full.freq) // 4],
         n_log_bins=10 if test_mode != "fast" else 6,
+        keep_low=True,
         f_min=None,
         f_max=None,
     )

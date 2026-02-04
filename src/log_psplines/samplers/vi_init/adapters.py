@@ -402,6 +402,7 @@ def compute_vi_artifacts_multivar(
             sampler.all_bases,
             sampler.all_penalties,
             sampler.freq_weights,
+            sampler.freq_bin_counts,
             sampler.config.alpha_phi,
             sampler.config.beta_phi,
             sampler.config.alpha_delta,
@@ -658,6 +659,7 @@ def prepare_block_vi(
                 sampler.config.beta_delta,
                 sampler.nu,
                 sampler.freq_weights,
+                sampler.freq_bin_counts,
                 False,
                 jnp.zeros((sampler.n_freq,), dtype=sampler.freq.dtype),
             )

@@ -368,6 +368,10 @@ def _expected_coarse_freq_univar(
         pdgrm.freqs,
         f_transition=cfg.f_transition,
         n_log_bins=cfg.n_log_bins,
+        binning=cfg.binning,
+        representative=cfg.representative,
+        keep_low=cfg.keep_low,
+        n_freqs_per_bin=cfg.n_freqs_per_bin,
         f_min=cfg.f_min,
         f_max=cfg.f_max,
     )
@@ -449,6 +453,10 @@ def _expected_coarse_freq_multivar(
         fft.freq,
         f_transition=cfg.f_transition,
         n_log_bins=cfg.n_log_bins,
+        binning=cfg.binning,
+        representative=cfg.representative,
+        keep_low=cfg.keep_low,
+        n_freqs_per_bin=cfg.n_freqs_per_bin,
         f_min=cfg.f_min,
         f_max=cfg.f_max,
     )

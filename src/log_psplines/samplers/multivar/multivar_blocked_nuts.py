@@ -70,21 +70,10 @@ def compute_noise_floor_sq(
     The constant value is interpreted as a variance-space floor (already
     squared).
     """
+    # Backwards-compatible shim. Prefer compute_noise_floor_eps2 for new code.
+    # Keep this signature because other code may still import it.
     n_freq = freqs.shape[0]
-    if mode == "constant":
-        floor_sq = jnp.full((n_freq,), float(constant), dtype=freqs.dtype)
-    elif mode == "theory_scaled":
-        if theory_psd is None:
-            raise ValueError(
-                "theory_psd is required when noise_floor_mode='theory_scaled'."
-            )
-        theory_psd = jnp.asarray(theory_psd, dtype=freqs.dtype)
-        if theory_psd.shape[0] != n_freq:
-            raise ValueError(
-                f"theory_psd for block {block_j} has shape {theory_psd.shape}, expected ({n_freq},)."
-            )
-        floor_sq = jnp.asarray(scale, dtype=freqs.dtype) * theory_psd
-    elif mode == "array":
+    if mode == "array":
         if array is None:
             raise ValueError(
                 "noise_floor_array is required when noise_floor_mode='array'."
@@ -94,11 +83,77 @@ def compute_noise_floor_sq(
             raise ValueError(
                 f"noise_floor_array for block {block_j} has shape {floor_sq.shape}, expected ({n_freq},)."
             )
-    else:
+        return jnp.maximum(floor_sq, jnp.asarray(1e-30, dtype=freqs.dtype))
+
+    eps2 = compute_noise_floor_eps2(
+        mode=mode,
+        theory_psd=theory_psd,
+        scale=scale,
+        constant=constant,
+        tau=1e-12,
+        dtype=freqs.dtype,
+    )
+    return jnp.maximum(eps2, jnp.asarray(1e-30, dtype=freqs.dtype))
+
+
+def smooth_max(a: jnp.ndarray, b: jnp.ndarray, tau: float) -> jnp.ndarray:
+    """Smooth approximation to max(a, b) using logaddexp.
+
+    For tau -> 0, this approaches max(a, b). tau must be > 0.
+    """
+    tau_val = float(tau)
+    if tau_val <= 0.0:
+        raise ValueError("tau must be positive for smooth_max.")
+    return tau_val * jnp.logaddexp(a / tau_val, b / tau_val)
+
+
+def compute_noise_floor_eps2(
+    *,
+    mode: str,
+    theory_psd: Optional[jnp.ndarray],
+    scale: float,
+    constant: float,
+    tau: float,
+    dtype: jnp.dtype,
+) -> jnp.ndarray:
+    """Compute innovation variance floor eps2 (variance-space, already squared).
+
+    Modes
+    -----
+    - off:            eps2 = 0
+    - constant:       eps2 = constant
+    - theory_scaled:  eps2 = scale * theory_psd(f)
+    - hybrid:         eps2 = smooth_max(constant, scale*theory_psd(f), tau)
+    """
+    mode_norm = str(mode).lower().strip()
+
+    if mode_norm == "off":
+        return jnp.asarray(0.0, dtype=dtype)
+
+    constant_val = jnp.asarray(float(constant), dtype=dtype)
+    scale_val = jnp.asarray(float(scale), dtype=dtype)
+
+    if mode_norm == "constant":
+        return jnp.maximum(constant_val, jnp.asarray(1e-30, dtype=dtype))
+
+    if theory_psd is None:
         raise ValueError(
-            f"Unknown noise_floor_mode='{mode}'. Expected 'constant', 'theory_scaled', or 'array'."
+            "theory_psd is required when noise_floor_mode is 'theory_scaled' or 'hybrid'."
         )
-    return jnp.maximum(floor_sq, jnp.asarray(1e-30, dtype=freqs.dtype))
+
+    theory_psd_arr = jnp.asarray(theory_psd, dtype=dtype)
+    scaled = scale_val * theory_psd_arr
+
+    if mode_norm == "theory_scaled":
+        return jnp.maximum(scaled, jnp.asarray(1e-30, dtype=dtype))
+
+    if mode_norm == "hybrid":
+        eps2 = smooth_max(constant_val, scaled, tau=float(tau))
+        return jnp.maximum(eps2, jnp.asarray(1e-30, dtype=dtype))
+
+    raise ValueError(
+        f"Unknown noise_floor_mode='{mode}'. Expected one of 'off', 'constant', 'theory_scaled', or 'hybrid'."
+    )
 
 
 def _blocked_channel_model(
@@ -119,8 +174,9 @@ def _blocked_channel_model(
     beta_delta: float,
     nu: int,
     freq_weights: jnp.ndarray,
+    freq_bin_counts: jnp.ndarray,
     apply_noise_floor: bool,
-    noise_floor_sq: jnp.ndarray,
+    noise_floor_eps2: jnp.ndarray,
 ) -> None:
     """NumPyro model for a single Cholesky block (row of ``T``).
 
@@ -152,7 +208,8 @@ def _blocked_channel_model(
       ``y`` now replaced by the eigenvector-weighted replicates ``u``. The
       contribution to the log-likelihood is
       ``−ν Σ_k log δ_j(f_k)^2 − Σ_k ||u_j(f_k)||^2 / δ_j(f_k)^2`` up to constants.
-    - When enabled, an innovation noise floor is added to ``δ_j(f)^2`` inside
+    - When enabled, an innovation noise floor ``eps2(f)`` is added to
+      ``δ_j(f)^2`` inside
       the likelihood terms to avoid variance collapse in near-null bands.
     - Deterministic nodes record the evaluated spline fields so downstream code
       can reconstruct the PSD matrix without re-evaluating the splines.
@@ -229,10 +286,12 @@ def _blocked_channel_model(
     if apply_noise_floor:
         # Innovation noise floor prevents variance collapse in near-null bands
         # and stabilizes the likelihood geometry.
-        delta_eff_sq = delta_sq + noise_floor_sq
+        delta_eff_sq = delta_sq + noise_floor_eps2
     else:
         delta_eff_sq = delta_sq
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
+    bc = jnp.asarray(freq_bin_counts, dtype=log_delta_sq.dtype)
+    bc = jnp.maximum(bc, jnp.asarray(1.0, dtype=bc.dtype))
     sum_log_det = -float(nu) * jnp.sum(fw * jnp.log(delta_eff_sq))
 
     if n_theta_block > 0:
@@ -249,9 +308,16 @@ def _blocked_channel_model(
         u_im_resid = u_im_channel
 
     residual_power = u_re_resid**2 + u_im_resid**2
-    # Sum across replicates then frequencies
-    residual_power = jnp.sum(residual_power, axis=1)
-    log_likelihood = sum_log_det - jnp.sum(residual_power / delta_eff_sq)
+    # Sum across Wishart replicates; for coarse bins, this reflects the sum of
+    # sufficient statistics across all fine-grid frequencies in that bin.
+    residual_power_sum = jnp.sum(residual_power, axis=1)
+    # Convert to a per-bin mean using the raw bin counts. This keeps the
+    # innovation variance scale invariant to any global rescaling of freq_weights
+    # (e.g., tempering weights so sum(weights)=n_bins).
+    residual_power_mean = residual_power_sum / bc
+    log_likelihood = sum_log_det - jnp.sum(
+        fw * (residual_power_mean / delta_eff_sq)
+    )
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
 
@@ -298,11 +364,13 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     beta_phi_theta: Optional[float] = None
 
     # Innovation noise floor controls (variance-space floor added in likelihood).
+    # NOTE: For historical reasons we keep ``use_noise_floor``; setting
+    # ``noise_floor_mode='off'`` is also supported.
     use_noise_floor: bool = False
-    noise_floor_mode: str = "constant"
+    noise_floor_mode: str = "off"  # off|constant|theory_scaled|hybrid
     noise_floor_constant: float = 0.0
     noise_floor_scale: float = 1e-4
-    noise_floor_array: Optional[jnp.ndarray] = None
+    noise_floor_tau: float = 1e-12
     theory_psd: Optional[jnp.ndarray] = None
     noise_floor_blocks: Sequence[int] | str = (3,)
 
@@ -359,6 +427,96 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     def sampler_type(self) -> str:
         return "multivariate_blocked_nuts"
 
+    def _postprocess_idata(self, idata: az.InferenceData) -> None:
+        """Attach per-frequency noise floor arrays + derived scalings to idata.
+
+        This avoids recomputing eps2(f) after inference and enables overlay plots.
+        """
+        if not hasattr(self, "_noise_floor_eps2_floor_std"):
+            return
+
+        try:
+            from xarray import DataArray, Dataset
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError(
+                "xarray is required to attach noise floor group."
+            ) from exc
+
+        eps2_floor_std = np.asarray(
+            self._noise_floor_eps2_floor_std, dtype=np.float64
+        )
+        if eps2_floor_std.shape != (self.n_freq, self.n_channels):
+            raise ValueError(
+                f"eps2_floor_std has shape {eps2_floor_std.shape}, expected ({self.n_freq}, {self.n_channels})."
+            )
+
+        # Rescale from standardized units -> physical units using the same channel scaling
+        # used elsewhere in the PSD rescaling pipeline (diag element factor).
+        channel_stds = getattr(self.config, "channel_stds", None)
+        sf = float(getattr(self.data, "scaling_factor", 1.0) or 1.0)
+        if channel_stds is None:
+            factor_ch = np.ones((self.n_channels,), dtype=np.float64)
+        else:
+            channel_stds = np.asarray(channel_stds, dtype=np.float64)
+            if channel_stds.shape != (self.n_channels,):
+                raise ValueError(
+                    f"channel_stds has shape {channel_stds.shape}, expected ({self.n_channels},)."
+                )
+            if sf == 0.0:
+                factor_ch = channel_stds**2
+            else:
+                factor_ch = (channel_stds**2) / sf
+
+        eps2_floor_phys = eps2_floor_std * factor_ch[None, :]
+
+        theory_psd_std = np.full(
+            (self.n_freq, self.n_channels), np.nan, dtype=np.float64
+        )
+        theory = getattr(self.config, "theory_psd", None)
+        blocks = getattr(self.config, "noise_floor_blocks", ())
+        if theory is not None:
+            theory_vec = np.asarray(theory, dtype=np.float64)
+            if theory_vec.shape == (self.n_freq,):
+                if isinstance(blocks, str) and blocks.lower() == "all":
+                    theory_psd_std[:, :] = theory_vec[:, None]
+                else:
+                    for ch in set(int(b) for b in blocks):
+                        if 0 <= ch < self.n_channels:
+                            theory_psd_std[:, ch] = theory_vec
+
+        coords = {
+            "freq": np.asarray(self.freq),
+            "channels": np.arange(self.n_channels, dtype=int),
+        }
+        ds = Dataset(
+            data_vars={
+                "eps2_floor_std": DataArray(
+                    eps2_floor_std,
+                    dims=["freq", "channels"],
+                    coords=coords,
+                ),
+                "eps2_floor_phys": DataArray(
+                    eps2_floor_phys,
+                    dims=["freq", "channels"],
+                    coords=coords,
+                ),
+                "theory_psd_std": DataArray(
+                    theory_psd_std,
+                    dims=["freq", "channels"],
+                    coords=coords,
+                ),
+                "psd_rescale_factor": DataArray(
+                    factor_ch,
+                    dims=["channels"],
+                    coords={"channels": coords["channels"]},
+                ),
+                "psd_rescale_sf": DataArray(sf),
+            },
+            coords=coords,
+        )
+
+        idata.add_groups(noise_floor=ds)
+
     def _get_channel_setting(
         self,
         name: str,
@@ -394,20 +552,45 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     def _get_noise_floor_args(
         self, channel_index: int
     ) -> tuple[bool, jnp.ndarray]:
+        mode = str(self.config.noise_floor_mode).lower().strip()
         apply_noise_floor = self._should_apply_noise_floor(channel_index)
-        if apply_noise_floor:
-            noise_floor_sq = compute_noise_floor_sq(
-                self.freq,
-                channel_index,
-                self.config.noise_floor_mode,
-                self.config.noise_floor_constant,
-                self.config.noise_floor_scale,
-                self.config.noise_floor_array,
-                self.config.theory_psd,
+        if apply_noise_floor and mode != "off":
+            if self.config.theory_psd is not None:
+                theory = jnp.asarray(
+                    self.config.theory_psd, dtype=self.freq.dtype
+                )
+                if theory.ndim != 0 and theory.shape[0] != self.n_freq:
+                    raise ValueError(
+                        f"theory_psd has shape {theory.shape}, expected ({self.n_freq},) for channel {channel_index}."
+                    )
+            else:
+                theory = None
+
+            eps2 = compute_noise_floor_eps2(
+                mode=mode,
+                theory_psd=theory,
+                scale=self.config.noise_floor_scale,
+                constant=self.config.noise_floor_constant,
+                tau=self.config.noise_floor_tau,
+                dtype=self.freq.dtype,
             )
-        else:
-            noise_floor_sq = jnp.zeros((self.n_freq,), dtype=self.freq.dtype)
-        return apply_noise_floor, noise_floor_sq
+
+            if self.config.verbose and channel_index == 2:
+                eps2_np = np.asarray(jax.device_get(eps2))
+                if eps2_np.ndim == 0:
+                    vmin = vmed = vmax = float(eps2_np)
+                else:
+                    vmin = float(np.min(eps2_np))
+                    vmed = float(np.median(eps2_np))
+                    vmax = float(np.max(eps2_np))
+                logger.info(
+                    f"Noise floor eps2 stats for channel {channel_index}: "
+                    f"min={vmin:.3e}, median={vmed:.3e}, max={vmax:.3e} (mode={mode})."
+                )
+            return True, eps2
+
+        eps2 = jnp.zeros((self.n_freq,), dtype=self.freq.dtype)
+        return False, eps2
 
     def sample(
         self,
@@ -441,6 +624,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         theta_re_total = None
         theta_im_total = None
         log_likelihood_total = None
+        eps2_floor_std = np.zeros(
+            (self.n_freq, self.n_channels), dtype=np.float32
+        )
 
         total_runtime = 0.0
 
@@ -490,8 +676,12 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             u_re_prev = self.u_re[:, :channel_index, :]
             u_im_prev = self.u_im[:, :channel_index, :]
 
-            apply_noise_floor, noise_floor_sq = self._get_noise_floor_args(
+            apply_noise_floor, noise_floor_eps2 = self._get_noise_floor_args(
                 channel_index
+            )
+            # Persist eps2(f) so it can be saved into InferenceData for diagnostics/plotting.
+            eps2_floor_std[:, channel_index] = np.asarray(
+                jax.device_get(noise_floor_eps2), dtype=np.float32
             )
 
             target_accept_prob = self._get_channel_setting(
@@ -545,8 +735,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.config.beta_delta,
                 self.nu,
                 self.freq_weights,
+                self.freq_bin_counts,
                 apply_noise_floor,
-                noise_floor_sq,
+                noise_floor_eps2,
                 extra_fields=(
                     (
                         "potential_energy",
@@ -653,6 +844,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 "log_likelihood": np.asarray(log_likelihood_total),
             }
         )
+
+        # Store noise floor arrays for the BaseSampler postprocess hook.
+        self._noise_floor_eps2_floor_std = eps2_floor_std
 
         return self.to_arviz(combined_samples, combined_stats)
 

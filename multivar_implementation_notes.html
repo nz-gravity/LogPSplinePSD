@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Coarse-Graining &#8212; LogPSplinePSD</title>
+    <title>Multivariate implementation notes &#8212; LogPSplinePSD</title>
   
   
   
@@ -59,11 +59,11 @@
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
     <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'coarse_grain';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'multivar_implementation_notes';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Runtime" href="studies/runtime/runtime.html" />
-    <link rel="prev" title="Multivariate implementation notes" href="multivar_implementation_notes.html" />
+    <link rel="next" title="Coarse-Graining" href="coarse_grain.html" />
+    <link rel="prev" title="Prior on phi: TeX vs implementation" href="phi_prior_approx.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -177,8 +177,8 @@
 <li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate blocked NUTS: math ↔ code</a></li>
 <li class="toctree-l1"><a class="reference internal" href="phi_prior_approx.html">Prior on phi: TeX vs implementation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Coarse-Graining</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Multivariate implementation notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
 <li class="toctree-l1"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
 <li class="toctree-l1"><a class="reference internal" href="studies/lvk/lvk_demo.html">LVK Demo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
@@ -253,7 +253,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fcoarse_grain.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivar_implementation_notes.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -283,7 +283,7 @@
       
       
       
-      <li><a href="_sources/coarse_grain.rst" target="_blank"
+      <li><a href="_sources/multivar_implementation_notes.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -367,7 +367,7 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Coarse-Graining</h1>
+    <h1>Multivariate implementation notes</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -377,9 +377,11 @@ document.write(`
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-bins">Frequency bins</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#aggregating-fft-data">Aggregating FFT data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#likelihood-scaling">Likelihood scaling</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-weights-vs-bin-counts">Coarse graining: weights vs bin counts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#noise-floor-option-blocked-sampler">Noise-floor option (blocked sampler)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
 </ul>
             </nav>
         </div>
@@ -391,69 +393,94 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="coarse-graining">
-<h1>Coarse-Graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h1>
-<p>The multivariate PSD pipeline optionally groups nearby Fourier frequencies into
-coarse bins so that each bin contributes a single aggregated Wishart statistic.
-This documents the design of that discretization and shows how the implementation
-realizes the theoretical approximations stated in the repository.</p>
-<section id="frequency-bins">
-<h2>Frequency bins<a class="headerlink" href="#frequency-bins" title="Link to this heading">#</a></h2>
-<p>The retained fine-frequency grid ({f_1,dots,f_{N_l}}subset[f_{min},f_{max}])
-is coarse-grained by dividing it into consecutive, disjoint subsets (J_h). Each
-(J_h) contains an <strong>odd</strong> number (N_h) of Fourier frequencies, and (bar f_h)
-denotes the <em>midpoint Fourier frequency</em> of (J_h) (the middle member on the
-discrete Fourier grid, not an average).</p>
-<p>The binning logic
-is implemented by <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.preprocess.compute_binning_structure()</span></code>,
-which returns <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.preprocess.CoarseGrainSpec</span></code>.
-Only <strong>linear, full-band</strong> binning is supported. Exactly one construction mode
-must be chosen:</p>
+  <section id="multivariate-implementation-notes">
+<h1>Multivariate implementation notes<a class="headerlink" href="#multivariate-implementation-notes" title="Link to this heading">#</a></h1>
+<p>This page collects implementation-level notes that are easy to forget when
+reading the multivariate derivation in <code class="docutils literal notranslate"><span class="pre">docs/maths.tex</span></code>.</p>
+<section id="fft-psd-normalisation">
+<h2>FFT / PSD normalisation<a class="headerlink" href="#fft-psd-normalisation" title="Link to this heading">#</a></h2>
+<p>The derivation in <code class="docutils literal notranslate"><span class="pre">docs/maths.tex</span></code> defines a DFT with an explicit
+<span class="math notranslate nohighlight">\(\Delta_t\)</span> factor and writes the Whittle likelihood with a <span class="math notranslate nohighlight">\(1/T\)</span>
+scaling.</p>
+<p>The implementation uses a one-sided Welch-style normalisation inside
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT.compute_wishart()</span></code>.</p>
+<p>Practical consequences:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">n_freqs_per_bin</span></code>: fixed membership with equal-size (odd) bins that divide
-the retained frequency count exactly.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">n_bins</span></code>: fixed bin count with sizes as equal as possible, all odd.</p></li>
-</ul>
-<p>The spec stores</p>
-<ul class="simple">
-<li><p>the masks that select the retained frequencies,</p></li>
-<li><p>indices to group points into contiguous bins,</p></li>
-<li><p>the member count (N_h) per bin, and</p></li>
-<li><p>bin widths (diagnostics only).</p></li>
+<li><p>the DC bin is dropped (numerical stability on log axes and to avoid leakage
+dominating the first bin);</p></li>
+<li><p>the rFFT produces the positive-frequency grid; the normalisation ensures that
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.wishart_matrix_to_psd()</span></code> produces spectra in
+one-sided “per Hz” units.</p></li>
 </ul>
 </section>
-<section id="aggregating-fft-data">
-<h2>Aggregating FFT data<a class="headerlink" href="#aggregating-fft-data" title="Link to this heading">#</a></h2>
-<p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft()</span></code> takes the
-<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code>
-and builds the coarse representation used during sampling. The frequencies are
-grouped by bin across the <strong>entire</strong> retained band. Within each (J_h), the
-individual Wishart components (Y(f)=U(f)U(f)^H) are <strong>summed</strong> to form
-(bar Y_h = sum_{fin J_h}Y(f)), and the sum is re-diagonalized to obtain a
-single (U_h) per bin. The function <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.sum_wishart_outer_products()</span></code>
-implements the matrix sum, and <code class="xref py py-func docutils literal notranslate"><span class="pre">numpy.linalg.eigh()</span></code> recovers the eigenvectors
-and eigenvalues that encode (bar Y_h).</p>
-<p>The returned <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code> now has
-<cite>len(spec.f_coarse)</cite> frequencies. <cite>coarse_grain_multivar_fft</cite> also returns a
-<cite>weights</cite> array giving the member count (N_h) for each coarse bin.</p>
+<section id="coarse-graining-weights-vs-bin-counts">
+<h2>Coarse graining: weights vs bin counts<a class="headerlink" href="#coarse-graining-weights-vs-bin-counts" title="Link to this heading">#</a></h2>
+<p>When coarse graining multivariate data, two frequency-weight-like objects exist:</p>
+<ul class="simple">
+<li><p><cite>freq_bin_counts</cite>: the raw member count <span class="math notranslate nohighlight">\(N_h\)</span> per coarse bin, stored on
+<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code>.</p></li>
+<li><p><cite>freq_weights</cite>: the weights actually used to scale the log-determinant term in
+the NumPyro likelihood.</p></li>
+</ul>
+<p>By default, <cite>run_mcmc</cite> passes <cite>freq_weights = N_h</cite>. This matches the coarse-bin
+approximation where each bin has effective DOF <span class="math notranslate nohighlight">\(\nu N_h\)</span>.</p>
+<p>If users choose to normalise or temper <cite>freq_weights</cite> for sampler geometry, the
+raw <cite>freq_bin_counts</cite> remain available so PSD conversion does not drift.</p>
+<p>See:</p>
+<ul class="simple">
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code></p></li>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft()</span></code></p></li>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.compute_effective_nu()</span></code></p></li>
+</ul>
 </section>
-<section id="likelihood-scaling">
-<h2>Likelihood scaling<a class="headerlink" href="#likelihood-scaling" title="Link to this heading">#</a></h2>
-<p>The weights scale <strong>only</strong> the log-determinant term so that each bin behaves like
-a Wishart observation with (N_b N_h) degrees of freedom:</p>
+<section id="blocked-vs-unified-multivariate-nuts">
+<h2>Blocked vs unified multivariate NUTS<a class="headerlink" href="#blocked-vs-unified-multivariate-nuts" title="Link to this heading">#</a></h2>
+<p>Two multivariate NUTS implementations exist:</p>
+<ul class="simple">
+<li><p>Blocked sampler: <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler</span></code></p>
+<ul>
+<li><p>fits each Cholesky row as an independent NUTS problem,</p></li>
+<li><p>samples distinct spline-weight blocks for each off-diagonal
+<span class="math notranslate nohighlight">\(\theta_{jl}(f)\)</span> within a row.</p></li>
+</ul>
+</li>
+<li><p>Unified sampler: <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_nuts.MultivarNUTSSampler</span></code></p>
+<ul>
+<li><p>fits all parameters jointly,</p></li>
+<li><p>currently uses a <em>shared</em> spline field for all off-diagonal real parts and a
+shared field for all imaginary parts (tiled across <span class="math notranslate nohighlight">\(\theta\)</span> indices).</p></li>
+</ul>
+</li>
+</ul>
+<p>If the intended model is “one spline per <span class="math notranslate nohighlight">\(\theta_{jl}\)</span>”, the blocked
+sampler aligns more closely with that intent.</p>
+</section>
+<section id="noise-floor-option-blocked-sampler">
+<h2>Noise-floor option (blocked sampler)<a class="headerlink" href="#noise-floor-option-blocked-sampler" title="Link to this heading">#</a></h2>
+<p>The blocked sampler can add an “innovation noise floor” in variance space,
+replacing</p>
 <div class="math notranslate nohighlight">
-\[\log \mathcal{L} \propto - \sum_{h=1}^{N_c} N_b N_h \log |\S(\bar f_h)|
-- \sum_\nu \u^{(h)*}_\nu \S(\bar f_h)^{-1} \u^{(h)}_\nu.\]</div>
-<p>When coarse graining is enabled, <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code>
-accepts the <cite>weights</cite> vector (usually via <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.config.CoarseGrainConfig</span></code>)
-and stores it as <cite>freq_weights</cite>. The NumPyro model
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_nuts.multivariate_psplines_model()</span></code>
-multiplies <cite>log_delta_sq</cite> by <cite>freq_weights</cite>, ensuring the total log-det term
-matches the aggregated (N_b N_h) DOF. The trace term uses the <strong>summed</strong>
-statistic (bar Y_h) directly, so no additional (N_h) factors appear.
-Coarse graining therefore increases information linearly in (N_h).</p>
-<p>No log-binning, hybrid schemes, or “preserve low frequencies” modes are
-implemented.</p>
+\[\delta_j(f)^2 \mapsto \delta_j(f)^2 + \mathrm{floor}(f)\]</div>
+<p>inside the likelihood. This can stabilise inference in near-null bands where
+variances would otherwise collapse.</p>
+<p>See:</p>
+<ul class="simple">
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSConfig</span></code></p></li>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.compute_noise_floor_sq()</span></code></p></li>
+</ul>
+</section>
+<section id="diagnostics-coarse-bin-likelihood-equivalence">
+<h2>Diagnostics: coarse-bin likelihood equivalence<a class="headerlink" href="#diagnostics-coarse-bin-likelihood-equivalence" title="Link to this heading">#</a></h2>
+<p>The helper <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.diagnostics.coarse_grain_checks.coarse_bin_likelihood_equivalence_check()</span></code>
+tests the key coarse-graining invariant:</p>
+<ul class="simple">
+<li><p>sum of fine-grid log-likelihood contributions within a bin should match the
+coarse-bin log-likelihood (up to bin-constant offsets),</p></li>
+<li><p>there should be no “extra” factor of <span class="math notranslate nohighlight">\(N_h\)</span> introduced in the quadratic
+term.</p></li>
+</ul>
+<p>This is useful when changing coarse-grain logic or the frequency weighting
+convention.</p>
 </section>
 </section>
 
@@ -488,20 +515,20 @@ implemented.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="multivar_implementation_notes.html"
+       href="phi_prior_approx.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Multivariate implementation notes</p>
+        <p class="prev-next-title">Prior on phi: TeX vs implementation</p>
       </div>
     </a>
     <a class="right-next"
-       href="studies/runtime/runtime.html"
+       href="coarse_grain.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Runtime</p>
+        <p class="prev-next-title">Coarse-Graining</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -521,9 +548,11 @@ implemented.</p>
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-bins">Frequency bins</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#aggregating-fft-data">Aggregating FFT data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#likelihood-scaling">Likelihood scaling</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-weights-vs-bin-counts">Coarse graining: weights vs bin counts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#noise-floor-option-blocked-sampler">Noise-floor option (blocked sampler)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
 </ul>
   </nav></div>
 

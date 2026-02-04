@@ -1,0 +1,696 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Multivariate blocked NUTS: math ↔ code &#8212; LogPSplinePSD</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="_static/togglebutton.js?v=1ae7504c"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'multivar_blocked_nuts';</script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Prior on phi: TeX vs implementation" href="phi_prior_approx.html" />
+    <link rel="prev" title="API" href="api.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="README.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="_static/logo.png" class="logo__image only-light" alt="LogPSplinePSD - Home"/>
+    <script>document.write(`<img src="_static/logo.png" class="logo__image only-dark" alt="LogPSplinePSD - Home"/>`);</script>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Multivariate blocked NUTS: math ↔ code</a></li>
+<li class="toctree-l1"><a class="reference internal" href="phi_prior_approx.html">Prior on phi: TeX vs implementation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
+<li class="toctree-l1"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
+<li class="toctree-l1"><a class="reference internal" href="studies/lvk/lvk_demo.html">LVK Demo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/nz-gravity/LogPsplinePSD" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivar_blocked_nuts.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="_sources/multivar_blocked_nuts.rst" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.rst</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Multivariate blocked NUTS: math ↔ code</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-wishart-statistics">Data → Wishart statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cholesky-parameterisation">Cholesky parameterisation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-compatibility">Coarse-graining compatibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#symbol-code-mapping">Symbol ↔ code mapping</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction">PSD reconstruction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes-on-scaling-conventions">Notes on scaling conventions</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="multivariate-blocked-nuts-math-code">
+<h1>Multivariate blocked NUTS: math ↔ code<a class="headerlink" href="#multivariate-blocked-nuts-math-code" title="Link to this heading">#</a></h1>
+<p>This page documents the <em>implemented</em> multivariate likelihood and
+parameterisation used by the blocked sampler
+<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler</span></code>.</p>
+<dl class="simple">
+<dt>It is intended as a durable bridge between the draft derivation in our paper</dt><dd><p>and the code under <code class="docutils literal notranslate"><span class="pre">src/log_psplines/</span></code>.</p>
+</dd>
+</dl>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>The multivariate pipeline is:</p>
+<ol class="arabic simple">
+<li><p>Build frequency-domain sufficient statistics from a multichannel time series
+using block-averaged FFTs.</p></li>
+<li><p>(Optional) coarse-grain the frequency axis by summing Wishart statistics
+across bins.</p></li>
+<li><p>Fit a Cholesky-parameterised spectral density matrix with P-splines,
+sampling each Cholesky row as an <em>independent</em> NumPyro/NUTS problem.</p></li>
+</ol>
+<p>The implementation is designed around the Whittle/Wishart sufficient statistic</p>
+<div class="math notranslate nohighlight">
+\[Y(f_k) = \sum_{b=1}^{\nu} d^{(b)}(f_k)\, d^{(b)}(f_k)^H\]</div>
+<p>with degrees of freedom <span class="math notranslate nohighlight">\(\nu\)</span> equal to the number of non-overlapping
+blocks (called <code class="docutils literal notranslate"><span class="pre">n_blocks</span></code> in code).</p>
+</section>
+<section id="data-wishart-statistics">
+<h2>Data → Wishart statistics<a class="headerlink" href="#data-wishart-statistics" title="Link to this heading">#</a></h2>
+<p>The sufficient statistics are computed by
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT.compute_wishart()</span></code>.</p>
+<p>Given time-domain data <code class="docutils literal notranslate"><span class="pre">x</span></code> with shape <code class="docutils literal notranslate"><span class="pre">(n_time,</span> <span class="pre">p)</span></code>, the code:</p>
+<ul>
+<li><p>splits <code class="docutils literal notranslate"><span class="pre">x</span></code> into <code class="docutils literal notranslate"><span class="pre">n_blocks</span></code> contiguous non-overlapping blocks,</p></li>
+<li><p>detrends each block (constant detrend),</p></li>
+<li><p>applies a taper/window (default: Hann),</p></li>
+<li><p>uses <code class="docutils literal notranslate"><span class="pre">np.fft.rfft</span></code> to work on the positive-frequency grid,</p></li>
+<li><p>applies a one-sided PSD normalisation factor (Nyquist bin handled specially),</p></li>
+<li><p>forms the per-frequency matrix</p>
+<div class="math notranslate nohighlight">
+\[Y(f_k) = \sum_{b=1}^{\nu} D_b(f_k)\, D_b(f_k)^H,\]</div>
+<p>where <span class="math notranslate nohighlight">\(D_b(f_k)\)</span> is the tapered/normalised FFT vector for block <span class="math notranslate nohighlight">\(b\)</span>.</p>
+</li>
+</ul>
+<p>The code then eigendecomposes <span class="math notranslate nohighlight">\(Y(f_k)\)</span> and stores</p>
+<div class="math notranslate nohighlight">
+\[Y(f_k) = U(f_k) U(f_k)^H,\]</div>
+<p>where the columns of <span class="math notranslate nohighlight">\(U(f_k)\)</span> are <span class="math notranslate nohighlight">\(u_\ell^{(k)} = \sqrt{\lambda_\ell^{(k)}}\, v_\ell^{(k)}\)</span>.</p>
+<p>Those eigenvector-weighted components <span class="math notranslate nohighlight">\(U(f_k)\)</span> are the arrays
+<code class="docutils literal notranslate"><span class="pre">u_re</span></code>/<code class="docutils literal notranslate"><span class="pre">u_im</span></code> exposed on <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code>.</p>
+</section>
+<section id="cholesky-parameterisation">
+<h2>Cholesky parameterisation<a class="headerlink" href="#cholesky-parameterisation" title="Link to this heading">#</a></h2>
+<p>The blocked sampler follows the Rosen/Orihara-style inverse parameterisation:</p>
+<div class="math notranslate nohighlight">
+\[S(f_k)^{-1} = T(f_k)^H\, D(f_k)^{-1}\, T(f_k),\]</div>
+<p>where</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(D(f_k)\)</span> is diagonal with entries <span class="math notranslate nohighlight">\(\delta_j(f_k)^2\)</span>,</p></li>
+<li><p><span class="math notranslate nohighlight">\(T(f_k)\)</span> is unit lower-triangular with strictly-lower entries
+<span class="math notranslate nohighlight">\(-\theta_{jl}(f_k)\)</span>.</p></li>
+</ul>
+<p>In code, the diagonal field is represented as</p>
+<div class="math notranslate nohighlight">
+\[\log \delta_j(f_k)^2 = \sum_m B_m(f_k)\, w^{(\delta)}_{j,m}\]</div>
+<p>and each off-diagonal coefficient has its own real/imag spline field</p>
+<div class="math notranslate nohighlight">
+\[\Re\,\theta_{jl}(f_k) = \sum_m B_m(f_k)\, w^{(\Re)}_{jl,m},
+\qquad
+\Im\,\theta_{jl}(f_k) = \sum_m B_m(f_k)\, w^{(\Im)}_{jl,m}.\]</div>
+<p>The blocked sampler actually samples distinct weight vectors per
+<span class="math notranslate nohighlight">\(\theta_{jl}\)</span> (within a fixed row <span class="math notranslate nohighlight">\(j\)</span>).</p>
+</section>
+<section id="per-row-factorisation-of-the-likelihood">
+<h2>Per-row factorisation of the likelihood<a class="headerlink" href="#per-row-factorisation-of-the-likelihood" title="Link to this heading">#</a></h2>
+<p>With the parameterisation above, the complex-Wishart/Whittle log-likelihood can
+be written as a sum of row-wise terms (one term per Cholesky row).</p>
+<p>Let <span class="math notranslate nohighlight">\(u_j(f_k)\)</span> denote the <span class="math notranslate nohighlight">\(j\)</span>-th row of <span class="math notranslate nohighlight">\(U(f_k)\)</span>, i.e. the
+vector of replicate components for channel <span class="math notranslate nohighlight">\(j\)</span> at frequency <span class="math notranslate nohighlight">\(f_k\)</span>.</p>
+<p>Define the row residual</p>
+<div class="math notranslate nohighlight">
+\[r_j(f_k) = u_j(f_k) - \sum_{l&lt;j} \theta_{jl}(f_k)\, u_l(f_k).\]</div>
+<p>The blocked model implements (up to constants)</p>
+<div class="math notranslate nohighlight">
+\[\log \mathcal{L}_j
+\;\propto\;
+-\nu\,\sum_k w_k\,\log\big(\delta_j(f_k)^2\big)
+\; - \sum_k \frac{\|r_j(f_k)\|_2^2}{\delta_j(f_k)^2}.\]</div>
+<p>Key points:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(\nu\)</span> is the number of averaged blocks (<code class="docutils literal notranslate"><span class="pre">fft_data.nu</span></code>).</p></li>
+<li><p><span class="math notranslate nohighlight">\(w_k\)</span> are optional frequency weights (<code class="docutils literal notranslate"><span class="pre">freq_weights</span></code>). They are used
+to scale the log-determinant term when coarse graining is enabled.</p></li>
+<li><p>The quadratic term uses the <em>summed sufficient statistics</em> directly, so it
+does not multiply by <span class="math notranslate nohighlight">\(w_k\)</span> again.</p></li>
+</ul>
+<p>This is implemented in the internal NumPyro model
+<code class="docutils literal notranslate"><span class="pre">_blocked_channel_model</span></code> inside
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts</span></code>.</p>
+</section>
+<section id="coarse-graining-compatibility">
+<h2>Coarse-graining compatibility<a class="headerlink" href="#coarse-graining-compatibility" title="Link to this heading">#</a></h2>
+<p>Coarse graining for multivariate FFT/Wishart statistics is performed by
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft()</span></code>.</p>
+<p>Within each coarse bin <span class="math notranslate nohighlight">\(J_h\)</span>, it sums</p>
+<div class="math notranslate nohighlight">
+\[\bar Y_h = \sum_{f\in J_h} Y(f)\]</div>
+<p>and recomputes <span class="math notranslate nohighlight">\(\bar U_h\)</span> so that <span class="math notranslate nohighlight">\(\bar Y_h = \bar U_h\bar U_h^H\)</span>.</p>
+<p>The returned <cite>weights</cite> vector equals the bin member counts <span class="math notranslate nohighlight">\(N_h\)</span> and
+should be passed as <code class="docutils literal notranslate"><span class="pre">freq_weights</span></code>. With this choice, each bin behaves like a
+Wishart statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(\nu N_h\)</span>.</p>
+</section>
+<section id="symbol-code-mapping">
+<h2>Symbol ↔ code mapping<a class="headerlink" href="#symbol-code-mapping" title="Link to this heading">#</a></h2>
+<p>The table below lists the most important objects and where they appear.</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(p\)</span> (number of channels) → <code class="docutils literal notranslate"><span class="pre">fft_data.n_dim</span></code> / <code class="docutils literal notranslate"><span class="pre">self.n_channels</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(f_k\)</span> (frequency grid) → <code class="docutils literal notranslate"><span class="pre">fft_data.freq</span></code> / <code class="docutils literal notranslate"><span class="pre">self.freq</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(\nu\)</span> (block count / Wishart DOF) → <code class="docutils literal notranslate"><span class="pre">fft_data.nu</span></code> / <code class="docutils literal notranslate"><span class="pre">self.nu</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(U(f_k)\)</span> (eigen replicates) → <code class="docutils literal notranslate"><span class="pre">fft_data.u_re</span></code> + i <code class="docutils literal notranslate"><span class="pre">fft_data.u_im</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(\log \delta_j(f_k)^2\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">log_delta_sq_{j}</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(\theta_{jl}(f_k)\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">theta_re_{j}</span></code>, <code class="docutils literal notranslate"><span class="pre">theta_im_{j}</span></code></p></li>
+<li><p>coarse-bin member counts <span class="math notranslate nohighlight">\(N_h\)</span> → <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code> (stored)</p></li>
+<li><p>likelihood weights <span class="math notranslate nohighlight">\(w_k\)</span> → <code class="docutils literal notranslate"><span class="pre">config.freq_weights</span></code> / <code class="docutils literal notranslate"><span class="pre">self.freq_weights</span></code></p></li>
+</ul>
+</section>
+<section id="psd-reconstruction">
+<h2>PSD reconstruction<a class="headerlink" href="#psd-reconstruction" title="Link to this heading">#</a></h2>
+<p>Posterior samples of <code class="docutils literal notranslate"><span class="pre">log_delta_sq</span></code> and <code class="docutils literal notranslate"><span class="pre">theta_re</span></code>/<code class="docutils literal notranslate"><span class="pre">theta_im</span></code> are
+converted into a spectral density matrix by
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">log_psplines.psplines.multivar_psplines.MultivariateLogPSplines.reconstruct_psd_matrix()</span></code>.</p>
+<p>For each frequency, it builds <span class="math notranslate nohighlight">\(T(f_k)\)</span> with strictly-lower entries
+<span class="math notranslate nohighlight">\(-\theta_{jl}(f_k)\)</span>, constructs <span class="math notranslate nohighlight">\(D(f_k)=\mathrm{diag}(\delta_j(f_k)^2)\)</span>,
+and returns</p>
+<div class="math notranslate nohighlight">
+\[S(f_k) = T(f_k)^{-1}\, D(f_k)\, T(f_k)^{-H}.\]</div>
+</section>
+<section id="notes-on-scaling-conventions">
+<h2>Notes on scaling conventions<a class="headerlink" href="#notes-on-scaling-conventions" title="Link to this heading">#</a></h2>
+<p>The derivation in <code class="docutils literal notranslate"><span class="pre">docs/maths.tex</span></code> writes the Whittle likelihood with an
+explicit observation-time factor <span class="math notranslate nohighlight">\(T\)</span>.</p>
+<p>The implementation normalises the FFTs to one-sided PSD units during
+<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wishart()</span></code>. In that
+normalisation, the time/frequency-resolution factors are absorbed into the
+construction of <span class="math notranslate nohighlight">\(Y(f_k)\)</span> (and therefore <span class="math notranslate nohighlight">\(U(f_k)\)</span>). As a result,
+there is no explicit <span class="math notranslate nohighlight">\(T\)</span> factor in the NumPyro likelihood.</p>
+<p>One way to see that this is consistent is to view it as a deterministic
+reparameterisation of the Fourier coefficients.</p>
+<p>In one common Whittle convention,</p>
+<div class="math notranslate nohighlight">
+\[d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; T\,S(f_k)\right),\]</div>
+<p>which yields a quadratic term of the form</p>
+<div class="math notranslate nohighlight">
+\[\exp\!\left(-\frac{1}{T}\, d(f_k)^H S(f_k)^{-1} d(f_k)\right).\]</div>
+<p>If instead we define the rescaled coefficient</p>
+<div class="math notranslate nohighlight">
+\[ilde d(f_k) = \frac{d(f_k)}{\sqrt{T}},\]</div>
+<p>then</p>
+<div class="math notranslate nohighlight">
+\[ilde d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; S(f_k)\right),\]</div>
+<p>and the quadratic term becomes</p>
+<div class="math notranslate nohighlight">
+\[\exp\!\left(-\tilde d(f_k)^H S(f_k)^{-1} \tilde d(f_k)\right)\]</div>
+<p>with no explicit <span class="math notranslate nohighlight">\(T\)</span>.</p>
+<p>The code effectively makes this kind of deterministic rescaling (along with the
+standard one-sided/Welch normalisation factors) when constructing
+<span class="math notranslate nohighlight">\(Y(f_k)\)</span> from the block FFTs. This is fine as long as you interpret
+<span class="math notranslate nohighlight">\(S(f)\)</span> in the implementation as being expressed in the corresponding
+one-sided PSD convention.</p>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./."
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="api.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">API</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="phi_prior_approx.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Prior on phi: TeX vs implementation</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-wishart-statistics">Data → Wishart statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cholesky-parameterisation">Cholesky parameterisation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-compatibility">Coarse-graining compatibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#symbol-code-mapping">Symbol ↔ code mapping</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction">PSD reconstruction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes-on-scaling-conventions">Notes on scaling conventions</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By NZ Gravity
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2025.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

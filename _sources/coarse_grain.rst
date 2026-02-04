@@ -9,45 +9,51 @@ realizes the theoretical approximations stated in the repository.
 Frequency bins
 --------------
 
-The fine-frequency grid \(\{f_1,\dots,f_{N_l}\}\) is split into low-frequency
-points (kept untouched) and one or more high-frequency logarithmic bins. Each bin
-contains a contiguous subset \(J_h\) with midpoint \(\bar f_h\). The binning logic
+The retained fine-frequency grid \(\{f_1,\dots,f_{N_l}\}\subset[f_{\min},f_{\max}]\)
+is coarse-grained by dividing it into consecutive, disjoint subsets \(J_h\). Each
+\(J_h\) contains an **odd** number \(N_h\) of Fourier frequencies, and \(\bar f_h\)
+denotes the *midpoint Fourier frequency* of \(J_h\) (the middle member on the
+discrete Fourier grid, not an average).
+
+The binning logic
 is implemented by :func:`log_psplines.coarse_grain.preprocess.compute_binning_structure`,
 which returns :class:`log_psplines.coarse_grain.preprocess.CoarseGrainSpec`.
+Only **linear, full-band** binning is supported. Exactly one construction mode
+must be chosen:
+
+- ``n_freqs_per_bin``: fixed membership with equal-size (odd) bins that divide
+  the retained frequency count exactly.
+- ``n_bins``: fixed bin count with sizes as equal as possible, all odd.
 
 The spec stores
 
 - the masks that select the retained frequencies,
-- the low/high boundaries,
-- indices to reorder high-frequency points into contiguous bins,
-- the count of members per bin, and
-- bin widths used for frequency-weight scaling.
+- indices to group points into contiguous bins,
+- the member count \(N_h\) per bin, and
+- bin widths (diagnostics only).
 
 Aggregating FFT data
 --------------------
 
 :func:`log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft` takes the
 :class:`log_psplines.datatypes.multivar.MultivarFFT` and :class:`CoarseGrainSpec`
-and builds the coarse representation used during sampling. Low frequencies are
-copied unchanged. High frequencies are grouped by bin, the individual Wishart
-components \(\Y(f)=\U(f)\U(f)^H\) are summed within each \(J_h\) to form
+and builds the coarse representation used during sampling. The frequencies are
+grouped by bin across the **entire** retained band. Within each \(J_h\), the
+individual Wishart components \(\Y(f)=\U(f)\U(f)^H\) are **summed** to form
 \(\bar \Y_h = \sum_{f\in J_h}\Y(f)\), and the sum is re-diagonalized to obtain a
 single \(\U_h\) per bin. The function :func:`log_psplines.spectrum_utils.sum_wishart_outer_products`
 implements the matrix sum, and :func:`numpy.linalg.eigh` recovers the eigenvectors
 and eigenvalues that encode \(\bar \Y_h\).
 
 The returned :class:`log_psplines.datatypes.multivar.MultivarFFT` now has
-`len(spec.f_coarse)` frequencies; the first entries correspond to the unmodified
-low frequencies while the remaining entries represent the aggregated high bins.
-`coarse_grain_multivar_fft` also returns a `weights` array where low frequencies
-contribute `1` and each coarse bin contributes its member count \(N_h\).
+`len(spec.f_coarse)` frequencies. `coarse_grain_multivar_fft` also returns a
+`weights` array giving the member count \(N_h\) for each coarse bin.
 
 Likelihood scaling
 ------------------
 
-The weights are used to scale the log-determinant term in the multivariate log-
-likelihood so that each bin behaves like a Wishart observation with
-\(N_b N_h\) degrees of freedom:
+The weights scale **only** the log-determinant term so that each bin behaves like
+a Wishart observation with \(N_b N_h\) degrees of freedom:
 
 .. math::
 
@@ -59,5 +65,9 @@ accepts the `weights` vector (usually via :class:`log_psplines.coarse_grain.conf
 and stores it as `freq_weights`. The NumPyro model
 :func:`log_psplines.samplers.multivar.multivar_nuts.multivariate_psplines_model`
 multiplies `log_delta_sq` by `freq_weights`, ensuring the total log-det term
-matches the aggregated \(N_b N_h\) DOF. The trace term already uses the summed
-power in the aggregated \(\bar \Y_h\), so no further adjustments are needed.
+matches the aggregated \(N_b N_h\) DOF. The trace term uses the **summed**
+statistic \(\bar \Y_h\) directly, so no additional \(N_h\) factors appear.
+Coarse graining therefore increases information linearly in \(N_h\).
+
+No log-binning, hybrid schemes, or “preserve low frequencies” modes are
+implemented.

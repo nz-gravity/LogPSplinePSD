@@ -60,6 +60,8 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     # Coarse-grained run
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
+        keep_low=True,
+        binning="log",
         # Keep half the band unaggregated to improve fidelity on the physical scale
         f_transition=varma.freq[len(varma.freq) // 2],
         n_log_bins=10 if test_mode != "fast" else 6,
@@ -103,6 +105,10 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         freqs_coarse,
         f_transition=coarse_cfg.f_transition,
         n_log_bins=coarse_cfg.n_log_bins,
+        binning=coarse_cfg.binning,
+        representative=coarse_cfg.representative,
+        keep_low=coarse_cfg.keep_low,
+        n_freqs_per_bin=coarse_cfg.n_freqs_per_bin,
         f_min=coarse_cfg.f_min,
         f_max=coarse_cfg.f_max,
     )
@@ -165,6 +171,10 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         fft_full.freq,
         f_transition=coarse_cfg.f_transition,
         n_log_bins=coarse_cfg.n_log_bins,
+        binning=coarse_cfg.binning,
+        representative=coarse_cfg.representative,
+        keep_low=coarse_cfg.keep_low,
+        n_freqs_per_bin=coarse_cfg.n_freqs_per_bin,
         f_min=coarse_cfg.f_min,
         f_max=coarse_cfg.f_max,
     )

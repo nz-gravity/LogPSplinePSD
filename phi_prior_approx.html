@@ -6,7 +6,9 @@
 
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Search - LogPSplinePSD</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Prior on phi: TeX vs implementation &#8212; LogPSplinePSD</title>
   
   
   
@@ -55,12 +57,13 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'search';</script>
-  <script src="_static/searchtools.js"></script>
-  <script src="_static/language_data.js"></script>
-  <script src="searchindex.js"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'phi_prior_approx';</script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="#" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Multivariate implementation notes" href="multivar_implementation_notes.html" />
+    <link rel="prev" title="Multivariate blocked NUTS: math ↔ code" href="multivar_blocked_nuts.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -92,7 +95,7 @@
     <div class="search-button__overlay"></div>
     <div class="search-button__search-container">
 <form class="bd-search d-flex align-items-center"
-      action="#"
+      action="search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -122,8 +125,6 @@
     <div class="bd-container__inner bd-page-width">
       
       
-      
-        
       
       <div class="bd-sidebar-primary bd-sidebar">
         
@@ -172,10 +173,10 @@
  </script></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <ul class="nav bd-sidenav">
+        <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate blocked NUTS: math ↔ code</a></li>
-<li class="toctree-l1"><a class="reference internal" href="phi_prior_approx.html">Prior on phi: TeX vs implementation</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Prior on phi: TeX vs implementation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
 <li class="toctree-l1"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
@@ -252,7 +253,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fsearch.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fphi_prior_approx.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -264,6 +265,54 @@
   </span>
 <span class="btn__text-container">Open issue</span>
 </a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="_sources/phi_prior_approx.rst" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.rst</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
 </li>
       
   </ul>
@@ -305,7 +354,9 @@ document.write(`
   </button>
 `);
 </script>
-
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
 </div></div>
       
     </div>
@@ -314,42 +365,133 @@ document.write(`
 </div>
               
               
-  <div class="bd-search-container">
-    <h1>Search</h1>
-    <noscript>
-      <div class="admonition error">
-        <p class="admonition-title">Error</p>
-        <p>Please activate JavaScript to enable the search functionality.</p>
-      </div>
-    </noscript>
-    
-<form class="bd-search d-flex align-items-center"
-      action="#"
-      method="get">
-  <i class="fa-solid fa-magnifying-glass"></i>
-  <input type="search"
-         class="form-control"
-         name="q"
-         id="search-input"
-         placeholder="Search this book..."
-         aria-label="Search this book..."
-         autocomplete="off"
-         autocorrect="off"
-         autocapitalize="off"
-         spellcheck="false"/>
-  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
-</form>
-    <div id="search-results"></div>
-  </div>
-  <script>
-    // Activate the search field on page load
-    let searchInput = document.querySelector("form.bd-search input");
-    if (searchInput) {
-        searchInput.focus();
-        searchInput.select();
-        console.log("[PST]: Set focus on search field.");
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Prior on phi: TeX vs implementation</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-hierarchical-p-spline-prior">Background: hierarchical P-spline prior</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-code-actually-samples">What the code actually samples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-this-change-exists">Why this change exists</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-look-in-the-code">Where to look in the code</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="prior-on-phi-tex-vs-implementation">
+<h1>Prior on phi: TeX vs implementation<a class="headerlink" href="#prior-on-phi-tex-vs-implementation" title="Link to this heading">#</a></h1>
+<p>This page explains a deliberate difference between the draft math in
+<code class="docutils literal notranslate"><span class="pre">docs/maths.tex</span></code> and the sampler implementation.</p>
+<section id="background-hierarchical-p-spline-prior">
+<h2>Background: hierarchical P-spline prior<a class="headerlink" href="#background-hierarchical-p-spline-prior" title="Link to this heading">#</a></h2>
+<p>The draft writes the spline-weight prior as</p>
+<div class="math notranslate nohighlight">
+\[w\mid \phi \sim \mathcal{N}\big(0, (\phi P)^{-1}\big),\]</div>
+<p>with hyperpriors</p>
+<div class="math notranslate nohighlight">
+\[\phi\mid\delta \sim \mathrm{Gamma}(\alpha_\phi, \; \delta\,\beta_\phi),
+\qquad
+\delta \sim \mathrm{Gamma}(\alpha_\delta, \beta_\delta),\]</div>
+<p>where we use the <em>rate</em> parameterisation of the Gamma distribution.</p>
+</section>
+<section id="what-the-code-actually-samples">
+<h2>What the code actually samples<a class="headerlink" href="#what-the-code-actually-samples" title="Link to this heading">#</a></h2>
+<p>The sampler utility <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>
+keeps the same <em>intended</em> hierarchical structure but changes the sampling
+parameterisation for <span class="math notranslate nohighlight">\(\phi\)</span>:</p>
+<ul class="simple">
+<li><p>it samples <span class="math notranslate nohighlight">\(\delta \sim \mathrm{Gamma}(\alpha_\delta, \beta_\delta)\)</span> as
+written;</p></li>
+<li><p>it does <strong>not</strong> sample <span class="math notranslate nohighlight">\(\phi\mid\delta\)</span> from a Gamma directly;</p></li>
+<li><p>instead it samples <span class="math notranslate nohighlight">\(\log \phi\)</span> from a Normal distribution chosen to
+<em>moment-match</em> the Gamma.</p></li>
+</ul>
+<p>Concretely, for</p>
+<div class="math notranslate nohighlight">
+\[\phi\mid\delta \sim \mathrm{Gamma}(\alpha_\phi, \mathrm{rate}=\beta_\phi\,\delta),\]</div>
+<p>the mean and variance are</p>
+<div class="math notranslate nohighlight">
+\[\mathbb{E}[\phi\mid\delta] = \frac{\alpha_\phi}{\beta_\phi\,\delta},
+\qquad
+\mathrm{Var}[\phi\mid\delta] = \frac{\alpha_\phi}{(\beta_\phi\,\delta)^2}.\]</div>
+<p>The code constructs a log-normal approximation</p>
+<div class="math notranslate nohighlight">
+\[\log \phi\mid\delta \sim \mathcal{N}(\mu, \sigma^2)\]</div>
+<p>with</p>
+<div class="math notranslate nohighlight">
+\[\sigma^2 = \log\Big(1 + \frac{1}{\alpha_\phi}\Big),
+\qquad
+\mu = \log\Big(\frac{\alpha_\phi}{\beta_\phi\,\delta}\Big) - \frac{\sigma^2}{2}.\]</div>
+<p>This exactly matches the formulas in
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>.</p>
+</section>
+<section id="why-this-change-exists">
+<h2>Why this change exists<a class="headerlink" href="#why-this-change-exists" title="Link to this heading">#</a></h2>
+<p>Sampling <span class="math notranslate nohighlight">\(\phi\)</span> directly under the Gamma prior frequently produces a
+“funnel” geometry once <span class="math notranslate nohighlight">\(\phi\)</span> interacts with the Gaussian spline weights.
+That geometry can make NUTS initialization and adaptation brittle.</p>
+<p>Sampling <span class="math notranslate nohighlight">\(\log\phi\)</span> under a moment-matched Normal has two practical
+benefits:</p>
+<ul class="simple">
+<li><p>it reduces extreme curvature in the posterior geometry,</p></li>
+<li><p>it tends to improve VI-based initialization and NUTS warmup stability.</p></li>
+</ul>
+<p>Importantly, this is <strong>not</strong> the same distribution as the Gamma prior. The two
+match the first two moments of <span class="math notranslate nohighlight">\(\phi\mid\delta\)</span>, but tails differ.</p>
+</section>
+<section id="where-to-look-in-the-code">
+<h2>Where to look in the code<a class="headerlink" href="#where-to-look-in-the-code" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Implementation: <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>.</p></li>
+<li><p>Usage:</p>
+<ul>
+<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts</span></code></p></li>
+<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_nuts</span></code></p></li>
+</ul>
+</li>
+</ul>
+<p>If you want the docs to reflect the implementation, you can interpret the
+written Gamma prior for <span class="math notranslate nohighlight">\(\phi\mid\delta\)</span> as an <em>idealised target</em>, and the
+code as using a numerically friendlier, moment-matched approximation.</p>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./."
+        },
+        predefinedOutput: true
     }
-  </script>
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
 
               
               
@@ -358,12 +500,48 @@ document.write(`
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
+    <a class="left-prev"
+       href="multivar_blocked_nuts.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Multivariate blocked NUTS: math ↔ code</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="multivar_implementation_notes.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Multivariate implementation notes</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
 </div>
                 </footer>
               
             </div>
             
             
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-hierarchical-p-spline-prior">Background: hierarchical P-spline prior</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-code-actually-samples">What the code actually samples</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-this-change-exists">Why this change exists</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-look-in-the-code">Where to look in the code</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
           </div>

@@ -141,10 +141,12 @@ def test_windowing_reduces_welch_wishart_gap(outdir):
     best_label = min(window_rms, key=window_rms.get)
     assert window_rms[best_label] < baseline_rms * 0.75
 
+    n_bins = min(512, f_welch.size)
+    if (n_bins % 2) != (f_welch.size % 2):
+        n_bins = max(1, n_bins - 1)
     spec = compute_binning_structure(
         f_welch,
-        f_transition=trans_freq,
-        n_log_bins=512,
+        n_bins=n_bins,
         f_min=f_welch[0],
         f_max=f_welch[-1],
     )
@@ -229,10 +231,12 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
     best_label = min(window_rms, key=window_rms.get)
     assert window_rms[best_label] < baseline_rms * 0.7
 
+    n_bins = min(100, f_welch.size)
+    if (n_bins % 2) != (f_welch.size % 2):
+        n_bins = max(1, n_bins - 1)
     spec = compute_binning_structure(
         f_welch,
-        f_transition=trans_freq,
-        n_log_bins=100,
+        n_bins=n_bins,
         f_min=f_welch[0],
         f_max=f_welch[-1],
     )

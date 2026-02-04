@@ -47,86 +47,65 @@ def coarse_grain_multivar_fft(
     u_re_sel = fft.u_re[selection]
     u_im_sel = fft.u_im[selection]
 
-    # Low frequencies are kept as-is
-    mask_low = np.asarray(spec.mask_low, dtype=bool)
     mask_high = np.asarray(spec.mask_high, dtype=bool)
+    n_bins_high = int(spec.n_bins_high)
+    if n_bins_high <= 0:
+        raise ValueError("Coarse-graining spec has no bins.")
 
-    y_re_low = y_re_sel[mask_low]
-    y_im_low = y_im_sel[mask_low]
-    u_low = (u_re_sel[mask_low] + 1j * u_im_sel[mask_low]).astype(
+    u_high = (u_re_sel[mask_high] + 1j * u_im_sel[mask_high]).astype(
         np.complex128
     )
+    y_re_high = y_re_sel[mask_high]
+    y_im_high = y_im_sel[mask_high]
 
-    # High-frequency aggregation into logarithmic bins
-    n_bins_high = int(spec.n_bins_high)
-    if n_bins_high == 0:
-        # Only low region present
-        u_coarse = u_low
-        y_re_coarse = y_re_low
-        y_im_coarse = y_im_low
-        weights = np.ones(y_re_low.shape[0], dtype=np.float64)
-    else:
-        u_high = (u_re_sel[mask_high] + 1j * u_im_sel[mask_high]).astype(
-            np.complex128
-        )
-        y_re_high = y_re_sel[mask_high]
-        y_im_high = y_im_sel[mask_high]
+    sort_idx = np.asarray(spec.sort_indices, dtype=np.int64)
+    bin_counts = np.asarray(spec.bin_counts, dtype=np.int64)
 
-        sort_idx = np.asarray(spec.sort_indices, dtype=np.int64)
-        sorted_bins = np.asarray(spec.bin_indices[sort_idx], dtype=np.int64)
-        bin_counts = np.asarray(spec.bin_counts, dtype=np.int64)
+    # Sort high-frequency arrays to contiguous bins
+    u_high_sorted = u_high[sort_idx]
+    y_re_high_sorted = y_re_high[sort_idx]
+    y_im_high_sorted = y_im_high[sort_idx]
 
-        # Sort high-frequency arrays to contiguous bins
-        u_high_sorted = u_high[sort_idx]
-        y_re_high_sorted = y_re_high[sort_idx]
-        y_im_high_sorted = y_im_high[sort_idx]
+    # Pre-allocate outputs
+    n_dim = fft.n_dim
+    u_bins = np.zeros((n_bins_high, n_dim, n_dim), dtype=np.complex128)
+    y_re_bins = np.zeros((n_bins_high, n_dim), dtype=np.float64)
+    y_im_bins = np.zeros((n_bins_high, n_dim), dtype=np.float64)
 
-        # Pre-allocate outputs
-        n_dim = fft.n_dim
-        u_bins = np.zeros((n_bins_high, n_dim, n_dim), dtype=np.complex128)
-        y_re_bins = np.zeros((n_bins_high, n_dim), dtype=np.float64)
-        y_im_bins = np.zeros((n_bins_high, n_dim), dtype=np.float64)
+    # Iterate over bins using counts
+    pos = 0
+    for b in range(n_bins_high):
+        count = int(bin_counts[b])
+        if count <= 0:
+            continue
+        sl = slice(pos, pos + count)
+        pos += count
 
-        # Iterate over bins using counts
-        pos = 0
-        for b in range(n_bins_high):
-            count = int(bin_counts[b])
-            if count <= 0:
-                continue
-            sl = slice(pos, pos + count)
-            pos += count
+        # Sum of y across member frequencies (for diagnostics only)
+        y_re_bins[b] = np.sum(y_re_high_sorted[sl], axis=0)
+        y_im_bins[b] = np.sum(y_im_high_sorted[sl], axis=0)
 
-            # Average of y across member frequencies (for diagnostics only)
-            y_re_bins[b] = np.mean(y_re_high_sorted[sl], axis=0)
-            y_im_bins[b] = np.mean(y_im_high_sorted[sl], axis=0)
+        # Sum Y = Σ U U^H then eigendecompose
+        Y_sum = sum_wishart_outer_products(u_high_sorted[sl])
+        # Numeric guard
+        try:
+            eigvals, eigvecs = np.linalg.eigh(Y_sum)
+        except np.linalg.LinAlgError:
+            # Fallback to symmetric part if numerical issues arise
+            Ys = 0.5 * (Y_sum + Y_sum.conj().T)
+            eigvals, eigvecs = np.linalg.eigh(Ys)
 
-            # Sum Y = Σ U U^H then eigendecompose
-            Y_sum = sum_wishart_outer_products(u_high_sorted[sl])
-            # Numeric guard
-            try:
-                eigvals, eigvecs = np.linalg.eigh(Y_sum)
-            except np.linalg.LinAlgError:
-                # Fallback to symmetric part if numerical issues arise
-                Ys = 0.5 * (Y_sum + Y_sum.conj().T)
-                eigvals, eigvecs = np.linalg.eigh(Ys)
+        eigvals = np.clip(eigvals.real, a_min=0.0, a_max=None)
+        sqrt_eig = np.sqrt(eigvals).astype(np.float64)
+        # Columns: v_j * sqrt(λ_j)
+        u_bins[b] = eigvecs * sqrt_eig[np.newaxis, :]
 
-            eigvals = np.clip(eigvals.real, a_min=0.0, a_max=None)
-            sqrt_eig = np.sqrt(eigvals).astype(np.float64)
-            # Columns: v_j * sqrt(λ_j)
-            u_bins[b] = eigvecs * sqrt_eig[np.newaxis, :]
+    u_coarse = u_bins
+    y_re_coarse = y_re_bins
+    y_im_coarse = y_im_bins
 
-        # Concatenate low and high parts
-        u_coarse = np.concatenate((u_low, u_bins), axis=0)
-        y_re_coarse = np.concatenate((y_re_low, y_re_bins), axis=0)
-        y_im_coarse = np.concatenate((y_im_low, y_im_bins), axis=0)
-
-        # Frequency weights: 1 for low region; bin counts for high bins
-        weights = np.concatenate(
-            (
-                np.ones(y_re_low.shape[0], dtype=np.float64),
-                bin_counts.astype(float),
-            )
-        )
+    # Frequency weights: bin counts for each coarse bin
+    weights = bin_counts.astype(float)
 
     # Build the coarse FFT structure and attach the aggregated PSD for diagnostics.
     u_re_coarse = u_coarse.real.astype(np.float64)
@@ -153,6 +132,7 @@ def coarse_grain_multivar_fft(
         raw_psd=psd_coarse.astype(np.complex128),
         raw_freq=np.asarray(spec.f_coarse, dtype=np.float64),
         channel_stds=fft.channel_stds,
+        freq_bin_counts=np.asarray(weights, dtype=np.float64),
     )
 
     return fft_coarse, weights

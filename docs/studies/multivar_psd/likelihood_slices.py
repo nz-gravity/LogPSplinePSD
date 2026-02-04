@@ -351,7 +351,7 @@ def _draw_r23_inset(
     inset.tick_params(axis="both", labelsize=6)
     # inset.set_title("r23", fontsize=8)
     inset.set_xlabel("freq", fontsize=6)
-    inset.set_ylabel(r"$\lambda_2/\lambda_3$", fontsize=6)
+    inset.set_ylabel(r"$\lambda_3/\lambda_2$", fontsize=6)
 
 
 def _draw_contour_on_axis(
@@ -901,6 +901,12 @@ def main() -> None:
         help="Comma-separated frequency indices to override automatic selection.",
     )
     parser.add_argument(
+        "--target-r23",
+        type=float,
+        default=None,
+        help="Ensure a slice at the bin with r23 closest to this target (e.g. 1.0).",
+    )
+    parser.add_argument(
         "--contour-levels",
         type=int,
         default=12,
@@ -946,6 +952,15 @@ def main() -> None:
         if args.k_indices
         else None
     )
+    if args.target_r23 is not None:
+        gap = np.abs(r23 - args.target_r23)
+        gap[np.isnan(gap)] = np.inf
+        if np.any(np.isfinite(gap)):
+            target_idx = int(np.nanargmin(gap))
+            if manual_indices is None:
+                manual_indices = [target_idx]
+            elif target_idx not in manual_indices:
+                manual_indices.append(target_idx)
     selected_indices = _select_frequency_indices(
         r23, freq, args.n_freq_slices, manual_indices
     )

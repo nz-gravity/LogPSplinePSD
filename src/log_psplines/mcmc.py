@@ -167,6 +167,10 @@ def _coarse_grain_processed_data(
             processed_data.freqs,
             f_transition=cg_config.f_transition,
             n_log_bins=cg_config.n_log_bins,
+            binning=getattr(cg_config, "binning", "linear"),
+            representative=getattr(cg_config, "representative", "middle"),
+            keep_low=bool(getattr(cg_config, "keep_low", True)),
+            n_freqs_per_bin=getattr(cg_config, "n_freqs_per_bin", None),
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,
         )
@@ -212,6 +216,10 @@ def _coarse_grain_processed_data(
             processed_data.freq,
             f_transition=cg_config.f_transition,
             n_log_bins=cg_config.n_log_bins,
+            binning=getattr(cg_config, "binning", "linear"),
+            representative=getattr(cg_config, "representative", "middle"),
+            keep_low=bool(getattr(cg_config, "keep_low", True)),
+            n_freqs_per_bin=getattr(cg_config, "n_freqs_per_bin", None),
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,
         )
@@ -294,12 +302,13 @@ def run_mcmc(
     beta_phi_theta: Optional[float] = None,
     # Multivariate blocked NUTS noise floor controls
     use_noise_floor: bool = False,
-    noise_floor_mode: str = "constant",
+    noise_floor_mode: str = "off",
     noise_floor_constant: float = 0.0,
     noise_floor_scale: float = 1e-4,
-    noise_floor_array: Optional[jnp.ndarray] = None,
+    noise_floor_tau: float = 1e-12,
     theory_psd: Optional[jnp.ndarray] = None,
     noise_floor_blocks: Optional[list[int] | str] = None,
+    normalize_freq_weights: bool = False,
     # MH specific
     target_accept_rate: float = 0.44,
     adaptation_window: int = 50,
@@ -394,7 +403,7 @@ def run_mcmc(
     use_noise_floor : bool, default=False
         Enable an innovation variance floor in the multivariate blocked NUTS
         likelihood (helps prevent variance collapse in near-null bands).
-    noise_floor_mode : {"constant", "theory_scaled", "array"}, default="constant"
+    noise_floor_mode : {"off", "constant", "theory_scaled", "hybrid"}, default="off"
         Strategy for constructing the innovation noise floor when enabled.
     noise_floor_constant : float, default=0.0
         Constant variance-space floor (already squared), used when
@@ -402,9 +411,8 @@ def run_mcmc(
     noise_floor_scale : float, default=1e-4
         Scale factor applied to ``theory_psd`` when
         ``noise_floor_mode="theory_scaled"``.
-    noise_floor_array : Optional[jnp.ndarray], default=None
-        Per-frequency variance floor array used when
-        ``noise_floor_mode="array"``.
+    noise_floor_tau : float, default=1e-12
+        Smoothness parameter used when ``noise_floor_mode="hybrid"``.
     theory_psd : Optional[jnp.ndarray], default=None
         Reference PSD (per-frequency) used when
         ``noise_floor_mode="theory_scaled"``.
@@ -535,6 +543,31 @@ def run_mcmc(
             processed_data, cg_config, scaled_true_psd
         )
     )
+
+    # Diagnostic lever: renormalize coarse-grain weights so they sum to the number
+    # of retained coarse bins (instead of the number of fine-grid frequencies).
+    if (
+        normalize_freq_weights
+        and freq_weights is not None
+        and processed_data is not None
+    ):
+        try:
+            target = (
+                int(processed_data.n)
+                if isinstance(processed_data, Periodogram)
+                else int(processed_data.n_freq)
+            )
+            total = float(np.sum(freq_weights))
+            if target > 0 and total > 0.0 and np.isfinite(total):
+                freq_weights = freq_weights * (target / total)
+                logger.info(
+                    "Normalized coarse-grain weights: sum={:.1f} -> {:.1f} (target n_bins={})",
+                    total,
+                    float(np.sum(freq_weights)),
+                    target,
+                )
+        except Exception as exc:
+            logger.warning(f"Could not normalize coarse-grain weights: {exc}")
 
     # Align true_psd (if provided) to the processed frequency grid
     if scaled_true_psd is not None and processed_data is not None:
@@ -728,9 +761,10 @@ def run_mcmc(
         noise_floor_mode=noise_floor_mode,
         noise_floor_constant=noise_floor_constant,
         noise_floor_scale=noise_floor_scale,
-        noise_floor_array=noise_floor_array,
+        noise_floor_tau=noise_floor_tau,
         theory_psd=theory_psd,
         noise_floor_blocks=noise_floor_blocks,
+        normalize_freq_weights=normalize_freq_weights,
         **kwargs,
     )
 
@@ -786,12 +820,13 @@ def create_sampler(
     alpha_phi_theta: Optional[float] = None,
     beta_phi_theta: Optional[float] = None,
     use_noise_floor: bool = False,
-    noise_floor_mode: str = "constant",
+    noise_floor_mode: str = "off",
     noise_floor_constant: float = 0.0,
     noise_floor_scale: float = 1e-4,
-    noise_floor_array: Optional[jnp.ndarray] = None,
+    noise_floor_tau: float = 1e-12,
     theory_psd: Optional[jnp.ndarray] = None,
     noise_floor_blocks: Optional[list[int] | str] = None,
+    normalize_freq_weights: bool = False,
     **kwargs,
 ):
     """Factory function to create appropriate sampler."""
@@ -818,6 +853,7 @@ def create_sampler(
         "channel_stds": channel_stds,
         "true_psd": true_psd,
         "freq_weights": freq_weights,
+        "normalize_freq_weights": bool(normalize_freq_weights),
         "vi_psd_max_draws": vi_psd_max_draws,
         "only_vi": only_vi,
     }
@@ -873,7 +909,7 @@ def create_sampler(
             sampler_type = "multivar_blocked_nuts"
 
         if sampler_type == "multivar_blocked_nuts":
-            config = MultivarBlockedNUTSConfig(
+            blocked_kwargs = dict(
                 **common_config_kwargs,
                 target_accept_prob=target_accept_prob,
                 target_accept_prob_by_channel=target_accept_prob_by_channel,
@@ -892,14 +928,13 @@ def create_sampler(
                 noise_floor_mode=noise_floor_mode,
                 noise_floor_constant=noise_floor_constant,
                 noise_floor_scale=noise_floor_scale,
-                noise_floor_array=noise_floor_array,
+                noise_floor_tau=noise_floor_tau,
                 theory_psd=theory_psd,
-                noise_floor_blocks=(
-                    noise_floor_blocks
-                    if noise_floor_blocks is not None
-                    else MultivarBlockedNUTSConfig.noise_floor_blocks
-                ),
             )
+            if noise_floor_blocks is not None:
+                blocked_kwargs["noise_floor_blocks"] = noise_floor_blocks
+
+            config = MultivarBlockedNUTSConfig(**blocked_kwargs)
             return MultivarBlockedNUTSSampler(data, model, config)
 
         config = MultivarNUTSConfig(

@@ -11,6 +11,10 @@ from log_psplines.coarse_grain import (
     plot_coarse_vs_original,
 )
 from log_psplines.datatypes import MultivariateTimeseries
+from log_psplines.diagnostics.coarse_grain_checks import (
+    bin_doubling_stiffness_check_from_u_stacks,
+    coarse_bin_likelihood_equivalence_check,
+)
 from log_psplines.plotting import plot_pdgrm
 from log_psplines.spectrum_utils import (
     sum_wishart_outer_products,
@@ -57,13 +61,54 @@ def test_compute_binning_structure_simple():
     )
 
 
+def test_compute_binning_structure_linear_bins_equal_width():
+    freqs = np.linspace(1.0, 101.0, 1001)
+    spec = compute_binning_structure(
+        freqs,
+        f_transition=10.0,
+        n_log_bins=10,
+        binning="linear",
+        keep_low=True,
+        f_min=1.0,
+        f_max=101.0,
+    )
+
+    assert spec.n_bins_high > 0
+    assert spec.bin_widths.shape == (spec.n_bins_high,)
+    assert np.allclose(
+        spec.bin_widths, spec.bin_widths[0], rtol=1e-12, atol=1e-12
+    )
+
+
+def test_compute_binning_structure_linear_fixed_size_midpoint_frequency():
+    freqs = np.arange(1.0, 21.0, 1.0)  # 20 freqs
+    spec = compute_binning_structure(
+        freqs,
+        f_transition=1e-6,
+        n_log_bins=999,  # ignored when n_freqs_per_bin is provided
+        binning="linear",
+        representative="middle",
+        keep_low=False,
+        n_freqs_per_bin=5,
+        f_min=freqs[0],
+        f_max=freqs[-1],
+    )
+
+    assert spec.n_low == 0
+    assert spec.n_bins_high == 4
+    assert np.all(spec.bin_counts == 5)
+    assert np.allclose(spec.f_coarse, np.array([3.0, 8.0, 13.0, 18.0]))
+
+
 def test_coarse_weights_properties_log_bins():
     freqs = np.linspace(0.5, 128.0, 512)
     power = np.ones_like(freqs)
     cfg = CoarseGrainConfig(
         enabled=True,
+        keep_low=True,
         f_transition=16.0,
         n_log_bins=50,
+        binning="log",
         f_min=1.0,
         f_max=120.0,
     )
@@ -72,6 +117,10 @@ def test_coarse_weights_properties_log_bins():
         freqs,
         f_transition=cfg.f_transition,
         n_log_bins=cfg.n_log_bins,
+        binning=cfg.binning,
+        representative=cfg.representative,
+        keep_low=cfg.keep_low,
+        n_freqs_per_bin=cfg.n_freqs_per_bin,
         f_min=cfg.f_min,
         f_max=cfg.f_max,
     )
@@ -154,6 +203,94 @@ def test_multivar_coarse_psd_matches_bin_average():
         np.abs(manual_psd - fft_coarse.raw_psd) / (np.abs(manual_psd) + 1e-12)
     )
     assert max_rel < 1e-10
+
+
+def test_multivar_coarse_likelihood_equivalence_per_bin_theta_off():
+    rng = np.random.default_rng(123)
+    # Choose n so that with n_blocks=4 the retained positive-frequency count is
+    # divisible by an odd n_freqs_per_bin (here 5). With block_len=100, rfft
+    # yields 51 bins including 0, and we drop the 0 bin -> 50.
+    n = 400
+    t = np.arange(n)
+    base = rng.normal(size=n)
+    y = np.column_stack(
+        [
+            base + 0.2 * rng.normal(size=n),
+            0.7 * base + 0.3 * rng.normal(size=n),
+        ]
+    )
+    ts = MultivariateTimeseries(y=y, t=t)
+    fft_full = ts.to_wishart_stats(n_blocks=4)
+
+    # Paper-style full-band linear coarse graining with fixed odd bin size.
+    spec = compute_binning_structure(
+        fft_full.freq,
+        f_transition=1e-6,
+        n_log_bins=999,  # ignored when n_freqs_per_bin is provided
+        binning="linear",
+        representative="middle",
+        keep_low=False,
+        n_freqs_per_bin=5,
+        f_min=fft_full.freq[0],
+        f_max=fft_full.freq[-1],
+    )
+
+    # Choose a non-degenerate constant parameter value to make scaling visible.
+    # theta is set to zero to avoid basis-invariance concerns in the equivalence check.
+    log_delta_sq_bin = np.log(np.array([2.0, 3.0], dtype=np.float64))
+
+    res = coarse_bin_likelihood_equivalence_check(
+        fft_fine=fft_full,
+        spec=spec,
+        bin_index=0,
+        nu=int(fft_full.nu),
+        log_delta_sq_bin=log_delta_sq_bin,
+        include_theta=False,
+    )
+    # Expect equivalence up to numerical roundoff.
+    assert abs(res.delta) < 1e-8
+
+
+def test_bin_doubling_stiffness_proxy_scales_linearly():
+    rng = np.random.default_rng(0)
+    n_dim = 3
+    n_small = 5
+    n_large = 10
+
+    u_stack_small = (
+        rng.normal(size=(n_small, n_dim, n_dim))
+        + 1j * rng.normal(size=(n_small, n_dim, n_dim))
+    ).astype(np.complex128)
+    u_stack_large = (
+        rng.normal(size=(n_large, n_dim, n_dim))
+        + 1j * rng.normal(size=(n_large, n_dim, n_dim))
+    ).astype(np.complex128)
+
+    log_delta_sq_bin = np.log(np.array([1.5, 2.0, 3.0], dtype=np.float64))
+    n_theta = n_dim * (n_dim - 1) // 2
+    theta_re = np.zeros((n_theta,), dtype=np.float64)
+    theta_im = np.zeros((n_theta,), dtype=np.float64)
+
+    # Direction along the last diagonal log-scale.
+    direction = np.zeros((n_dim + 2 * n_theta,), dtype=np.float64)
+    direction[n_dim - 1] = 1.0
+
+    res = bin_doubling_stiffness_check_from_u_stacks(
+        u_stack_small=u_stack_small,
+        u_stack_large=u_stack_large,
+        nu=4.0,
+        log_delta_sq_bin=log_delta_sq_bin,
+        theta_re_bin=theta_re,
+        theta_im_bin=theta_im,
+        direction=direction,
+        epsilons=(1e-3, 1e-2),
+    )
+
+    assert res.n_members_small == n_small
+    assert res.n_members_large == n_large
+    for entry in res.eps_results:
+        assert np.isfinite(entry.ratio)
+        assert abs(entry.ratio - entry.expected_ratio) < 0.05
 
 
 @pytest.mark.slow

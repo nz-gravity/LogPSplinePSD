@@ -145,6 +145,7 @@ def test_windowing_reduces_welch_wishart_gap(outdir):
         f_welch,
         f_transition=trans_freq,
         n_log_bins=512,
+        keep_low=True,
         f_min=f_welch[0],
         f_max=f_welch[-1],
     )
@@ -233,6 +234,7 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
         f_welch,
         f_transition=trans_freq,
         n_log_bins=100,
+        keep_low=True,
         f_min=f_welch[0],
         f_max=f_welch[-1],
     )

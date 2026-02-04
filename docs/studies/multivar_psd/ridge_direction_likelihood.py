@@ -25,15 +25,26 @@ def _load_likelihood_module() -> object:
 
 
 def _select_frequency(
-    r23: np.ndarray, freq: np.ndarray, idx: int | None
+    r23: np.ndarray,
+    freq: np.ndarray,
+    idx: int | None,
+    target_r23: float | None,
 ) -> int:
-    """Pick a frequency index either manually or via maximum ratio."""
+    """Pick a frequency index by manual override, target r23, or maximum r23."""
     if idx is not None:
         if idx < 0 or idx >= freq.size:
             raise IndexError(f"freq index {idx} outside [0, {freq.size}).")
         return idx
     if np.all(np.isnan(r23)):
         raise RuntimeError("Ratio r23 is NaN everywhere.")
+    if target_r23 is not None:
+        gap = np.abs(r23 - target_r23)
+        gap[np.isnan(gap)] = np.inf
+        if not np.any(np.isfinite(gap)):
+            raise RuntimeError(
+                "Could not locate a finite r23 to match target."
+            )
+        return int(np.nanargmin(gap))
     return int(np.nanargmax(r23))
 
 
@@ -142,6 +153,12 @@ def main() -> None:
         help="Frequency index to inspect (default=argmax r23).",
     )
     parser.add_argument(
+        "--target-r23",
+        type=float,
+        default=None,
+        help="Target eigenvalue ratio r23=λ3/λ2 (select closest bin when provided).",
+    )
+    parser.add_argument(
         "--penalty-eig-index",
         type=int,
         default=0,
@@ -174,7 +191,7 @@ def main() -> None:
     freq, matrices, u_modes, idata = module._prepare_data(prep_args)
     theta_hat_all, delta3_sq = module._compute_theta_hat_and_delta(u_modes)
     r23 = _compute_r23(matrices)
-    k = _select_frequency(r23, freq, args.freq_index)
+    k = _select_frequency(r23, freq, args.freq_index, args.target_r23)
 
     basis_re, basis_im, penalty = _load_basis_and_penalty(idata)
     if k >= basis_re.shape[0]:

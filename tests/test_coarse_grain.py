@@ -88,6 +88,40 @@ def test_compute_binning_structure_linear_fixed_size_midpoint_frequency():
     assert np.allclose(spec.f_coarse, np.array([3.0, 8.0, 13.0, 18.0]))
 
 
+def test_compute_binning_structure_linear_fixed_size_allows_remainder():
+    freqs = np.arange(1.0, 24.0, 1.0)  # 23 freqs -> 4 bins of 5 + remainder 3
+    spec = compute_binning_structure(
+        freqs,
+        n_freqs_per_bin=5,
+        f_min=freqs[0],
+        f_max=freqs[-1],
+    )
+
+    assert spec.n_low == 0
+    assert spec.n_bins_high == 5
+    assert np.all(spec.bin_counts[:-1] == 5)
+    assert spec.bin_counts[-1] == 3
+    assert np.all(spec.bin_counts % 2 == 1)
+    assert np.allclose(spec.f_coarse, np.array([3.0, 8.0, 13.0, 18.0, 22.0]))
+
+
+def test_compute_binning_structure_linear_fixed_size_absorbs_even_remainder():
+    freqs = np.arange(1.0, 23.0, 1.0)  # 22 freqs -> 3 bins of 5 + last bin 7
+    spec = compute_binning_structure(
+        freqs,
+        n_freqs_per_bin=5,
+        f_min=freqs[0],
+        f_max=freqs[-1],
+    )
+
+    assert spec.n_low == 0
+    assert spec.n_bins_high == 4
+    assert np.all(spec.bin_counts[:3] == 5)
+    assert spec.bin_counts[-1] == 7
+    assert np.all(spec.bin_counts % 2 == 1)
+    assert np.allclose(spec.f_coarse, np.array([3.0, 8.0, 13.0, 19.0]))
+
+
 def test_apply_coarse_graining_univar_uses_sum():
     freqs = np.arange(1.0, 10.0, 1.0)  # 9 freqs
     power = np.arange(1.0, 10.0, 1.0)

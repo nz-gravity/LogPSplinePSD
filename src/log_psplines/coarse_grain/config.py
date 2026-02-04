@@ -12,7 +12,7 @@ class CoarseGrainConfig:
     # Exactly one of n_bins or n_freqs_per_bin must be provided.
     n_bins: Optional[int] = 1000
     # If provided, enforce equal-size bins containing this many fine-grid
-    # frequencies each. Must be odd and divide the retained frequency count.
+    # frequencies each (with the final bin absorbing any remainder). Must be odd.
     n_freqs_per_bin: Optional[int] = None
     f_min: Optional[float] = None
     f_max: Optional[float] = None

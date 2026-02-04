@@ -33,8 +33,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 FMIN, FMAX = 1e-4, 1e-1
 COARSE_CFG = CoarseGrainConfig(
     enabled=True,
-    f_transition=5e-3,
-    n_log_bins=200,
+    n_bins=200,
     f_min=FMIN,
     f_max=FMAX,
 )
@@ -113,8 +112,7 @@ def main() -> None:
 
     spec = compute_binning_structure(
         fft.freq,
-        f_transition=COARSE_CFG.f_transition,
-        n_log_bins=COARSE_CFG.n_log_bins,
+        n_bins=COARSE_CFG.n_bins,
         f_min=COARSE_CFG.f_min,
         f_max=COARSE_CFG.f_max,
     )

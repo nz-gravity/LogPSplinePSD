@@ -234,8 +234,6 @@ def _blocked_channel_model(
     else:
         delta_eff_sq = delta_sq
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
-    bc = jnp.asarray(freq_bin_counts, dtype=log_delta_sq.dtype)
-    bc = jnp.maximum(bc, jnp.asarray(1.0, dtype=bc.dtype))
     sum_log_det = -float(nu) * jnp.sum(fw * jnp.log(delta_eff_sq))
 
     if n_theta_block > 0:
@@ -255,12 +253,7 @@ def _blocked_channel_model(
     # Sum across Wishart replicates; for coarse bins, this reflects the sum of
     # sufficient statistics across all fine-grid frequencies in that bin.
     residual_power_sum = jnp.sum(residual_power, axis=1)
-    # Convert to a per-bin mean using the raw bin counts. This keeps likelihood
-    # scaling consistent if freq_weights are rescaled/tempered.
-    residual_power_mean = residual_power_sum / bc
-    log_likelihood = sum_log_det - jnp.sum(
-        fw * (residual_power_mean / delta_eff_sq)
-    )
+    log_likelihood = sum_log_det - jnp.sum(residual_power_sum / delta_eff_sq)
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
 

@@ -92,8 +92,8 @@ class MultivarBaseSampler(BaseSampler):
         self.nu = int(self.fft_data.nu)
 
         # Optional frequency weights (used to scale the log-det term in the
-        # multivariate coarse-grained likelihood). These weights may be
-        # renormalized for tempering/geometry diagnostics.
+        # multivariate coarse-grained likelihood). For paper-consistent coarse
+        # graining these should equal the per-bin member counts.
         if self.config.freq_weights is not None:
             fw = jnp.asarray(self.config.freq_weights, dtype=jnp.float32)
             if fw.shape[0] != self.n_freq:

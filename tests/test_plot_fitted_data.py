@@ -137,12 +137,10 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
 
     # Coarse-graining specification
     freqs = pdgrm_full.freqs
-    f_transition = freqs[len(freqs) // 4]
-    n_log_bins = 12 if test_mode != "fast" else 6
+    n_bins = 12 if test_mode != "fast" else 6
     spec: CoarseGrainSpec = compute_binning_structure(
         freqs,
-        f_transition=f_transition,
-        n_log_bins=n_log_bins,
+        n_bins=n_bins,
         f_min=None,
         f_max=None,
     )
@@ -152,15 +150,12 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
         freqs=pdgrm_full.freqs,
         power=pdgrm_full.power,
         spec=spec,
-        transition_freq=f_transition,
         scaling_factor=pdgrm_full.scaling_factor,
     )
     fig.savefig(os.path.join(outdir, "coarse_vs_original.png"), dpi=150)
 
     # 2) Frequency weights used in the likelihood scaling
-    fig_w, ax_w = plot_coarse_grain_weights(
-        spec=spec, weights=weights, transition_freq=f_transition
-    )
+    fig_w, ax_w = plot_coarse_grain_weights(spec=spec, weights=weights)
     fig_w.savefig(os.path.join(outdir, "coarse_weights.png"), dpi=150)
 
     # 3) Build a P-spline on the coarse grid and plot with knots
@@ -227,8 +222,7 @@ def test_plot_multivariate_fitted_data_blocks(
     # Coarse-grain along frequency for what the likelihood actually fits
     spec = compute_binning_structure(
         fft_full.freq,
-        f_transition=fft_full.freq[len(fft_full.freq) // 4],
-        n_log_bins=10 if test_mode != "fast" else 6,
+        n_bins=10 if test_mode != "fast" else 6,
         f_min=None,
         f_max=None,
     )

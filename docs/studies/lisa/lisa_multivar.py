@@ -239,8 +239,7 @@ FMIN, FMAX = 10**-4, 10**-1
 
 coarse_cfg = CoarseGrainConfig(
     enabled=True,
-    f_transition=FMIN,
-    n_log_bins=512,
+    n_bins=512,
     f_min=FMIN,
     f_max=FMAX,
 )
@@ -280,8 +279,7 @@ if USE_NOISE_FLOOR:
         if coarse_cfg.enabled:
             spec = compute_binning_structure(
                 freq_fine,
-                f_transition=coarse_cfg.f_transition,
-                n_log_bins=coarse_cfg.n_log_bins,
+                n_bins=coarse_cfg.n_bins,
                 f_min=coarse_cfg.f_min,
                 f_max=coarse_cfg.f_max,
             )

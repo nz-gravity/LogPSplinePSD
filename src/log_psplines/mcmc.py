@@ -165,11 +165,7 @@ def _coarse_grain_processed_data(
     if isinstance(processed_data, Periodogram):
         spec = compute_binning_structure(
             processed_data.freqs,
-            f_transition=cg_config.f_transition,
-            n_log_bins=cg_config.n_log_bins,
-            binning=cg_config.binning,
-            representative=cg_config.representative,
-            keep_low=cg_config.keep_low,
+            n_bins=cg_config.n_bins,
             n_freqs_per_bin=cg_config.n_freqs_per_bin,
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,
@@ -214,11 +210,7 @@ def _coarse_grain_processed_data(
     if isinstance(processed_data, MultivarFFT):
         spec = compute_binning_structure(
             processed_data.freq,
-            f_transition=cg_config.f_transition,
-            n_log_bins=cg_config.n_log_bins,
-            binning=cg_config.binning,
-            representative=cg_config.representative,
-            keep_low=cg_config.keep_low,
+            n_bins=cg_config.n_bins,
             n_freqs_per_bin=cg_config.n_freqs_per_bin,
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,

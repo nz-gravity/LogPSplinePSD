@@ -138,12 +138,9 @@ def multivariate_psplines_model(
     residual_power_sum = jnp.sum(jnp.abs(u_resid) ** 2, axis=2)
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
-    bc = jnp.asarray(freq_bin_counts, dtype=log_delta_sq.dtype)
-    bc = jnp.maximum(bc, jnp.asarray(1.0, dtype=bc.dtype))
-    residual_power_mean = residual_power_sum / bc[:, None]
     sum_log_det = -nu_scale * jnp.sum(fw[:, None] * log_delta_sq)
     log_likelihood = sum_log_det - jnp.sum(
-        fw[:, None] * residual_power_mean * exp_neg_log_delta
+        residual_power_sum * exp_neg_log_delta
     )
     numpyro.factor("likelihood", log_likelihood)
 

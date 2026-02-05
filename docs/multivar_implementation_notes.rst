@@ -32,7 +32,12 @@ Practical consequences:
   dominating the first bin);
 - the rFFT produces the positive-frequency grid; the normalisation ensures that
   :func:`log_psplines.spectrum_utils.wishart_matrix_to_psd` produces spectra in
-  one-sided “per Hz” units.
+  one-sided “per Hz” units;
+- the Whittle observation-duration factor :math:`T` is tracked explicitly as
+  ``fft_data.duration`` (seconds per time-domain block) and enters the
+  multivariate likelihood via an explicit :math:`1/T` in the quadratic term.
+  PSD conversions therefore divide by ``duration`` to preserve the same PSD
+  convention across diagnostics/plotting.
 
 Coarse graining: weights vs bin counts
 --------------------------------------

@@ -232,6 +232,7 @@ def test_multivar_coarse_psd_matches_bin_average():
     pos = 0
     base_nu = int(max(int(fft_full.nu), 1))
     scaling = float(fft_full.scaling_factor or 1.0)
+    duration = float(getattr(fft_full, "duration", 1.0) or 1.0)
 
     for idx in range(spec.f_coarse.shape[0]):
         count = bin_counts[idx]
@@ -245,6 +246,7 @@ def test_multivar_coarse_psd_matches_bin_average():
         psd = wishart_matrix_to_psd(
             y_sum[None, ...],
             nu=base_nu,
+            duration=duration,
             scaling_factor=scaling,
             weights=weight,
         )[0]

@@ -355,7 +355,7 @@ def estimate_spectral_matrix(
             n_knots=10,
             degree=3,
             diffMatrixOrder=2,
-            n_time_blocks=Nb,
+            Nb=Nb,
             coarse_grain_config=coarse_cfg,
             only_vi=RUN_VI_ONLY,
             vi_steps=15_000,

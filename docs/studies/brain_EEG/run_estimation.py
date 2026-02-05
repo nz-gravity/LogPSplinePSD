@@ -176,7 +176,7 @@ def _run_multivar_pspline(selected_data, fs):
             n_knots=10,
             degree=3,
             diffMatrixOrder=2,
-            n_time_blocks=200,
+            Nb=200,
             only_vi=True,
             vi_steps=20_000,
             vi_lr=1e-3,

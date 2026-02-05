@@ -74,7 +74,7 @@ def main() -> None:
         "--block-size",
         type=int,
         default=5000,
-        help="Samples per Wishart block (used to pick n_time_blocks).",
+        help="Samples per Wishart block (used to pick Nb).",
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--knots", type=int, default=15)
@@ -163,7 +163,7 @@ def main() -> None:
         vi_steps=int(args.vi_steps),
         vi_guide=str(args.vi_guide),
         vi_psd_max_draws=64,
-        n_time_blocks=int(Nb),
+        Nb=int(Nb),
         knot_kwargs=dict(method="log"),
         coarse_grain_config=coarse_cfg,
         alpha_delta=float(args.alpha_delta),

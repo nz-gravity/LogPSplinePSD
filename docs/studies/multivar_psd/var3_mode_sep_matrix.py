@@ -8,7 +8,7 @@ Defaults match the "concrete test matrix" discussed in the study notes:
   - cases: separated, force_separation, bunched
   - alpha_delta=beta_delta in {1e-4, 1, 2}
   - init_from_vi in {False, True diag, True lowrank, True flow:1}
-  - n_time_blocks in {8, 16, 32}
+  - Nb in {8, 16, 32}
   - n_knots in {5, 10, 15, 20}
 
 Outputs are organised as:
@@ -95,13 +95,13 @@ def _iter_runs(
     knots: Sequence[int],
 ) -> Iterable[dict[str, object]]:
     for case in cases:
-        for n_time_blocks in time_blocks:
+        for Nb in time_blocks:
             for n_knots in knots:
                 for alpha_delta in alpha_deltas:
                     for init_mode in init_modes:
                         yield {
                             "case": case,
-                            "n_time_blocks": int(n_time_blocks),
+                            "Nb": int(Nb),
                             "n_knots": int(n_knots),
                             "alpha_delta": float(alpha_delta),
                             "init_mode": str(init_mode),
@@ -190,9 +190,9 @@ def main() -> None:
     n = int(args.n)
     for Nb in time_blocks:
         if Nb < 3:
-            raise ValueError("n_time_blocks must be >= 3 (p=3).")
+            raise ValueError("Nb must be >= 3 (p=3).")
         if n % int(Nb) != 0:
-            raise ValueError(f"n={n} must be divisible by n_time_blocks={Nb}.")
+            raise ValueError(f"n={n} must be divisible by Nb={Nb}.")
 
     here = Path(__file__).resolve().parent
     root_out = (
@@ -223,7 +223,7 @@ def main() -> None:
                     cases=cases,
                     alpha_delta=alpha_deltas,
                     init_modes=init_modes,
-                    n_time_blocks=time_blocks,
+                    Nb=time_blocks,
                     n_knots=knots,
                 ),
             ),
@@ -266,7 +266,7 @@ def main() -> None:
             run_dir = (
                 root_out
                 / f"case_{spec['case']}"
-                / f"B{spec['n_time_blocks']}"
+                / f"B{spec['Nb']}"
                 / f"K{spec['n_knots']}"
                 / f"ad{ad_tag}"
                 / f"init_{init_tag}"
@@ -287,7 +287,7 @@ def main() -> None:
         run_dir = (
             root_out
             / f"case_{spec['case']}"
-            / f"B{spec['n_time_blocks']}"
+            / f"B{spec['Nb']}"
             / f"K{spec['n_knots']}"
             / f"ad{ad_tag}"
             / f"init_{init_tag}"
@@ -315,7 +315,7 @@ def main() -> None:
             n_samples=int(args.samples),
             n_warmup=int(args.warmup),
             num_chains=int(args.chains),
-            n_time_blocks=int(spec["n_time_blocks"]),
+            Nb=int(spec["Nb"]),
             target_accept_prob=float(args.target_accept),
             max_tree_depth=int(args.max_tree_depth),
             alpha_delta=ad,

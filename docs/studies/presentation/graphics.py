@@ -384,7 +384,7 @@ def run_or_load_pspline_fit(
         diffMatrixOrder=2,
         n_samples=1000,
         n_warmup=1000,
-        n_time_blocks=1,
+        Nb=1,
         rng_key=321,
         only_vi=False,
         vi_steps=2000,

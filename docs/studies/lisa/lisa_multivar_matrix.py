@@ -10,7 +10,7 @@ actual LISA pipeline.
 Key grid knobs (defaults are intentionally small-ish):
   - sampler: multivar_blocked_nuts vs multivar_nuts
   - coarse graining: on/off (linear full-band binning)
-  - n_time_blocks: Wishart averaging blocks (blocked sampler only)
+  - Nb: Wishart averaging blocks (blocked sampler only)
   - n_knots: spline complexity
   - alpha_delta (= beta_delta): prior strength on P-spline delta hyperparams
   - init mode: no-VI vs VI (diag / lowrank / flow:1)
@@ -131,7 +131,7 @@ def _iter_runs(
             coarse_on = coarse_key in {"on", "true", "1", "yes"}
             bins_grid = list(log_bins) if coarse_on else [1]
             for Nc in bins_grid:
-                for n_time_blocks in blocks_grid:
+                for Nb in blocks_grid:
                     for n_knots in knots:
                         for alpha_delta in alpha_deltas:
                             for init_mode in init_modes:
@@ -139,7 +139,7 @@ def _iter_runs(
                                     "sampler": str(sampler),
                                     "coarse": str(coarse),
                                     "Nc": int(Nc),
-                                    "n_time_blocks": int(n_time_blocks),
+                                    "Nb": int(Nb),
                                     "n_knots": int(n_knots),
                                     "alpha_delta": float(alpha_delta),
                                     "init_mode": str(init_mode),
@@ -494,7 +494,7 @@ def main() -> None:
         nargs="+",
         type=int,
         default=[384, 768, 1024],
-        help="n_time_blocks values (Wishart blocks). Must be >= p. Prefer larger values when coarse=off.",
+        help="Nb values (Wishart blocks). Must be >= p. Prefer larger values when coarse=off.",
     )
     parser.add_argument("--knots-grid", nargs="+", type=int, default=[15, 30])
     parser.add_argument(
@@ -534,7 +534,7 @@ def main() -> None:
 
     for Nb in time_blocks:
         if Nb < 3:
-            raise ValueError("n_time_blocks must be >= 3 (p=3).")
+            raise ValueError("Nb must be >= 3 (p=3).")
 
     n_tag = (
         f"Nmax{int(args.max_n_time)}"
@@ -589,7 +589,7 @@ def main() -> None:
                 root_out
                 / f"sampler_{sampler_tag}"
                 / f"cg_{cg_tag}_{bins_tag}"
-                / f"B{int(spec['n_time_blocks'])}"
+                / f"B{int(spec['Nb'])}"
                 / f"K{int(spec['n_knots'])}"
                 / f"ad{ad_tag}"
                 / f"init_{init_tag}"
@@ -610,13 +610,13 @@ def main() -> None:
             Nc = int(spec["Nc"])
             bins_tag = f"bins{Nc}" if cg_tag == "on" else "raw"
             sampler_tag = _sanitize_tag(str(spec["sampler"]))
-            n_time_blocks = int(spec["n_time_blocks"])
+            Nb = int(spec["Nb"])
             n_knots = int(spec["n_knots"])
             run_dir = (
                 root_out
                 / f"sampler_{sampler_tag}"
                 / f"cg_{cg_tag}_{bins_tag}"
-                / f"B{n_time_blocks}"
+                / f"B{Nb}"
                 / f"K{n_knots}"
                 / f"ad{ad_tag}"
                 / f"init_{init_tag}"
@@ -678,8 +678,8 @@ def main() -> None:
                 n_total = int(fft.N) * p
                 if n_total > 100_000:
                     logger.warning(
-                        "coarse=off with n_time_blocks={} implies N={} -> N≈{} basis rows; expect very slow NUTS. "
-                        "Consider larger n_time_blocks (e.g. 384/768/1024) or --max-n-time.",
+                        "coarse=off with Nb={} implies N={} -> N≈{} basis rows; expect very slow NUTS. "
+                        "Consider larger Nb (e.g. 384/768/1024) or --max-n-time.",
                         int(Nb),
                         int(fft.N),
                         int(n_total),
@@ -727,7 +727,7 @@ def main() -> None:
                     log_bins=log_bins,
                     alpha_delta=alpha_deltas,
                     init_modes=init_modes,
-                    n_time_blocks=time_blocks,
+                    Nb=time_blocks,
                     n_knots=knots,
                 ),
             ),
@@ -744,7 +744,7 @@ def main() -> None:
         )
         alpha_delta = float(spec["alpha_delta"])
         beta_delta = float(spec["alpha_delta"])
-        n_time_blocks = int(spec["n_time_blocks"])
+        Nb = int(spec["Nb"])
         n_knots = int(spec["n_knots"])
         sampler = str(spec["sampler"])
 
@@ -761,7 +761,7 @@ def main() -> None:
             root_out
             / f"sampler_{sampler_tag}"
             / f"cg_{cg_tag}_{bins_tag}"
-            / f"B{n_time_blocks}"
+            / f"B{Nb}"
             / f"K{n_knots}"
             / f"ad{ad_tag}"
             / f"init_{init_tag}"
@@ -781,7 +781,7 @@ def main() -> None:
                 )
             data_for_run = csd_full
         else:
-            data_for_run = wishart_cache[n_time_blocks]
+            data_for_run = wishart_cache[Nb]
 
         coarse_cfg = CoarseGrainConfig(
             enabled=bool(cg_on),
@@ -794,7 +794,7 @@ def main() -> None:
             sampler=sampler,
             coarse_grain=bool(cg_on),
             Nc=int(Nc),
-            n_time_blocks=int(n_time_blocks),
+            Nb=int(Nb),
             n_knots=int(n_knots),
             alpha_delta=float(alpha_delta),
             beta_delta=float(beta_delta),
@@ -835,7 +835,7 @@ def main() -> None:
                 diagnostics_summary_mode="off",
                 diagnostics_summary_position="end",
                 coarse_grain_config=coarse_cfg,
-                n_time_blocks=n_time_blocks,
+                Nb=Nb,
                 fmin=FMIN,
                 fmax=FMAX,
                 alpha_delta=alpha_delta,

@@ -90,7 +90,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         assert nfreq_coarse < nfreq_full
 
     # Compare median PSD along diagonal channels on the coarse grid
-    q50_full = psd_full.sel(percentile=50).values  # (freq, dim, dim)
+    q50_full = psd_full.sel(percentile=50).values  # (freq, p, p)
     q50_coarse = psd_coarse.sel(percentile=50).values
 
     freqs_full = np.asarray(idata_full.posterior_psd["freq"].values)

@@ -31,7 +31,7 @@ def plot_ess_evolution(
             )
             for draw_div in draw_divisions
         ],
-        dim="ess_dim",
+        p="ess_dim",
     )
 
     ess_tail_dataset = xr.concat(
@@ -44,7 +44,7 @@ def plot_ess_evolution(
             )
             for draw_div in draw_divisions
         ],
-        dim="ess_dim",
+        p="ess_dim",
     )
 
     # Convert datasets to (n_vars, n_points) arrays

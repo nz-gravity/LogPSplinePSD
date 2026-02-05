@@ -124,7 +124,7 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
 
     true_psd_full = _calculate_true_varma_psd(
         freqs_hz=varma.freq,
-        dim=varma.dim,
+        p=varma.p,
         var_coeffs=var_coeffs,
         vma_coeffs=vma_coeffs,
         sigma=sigma,

@@ -11,21 +11,27 @@ import numpy as np
 
 def main() -> None:
     idata_path = Path("docs/studies/lisa/results/lisa/inference_data.nc")
-    output_dir = Path("docs/studies/lisa/results/lisa/diagnostics/weights_trace")
+    output_dir = Path(
+        "docs/studies/lisa/results/lisa/diagnostics/weights_trace"
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     idata = az.from_netcdf(idata_path)
     weight_vars = [
-        name for name in idata.posterior.data_vars if name.startswith("weights_")
+        name
+        for name in idata.posterior.data_vars
+        if name.startswith("weights_")
     ]
 
     if not weight_vars:
-        raise ValueError("No posterior variables starting with 'weights_' found.")
+        raise ValueError(
+            "No posterior variables starting with 'weights_' found."
+        )
 
     for var_name in weight_vars:
         var = idata.posterior[var_name]
-        subplot_dims = [dim for dim in var.dims if dim not in ("chain", "draw")]
-        num_subplots = int(np.prod([var.sizes[dim] for dim in subplot_dims]))
+        subplot_dims = [p for p in var.dims if p not in ("chain", "draw")]
+        num_subplots = int(np.prod([var.sizes[p] for p in subplot_dims]))
         az.rcParams["plot.max_subplots"] = max(num_subplots, 1)
 
         axes = az.plot_trace(

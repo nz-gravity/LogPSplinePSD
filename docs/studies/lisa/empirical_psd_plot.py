@@ -163,17 +163,13 @@ def main() -> None:
         y_full = np.asarray(synth["data"], dtype=float)
         freq_true = np.asarray(synth["freq_true"], dtype=float)
         true_matrix = np.asarray(synth["true_matrix"])
-        block_len_samples = (
-            int(synth["block_len_samples"])
-            if "block_len_samples" in synth.files
-            else None
-        )
+        Lb = int(synth["Lb"]) if "Lb" in synth.files else None
 
     n = int(y_full.shape[0])
     if args.Nb and args.Nb > 0:
         Nb = int(args.Nb)
-    elif block_len_samples is not None and block_len_samples > 0:
-        Nb = max(1, n // int(block_len_samples))
+    elif Lb is not None and Lb > 0:
+        Nb = max(1, n // int(Lb))
     else:
         Nb = 1
 

@@ -43,7 +43,7 @@ def multivariate_psplines_model(
     u_re: jnp.ndarray,  # Wishart replicates (real)
     u_im: jnp.ndarray,  # Wishart replicates (imag)
     duration: float,
-    nu: int,
+    Nb: int,
     all_bases,
     all_penalties,
     freq_weights: jnp.ndarray,
@@ -57,14 +57,14 @@ def multivariate_psplines_model(
     NumPyro model for multivariate PSD estimation using P-splines and Cholesky parameterization.
     """
     # Extract dimensions from input arrays (these are static during compilation)
-    n_freq, n_dim, _ = u_re.shape
-    n_theta = int(n_dim * (n_dim - 1) / 2)
+    N, p, _ = u_re.shape
+    n_theta = int(p * (p - 1) / 2)
 
     component_idx = 0
     log_delta_components = []
 
     # Diagonal components (one per channel)
-    for j in range(n_dim):  # Now n_dim is a concrete Python int
+    for j in range(p):  # Now p is a concrete Python int
         penalty = all_penalties[component_idx]
         basis = all_bases[component_idx]
         block = sample_pspline_block(
@@ -117,17 +117,17 @@ def multivariate_psplines_model(
         component_idx += 1
         theta_im = jnp.tile(theta_im_base[:, None], (1, max(1, n_theta)))
     else:
-        theta_re = jnp.zeros((n_freq, 0))
-        theta_im = jnp.zeros((n_freq, 0))
+        theta_re = jnp.zeros((N, 0))
+        theta_im = jnp.zeros((N, 0))
 
     # Likelihood using Wishart replicates
     theta_complex = theta_re + 1j * theta_im
     u_complex = u_re + 1j * u_im
 
-    nu_scale = jnp.asarray(nu, dtype=log_delta_sq.dtype)
+    Nb = jnp.asarray(Nb, dtype=log_delta_sq.dtype)
     u_resid = u_complex
     idx = 0
-    for row in range(1, n_dim):
+    for row in range(1, p):
         count = row
         if count > 0:
             coeff = theta_complex[:, idx : idx + count]
@@ -139,7 +139,7 @@ def multivariate_psplines_model(
     residual_power_sum = jnp.sum(jnp.abs(u_resid) ** 2, axis=2)
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
-    sum_log_det = -nu_scale * jnp.sum(fw[:, None] * log_delta_sq)
+    sum_log_det = -Nb * jnp.sum(fw[:, None] * log_delta_sq)
     duration_scale = jnp.asarray(duration, dtype=log_delta_sq.dtype)
     log_likelihood = sum_log_det - jnp.sum(
         residual_power_sum * exp_neg_log_delta / duration_scale
@@ -242,7 +242,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         )
 
         logger.info(
-            f"Multivariate NUTS sampler [{self.device}] - {self.n_channels} channels"
+            f"Multivariate NUTS sampler [{self.device}] - {self.p} channels"
         )
 
         # FIXED: Run sampling with individual arrays instead of MultivarFFT object
@@ -252,7 +252,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             self.u_re,
             self.u_im,
             self.duration,
-            self.nu,
+            self.Nb,
             self.all_bases,
             self.all_penalties,
             self.freq_weights,
@@ -337,7 +337,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
                     u_re=self.u_re,
                     u_im=self.u_im,
                     duration=self.duration,
-                    nu=self.nu,
+                    Nb=self.Nb,
                     all_bases=self.all_bases,
                     all_penalties=self.all_penalties,
                     freq_weights=self.freq_weights,
@@ -377,7 +377,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             u_re=self.u_re,
             u_im=self.u_im,
             duration=self.duration,
-            nu=self.nu,
+            Nb=self.Nb,
             all_bases=self.all_bases,
             all_penalties=self.all_penalties,
             freq_weights=self.freq_weights,

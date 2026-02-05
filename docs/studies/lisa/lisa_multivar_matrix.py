@@ -10,7 +10,7 @@ actual LISA pipeline.
 Key grid knobs (defaults are intentionally small-ish):
   - sampler: multivar_blocked_nuts vs multivar_nuts
   - coarse graining: on/off (linear full-band binning)
-  - n_time_blocks: Wishart averaging blocks (blocked sampler only)
+  - Nb: Wishart averaging blocks (blocked sampler only)
   - n_knots: spline complexity
   - alpha_delta (= beta_delta): prior strength on P-spline delta hyperparams
   - init mode: no-VI vs VI (diag / lowrank / flow:1)
@@ -131,7 +131,7 @@ def _iter_runs(
             coarse_on = coarse_key in {"on", "true", "1", "yes"}
             bins_grid = list(log_bins) if coarse_on else [1]
             for Nc in bins_grid:
-                for n_time_blocks in blocks_grid:
+                for Nb in blocks_grid:
                     for n_knots in knots:
                         for alpha_delta in alpha_deltas:
                             for init_mode in init_modes:
@@ -139,7 +139,7 @@ def _iter_runs(
                                     "sampler": str(sampler),
                                     "coarse": str(coarse),
                                     "Nc": int(Nc),
-                                    "n_time_blocks": int(n_time_blocks),
+                                    "Nb": int(Nb),
                                     "n_knots": int(n_knots),
                                     "alpha_delta": float(alpha_delta),
                                     "init_mode": str(init_mode),
@@ -394,7 +394,7 @@ def _load_lisa_inputs(
         max_n = int(max_n_time)
         t_full = t_full[:max_n]
         y_full = y_full[:max_n]
-        logger.info(f"Truncated to n_time={max_n} samples for the matrix run.")
+        logger.info(f"Truncated to n={max_n} samples for the matrix run.")
 
     return (
         np.asarray(t_full, dtype=float),
@@ -494,7 +494,7 @@ def main() -> None:
         nargs="+",
         type=int,
         default=[384, 768, 1024],
-        help="n_time_blocks values (Wishart blocks). Must be >= n_channels. Prefer larger values when coarse=off.",
+        help="Nb values (Wishart blocks). Must be >= p. Prefer larger values when coarse=off.",
     )
     parser.add_argument("--knots-grid", nargs="+", type=int, default=[15, 30])
     parser.add_argument(
@@ -532,9 +532,9 @@ def main() -> None:
     knots = [int(x) for x in args.knots_grid]
     log_bins = [int(x) for x in args.log_bins_grid]
 
-    for n_blocks in time_blocks:
-        if n_blocks < 3:
-            raise ValueError("n_time_blocks must be >= 3 (n_channels=3).")
+    for Nb in time_blocks:
+        if Nb < 3:
+            raise ValueError("Nb must be >= 3 (p=3).")
 
     n_tag = (
         f"Nmax{int(args.max_n_time)}"
@@ -589,7 +589,7 @@ def main() -> None:
                 root_out
                 / f"sampler_{sampler_tag}"
                 / f"cg_{cg_tag}_{bins_tag}"
-                / f"B{int(spec['n_time_blocks'])}"
+                / f"B{int(spec['Nb'])}"
                 / f"K{int(spec['n_knots'])}"
                 / f"ad{ad_tag}"
                 / f"init_{init_tag}"
@@ -610,13 +610,13 @@ def main() -> None:
             Nc = int(spec["Nc"])
             bins_tag = f"bins{Nc}" if cg_tag == "on" else "raw"
             sampler_tag = _sanitize_tag(str(spec["sampler"]))
-            n_time_blocks = int(spec["n_time_blocks"])
+            Nb = int(spec["Nb"])
             n_knots = int(spec["n_knots"])
             run_dir = (
                 root_out
                 / f"sampler_{sampler_tag}"
                 / f"cg_{cg_tag}_{bins_tag}"
-                / f"B{n_time_blocks}"
+                / f"B{Nb}"
                 / f"K{n_knots}"
                 / f"ad{ad_tag}"
                 / f"init_{init_tag}"
@@ -638,13 +638,13 @@ def main() -> None:
     # blocked-sampler run sees the same data length.
     uses_blocks = any(s == "multivar_blocked_nuts" for s in samplers)
     block_lcm = int(math.lcm(*time_blocks)) if uses_blocks else 1
-    n_time = int(y_full.shape[0])
-    n_used = n_time - (n_time % block_lcm)
+    n = int(y_full.shape[0])
+    n_used = n - (n % block_lcm)
     if n_used <= 0:
         raise ValueError("Time series too short after divisibility trimming.")
-    if n_used != n_time:
+    if n_used != n:
         logger.info(
-            f"Trimming {n_time - n_used} samples to make n_time divisible by lcm(time_blocks)={block_lcm}."
+            f"Trimming {n - n_used} samples to make n divisible by lcm(time_blocks)={block_lcm}."
         )
         y_full = y_full[:n_used]
         t_full = t_full[:n_used]
@@ -656,9 +656,9 @@ def main() -> None:
     # and/or one full-periodogram FFT for multivar_nuts.
     wishart_cache = {}
     if uses_blocks:
-        for n_blocks in sorted(set(time_blocks)):
-            wishart_cache[int(n_blocks)] = standardized_ts.to_wishart_stats(
-                n_blocks=int(n_blocks), fmin=FMIN, fmax=FMAX
+        for Nb in sorted(set(time_blocks)):
+            wishart_cache[int(Nb)] = standardized_ts.to_wishart_stats(
+                Nb=int(Nb), fmin=FMIN, fmax=FMAX
             )
 
     csd_full = None
@@ -672,25 +672,25 @@ def main() -> None:
         x in {"off", "false", "0", "no"} for x in coarse_keys
     )
     if coarse_off_requested:
-        n_channels = int(raw_series.n_channels)
+        p = int(raw_series.p)
         if wishart_cache:
-            for n_blocks, fft in sorted(wishart_cache.items()):
-                n_total = int(fft.n_freq) * n_channels
+            for Nb, fft in sorted(wishart_cache.items()):
+                n_total = int(fft.N) * p
                 if n_total > 100_000:
                     logger.warning(
-                        "coarse=off with n_time_blocks={} implies n_freq={} -> N≈{} basis rows; expect very slow NUTS. "
-                        "Consider larger n_time_blocks (e.g. 384/768/1024) or --max-n-time.",
-                        int(n_blocks),
-                        int(fft.n_freq),
+                        "coarse=off with Nb={} implies N={} -> N≈{} basis rows; expect very slow NUTS. "
+                        "Consider larger Nb (e.g. 384/768/1024) or --max-n-time.",
+                        int(Nb),
+                        int(fft.N),
                         int(n_total),
                     )
         if csd_full is not None:
-            n_total = int(csd_full.n_freq) * n_channels
+            n_total = int(csd_full.N) * p
             if n_total > 100_000:
                 logger.warning(
-                    "coarse=off with multivar_nuts implies n_freq={} -> N≈{} basis rows; expect very slow NUTS. "
+                    "coarse=off with multivar_nuts implies N={} -> N≈{} basis rows; expect very slow NUTS. "
                     "Consider --max-n-time or enabling coarse graining.",
-                    int(csd_full.n_freq),
+                    int(csd_full.N),
                     int(n_total),
                 )
 
@@ -712,7 +712,7 @@ def main() -> None:
                     fmax=float(FMAX),
                     fs=float(fs),
                     dt=float(dt),
-                    n_time=int(y_full.shape[0]),
+                    n=int(y_full.shape[0]),
                     data_source=(
                         str(npz_path)
                         if npz_path is not None
@@ -727,7 +727,7 @@ def main() -> None:
                     log_bins=log_bins,
                     alpha_delta=alpha_deltas,
                     init_modes=init_modes,
-                    n_time_blocks=time_blocks,
+                    Nb=time_blocks,
                     n_knots=knots,
                 ),
             ),
@@ -744,7 +744,7 @@ def main() -> None:
         )
         alpha_delta = float(spec["alpha_delta"])
         beta_delta = float(spec["alpha_delta"])
-        n_time_blocks = int(spec["n_time_blocks"])
+        Nb = int(spec["Nb"])
         n_knots = int(spec["n_knots"])
         sampler = str(spec["sampler"])
 
@@ -761,7 +761,7 @@ def main() -> None:
             root_out
             / f"sampler_{sampler_tag}"
             / f"cg_{cg_tag}_{bins_tag}"
-            / f"B{n_time_blocks}"
+            / f"B{Nb}"
             / f"K{n_knots}"
             / f"ad{ad_tag}"
             / f"init_{init_tag}"
@@ -781,7 +781,7 @@ def main() -> None:
                 )
             data_for_run = csd_full
         else:
-            data_for_run = wishart_cache[n_time_blocks]
+            data_for_run = wishart_cache[Nb]
 
         coarse_cfg = CoarseGrainConfig(
             enabled=bool(cg_on),
@@ -794,7 +794,7 @@ def main() -> None:
             sampler=sampler,
             coarse_grain=bool(cg_on),
             Nc=int(Nc),
-            n_time_blocks=int(n_time_blocks),
+            Nb=int(Nb),
             n_knots=int(n_knots),
             alpha_delta=float(alpha_delta),
             beta_delta=float(beta_delta),
@@ -835,7 +835,7 @@ def main() -> None:
                 diagnostics_summary_mode="off",
                 diagnostics_summary_position="end",
                 coarse_grain_config=coarse_cfg,
-                n_time_blocks=n_time_blocks,
+                Nb=Nb,
                 fmin=FMIN,
                 fmax=FMAX,
                 alpha_delta=alpha_delta,

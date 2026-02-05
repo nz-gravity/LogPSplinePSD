@@ -15,7 +15,7 @@ def test_prepare_psd_matrix_diagonal_input():
     psd_samples[:, 0, :] = 1.0
     psd_samples[:, 1, :] = 2.0
     psd_samples[:, 2, :] = 3.0
-    psd_matrix = _prepare_psd_matrix(psd_samples, n_channels=3)
+    psd_matrix = _prepare_psd_matrix(psd_samples, p=3)
     assert psd_matrix.shape == (2, 3, 3, 4)
     assert np.all(psd_matrix[:, 0, 0, :] == 1.0)
     assert np.all(psd_matrix[:, 1, 1, :] == 2.0)
@@ -28,13 +28,13 @@ def test_prepare_psd_matrix_transposes_full_matrix():
     psd_matrix[:, 0, 0, :] = 1.0
     psd_matrix[:, 1, 1, :] = 2.0
     psd_samples = np.transpose(psd_matrix, (0, 3, 1, 2))
-    result = _prepare_psd_matrix(psd_samples, n_channels=2)
+    result = _prepare_psd_matrix(psd_samples, p=2)
     np.testing.assert_allclose(result, psd_matrix)
 
 
 def test_prepare_psd_matrix_rejects_invalid_shape():
     with pytest.raises(ValueError):
-        _prepare_psd_matrix(np.zeros((2, 2)), n_channels=2)
+        _prepare_psd_matrix(np.zeros((2, 2)), p=2)
 
 
 def test_compute_psd_functionals_constant_psd():

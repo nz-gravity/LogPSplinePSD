@@ -39,7 +39,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     if channel_stds is not None:
         scale_matrix = np.outer(channel_stds, channel_stds) / scaling_factor
     else:
-        scale_matrix = scaling_factor * np.ones((ts.n_channels, ts.n_channels))
+        scale_matrix = scaling_factor * np.ones((ts.p, ts.p))
 
     def to_physical(psd: np.ndarray) -> np.ndarray:
         return psd * scale_matrix
@@ -54,7 +54,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         n_warmup=n_warmup,
         outdir=full_dir,
         verbose=False,
-        n_time_blocks=2 if test_mode != "fast" else 1,
+        Nb=2 if test_mode != "fast" else 1,
         true_psd=varma.get_true_psd(),
     )
 
@@ -74,7 +74,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         n_warmup=n_warmup,
         outdir=coarse_dir,
         verbose=False,
-        n_time_blocks=2 if test_mode != "fast" else 1,
+        Nb=2 if test_mode != "fast" else 1,
         coarse_grain_config=coarse_cfg,
         true_psd=varma.get_true_psd(),
     )
@@ -141,10 +141,10 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
 
     # Diagnostics: empirical PSD stored in the coarse run should match the
     # coarse-grained Wishart statistics computed directly from the data.
-    n_blocks = 2 if test_mode != "fast" else 1
+    Nb = 2 if test_mode != "fast" else 1
     standardized_ts = ts.standardise_for_psd()
     fft_full = standardized_ts.to_wishart_stats(
-        n_blocks=n_blocks,
+        Nb=Nb,
         fmin=None,
         fmax=None,
     )

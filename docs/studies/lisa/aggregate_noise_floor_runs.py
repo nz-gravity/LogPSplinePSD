@@ -11,13 +11,11 @@ import numpy as np
 import pandas as pd
 
 
-def _tree_depth_hits(
-    sample_stats, n_channels: int, max_tree_depth: int
-) -> dict:
+def _tree_depth_hits(sample_stats, p: int, max_tree_depth: int) -> dict:
     max_steps = 2**max_tree_depth - 1
     hits = {}
     hit_fracs = []
-    for ch in range(n_channels):
+    for ch in range(p):
         key = f"num_steps_channel_{ch}"
         if key not in sample_stats:
             hits[f"td_hit_c{ch}"] = np.nan
@@ -63,9 +61,9 @@ def _collect_run(run_dir: Path) -> dict | None:
     summary_stats = _summarize_csv(summary_path)
     idata = az.from_netcdf(str(idata_path))
 
-    n_channels = int(idata.attrs.get("n_channels", 0))
+    p = int(idata.attrs.get("p", 0))
     max_tree_depth = int(idata.attrs.get("max_tree_depth", 10))
-    td_stats = _tree_depth_hits(idata.sample_stats, n_channels, max_tree_depth)
+    td_stats = _tree_depth_hits(idata.sample_stats, p, max_tree_depth)
 
     noise_mode = idata.attrs.get("noise_floor_mode", "")
     noise_scale = idata.attrs.get("noise_floor_scale", np.nan)

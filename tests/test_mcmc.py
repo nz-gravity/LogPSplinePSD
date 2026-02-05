@@ -38,10 +38,10 @@ def test_multivar_mcmc(outdir, test_mode):
     # Generate test data
     np.random.seed(42)
     varma = VARMAData(n_samples=n)
-    n_dim = varma.dim
+    p = varma.dim
     varma.plot(fname=os.path.join(outdir, "varma_data.png"))
 
-    print(f"VARMA data shape: {varma.data.shape}, dim={n_dim}")
+    print(f"VARMA data shape: {varma.data.shape}, dim={p}")
 
     timeseries = MultivariateTimeseries(
         t=varma.time,
@@ -57,7 +57,7 @@ def test_multivar_mcmc(outdir, test_mode):
         ("multivar_nuts", "multivariate_nuts", True, 1),
     ]
 
-    for sampler_name, expected_sampler_attr, expect_lp, n_blocks in samplers:
+    for sampler_name, expected_sampler_attr, expect_lp, Nb in samplers:
         save_name = (
             "multivar_blocked_nuts" if sampler_name == "nuts" else sampler_name
         )
@@ -75,7 +75,7 @@ def test_multivar_mcmc(outdir, test_mode):
             verbose=verbose,
             target_accept_prob=0.8,
             true_psd=true_psd,
-            n_time_blocks=n_blocks,
+            Nb=Nb,
         )
 
         # Basic checks
@@ -107,7 +107,7 @@ def test_multivar_mcmc(outdir, test_mode):
             )
 
         # Check diagonal parameters
-        for j in range(n_dim):
+        for j in range(p):
             assert f"delta_{j}" in idata.posterior.data_vars
             assert f"phi_delta_{j}" in idata.posterior.data_vars
             assert f"weights_delta_{j}" in idata.posterior.data_vars
@@ -126,9 +126,9 @@ def test_multivar_mcmc(outdir, test_mode):
             psd_matrix_shape[1] == freq_dim
         ), "Posterior PSD frequency dimension mismatch."
         assert psd_matrix_shape[2:] == (
-            n_dim,
-            n_dim,
-        ), f"Posterior PSD matrix channel dims mismatch: expected {(n_dim, n_dim)}, got {psd_matrix_shape[2:]}"
+            p,
+            p,
+        ), f"Posterior PSD matrix channel dims mismatch: expected {(p, p)}, got {psd_matrix_shape[2:]}"
 
         # Check RIAE and CI coverage computation for multivariate
         print(
@@ -198,7 +198,7 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
         n_knots=3,
         n_samples=1,
         n_warmup=1,
-        n_time_blocks=1,
+        Nb=1,
         vi_steps=10,
         vi_posterior_draws=6,
         vi_psd_max_draws=2,
@@ -434,14 +434,14 @@ def _synthetic_multivar_series():
 
 def _expected_coarse_freq_multivar(
     ts: MultivariateTimeseries,
-    n_blocks: int,
+    Nb: int,
     fmin: float,
     fmax: float,
     cfg: CoarseGrainConfig,
 ) -> np.ndarray:
     standardized = ts.standardise_for_psd()
     fft = standardized.to_wishart_stats(
-        n_blocks=n_blocks,
+        Nb=Nb,
         fmin=fmin,
         fmax=fmax,
     )
@@ -467,10 +467,10 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
         f_min=fmin,
         f_max=fmax,
     )
-    n_blocks = 2
+    Nb = 2
     expected_freq = _expected_coarse_freq_multivar(
         ts_spec,
-        n_blocks=n_blocks,
+        Nb=Nb,
         fmin=fmin,
         fmax=fmax,
         cfg=coarse_cfg,
@@ -484,7 +484,7 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
         n_knots=5,
         degree=3,
         diffMatrixOrder=2,
-        n_time_blocks=n_blocks,
+        Nb=Nb,
         only_vi=True,
         vi_steps=20,
         vi_lr=5e-3,
@@ -514,7 +514,7 @@ def test_multivar_blocked_nuts_records_step_size():
         n_knots=4,
         degree=3,
         diffMatrixOrder=2,
-        n_time_blocks=1,
+        Nb=1,
         init_from_vi=False,
         verbose=False,
     )

@@ -61,9 +61,9 @@ def _resolve_blocks(n_time_target: int, block_size: int) -> tuple[int, int]:
     if block_size <= 0:
         raise ValueError("--block-size must be positive.")
 
-    n_blocks = max(1, n_time_target // block_size)
-    n_used = n_blocks * block_size
-    return n_blocks, n_used
+    Nb = max(1, n_time_target // block_size)
+    n_used = Nb * block_size
+    return Nb, n_used
 
 
 def main() -> None:
@@ -74,7 +74,7 @@ def main() -> None:
         "--block-size",
         type=int,
         default=5000,
-        help="Samples per Wishart block (used to pick n_time_blocks).",
+        help="Samples per Wishart block (used to pick Nb).",
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--knots", type=int, default=15)
@@ -119,10 +119,10 @@ def main() -> None:
         )
         return
 
-    n_blocks, n_used = _resolve_blocks(args.n_time, args.block_size)
-    if n_used != int(args.n_time):
+    Nb, n_used = _resolve_blocks(args.n, args.block_size)
+    if n_used != int(args.n):
         logger.info(
-            f"Trimming target N={int(args.n_time)} -> N_used={n_used} to fit {n_blocks} blocks of {int(args.block_size)}."
+            f"Trimming target N={int(args.n)} -> N_used={n_used} to fit {Nb} blocks of {int(args.block_size)}."
         )
 
     varma = VARMAData(
@@ -140,7 +140,7 @@ def main() -> None:
         coarse_cfg = CoarseGrainConfig(enabled=True, Nc=coarse_bins)
 
     logger.info(
-        f"Running VAR(3) job: N={n_used}, blocks={n_blocks}, coarse_bins={coarse_bins or 'off'}, outdir={outdir}"
+        f"Running VAR(3) job: N={n_used}, blocks={Nb}, coarse_bins={coarse_bins or 'off'}, outdir={outdir}"
     )
 
     run_mcmc(
@@ -163,7 +163,7 @@ def main() -> None:
         vi_steps=int(args.vi_steps),
         vi_guide=str(args.vi_guide),
         vi_psd_max_draws=64,
-        n_time_blocks=int(n_blocks),
+        Nb=int(Nb),
         knot_kwargs=dict(method="log"),
         coarse_grain_config=coarse_cfg,
         alpha_delta=float(args.alpha_delta),

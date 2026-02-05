@@ -15,24 +15,22 @@ from log_psplines.datatypes.multivar import MultivarFFT
 from log_psplines.example_datasets.lisa_data import LISAData
 
 
-def _make_test_signal(n_time: int, fs: float) -> np.ndarray:
+def _make_test_signal(n: int, fs: float) -> np.ndarray:
     rng = np.random.default_rng(123)
-    t = np.arange(n_time, dtype=float) / fs
+    t = np.arange(n, dtype=float) / fs
     low = 0.7 * np.sin(2 * np.pi * 0.002 * t)
     mid = 0.4 * np.sin(2 * np.pi * 0.08 * t)
-    noise = rng.normal(scale=0.05, size=n_time)
+    noise = rng.normal(scale=0.05, size=n)
     return (low + mid + noise)[:, None]
 
 
 def _wishart_psd(
     data: np.ndarray,
     fs: float,
-    n_blocks: int,
+    Nb: int,
     window: str | tuple | None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    fft = MultivarFFT.compute_wishart(
-        data, fs=fs, n_blocks=n_blocks, window=window
-    )
+    fft = MultivarFFT.compute_wishart(data, fs=fs, Nb=Nb, window=window)
     return fft.freq, np.real(fft.raw_psd[:, 0, 0])
 
 
@@ -45,13 +43,13 @@ def _log_rms_difference(reference: np.ndarray, target: np.ndarray) -> float:
     )
 
 
-def _load_lisa_x_segment(n_time: int, offset: int = 0) -> np.ndarray:
+def _load_lisa_x_segment(n: int, offset: int = 0) -> np.ndarray:
     lisa = LISAData.load(data_path=Path("data/tdi.h5"))
     x_channel = np.asarray(lisa.data[:, 0], dtype=float)
-    segment = x_channel[offset : offset + n_time]
-    if segment.shape[0] != n_time:
+    segment = x_channel[offset : offset + n]
+    if segment.shape[0] != n:
         raise ValueError(
-            f"Requested {n_time} samples from LISA TDI data but got {segment.shape[0]}"
+            f"Requested {n} samples from LISA TDI data but got {segment.shape[0]}"
         )
     return segment
 
@@ -93,18 +91,18 @@ def test_windowing_reduces_welch_wishart_gap(outdir):
     os.makedirs(outdir, exist_ok=True)
 
     fs = 1.0
-    n_time = 4096
-    n_blocks = 4
-    block_len = n_time // n_blocks
-    data = _make_test_signal(n_time, fs)
+    n = 4096
+    Nb = 4
+    Lb = n // Nb
+    data = _make_test_signal(n, fs)
     trans_freq = 10**-2
 
     f_welch, psd_welch = welch(
         data[:, 0],
         fs=fs,
         window="hann",
-        nperseg=block_len,
-        noverlap=block_len // 2,
+        nperseg=Lb,
+        noverlap=Lb // 2,
         detrend="constant",
         scaling="density",
         return_onesided=True,
@@ -113,9 +111,7 @@ def test_windowing_reduces_welch_wishart_gap(outdir):
     f_welch = f_welch[1:]
     psd_welch = psd_welch[1:]
 
-    wishart_rect = MultivarFFT.compute_wishart(
-        data, fs=fs, n_blocks=n_blocks, window=None
-    )
+    wishart_rect = MultivarFFT.compute_wishart(data, fs=fs, Nb=Nb, window=None)
     np.testing.assert_allclose(wishart_rect.freq, f_welch)
     psd_rect = np.real(wishart_rect.raw_psd[:, 0, 0])
 
@@ -130,9 +126,7 @@ def test_windowing_reduces_welch_wishart_gap(outdir):
 
     window_rms = {}
     for name, cfg in window_cfgs.items():
-        freq_win, psd_win = _wishart_psd(
-            data, fs=fs, n_blocks=n_blocks, window=cfg
-        )
+        freq_win, psd_win = _wishart_psd(data, fs=fs, Nb=Nb, window=cfg)
         np.testing.assert_allclose(freq_win, f_welch)
         window_rms[name] = _log_rms_difference(psd_welch, psd_win)
         print(f"Window {name}: log-RMS diff={window_rms[name]:.4f}")
@@ -153,9 +147,7 @@ def test_windowing_reduces_welch_wishart_gap(outdir):
     coarse_baseline = _coarse_log_rms(psd_welch, f_welch, wishart_rect, spec)
     coarse_rms = {}
     for name, cfg in window_cfgs.items():
-        fft_win = MultivarFFT.compute_wishart(
-            data, fs=fs, n_blocks=n_blocks, window=cfg
-        )
+        fft_win = MultivarFFT.compute_wishart(data, fs=fs, Nb=Nb, window=cfg)
         coarse_rms[name] = _coarse_log_rms(psd_welch, f_welch, fft_win, spec)
         print(f"Coarse window {name}: log-RMS diff={coarse_rms[name]:.4f}")
     assert coarse_rms["hann"] < coarse_baseline * 0.8
@@ -169,7 +161,7 @@ def test_windowing_reduces_welch_wishart_gap(outdir):
         window_cfgs,
         data,
         fs,
-        n_blocks,
+        Nb,
         spec,
         trans_freq,
         f"{outdir}/simulated.png",
@@ -184,19 +176,19 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
     os.makedirs(outdir, exist_ok=True)
 
     fs = 0.5  # dt = 2 s in the provided TDI file
-    n_time = 65536  # keep runtime modest while matching block sizes
-    n_blocks = 4
-    block_len = n_time // n_blocks
+    n = 65536  # keep runtime modest while matching block sizes
+    Nb = 4
+    Lb = n // Nb
     trans_freq = 10**-4
 
-    data = _load_lisa_x_segment(n_time)[:, None]
+    data = _load_lisa_x_segment(n)[:, None]
 
     f_welch, psd_welch = welch(
         data[:, 0],
         fs=fs,
         window="hann",
-        nperseg=block_len,
-        noverlap=block_len // 2,
+        nperseg=Lb,
+        noverlap=Lb // 2,
         detrend="constant",
         scaling="density",
         return_onesided=True,
@@ -204,9 +196,7 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
     f_welch = f_welch[1:]
     psd_welch = psd_welch[1:]
 
-    wishart_rect = MultivarFFT.compute_wishart(
-        data, fs=fs, n_blocks=n_blocks, window=None
-    )
+    wishart_rect = MultivarFFT.compute_wishart(data, fs=fs, Nb=Nb, window=None)
     np.testing.assert_allclose(wishart_rect.freq, f_welch)
     psd_rect = np.real(wishart_rect.raw_psd[:, 0, 0])
     baseline_rms = _log_rms_difference(psd_welch, psd_rect)
@@ -220,9 +210,7 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
 
     window_rms = {}
     for name, cfg in window_cfgs.items():
-        freq_win, psd_win = _wishart_psd(
-            data, fs=fs, n_blocks=n_blocks, window=cfg
-        )
+        freq_win, psd_win = _wishart_psd(data, fs=fs, Nb=Nb, window=cfg)
         np.testing.assert_allclose(freq_win, f_welch)
         window_rms[name] = _log_rms_difference(psd_welch, psd_win)
         print(f"LISA window {name}: log-RMS diff={window_rms[name]:.4f}")
@@ -243,9 +231,7 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
     coarse_baseline = _coarse_log_rms(psd_welch, f_welch, wishart_rect, spec)
     coarse_rms = {}
     for name, cfg in window_cfgs.items():
-        fft_win = MultivarFFT.compute_wishart(
-            data, fs=fs, n_blocks=n_blocks, window=cfg
-        )
+        fft_win = MultivarFFT.compute_wishart(data, fs=fs, Nb=Nb, window=cfg)
         coarse_rms[name] = _coarse_log_rms(psd_welch, f_welch, fft_win, spec)
         print(
             f"LISA coarse window {name}: log-RMS diff={coarse_rms[name]:.4f}"
@@ -257,7 +243,7 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
         window_cfgs,
         data,
         fs,
-        n_blocks,
+        Nb,
         spec,
         trans_freq,
         f"{outdir}/lisa.png",
@@ -278,7 +264,7 @@ def _make_plot(
     window_cfgs,
     data,
     fs,
-    n_blocks,
+    Nb,
     spec,
     trans_freq,
     fname,
@@ -295,7 +281,7 @@ def _make_plot(
 
     axes[1].loglog(f_welch, psd_welch, label="Welch", color="black")
     for name, cfg in window_cfgs.items():
-        _, psd_win = _wishart_psd(data, fs=fs, n_blocks=n_blocks, window=cfg)
+        _, psd_win = _wishart_psd(data, fs=fs, Nb=Nb, window=cfg)
         axes[1].loglog(
             f_welch,
             psd_win,
@@ -306,9 +292,7 @@ def _make_plot(
 
     f_coarse, psd_coarse_welch = _coarse_apply(psd_welch, f_welch, spec)
     _, psd_coarse_rect = _coarse_psd_wishart(
-        MultivarFFT.compute_wishart(
-            data, fs=fs, n_blocks=n_blocks, window=None
-        ),
+        MultivarFFT.compute_wishart(data, fs=fs, Nb=Nb, window=None),
         spec,
     )
     axes[2].loglog(
@@ -324,9 +308,7 @@ def _make_plot(
         linestyle="--",
     )
     for name, cfg in window_cfgs.items():
-        fft_win = MultivarFFT.compute_wishart(
-            data, fs=fs, n_blocks=n_blocks, window=cfg
-        )
+        fft_win = MultivarFFT.compute_wishart(data, fs=fs, Nb=Nb, window=cfg)
         _, psd_coarse_win = _coarse_psd_wishart(fft_win, spec)
         axes[2].loglog(
             f_coarse,

@@ -7,8 +7,8 @@ statistics and PSD matrices. The current conventions are:
 
 - **Normalisation** – PSD matrices are **one-sided** and expressed per Hz. The
   helper :func:`wishart_matrix_to_psd` simply divides the summed Wishart
-  matrices by the effective degrees of freedom, i.e., :math:`S(f) = Y(f) / \nu`.
-- **Degrees of freedom** – :func:`compute_effective_nu` multiplies the baseline
+  matrices by the effective degrees of freedom, i.e., :math:`S(f) = Y(f) / N_b`.
+- **Degrees of freedom** – :func:`compute_effective_Nb` multiplies the baseline
   block count by the coarse-grain bin counts, so the PSD conversion always uses
   the correct ``ν`` for each frequency bin.
 - **Scaling factor** – The optional ``scaling_factor`` tracks variance

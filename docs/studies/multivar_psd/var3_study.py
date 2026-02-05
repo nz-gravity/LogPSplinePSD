@@ -131,7 +131,7 @@ def simulation_study(
         vi_guide=DEFAULT_VI_GUIDE,
         vi_psd_max_draws=DEFAULT_VI_PSD_MAX_DRAWS,
         posterior_psd_max_draws=DEFAULT_POSTERIOR_PSD_MAX_DRAWS,
-        n_time_blocks=DEFAULT_N_TIME_BLOCKS,
+        Nb=DEFAULT_N_TIME_BLOCKS,
         knot_kwargs=dict(method=knot_method),
         coarse_grain_config=coarse_grain_config,
         alpha_delta=DEFAULT_ALPHA_DELTA,

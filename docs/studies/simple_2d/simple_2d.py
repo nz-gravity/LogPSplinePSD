@@ -375,7 +375,7 @@ phase_terms = (
 )
 mods = 1.0 + a_samples[:, None] * np.cos(phase_terms)
 mods2 = mods**2
-# Broadcast into (n_samps, n_segments, n_freq)
+# Broadcast into (n_samps, n_segments, N)
 S_mod_samples = base_psd_samples[:, None, :] * mods2[:, :, None]
 # Posterior median time-varying PSD
 S_mod_median = np.median(S_mod_samples, axis=0)
@@ -399,7 +399,7 @@ if not (os.path.exists(samples_file) and os.path.exists(posts_file)):
     )
     mods = 1.0 + a_samples[:, None] * np.cos(phase_terms)
     mods2 = mods**2
-    # Broadcast into (n_samps, n_segments, n_freq)
+    # Broadcast into (n_samps, n_segments, N)
     S_mod_samples = base_psd_samples[:, None, :] * mods2[:, :, None]
     # Posterior median time-varying PSD
     S_mod_median = np.median(S_mod_samples, axis=0)

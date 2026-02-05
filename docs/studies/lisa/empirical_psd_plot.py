@@ -117,7 +117,7 @@ def main() -> None:
     parser.add_argument("--fmin", type=float, default=1e-4)
     parser.add_argument("--fmax", type=float, default=1e-1)
     parser.add_argument(
-        "--n_blocks",
+        "--Nb",
         type=int,
         default=0,
         help="Number of time blocks for Wishart averaging. When 0, infer from NPZ metadata if present.",
@@ -169,16 +169,16 @@ def main() -> None:
             else None
         )
 
-    n_time = int(y_full.shape[0])
-    if args.n_blocks and args.n_blocks > 0:
-        n_blocks = int(args.n_blocks)
+    n = int(y_full.shape[0])
+    if args.Nb and args.Nb > 0:
+        Nb = int(args.Nb)
     elif block_len_samples is not None and block_len_samples > 0:
-        n_blocks = max(1, n_time // int(block_len_samples))
+        Nb = max(1, n // int(block_len_samples))
     else:
-        n_blocks = 1
+        Nb = 1
 
-    n_used = (n_time // n_blocks) * n_blocks
-    if n_used != n_time:
+    n_used = (n // Nb) * Nb
+    if n_used != n:
         t_full = t_full[:n_used]
         y_full = y_full[:n_used]
 
@@ -189,7 +189,7 @@ def main() -> None:
         else args.window
     )
     fft = ts.to_wishart_stats(
-        n_blocks=n_blocks,
+        Nb=Nb,
         fmin=float(args.fmin),
         fmax=float(args.fmax),
         window=window,

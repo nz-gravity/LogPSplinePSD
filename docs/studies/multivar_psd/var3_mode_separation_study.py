@@ -36,14 +36,14 @@ from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 
 @dataclass(frozen=True)
 class StudyConfig:
-    n_time: int = 1024
+    n: int = 1024
     fs: float = 1.0
     seed: int = 0
     n_knots: int = 7
     n_samples: int = 500
     n_warmup: int = 500
     num_chains: int = 4
-    n_time_blocks: int = 8
+    Nb: int = 8
     target_accept_prob: float = 0.8
     max_tree_depth: int = 10
     dense_mass: bool = True
@@ -271,7 +271,7 @@ def _build_case_varma(cfg: StudyConfig, case: str) -> VARMAData:
     sigma = _sigma_from_eigvars(q, eig_vars)
 
     return VARMAData(
-        n_samples=cfg.n_time,
+        n_samples=cfg.n,
         seed=cfg.seed,
         fs=cfg.fs,
         var_coeffs=var_coeffs,
@@ -323,7 +323,7 @@ def run_case(
         num_chains=cfg.num_chains,
         outdir=str(outdir),
         verbose=True,
-        n_time_blocks=cfg.n_time_blocks,
+        Nb=cfg.Nb,
         target_accept_prob=cfg.target_accept_prob,
         max_tree_depth=cfg.max_tree_depth,
         dense_mass=cfg.dense_mass,
@@ -355,8 +355,8 @@ def run_case(
     row: Dict[str, object] = {
         "case": case,
         "output_dir": str(outdir),
-        "n_time_blocks": float(cfg.n_time_blocks),
-        "n_time": float(cfg.n_time),
+        "Nb": float(cfg.Nb),
+        "n": float(cfg.n),
         "fs": float(cfg.fs),
         "seed": float(cfg.seed),
         "n_knots": float(cfg.n_knots),
@@ -431,14 +431,14 @@ def main() -> None:
         init_from_vi = False
 
     cfg = StudyConfig(
-        n_time=int(args.n_time),
+        n=int(args.n),
         fs=float(args.fs),
         seed=int(args.seed),
         n_knots=int(args.knots),
         n_samples=int(args.samples),
         n_warmup=int(args.warmup),
         num_chains=int(args.chains),
-        n_time_blocks=int(args.time_blocks),
+        Nb=int(args.time_blocks),
         target_accept_prob=float(args.target_accept),
         max_tree_depth=int(args.max_tree_depth),
         alpha_phi=float(args.alpha_phi),
@@ -463,9 +463,9 @@ def main() -> None:
         ),
     )
 
-    if cfg.n_time_blocks < 3:
+    if cfg.Nb < 3:
         logger.warning(
-            f"n_time_blocks={cfg.n_time_blocks} < n_channels=3; Wishart matrices are rank-deficient "
+            f"Nb={cfg.Nb} < p=3; Wishart matrices are rank-deficient "
             "and the blocked likelihood geometry will be pathological."
         )
 
@@ -473,9 +473,7 @@ def main() -> None:
     root_out = (
         here
         / str(args.out)
-        / (
-            f"seed_{cfg.seed}_N{cfg.n_time}_K{cfg.n_knots}_B{cfg.n_time_blocks}"
-        )
+        / (f"seed_{cfg.seed}_N{cfg.n}_K{cfg.n_knots}_B{cfg.Nb}")
     )
     root_out.mkdir(parents=True, exist_ok=True)
     (root_out / "study_config.json").write_text(

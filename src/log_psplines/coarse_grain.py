@@ -289,8 +289,8 @@ def apply_coarse_grain_multivar_fft(
     y_im_bins = _sum_bins_equal(y_im_sel, Nh=Nh).astype(np.float64, copy=False)
 
     # u still needs per-bin eigendecomposition
-    n_dim = int(fft.n_dim)
-    u_bins = np.zeros((Nc, n_dim, n_dim), dtype=np.complex128)
+    p = int(fft.p)
+    u_bins = np.zeros((Nc, p, p), dtype=np.complex128)
 
     for b in range(Nc):
         s = b * Nh
@@ -311,7 +311,7 @@ def apply_coarse_grain_multivar_fft(
 
     psd_coarse = wishart_matrix_to_psd(
         u_to_wishart_matrix(u_bins),
-        nu=int(fft.nu),
+        Nb=int(fft.Nb),
         duration=float(getattr(fft, "duration", 1.0) or 1.0),
         scaling_factor=float(fft.scaling_factor or 1.0),
         weights=weights,
@@ -325,9 +325,9 @@ def apply_coarse_grain_multivar_fft(
         u_re=u_bins.real.astype(np.float64),
         u_im=u_bins.imag.astype(np.float64),
         freq=f_coarse,
-        n_freq=int(f_coarse.shape[0]),
-        n_dim=int(fft.n_dim),
-        nu=int(fft.nu),
+        N=int(f_coarse.shape[0]),
+        p=int(fft.p),
+        Nb=int(fft.Nb),
         scaling_factor=fft.scaling_factor,
         fs=fft.fs,
         duration=float(getattr(fft, "duration", 1.0) or 1.0),

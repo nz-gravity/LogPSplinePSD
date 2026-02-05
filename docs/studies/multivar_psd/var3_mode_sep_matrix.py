@@ -8,7 +8,7 @@ Defaults match the "concrete test matrix" discussed in the study notes:
   - cases: separated, force_separation, bunched
   - alpha_delta=beta_delta in {1e-4, 1, 2}
   - init_from_vi in {False, True diag, True lowrank, True flow:1}
-  - n_time_blocks in {8, 16, 32}
+  - Nb in {8, 16, 32}
   - n_knots in {5, 10, 15, 20}
 
 Outputs are organised as:
@@ -95,13 +95,13 @@ def _iter_runs(
     knots: Sequence[int],
 ) -> Iterable[dict[str, object]]:
     for case in cases:
-        for n_time_blocks in time_blocks:
+        for Nb in time_blocks:
             for n_knots in knots:
                 for alpha_delta in alpha_deltas:
                     for init_mode in init_modes:
                         yield {
                             "case": case,
-                            "n_time_blocks": int(n_time_blocks),
+                            "Nb": int(Nb),
                             "n_knots": int(n_knots),
                             "alpha_delta": float(alpha_delta),
                             "init_mode": str(init_mode),
@@ -148,13 +148,37 @@ def main() -> None:
     parser.add_argument(
         "--time-blocks-grid", nargs="+", type=int, default=[8, 16, 32]
     )
-    parser.add_argument("--knots-grid", nargs="+", type=int, default=[5, 10, 15, 20])
-    parser.add_argument("--resume", action="store_true", help="Skip runs with existing diagnostics JSON.")
-    parser.add_argument("--overwrite", action="store_true", help="Re-run even if diagnostics JSON exists.")
+    parser.add_argument(
+        "--knots-grid", nargs="+", type=int, default=[5, 10, 15, 20]
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip runs with existing diagnostics JSON.",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Re-run even if diagnostics JSON exists.",
+    )
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--collect-only", action="store_true", help="Only collect existing JSON diagnostics into the aggregate CSV.")
-    parser.add_argument("--start", type=int, default=0, help="Start index into the run list (0-based).")
-    parser.add_argument("--limit", type=int, default=None, help="Maximum number of runs to execute/collect.")
+    parser.add_argument(
+        "--collect-only",
+        action="store_true",
+        help="Only collect existing JSON diagnostics into the aggregate CSV.",
+    )
+    parser.add_argument(
+        "--start",
+        type=int,
+        default=0,
+        help="Start index into the run list (0-based).",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of runs to execute/collect.",
+    )
     args = parser.parse_args()
 
     cases = [str(c) for c in args.cases]
@@ -163,25 +187,27 @@ def main() -> None:
     time_blocks = [int(x) for x in args.time_blocks_grid]
     knots = [int(x) for x in args.knots_grid]
 
-    n_time = int(args.n_time)
-    for n_blocks in time_blocks:
-        if n_blocks < 3:
-            raise ValueError("n_time_blocks must be >= 3 (n_channels=3).")
-        if n_time % int(n_blocks) != 0:
-            raise ValueError(
-                f"n_time={n_time} must be divisible by n_time_blocks={n_blocks}."
-            )
+    n = int(args.n)
+    for Nb in time_blocks:
+        if Nb < 3:
+            raise ValueError("Nb must be >= 3 (p=3).")
+        if n % int(Nb) != 0:
+            raise ValueError(f"n={n} must be divisible by Nb={Nb}.")
 
     here = Path(__file__).resolve().parent
-    root_out = here / str(args.out) / (
-        f"seed_{int(args.seed)}_N{n_time}_S{int(args.samples)}_W{int(args.warmup)}_C{int(args.chains)}"
+    root_out = (
+        here
+        / str(args.out)
+        / (
+            f"seed_{int(args.seed)}_N{n}_S{int(args.samples)}_W{int(args.warmup)}_C{int(args.chains)}"
+        )
     )
     root_out.mkdir(parents=True, exist_ok=True)
     (root_out / "matrix_config.json").write_text(
         json.dumps(
             dict(
                 base=dict(
-                    n_time=int(args.n_time),
+                    n=int(args.n),
                     fs=float(args.fs),
                     seed=int(args.seed),
                     n_samples=int(args.samples),
@@ -197,7 +223,7 @@ def main() -> None:
                     cases=cases,
                     alpha_delta=alpha_deltas,
                     init_modes=init_modes,
-                    n_time_blocks=time_blocks,
+                    Nb=time_blocks,
                     n_knots=knots,
                 ),
             ),
@@ -218,8 +244,14 @@ def main() -> None:
     )
 
     if args.start < 0 or args.start > len(all_runs):
-        raise ValueError(f"--start must be in [0, {len(all_runs)}], got {args.start}.")
-    end = len(all_runs) if args.limit is None else min(len(all_runs), args.start + int(args.limit))
+        raise ValueError(
+            f"--start must be in [0, {len(all_runs)}], got {args.start}."
+        )
+    end = (
+        len(all_runs)
+        if args.limit is None
+        else min(len(all_runs), args.start + int(args.limit))
+    )
     runs = all_runs[int(args.start) : end]
 
     aggregate_path = root_out / "var3_mode_sep_matrix.csv"
@@ -227,29 +259,35 @@ def main() -> None:
     if args.dry_run:
         print(f"Planned runs: {len(runs)} (of total {len(all_runs)})")
         for spec in runs[:20]:
-            init_from_vi, vi_guide, init_tag = _resolve_init(str(spec["init_mode"]))
+            init_from_vi, vi_guide, init_tag = _resolve_init(
+                str(spec["init_mode"])
+            )
             ad_tag = _float_tag(float(spec["alpha_delta"]))
             run_dir = (
                 root_out
                 / f"case_{spec['case']}"
-                / f"B{spec['n_time_blocks']}"
+                / f"B{spec['Nb']}"
                 / f"K{spec['n_knots']}"
                 / f"ad{ad_tag}"
                 / f"init_{init_tag}"
             )
-            print(f"- {run_dir} (init_from_vi={init_from_vi}, vi_guide={vi_guide})")
+            print(
+                f"- {run_dir} (init_from_vi={init_from_vi}, vi_guide={vi_guide})"
+            )
         return
 
     collected_rows: list[dict[str, object]] = []
 
     for spec in runs:
-        init_from_vi, vi_guide, init_tag = _resolve_init(str(spec["init_mode"]))
+        init_from_vi, vi_guide, init_tag = _resolve_init(
+            str(spec["init_mode"])
+        )
         ad = float(spec["alpha_delta"])
         ad_tag = _float_tag(ad)
         run_dir = (
             root_out
             / f"case_{spec['case']}"
-            / f"B{spec['n_time_blocks']}"
+            / f"B{spec['Nb']}"
             / f"K{spec['n_knots']}"
             / f"ad{ad_tag}"
             / f"init_{init_tag}"
@@ -270,14 +308,14 @@ def main() -> None:
             continue
 
         base_cfg = StudyConfig(
-            n_time=int(args.n_time),
+            n=int(args.n),
             fs=float(args.fs),
             seed=int(args.seed),
             n_knots=int(spec["n_knots"]),
             n_samples=int(args.samples),
             n_warmup=int(args.warmup),
             num_chains=int(args.chains),
-            n_time_blocks=int(spec["n_time_blocks"]),
+            Nb=int(spec["Nb"]),
             target_accept_prob=float(args.target_accept),
             max_tree_depth=int(args.max_tree_depth),
             alpha_delta=ad,

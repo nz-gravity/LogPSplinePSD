@@ -44,16 +44,16 @@ class MultivarFFT:
     Stores real/imaginary parts of the FFT together with Wishart replicates.
 
     Attributes:
-        y_re: Real part of FFT (n_freq, n_dim)
-        y_im: Imag part of FFT (n_freq, n_dim)
+        y_re: Real part of FFT (N, p)
+        y_im: Imag part of FFT (N, p)
         u_re: Real part of eigenvector-weighted periodogram replicates
-              (n_freq, n_dim, n_dim)
+              (N, p, p)
         u_im: Imag part of eigenvector-weighted periodogram replicates
-              (n_freq, n_dim, n_dim)
-        nu: Degrees of freedom (number of averaged blocks)
-        freq: Frequency grid (n_freq,)
-        n_freq: Number of frequencies
-        n_dim: Number of channels
+              (N, p, p)
+        Nb: Degrees of freedom (number of averaged blocks)
+        freq: Frequency grid (N,)
+        N: Number of frequencies
+        p: Number of channels
     """
 
     y_re: np.ndarray
@@ -61,9 +61,9 @@ class MultivarFFT:
     u_re: np.ndarray
     u_im: np.ndarray
     freq: np.ndarray
-    n_freq: int
-    n_dim: int
-    nu: int = 1
+    N: int
+    p: int
+    Nb: int = 1
     scaling_factor: Optional[float] = 1.0  # Track the PSD scaling factor
     channel_stds: Optional[np.ndarray] = (
         None  # Per-channel standard deviations
@@ -89,7 +89,7 @@ class MultivarFFT:
         if not np.isfinite(self.duration) or self.duration <= 0.0:
             raise ValueError("duration must be a positive finite float")
 
-        expected_fft_shape = (self.n_freq, self.n_dim)
+        expected_fft_shape = (self.N, self.p)
         if self.y_re.shape != expected_fft_shape:
             raise ValueError(
                 f"y_re must have shape {expected_fft_shape}, got {self.y_re.shape}"
@@ -99,7 +99,7 @@ class MultivarFFT:
                 f"y_im must have shape {expected_fft_shape}, got {self.y_im.shape}"
             )
 
-        expected_u_shape = (self.n_freq, self.n_dim, self.n_dim)
+        expected_u_shape = (self.N, self.p, self.p)
         if self.u_re.shape != expected_u_shape:
             raise ValueError(
                 f"u_re must have shape {expected_u_shape}, got {self.u_re.shape}"
@@ -109,9 +109,9 @@ class MultivarFFT:
                 f"u_im must have shape {expected_u_shape}, got {self.u_im.shape}"
             )
 
-        if self.freq.shape != (self.n_freq,):
+        if self.freq.shape != (self.N,):
             raise ValueError(
-                f"freq must have length {self.n_freq}, got {self.freq.shape}"
+                f"freq must have length {self.N}, got {self.freq.shape}"
             )
 
         if self.raw_psd is not None:
@@ -122,25 +122,25 @@ class MultivarFFT:
                 )
         if self.raw_freq is not None:
             self.raw_freq = np.asarray(self.raw_freq, dtype=np.float64)
-            if self.raw_freq.shape != (self.n_freq,):
+            if self.raw_freq.shape != (self.N,):
                 raise ValueError(
-                    f"raw_freq must have length {self.n_freq}, got {self.raw_freq.shape}"
+                    f"raw_freq must have length {self.N}, got {self.raw_freq.shape}"
                 )
 
         if self.freq_bin_counts is not None:
             self.freq_bin_counts = np.asarray(
                 self.freq_bin_counts, dtype=np.float64
             )
-            if self.freq_bin_counts.shape != (self.n_freq,):
+            if self.freq_bin_counts.shape != (self.N,):
                 raise ValueError(
-                    f"freq_bin_counts must have length {self.n_freq}, got {self.freq_bin_counts.shape}"
+                    f"freq_bin_counts must have length {self.N}, got {self.freq_bin_counts.shape}"
                 )
             if np.any(self.freq_bin_counts <= 0):
                 raise ValueError("freq_bin_counts must be positive")
 
         if self.channel_stds is not None:
             self.channel_stds = np.asarray(self.channel_stds, dtype=np.float64)
-            if self.channel_stds.shape != (self.n_dim,):
+            if self.channel_stds.shape != (self.p,):
                 raise ValueError(
                     "channel_stds must have length equal to number of channels"
                 )
@@ -160,7 +160,7 @@ class MultivarFFT:
         return cls.compute_wishart(
             x,
             fs=fs,
-            n_blocks=1,
+            Nb=1,
             fmin=fmin,
             fmax=fmax,
             scaling_factor=scaling_factor,
@@ -173,7 +173,7 @@ class MultivarFFT:
         cls,
         x: np.ndarray,
         fs: float,
-        n_blocks: int,
+        Nb: int,
         fmin: Optional[float] = None,
         fmax: Optional[float] = None,
         scaling_factor: Optional[float] = 1.0,
@@ -186,11 +186,11 @@ class MultivarFFT:
         Parameters
         ----------
         x : np.ndarray
-            Input time series (n_time, n_channels)
+            Input time series (n, p)
         fs : float
             Sampling frequency
-        n_blocks : int
-            Number of non-overlapping blocks to average. Must divide n_time.
+        Nb : int
+            Number of non-overlapping blocks to average. Must divide n.
         fmin, fmax : float, optional
             Optional frequency truncation applied after blocking.
         scaling_factor : float, optional
@@ -199,30 +199,28 @@ class MultivarFFT:
             Taper applied to each block before the FFT. Defaults to Hann.
             Set to ``None`` to recover the previous rectangular-window behavior.
         """
-        if n_blocks < 1:
-            raise ValueError("n_blocks must be positive.")
+        if Nb < 1:
+            raise ValueError("Nb must be positive.")
 
-        n_time, n_dim = x.shape
-        if n_time % n_blocks != 0:
-            raise ValueError(
-                f"n_time={n_time} must be divisible by n_blocks={n_blocks}."
-            )
+        n, p = x.shape
+        if n % Nb != 0:
+            raise ValueError(f"n={n} must be divisible by Nb={Nb}.")
 
-        block_len = n_time // n_blocks
-        if block_len <= n_dim:
+        Lb = n // Nb
+        if Lb <= p:
             raise ValueError(
                 "Block length must exceed number of channels for FFT stability."
             )
 
-        blocks = x.reshape(n_blocks, block_len, n_dim)
+        blocks = x.reshape(Nb, Lb, p)
         # Detrend each block (Welch-style constant detrend) to reduce low-frequency
         # leakage into the first few positive bins when using tapered windows.
         blocks = blocks - np.mean(blocks, axis=1, keepdims=True)
 
         if window is None:
-            taper = np.ones(block_len, dtype=np.float64)
+            taper = np.ones(Lb, dtype=np.float64)
         else:
-            taper = windows.get_window(window, block_len, fftbins=True)
+            taper = windows.get_window(window, Lb, fftbins=True)
             taper = np.asarray(taper, dtype=np.float64)
         taper_energy = float(np.sum(taper**2))
         if taper_energy <= 0.0:
@@ -230,7 +228,7 @@ class MultivarFFT:
         blocks = blocks * taper[None, :, None]
 
         block_ffts = np.fft.rfft(blocks, axis=1)
-        freq = np.fft.rfftfreq(block_len, 1 / fs)
+        freq = np.fft.rfftfreq(Lb, 1 / fs)
         # Drop the zero-frequency bin for numerical stability
         block_ffts = block_ffts[:, 1:, :]
         freq = freq[1:]
@@ -242,7 +240,7 @@ class MultivarFFT:
         scale = np.full(
             freq.shape, 2.0 / (taper_energy * fs), dtype=np.float64
         )
-        if block_len % 2 == 0 and scale.size > 0:
+        if Lb % 2 == 0 and scale.size > 0:
             scale[-1] = 1.0 / (taper_energy * fs)
         sqrt_scale = np.sqrt(scale, dtype=np.float64)[None, :, None]
         block_ffts = block_ffts * sqrt_scale
@@ -250,7 +248,7 @@ class MultivarFFT:
         # convention that keeps an explicit 1/T in the likelihood. This ensures
         # the likelihood uses the observation duration explicitly while PSD
         # conversions remain unchanged (see wishart_matrix_to_psd(duration=...)).
-        duration = float(block_len) / float(fs)
+        duration = float(Lb) / float(fs)
         sqrt_duration = float(np.sqrt(np.asarray(duration, dtype=np.float64)))
         block_ffts = block_ffts * sqrt_duration
 
@@ -286,7 +284,7 @@ class MultivarFFT:
         u_im = U.imag
         raw_psd = wishart_matrix_to_psd(
             u_to_wishart_matrix(U),
-            nu=n_blocks,
+            Nb=Nb,
             duration=duration,
             scaling_factor=float(scaling_factor or 1.0),
         )
@@ -295,13 +293,13 @@ class MultivarFFT:
             y_re=y_re,
             y_im=y_im,
             freq=freq,
-            n_freq=len(freq),
-            n_dim=n_dim,
+            N=len(freq),
+            p=p,
             u_re=u_re,
             u_im=u_im,
             raw_psd=raw_psd,
             raw_freq=freq,
-            nu=n_blocks,
+            Nb=Nb,
             scaling_factor=scaling_factor,
             fs=fs,
             duration=duration,
@@ -331,14 +329,14 @@ class MultivarFFT:
             y_re=self.y_re[mask],
             y_im=self.y_im[mask],
             freq=self.freq[mask],
-            n_freq=int(np.sum(mask)),
-            n_dim=self.n_dim,
+            N=int(np.sum(mask)),
+            p=self.p,
             u_re=self.u_re[mask],
             u_im=self.u_im[mask],
             raw_psd=raw_psd,
             raw_freq=raw_freq,
             freq_bin_counts=freq_bin_counts,
-            nu=self.nu,
+            Nb=self.Nb,
             scaling_factor=self.scaling_factor,
             fs=self.fs,
             duration=self.duration,
@@ -351,7 +349,7 @@ class MultivarFFT:
         return (float(f"{amps[0]:.3g}"), float(f"{amps[1]:.3g}"))
 
     def __repr__(self):
-        return f"MultivarFFT(n_freq={self.n_freq}, n_dim={self.n_dim}, amplitudes={self.amplitude_range})"
+        return f"MultivarFFT(N={self.N}, p={self.p}, amplitudes={self.amplitude_range})"
 
     @property
     def empirical_psd(self) -> "EmpiricalPSD":
@@ -384,16 +382,14 @@ class MultivarFFT:
         y_re = np.array(y_re, dtype=np.float64)
         y_im = np.array(y_im, dtype=np.float64)
         freq = np.asarray(freq, dtype=np.float64)
-        n_freq, n_dim = y_re.shape
-        if freq.shape != (n_freq,):
-            raise ValueError(
-                f"freq must have shape ({n_freq},), got {freq.shape}"
-            )
+        N, p = y_re.shape
+        if freq.shape != (N,):
+            raise ValueError(f"freq must have shape ({N},), got {freq.shape}")
         y_complex = y_re + 1j * y_im
         Y = np.einsum("fi,fj->fij", y_complex, np.conj(y_complex))
         psd = wishart_matrix_to_psd(
             Y,
-            nu=1.0,
+            Nb=1,
             duration=float(duration),
             scaling_factor=float(scaling),
         )
@@ -407,7 +403,7 @@ class MultivarFFT:
 
 @dataclass
 class MultivariateTimeseries:
-    y: np.ndarray  # numpy array (n_time, n_channels) for numerical stability
+    y: np.ndarray  # numpy array (n, p) for numerical stability
     t: np.ndarray = None  # numpy array
     std: np.ndarray = None  # numpy array, per-channel std
     scaling_factor: Optional[float] = (
@@ -428,7 +424,7 @@ class MultivariateTimeseries:
             raise ValueError("y or t contains NaN values.")
 
     @property
-    def n_channels(self):
+    def p(self):
         return self.y.shape[1] if self.y.ndim > 1 else 1
 
     @property
@@ -469,24 +465,22 @@ class MultivariateTimeseries:
 
     def to_wishart_stats(
         self,
-        n_blocks: int,
+        Nb: int,
         fmin: Optional[float] = None,
         fmax: Optional[float] = None,
         window: Optional[str | tuple] = "hann",
     ) -> "MultivarFFT":
-        n_time = self.y.shape[0]
-        if n_blocks <= 0:
-            raise ValueError("n_blocks must be positive.")
-        if n_time % n_blocks != 0:
-            raise ValueError(
-                f"n_time={n_time} must be divisible by n_blocks={n_blocks}."
-            )
-        block_len = n_time // n_blocks
+        n = self.y.shape[0]
+        if Nb <= 0:
+            raise ValueError("Nb must be positive.")
+        if n % Nb != 0:
+            raise ValueError(f"n={n} must be divisible by Nb={Nb}.")
+        Lb = n // Nb
 
         wishart_fft = MultivarFFT.compute_wishart(
             self.y,
             fs=self.fs,
-            n_blocks=n_blocks,
+            Nb=Nb,
             fmin=fmin,
             fmax=fmax,
             scaling_factor=self.scaling_factor,
@@ -494,9 +488,9 @@ class MultivariateTimeseries:
             window=window,
         )
         log_msg = (
-            f"Wishart averaging (blocks={n_blocks}): "
-            f"n_time={n_time} -> block_len={block_len}, "
-            f"n_freq={wishart_fft.n_freq}, n_channels={wishart_fft.n_dim}"
+            f"Wishart averaging (blocks={Nb}): "
+            f"n={n} -> Lb={Lb}, "
+            f"N={wishart_fft.N}, p={wishart_fft.p}"
         )
         logger.info(log_msg)
         return wishart_fft
@@ -507,7 +501,7 @@ class MultivariateTimeseries:
         return (float(f"{amps[0]:.3g}"), float(f"{amps[1]:.3g}"))
 
     def __repr__(self):
-        return f"MultivariateTimeseries(n_time={self.y.shape[0]}, n_channels={self.n_channels}, fs={self.fs:.3f}, amplitudes={self.amplitude_range})"
+        return f"MultivariateTimeseries(n={self.y.shape[0]}, p={self.p}, fs={self.fs:.3f}, amplitudes={self.amplitude_range})"
 
     def get_empirical_psd(self, **kwargs) -> "EmpiricalPSD":
         return EmpiricalPSD.from_timeseries_data(
@@ -519,15 +513,13 @@ class MultivariateTimeseries:
 
 @dataclass
 class EmpiricalPSD:
-    freq: np.ndarray  # (n_freq,)
-    psd: np.ndarray  # (n_freq, n_channels, n_channels) complex CSD matrix
-    coherence: (
-        np.ndarray
-    )  # (n_freq, n_channels, n_channels) real-valued coherence matrix
+    freq: np.ndarray  # (N,)
+    psd: np.ndarray  # (N, p, p) complex CSD matrix
+    coherence: np.ndarray  # (N, p, p) real-valued coherence matrix
     channels: Optional[np.ndarray] = None
 
     def __repr__(self):
-        return f"EmpiricalPSD(n_freq={self.freq.shape[0]}, n_channels={self.psd.shape[1]})"
+        return f"EmpiricalPSD(N={self.freq.shape[0]}, p={self.psd.shape[1]})"
 
     @classmethod
     def from_timeseries_data(
@@ -539,22 +531,22 @@ class EmpiricalPSD:
         window: str = "hann",
         detrend: str | bool = "constant",
     ) -> "EmpiricalPSD":
-        n_channels = data.shape[1]
+        p = data.shape[1]
 
         if nperseg is None:
             # Use half or full data length depending on total size
-            n_time = data.shape[0]
-            if n_time <= 512:
-                nperseg = n_time  # full segment for short data
+            n = data.shape[0]
+            if n <= 512:
+                nperseg = n  # full segment for short data
             else:
-                nperseg = n_time // 2
+                nperseg = n // 2
         if noverlap is None:
             noverlap = nperseg // 2
 
         # --- auto spectra ---
         psds = []
         f_ref = None
-        for i in range(n_channels):
+        for i in range(p):
             f, Pxx = welch(
                 data[:, i],
                 fs=fs,
@@ -568,13 +560,13 @@ class EmpiricalPSD:
             psds.append(Pxx)
             if f_ref is None:
                 f_ref = f
-        psds = np.stack(psds, axis=1)  # (n_freq, n_channels)
+        psds = np.stack(psds, axis=1)  # (N, p)
 
         # --- full CSD matrix ---
-        S = np.zeros((len(f_ref), n_channels, n_channels), dtype=complex)
-        for i in range(n_channels):
+        S = np.zeros((len(f_ref), p, p), dtype=complex)
+        for i in range(p):
             S[:, i, i] = psds[:, i]
-            for j in range(i + 1, n_channels):
+            for j in range(i + 1, p):
                 _, Sij = csd(
                     data[:, i],
                     data[:, j],
@@ -594,11 +586,11 @@ class EmpiricalPSD:
 
 
 def _get_coherence(psd: np.ndarray) -> np.ndarray:
-    n_freq, n_channels, _ = psd.shape
-    coh = np.zeros((n_freq, n_channels, n_channels))
-    for i in range(n_channels):
+    N, p, _ = psd.shape
+    coh = np.zeros((N, p, p))
+    for i in range(p):
         coh[:, i, i] = 1.0
-        for j in range(i + 1, n_channels):
+        for j in range(i + 1, p):
             denom = np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
             with np.errstate(divide="ignore", invalid="ignore"):
                 coh_ij = np.abs(psd[:, i, j]) ** 2 / denom

@@ -50,7 +50,7 @@ Whittle’s approximation for the periodogram \\(I_n(\\lambda_l)\\) yields the l
 
 .. math::
 
-     \log L(\beta) \propto -\sum_{l=1}^{\nu} \left[ \log f(\lambda_l) + \frac{I_n(\lambda_l)}{f(\lambda_l)} \right]
+     \log L(\beta) \propto -\sum_{l=1}^{N_b} \left[ \log f(\lambda_l) + \frac{I_n(\lambda_l)}{f(\lambda_l)} \right]
 
 
 

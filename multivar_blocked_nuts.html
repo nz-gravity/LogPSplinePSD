@@ -440,23 +440,23 @@ drift over time):</p>
 </ul>
 <div class="math notranslate nohighlight">
 \[\Y(f_k)=\sum_{i=1}^{N_b} \underbrace{\d^{(i)}(f_k)\d^{(i)}(f_k)^*}_{\I^{(i)}(f_k)}\]</div>
-<p>with degrees of freedom <span class="math notranslate nohighlight">\(\nu\)</span> equal to the number of non-overlapping
-blocks (called <code class="docutils literal notranslate"><span class="pre">n_blocks</span></code> in code).</p>
+<p>with degrees of freedom <span class="math notranslate nohighlight">\(N_b\)</span> equal to the number of non-overlapping
+blocks (called <code class="docutils literal notranslate"><span class="pre">Nb</span></code> in code).</p>
 </section>
 <section id="data-wishart-statistics">
 <h2>Data → Wishart statistics<a class="headerlink" href="#data-wishart-statistics" title="Link to this heading">#</a></h2>
 <p>The sufficient statistics are computed by
 <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT.compute_wishart()</span></code>.</p>
-<p>Given time-domain data <code class="docutils literal notranslate"><span class="pre">x</span></code> with shape <code class="docutils literal notranslate"><span class="pre">(n_time,</span> <span class="pre">p)</span></code>, the code:</p>
+<p>Given time-domain data <code class="docutils literal notranslate"><span class="pre">x</span></code> with shape <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">p)</span></code>, the code:</p>
 <ul>
-<li><p>splits <code class="docutils literal notranslate"><span class="pre">x</span></code> into <code class="docutils literal notranslate"><span class="pre">n_blocks</span></code> contiguous non-overlapping blocks,</p></li>
+<li><p>splits <code class="docutils literal notranslate"><span class="pre">x</span></code> into <code class="docutils literal notranslate"><span class="pre">Nb</span></code> contiguous non-overlapping blocks,</p></li>
 <li><p>detrends each block (constant detrend),</p></li>
 <li><p>applies a taper/window (default: Hann),</p></li>
 <li><p>uses <code class="docutils literal notranslate"><span class="pre">np.fft.rfft</span></code> to work on the positive-frequency grid,</p></li>
 <li><p>applies a one-sided PSD normalisation factor (Nyquist bin handled specially),</p></li>
 <li><p>forms the per-frequency matrix</p>
 <div class="math notranslate nohighlight">
-\[Y(f_k) = \sum_{b=1}^{\nu} D_b(f_k)\, D_b(f_k)^H,\]</div>
+\[Y(f_k) = \sum_{b=1}^{N_b} D_b(f_k)\, D_b(f_k)^H,\]</div>
 <p>where <span class="math notranslate nohighlight">\(D_b(f_k)\)</span> is the tapered/normalised FFT vector for block <span class="math notranslate nohighlight">\(b\)</span>.</p>
 </li>
 </ul>
@@ -503,16 +503,16 @@ vector of replicate components for channel <span class="math notranslate nohighl
 <p>The derivation expresses each factor as (verbatim LaTeX):</p>
 <div class="math notranslate nohighlight">
 \[\begin{split}\mathcal{L}_j(\u_j,\u_{&lt;j}|\btheta_j,\bdelta_j) \propto \nonumber \\
-\prod_{k=1}^{N} \delta_{jk}^{-2N_b} \exp \left(\frac{-\sum_{\nu=1}^p\left|u_{j\nu}^{(k)}-\sum_{l=1}^{j-1}\theta_{jl}^{(k)}u_{l\nu}^{(k)} \right|^2}{T\delta_{jk}^2} \right)\end{split}\]</div>
+\prod_{k=1}^{N} \delta_{jk}^{-2N_b} \exp \left(\frac{-\sum_{N_b=1}^p\left|u_{jN_b}^{(k)}-\sum_{l=1}^{j-1}\theta_{jl}^{(k)}u_{lN_b}^{(k)} \right|^2}{T\delta_{jk}^2} \right)\end{split}\]</div>
 <p>The blocked model implements (up to constants)</p>
 <div class="math notranslate nohighlight">
 \[\log \mathcal{L}_j
 \;\propto\;
--\nu\,\sum_k w_k\,\log\big(\delta_j(f_k)^2\big)
+-N_b\,\sum_k w_k\,\log\big(\delta_j(f_k)^2\big)
 \; - \sum_k \frac{\|r_j(f_k)\|_2^2}{T\,\delta_j(f_k)^2}.\]</div>
 <p>Key points:</p>
 <ul class="simple">
-<li><p><span class="math notranslate nohighlight">\(\nu\)</span> is the number of averaged blocks (<code class="docutils literal notranslate"><span class="pre">fft_data.nu</span></code>).</p></li>
+<li><p><span class="math notranslate nohighlight">\(N_b\)</span> is the number of averaged blocks (<code class="docutils literal notranslate"><span class="pre">fft_data.Nb</span></code>).</p></li>
 <li><p><span class="math notranslate nohighlight">\(T\)</span> is the per-block observation duration (<code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code>).</p></li>
 <li><p><span class="math notranslate nohighlight">\(w_k\)</span> are optional frequency weights (<code class="docutils literal notranslate"><span class="pre">freq_weights</span></code>). They are used
 to scale the log-determinant term when coarse graining is enabled.</p></li>
@@ -534,7 +534,7 @@ does not multiply by <span class="math notranslate nohighlight">\(w_k\)</span> a
 <p>and recomputes <span class="math notranslate nohighlight">\(\bar U_h\)</span> so that <span class="math notranslate nohighlight">\(\bar Y_h = \bar U_h\bar U_h^H\)</span>.</p>
 <p>The returned <cite>weights</cite> vector equals the bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> and
 should be passed as <code class="docutils literal notranslate"><span class="pre">freq_weights</span></code>. With this choice, each bin behaves like a
-Wishart statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(\nu Nh\)</span>.</p>
+Wishart statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(N_b Nh\)</span>.</p>
 <section id="exact-coarse-grained-likelihood-form-from-overleaf">
 <h3>Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-coarse-grained-likelihood-form-from-overleaf" title="Link to this heading">#</a></h3>
 <p>The coarse-grained approximation is written as (verbatim LaTeX):</p>
@@ -546,9 +546,9 @@ Wishart statistic with effective degrees of freedom <span class="math notranslat
 <h2>Symbol ↔ code mapping<a class="headerlink" href="#symbol-code-mapping" title="Link to this heading">#</a></h2>
 <p>The table below lists the most important objects and where they appear.</p>
 <ul class="simple">
-<li><p><span class="math notranslate nohighlight">\(p\)</span> (number of channels) → <code class="docutils literal notranslate"><span class="pre">fft_data.n_dim</span></code> / <code class="docutils literal notranslate"><span class="pre">self.n_channels</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(p\)</span> (number of channels) → <code class="docutils literal notranslate"><span class="pre">fft_data.p</span></code> / <code class="docutils literal notranslate"><span class="pre">self.p</span></code></p></li>
 <li><p><span class="math notranslate nohighlight">\(f_k\)</span> (frequency grid) → <code class="docutils literal notranslate"><span class="pre">fft_data.freq</span></code> / <code class="docutils literal notranslate"><span class="pre">self.freq</span></code></p></li>
-<li><p><span class="math notranslate nohighlight">\(\nu\)</span> (block count / Wishart DOF) → <code class="docutils literal notranslate"><span class="pre">fft_data.nu</span></code> / <code class="docutils literal notranslate"><span class="pre">self.nu</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(N_b\)</span> (block count / Wishart DOF) → <code class="docutils literal notranslate"><span class="pre">fft_data.Nb</span></code> / <code class="docutils literal notranslate"><span class="pre">self.Nb</span></code></p></li>
 <li><p><span class="math notranslate nohighlight">\(U(f_k)\)</span> (eigen replicates) → <code class="docutils literal notranslate"><span class="pre">fft_data.u_re</span></code> + i <code class="docutils literal notranslate"><span class="pre">fft_data.u_im</span></code></p></li>
 <li><p><span class="math notranslate nohighlight">\(\log \delta_j(f_k)^2\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">log_delta_sq_{j}</span></code></p></li>
 <li><p><span class="math notranslate nohighlight">\(\theta_{jl}(f_k)\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">theta_re_{j}</span></code>, <code class="docutils literal notranslate"><span class="pre">theta_im_{j}</span></code></p></li>

@@ -39,8 +39,8 @@ drift over time):
 
    \Y(f_k)=\sum_{i=1}^{N_b} \underbrace{\d^{(i)}(f_k)\d^{(i)}(f_k)^*}_{\I^{(i)}(f_k)}
 
-with degrees of freedom :math:`\nu` equal to the number of non-overlapping
-blocks (called ``n_blocks`` in code).
+with degrees of freedom :math:`N_b` equal to the number of non-overlapping
+blocks (called ``Nb`` in code).
 
 Data → Wishart statistics
 -------------------------
@@ -48,9 +48,9 @@ Data → Wishart statistics
 The sufficient statistics are computed by
 :func:`log_psplines.datatypes.multivar.MultivarFFT.compute_wishart`.
 
-Given time-domain data ``x`` with shape ``(n_time, p)``, the code:
+Given time-domain data ``x`` with shape ``(n, p)``, the code:
 
-- splits ``x`` into ``n_blocks`` contiguous non-overlapping blocks,
+- splits ``x`` into ``Nb`` contiguous non-overlapping blocks,
 - detrends each block (constant detrend),
 - applies a taper/window (default: Hann),
 - uses ``np.fft.rfft`` to work on the positive-frequency grid,
@@ -59,7 +59,7 @@ Given time-domain data ``x`` with shape ``(n_time, p)``, the code:
 
   .. math::
 
-     Y(f_k) = \sum_{b=1}^{\nu} D_b(f_k)\, D_b(f_k)^H,
+     Y(f_k) = \sum_{b=1}^{N_b} D_b(f_k)\, D_b(f_k)^H,
 
   where :math:`D_b(f_k)` is the tapered/normalised FFT vector for block :math:`b`.
 
@@ -129,7 +129,7 @@ The derivation expresses each factor as (verbatim LaTeX):
 .. math::
 
    \mathcal{L}_j(\u_j,\u_{<j}|\btheta_j,\bdelta_j) \propto \nonumber \\
-   \prod_{k=1}^{N} \delta_{jk}^{-2N_b} \exp \left(\frac{-\sum_{\nu=1}^p\left|u_{j\nu}^{(k)}-\sum_{l=1}^{j-1}\theta_{jl}^{(k)}u_{l\nu}^{(k)} \right|^2}{T\delta_{jk}^2} \right)
+   \prod_{k=1}^{N} \delta_{jk}^{-2N_b} \exp \left(\frac{-\sum_{N_b=1}^p\left|u_{jN_b}^{(k)}-\sum_{l=1}^{j-1}\theta_{jl}^{(k)}u_{lN_b}^{(k)} \right|^2}{T\delta_{jk}^2} \right)
 
 The blocked model implements (up to constants)
 
@@ -137,12 +137,12 @@ The blocked model implements (up to constants)
 
    \log \mathcal{L}_j
    \;\propto\;
-   -\nu\,\sum_k w_k\,\log\big(\delta_j(f_k)^2\big)
+   -N_b\,\sum_k w_k\,\log\big(\delta_j(f_k)^2\big)
    \; - \sum_k \frac{\|r_j(f_k)\|_2^2}{T\,\delta_j(f_k)^2}.
 
 Key points:
 
-- :math:`\nu` is the number of averaged blocks (``fft_data.nu``).
+- :math:`N_b` is the number of averaged blocks (``fft_data.Nb``).
 - :math:`T` is the per-block observation duration (``fft_data.duration``).
 - :math:`w_k` are optional frequency weights (``freq_weights``). They are used
   to scale the log-determinant term when coarse graining is enabled.
@@ -169,7 +169,7 @@ and recomputes :math:`\bar U_h` so that :math:`\bar Y_h = \bar U_h\bar U_h^H`.
 
 The returned `weights` vector equals the bin member counts :math:`Nh` and
 should be passed as ``freq_weights``. With this choice, each bin behaves like a
-Wishart statistic with effective degrees of freedom :math:`\nu Nh`.
+Wishart statistic with effective degrees of freedom :math:`N_b Nh`.
 
 Exact coarse-grained likelihood form (from ``overleaf``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -185,9 +185,9 @@ Symbol ↔ code mapping
 
 The table below lists the most important objects and where they appear.
 
-- :math:`p` (number of channels) → ``fft_data.n_dim`` / ``self.n_channels``
+- :math:`p` (number of channels) → ``fft_data.p`` / ``self.p``
 - :math:`f_k` (frequency grid) → ``fft_data.freq`` / ``self.freq``
-- :math:`\nu` (block count / Wishart DOF) → ``fft_data.nu`` / ``self.nu``
+- :math:`N_b` (block count / Wishart DOF) → ``fft_data.Nb`` / ``self.Nb``
 - :math:`U(f_k)` (eigen replicates) → ``fft_data.u_re`` + i ``fft_data.u_im``
 - :math:`\log \delta_j(f_k)^2` → deterministic nodes ``log_delta_sq_{j}``
 - :math:`\theta_{jl}(f_k)` → deterministic nodes ``theta_re_{j}``, ``theta_im_{j}``

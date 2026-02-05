@@ -435,7 +435,7 @@ convention across diagnostics/plotting.</p></li>
 the NumPyro likelihood.</p></li>
 </ul>
 <p>By default, <cite>run_mcmc</cite> passes <cite>freq_weights = Nh</cite>. This matches the coarse-bin
-approximation where each bin has effective DOF <span class="math notranslate nohighlight">\(\nu Nh\)</span>.</p>
+approximation where each bin has effective DOF <span class="math notranslate nohighlight">\(N_b Nh\)</span>.</p>
 <p>If users choose to normalise or temper <cite>freq_weights</cite> for sampler geometry, the
 raw <cite>freq_bin_counts</cite> remain available so PSD conversion does not drift.</p>
 <p>See:</p>
@@ -443,7 +443,7 @@ raw <cite>freq_bin_counts</cite> remain available so PSD conversion does not dri
 <li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code></p></li>
 <li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft()</span></code>
 (<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138">source</a>)</p></li>
-<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.compute_effective_nu()</span></code></p></li>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.compute_effective_Nb()</span></code></p></li>
 </ul>
 </section>
 <section id="blocked-vs-unified-multivariate-nuts">

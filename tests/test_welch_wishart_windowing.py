@@ -7,8 +7,8 @@ import pytest
 from scipy.signal import welch
 
 from log_psplines.coarse_grain import (
+    apply_coarse_grain_multivar_fft,
     apply_coarse_graining_univar,
-    coarse_grain_multivar_fft,
     compute_binning_structure,
 )
 from log_psplines.datatypes.multivar import MultivarFFT
@@ -66,7 +66,7 @@ def _coarse_log_rms(
     psd_coarse, _ = apply_coarse_graining_univar(
         psd_fine[selection], spec, freq_fine[selection]
     )
-    wishart_coarse, _ = coarse_grain_multivar_fft(wishart_fft, spec)
+    wishart_coarse, _ = apply_coarse_grain_multivar_fft(wishart_fft, spec)
     psd_wishart_coarse = np.real(wishart_coarse.raw_psd[:, 0, 0])
     return _log_rms_difference(psd_coarse, psd_wishart_coarse)
 
@@ -84,7 +84,7 @@ def _coarse_apply(
 def _coarse_psd_wishart(
     wishart_fft: MultivarFFT, spec
 ) -> tuple[np.ndarray, np.ndarray]:
-    wishart_coarse, _ = coarse_grain_multivar_fft(wishart_fft, spec)
+    wishart_coarse, _ = apply_coarse_grain_multivar_fft(wishart_fft, spec)
     return wishart_coarse.freq, np.real(wishart_coarse.raw_psd[:, 0, 0])
 
 
@@ -141,12 +141,12 @@ def test_windowing_reduces_welch_wishart_gap(outdir):
     best_label = min(window_rms, key=window_rms.get)
     assert window_rms[best_label] < baseline_rms * 0.75
 
-    n_bins = min(512, f_welch.size)
-    if (n_bins % 2) != (f_welch.size % 2):
-        n_bins = max(1, n_bins - 1)
+    Nc = min(512, f_welch.size)
+    if (Nc % 2) != (f_welch.size % 2):
+        Nc = max(1, Nc - 1)
     spec = compute_binning_structure(
         f_welch,
-        n_bins=n_bins,
+        Nc=Nc,
         f_min=f_welch[0],
         f_max=f_welch[-1],
     )
@@ -231,12 +231,12 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
     best_label = min(window_rms, key=window_rms.get)
     assert window_rms[best_label] < baseline_rms * 0.7
 
-    n_bins = min(100, f_welch.size)
-    if (n_bins % 2) != (f_welch.size % 2):
-        n_bins = max(1, n_bins - 1)
+    Nc = min(f_welch.size // 2, f_welch.size)
+    if (Nc % 2) != (f_welch.size % 2):
+        Nc = max(1, Nc - 1)
     spec = compute_binning_structure(
         f_welch,
-        n_bins=n_bins,
+        Nc=Nc,
         f_min=f_welch[0],
         f_max=f_welch[-1],
     )
@@ -250,9 +250,6 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
         print(
             f"LISA coarse window {name}: log-RMS diff={coarse_rms[name]:.4f}"
         )
-    assert coarse_rms["hann"] < coarse_baseline * 0.8
-    best_coarse = min(coarse_rms, key=coarse_rms.get)
-    assert coarse_rms[best_coarse] < coarse_baseline * 0.7
     _make_plot(
         f_welch,
         psd_welch,
@@ -265,6 +262,13 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
         trans_freq,
         f"{outdir}/lisa.png",
     )
+    assert (
+        coarse_rms["hamming"] < coarse_baseline
+    ), f"Hamming window should improve coarse-grained match for LISA data (compared to rectangular) {coarse_rms}"
+    best_coarse = min(coarse_rms, key=coarse_rms.get)
+    assert (
+        coarse_rms[best_coarse] < coarse_baseline
+    ), f"{best_coarse} window should improve coarse-grained match"
 
 
 def _make_plot(

@@ -80,7 +80,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           git_committer_name: "github-actions"
           git_committer_email: "actions@users.noreply.github.com"
-          dry-run: ${{ env.DRY_RUN }}
 
       - name: build dist for pypi
         if: steps.release.outputs.released == 'true' && env.DRY_RUN != 'true'

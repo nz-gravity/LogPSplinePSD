@@ -34,7 +34,7 @@ class VARMAData:
         self.var_coeffs = var_coeffs
         self.vma_coeffs = vma_coeffs
         self.sigma = sigma
-        self.dim = vma_coeffs.shape[1]
+        self.p = vma_coeffs.shape[1]
         self.psd_scaling = 1.0
         self.n_freq_samples = n_samples // 2
 
@@ -52,7 +52,7 @@ class VARMAData:
         self.psd_scaling = float(np.std(self.data) ** 2)
         self.psd = _calculate_true_varma_psd(
             self.freq,
-            self.dim,
+            self.p,
             self.var_coeffs,
             self.vma_coeffs,
             self.sigma,
@@ -78,23 +78,23 @@ class VARMAData:
         lag_ar = self.var_coeffs.shape[0]
 
         if self.sigma.shape[0] == 1:
-            cov_matrix = np.identity(self.dim) * self.sigma
+            cov_matrix = np.identity(self.p) * self.sigma
         else:
             cov_matrix = self.sigma
 
-        x_init = np.zeros((lag_ar + 1, self.dim))
-        x = np.empty((self.n_samples + 101, self.dim))
+        x_init = np.zeros((lag_ar + 1, self.p))
+        x = np.empty((self.n_samples + 101, self.p))
         x[:] = np.nan
         x[: lag_ar + 1] = x_init
         epsilon = np.random.multivariate_normal(
-            np.zeros(self.dim), cov_matrix, size=[lag_ma]
+            np.zeros(self.p), cov_matrix, size=[lag_ma]
         )
 
         for i in range(lag_ar + 1, x.shape[0]):
             epsilon = np.concatenate(
                 [
                     np.random.multivariate_normal(
-                        np.zeros(self.dim), cov_matrix, size=[1]
+                        np.zeros(self.p), cov_matrix, size=[1]
                     ),
                     epsilon[:-1],
                 ]
@@ -117,7 +117,7 @@ class VARMAData:
         Return a one-sided PSD matrix estimate for the simulated data.
         """
         N = self.n_freq_samples
-        dim = self.dim
+        p = self.p
         data = self.data
         N = data.shape[0]
         data = data - np.mean(data, axis=0)
@@ -148,21 +148,19 @@ class VARMAData:
         """
         if self.data is None:
             raise ValueError("No data to plot. Run resimulate first.")
-        dim = self.dim
+        p = self.p
         periodogram = self.get_periodogram()
         true_psd = self.get_true_psd()
         freq_hz = self.freq
         # Setup axes
         if axs is None:
-            fig, axs = plt.subplots(
-                dim, dim, figsize=(4 * dim, 4 * dim), sharex=True
-            )
+            fig, axs = plt.subplots(p, p, figsize=(4 * p, 4 * p), sharex=True)
         else:
             fig = axs[0, 0].figure
         data_kwgs = dict(alpha=0.3, lw=2, zorder=-10, color="k")
         true_kwgs = dict(lw=1, zorder=10, color="k")
-        for i in range(dim):
-            for j in range(dim):
+        for i in range(p):
+            for j in range(p):
                 ax = axs[i, j]
                 if i == j:
                     ax.plot(
@@ -207,7 +205,7 @@ class VARMAData:
                         **data_kwgs,
                     )
                     ax.set_title(f"Im(CSD): {i + 1},{j + 1}")
-                if i == dim - 1:
+                if i == p - 1:
                     ax.set_xlabel("Frequency (Hz)")
                 if j == 0:
                     ax.set_ylabel("Power / CSD")
@@ -220,7 +218,7 @@ class VARMAData:
 
 def _calculate_true_varma_psd(
     freqs_hz: np.ndarray,
-    dim: int,
+    p: int,
     var_coeffs: np.ndarray,
     vma_coeffs: np.ndarray,
     sigma: np.ndarray,
@@ -233,7 +231,7 @@ def _calculate_true_varma_psd(
 
     Args:
         freqs_hz (np.ndarray): Positive frequency grid in Hz.
-        dim (int): Process dimension.
+        p (int): Process dimension.
         var_coeffs/vma_coeffs: VAR/MA coefficient arrays.
         sigma (np.ndarray): Innovation covariance matrix.
         fs (float): Sampling frequency in Hz.
@@ -251,10 +249,10 @@ def _calculate_true_varma_psd(
             )
 
     omega = 2.0 * np.pi * freqs_hz / fs  # radians per sample
-    spec_matrix = np.empty((freqs_hz.size, dim, dim), dtype=np.complex128)
+    spec_matrix = np.empty((freqs_hz.size, p, p), dtype=np.complex128)
     for idx, w in enumerate(omega):
         spec_matrix[idx] = _calculate_spec_matrix_helper(
-            float(w), dim, var_coeffs, vma_coeffs, sigma
+            float(w), p, var_coeffs, vma_coeffs, sigma
         )
 
     # Convert to one-sided PSD: double positive frequencies except Nyquist
@@ -269,9 +267,9 @@ def _calculate_true_varma_psd(
     #   factor during FFT/Wishart conversion).
     if channel_stds is not None:
         channel_stds = np.asarray(channel_stds, dtype=np.float64)
-        if channel_stds.shape != (dim,):
+        if channel_stds.shape != (p,):
             raise ValueError(
-                f"channel_stds must have shape ({dim},), got {channel_stds.shape}."
+                f"channel_stds must have shape ({p},), got {channel_stds.shape}."
             )
         denom = np.outer(channel_stds, channel_stds).astype(np.float64)
         denom = np.where(denom == 0.0, np.nan, denom)
@@ -281,7 +279,7 @@ def _calculate_true_varma_psd(
     return psd
 
 
-def _calculate_spec_matrix_helper(omega, dim, var_coeffs, vma_coeffs, sigma):
+def _calculate_spec_matrix_helper(omega, p, var_coeffs, vma_coeffs, sigma):
     """
     Helper function to calculate spectral matrix for a single frequency.
 
@@ -289,7 +287,7 @@ def _calculate_spec_matrix_helper(omega, dim, var_coeffs, vma_coeffs, sigma):
         omega (float): Angular frequency (rad/sample).
     """
     if sigma.shape[0] == 1:
-        cov_matrix = np.identity(dim) * sigma
+        cov_matrix = np.identity(p) * sigma
     else:
         cov_matrix = sigma
 
@@ -298,7 +296,7 @@ def _calculate_spec_matrix_helper(omega, dim, var_coeffs, vma_coeffs, sigma):
     A_f_re_ar = np.sum(var_coeffs * np.cos(angles_ar), axis=0)
     A_f_im_ar = -np.sum(var_coeffs * np.sin(angles_ar), axis=0)
     A_f_ar = A_f_re_ar + 1j * A_f_im_ar
-    A_bar_f_ar = np.identity(dim) - A_f_ar
+    A_bar_f_ar = np.identity(p) - A_f_ar
     H_f_ar = np.linalg.inv(A_bar_f_ar)
 
     k_ma = np.arange(vma_coeffs.shape[0])

@@ -162,10 +162,10 @@ if USE_LISATOOLS_SYNTH:
                 "Synthetic NPZ stores PSD in frequency units only; "
                 "regenerate to include strain units for consistent overlays."
             )
-        if "block_len_samples" in synth.files:
-            block_len_samples = int(synth["block_len_samples"])
+        if "Lb" in synth.files:
+            Lb = int(synth["Lb"])
         else:
-            block_len_samples = None
+            Lb = None
         base_psd_units = "strain"
         true_psd_source = (synth["freq_true"], true_matrix)
 else:
@@ -211,31 +211,31 @@ n_duration_days = n_duration / 86_400.0
 # chunk boundaries in synthetic generators.
 if N_TIME_BLOCKS_OVERRIDE is not None:
     Nb = int(N_TIME_BLOCKS_OVERRIDE)
-elif block_len_samples is not None:
-    Nb = max(1, int(n // block_len_samples))
+elif Lb is not None:
+    Nb = max(1, int(n // Lb))
 else:
     Nb = infer_time_blocks(n, max_blocks=MAX_TIME_BLOCKS)
 
-block_len_samples = n // Nb
-block_seconds = block_len_samples * dt
-n_used = Nb * block_len_samples
+Lb = n // Nb
+block_seconds = Lb * dt
+n_used = Nb * Lb
 if n_used != n:
     n_trim = n - n_used
     logger.info(
-        f"Trimming {n_trim} samples to fit {Nb} blocks of {block_len_samples} samples ({block_seconds:.0f} s each).",
+        f"Trimming {n_trim} samples to fit {Nb} blocks of {Lb} samples ({block_seconds:.0f} s each).",
     )
     t_full = t_full[:n_used]
     y_full = y_full[:n_used]
 
 n = y_full.shape[0]
 logger.info(
-    f"Using Nb={Nb} x {block_len_samples} (n={n}, block_seconds={block_seconds:.0f}).",
+    f"Using Nb={Nb} x {Lb} (n={n}, block_seconds={block_seconds:.0f}).",
 )
 logger.info(
     f"Total duration: {n_duration_days:.2f} days ({n} samples).",
 )
 logger.info(
-    f"Per-block duration: {block_seconds / 86_400.0:.2f} days ({block_len_samples} samples).",
+    f"Per-block duration: {block_seconds / 86_400.0:.2f} days ({Lb} samples).",
 )
 
 
@@ -269,7 +269,7 @@ if USE_NOISE_FLOOR:
         freq_true = np.asarray(true_psd_source[0], dtype=float)
         true_matrix = np.asarray(true_psd_source[1])
 
-        freq_fine = np.fft.rfftfreq(block_len_samples, 1 / fs)[1:]
+        freq_fine = np.fft.rfftfreq(Lb, 1 / fs)[1:]
         freq_mask = (freq_fine >= FMIN) & (freq_fine <= FMAX)
         freq_fine = freq_fine[freq_mask]
         if freq_fine.size == 0:
@@ -520,14 +520,14 @@ def _blocked_welch(
 # For lisatools synthetic data, the generator can introduce small discontinuities
 # at chunk boundaries; computing Welch within each block and averaging avoids
 # leakage from crossing those boundaries.
-if WELCH_BLOCK_AVG and block_len_samples is not None:
+if WELCH_BLOCK_AVG and Lb is not None:
     logger.info(
-        f"Welch block-averaging enabled: {Nb} block(s) of {block_len_samples} samples."
+        f"Welch block-averaging enabled: {Nb} block(s) of {Lb} samples."
     )
     empirical_welch = _blocked_welch(
         y_full,
         fs=fs,
-        Lb=block_len_samples,
+        Lb=Lb,
         nperseg=welch_nperseg,
         noverlap=welch_noverlap,
         window=WELCH_WINDOW,

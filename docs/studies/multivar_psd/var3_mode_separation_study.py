@@ -64,9 +64,9 @@ def _hermitianize(mat: np.ndarray) -> np.ndarray:
     return 0.5 * (mat + np.swapaxes(mat.conj(), -1, -2))
 
 
-def _make_orthogonal(dim: int, seed: int) -> np.ndarray:
+def _make_orthogonal(p: int, seed: int) -> np.ndarray:
     rng = np.random.default_rng(seed)
-    a = rng.normal(size=(dim, dim))
+    a = rng.normal(size=(p, p))
     q, _ = np.linalg.qr(a)
     if np.linalg.det(q) < 0:
         q[:, 0] *= -1.0

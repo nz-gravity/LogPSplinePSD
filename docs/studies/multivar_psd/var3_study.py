@@ -16,13 +16,28 @@ import argparse
 import numpy as np
 
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.logger import logger, set_level
+from log_psplines.logger import set_level
 from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 
 set_level("DEBUG")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join("out_var3")
+
+DEFAULT_KNOT_METHOD = "log"
+DEFAULT_N_TIME_BLOCKS = 4
+DEFAULT_TARGET_ACCEPT_PROB = 0.9
+DEFAULT_MAX_TREE_DEPTH = 12
+DEFAULT_INIT_FROM_VI = True
+DEFAULT_VI_STEPS = 20000
+DEFAULT_VI_GUIDE = "lowrank:16"
+DEFAULT_VI_PSD_MAX_DRAWS = 64
+DEFAULT_POSTERIOR_PSD_MAX_DRAWS = 200
+DEFAULT_ALPHA_DELTA = 1.0
+DEFAULT_BETA_DELTA = 1.0
+DEFAULT_N_SAMPLES = 1000
+DEFAULT_N_WARMUP = 1000
+DEFAULT_NUM_CHAINS = 4
 
 SIGMA = np.array([[1.0, 0.10, 0.45], [0.10, 1.0, 0.00], [0.45, 0.00, 1.0]])
 # 3x3 identity MA(0) to match VAR dimension
@@ -63,24 +78,9 @@ def simulation_study(
     K: int = 15,
     SEED: int = 42,
     *,
-    skip_diagnostics: bool = False,
-    n_time_blocks: int = 4,
-    knot_method: str = "log",
     coarse_n_freqs_per_bin: int | None = 5,
     coarse_f_min: float | None = None,
     coarse_f_max: float | None = None,
-    alpha_delta: float = 1.0,
-    beta_delta: float = 1.0,
-    target_accept_prob: float = 0.9,
-    max_tree_depth: int = 12,
-    init_from_vi: bool = False,
-    vi_steps: int = 5000,
-    vi_guide: str | None = "diag",
-    posterior_psd_max_draws: int = 200,
-    vi_psd_max_draws: int = 64,
-    n_samples: int = 1000,
-    n_warmup: int = 1000,
-    num_chains: int = 4,
 ):
     print(f">>>> Running simulation with N={N}, K={K}, SEED={SEED} <<<<")
     outdir = f"{HERE}/{outdir}/seed_{SEED}_N{N}_K{K}"
@@ -97,12 +97,8 @@ def simulation_study(
     )
     ts = MultivariateTimeseries(t=varma.time, y=varma.data)
 
-    if knot_method not in {"linear", "log"}:
-        raise ValueError(
-            f"knot_method must be 'linear' or 'log', got {knot_method!r}."
-        )
-
     coarse_grain_config = None
+    knot_method = DEFAULT_KNOT_METHOD
     if coarse_n_freqs_per_bin is not None:
         coarse_n_freqs_per_bin = int(coarse_n_freqs_per_bin)
         if coarse_n_freqs_per_bin <= 0:
@@ -123,26 +119,26 @@ def simulation_study(
         n_knots=K,
         degree=2,
         diffMatrixOrder=2,
-        n_samples=n_samples,
-        n_warmup=n_warmup,
-        num_chains=num_chains,
+        n_samples=DEFAULT_N_SAMPLES,
+        n_warmup=DEFAULT_N_WARMUP,
+        num_chains=DEFAULT_NUM_CHAINS,
         outdir=outdir,
         verbose=True,
-        target_accept_prob=target_accept_prob,
-        max_tree_depth=max_tree_depth,
-        init_from_vi=init_from_vi,
-        vi_steps=vi_steps,
-        vi_guide=vi_guide,
-        vi_psd_max_draws=vi_psd_max_draws,
-        posterior_psd_max_draws=posterior_psd_max_draws,
-        n_time_blocks=n_time_blocks,
+        target_accept_prob=DEFAULT_TARGET_ACCEPT_PROB,
+        max_tree_depth=DEFAULT_MAX_TREE_DEPTH,
+        init_from_vi=DEFAULT_INIT_FROM_VI,
+        vi_steps=DEFAULT_VI_STEPS,
+        vi_guide=DEFAULT_VI_GUIDE,
+        vi_psd_max_draws=DEFAULT_VI_PSD_MAX_DRAWS,
+        posterior_psd_max_draws=DEFAULT_POSTERIOR_PSD_MAX_DRAWS,
+        n_time_blocks=DEFAULT_N_TIME_BLOCKS,
         knot_kwargs=dict(method=knot_method),
         coarse_grain_config=coarse_grain_config,
-        alpha_delta=alpha_delta,
-        beta_delta=beta_delta,
+        alpha_delta=DEFAULT_ALPHA_DELTA,
+        beta_delta=DEFAULT_BETA_DELTA,
         compute_psis=False,
         compute_coherence_quantiles=True,
-        skip_plot_diagnostics=skip_diagnostics,
+        skip_plot_diagnostics=False,
         true_psd=varma.get_true_psd(),
         save_preprocessing_plots=True,
     )
@@ -155,128 +151,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--N", type=int, default=5024, help="Number of time points"
     )
-    parser.add_argument(
-        "--K", type=int, default=15, help="Number of spline knots"
-    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument(
-        "--n-time-blocks",
-        type=int,
-        default=4,
-        help="Number of non-overlapping time blocks used to form Wishart-averaged FFT stats.",
-    )
-    parser.add_argument(
-        "--knot-method",
-        type=str,
-        default="log",
-        choices=["linear", "log"],
-        help="Knot placement method for the spline basis.",
-    )
     parser.add_argument(
         "--coarse-n-freqs-per-bin",
         type=int,
         default=5,
         help="If set, enable coarse graining with this odd bin size (set to 0 to disable).",
     )
-    parser.add_argument(
-        "--alpha-delta",
-        type=float,
-        default=1.0,
-        help="Gamma prior concentration for delta hyperparameters.",
-    )
-    parser.add_argument(
-        "--beta-delta",
-        type=float,
-        default=1.0,
-        help="Gamma prior rate for delta hyperparameters.",
-    )
-    parser.add_argument(
-        "--target-accept",
-        type=float,
-        default=0.9,
-        help="NUTS target acceptance probability.",
-    )
-    parser.add_argument(
-        "--max-tree-depth",
-        type=int,
-        default=12,
-        help="NUTS maximum tree depth.",
-    )
-    parser.add_argument(
-        "--init-from-vi",
-        action="store_true",
-        help="Use VI-based initialisation for each block.",
-    )
-    parser.add_argument(
-        "--vi-steps",
-        type=int,
-        default=5000,
-        help="Number of VI optimisation steps per block (if --init-from-vi).",
-    )
-    parser.add_argument(
-        "--vi-guide",
-        type=str,
-        default="diag",
-        help="VI guide spec passed to the blocked initialiser (if --init-from-vi).",
-    )
-    parser.add_argument(
-        "--posterior-psd-max-draws",
-        type=int,
-        default=200,
-        help="Max posterior draws used to compute PSD quantiles for plots/coverage.",
-    )
-    parser.add_argument(
-        "--vi-psd-max-draws",
-        type=int,
-        default=64,
-        help="Max VI posterior draws used to compute VI PSD quantiles for overlay.",
-    )
-    parser.add_argument(
-        "--n-samples",
-        type=int,
-        default=1000,
-        help="Number of posterior samples per chain.",
-    )
-    parser.add_argument(
-        "--n-warmup",
-        type=int,
-        default=1000,
-        help="Number of warmup samples per chain.",
-    )
-    parser.add_argument(
-        "--chains",
-        type=int,
-        default=4,
-        help="Number of MCMC chains.",
-    )
-    parser.add_argument(
-        "--skip-diagnostics",
-        action="store_true",
-        help="Skip MCMC diagnostics plots/summaries (still saves main PSD plots).",
-    )
 
     args = parser.parse_args()
     coarse_n_freqs_per_bin = args.coarse_n_freqs_per_bin
-    if coarse_n_freqs_per_bin is not None and int(coarse_n_freqs_per_bin) <= 0:
+    if coarse_n_freqs_per_bin is not None and coarse_n_freqs_per_bin <= 0:
         coarse_n_freqs_per_bin = None
     simulation_study(
         N=args.N,
-        K=args.K,
         SEED=args.seed,
-        skip_diagnostics=args.skip_diagnostics,
-        n_time_blocks=args.n_time_blocks,
-        knot_method=args.knot_method,
         coarse_n_freqs_per_bin=coarse_n_freqs_per_bin,
-        alpha_delta=args.alpha_delta,
-        beta_delta=args.beta_delta,
-        target_accept_prob=args.target_accept,
-        max_tree_depth=args.max_tree_depth,
-        init_from_vi=bool(args.init_from_vi),
-        vi_steps=args.vi_steps,
-        vi_guide=args.vi_guide,
-        posterior_psd_max_draws=args.posterior_psd_max_draws,
-        vi_psd_max_draws=args.vi_psd_max_draws,
-        n_samples=args.n_samples,
-        n_warmup=args.n_warmup,
-        num_chains=args.chains,
     )

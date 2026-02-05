@@ -65,9 +65,9 @@ def _hermitianize(mat: np.ndarray) -> np.ndarray:
     return 0.5 * (mat + np.swapaxes(mat.conj(), -1, -2))
 
 
-def _make_orthogonal(dim: int, seed: int) -> np.ndarray:
+def _make_orthogonal(p: int, seed: int) -> np.ndarray:
     rng = np.random.default_rng(seed)
-    a = rng.normal(size=(dim, dim))
+    a = rng.normal(size=(p, p))
     q, _ = np.linalg.qr(a)
     # Fix sign to make deterministic-ish
     if np.linalg.det(q) < 0:
@@ -121,7 +121,7 @@ def _build_psd_from_eigs(
     eigvals = np.asarray(eigvals, dtype=float)
     if eigvals.shape != (freq.size, q.shape[0]):
         raise ValueError(
-            f"eigvals must have shape (N, dim)={(freq.size, q.shape[0])}, got {eigvals.shape}."
+            f"eigvals must have shape (N, p)={(freq.size, q.shape[0])}, got {eigvals.shape}."
         )
     s = np.zeros((freq.size, q.shape[0], q.shape[0]), dtype=np.complex128)
     for k in range(freq.size):
@@ -132,7 +132,7 @@ def _build_psd_from_eigs(
 
 def simulate_from_one_sided_psd(
     *,
-    psd: np.ndarray,  # (N, dim, dim), one-sided, excludes DC
+    psd: np.ndarray,  # (N, p, p), one-sided, excludes DC
     fs: float,
     n: int,
     seed: int,
@@ -144,14 +144,14 @@ def simulate_from_one_sided_psd(
       except the Nyquist bin where scale_k = 1/(N*fs).
     """
     psd = _hermitianize(psd)
-    N, dim, _ = psd.shape
+    N, p, _ = psd.shape
     expected_n_freq = n // 2
     if N != expected_n_freq:
         raise ValueError(f"psd must have N=n//2={expected_n_freq}, got {N}.")
     rng = np.random.default_rng(seed)
 
     # rfft bins: [0..N/2], complex
-    spec = np.zeros((n // 2 + 1, dim), dtype=np.complex128)
+    spec = np.zeros((n // 2 + 1, p), dtype=np.complex128)
     spec[0] = 0.0
 
     n = float(n)
@@ -169,15 +169,15 @@ def simulate_from_one_sided_psd(
             scale = n * float(fs)
             cov_fft = scale * cov.real
             cov_fft = 0.5 * (cov_fft + cov_fft.T)
-            vec = rng.multivariate_normal(np.zeros(dim), cov_fft)
+            vec = rng.multivariate_normal(np.zeros(p), cov_fft)
             spec[k] = vec.astype(np.float64)
             continue
 
         # Non-Nyquist positive frequencies (one-sided doubling)
         scale = n * float(fs) / 2.0
         cov_fft = scale * cov
-        chol = np.linalg.cholesky(cov_fft + 1e-12 * np.eye(dim))
-        z = (rng.normal(size=dim) + 1j * rng.normal(size=dim)) / np.sqrt(2.0)
+        chol = np.linalg.cholesky(cov_fft + 1e-12 * np.eye(p))
+        z = (rng.normal(size=p) + 1j * rng.normal(size=p)) / np.sqrt(2.0)
         spec[k] = chol @ z
 
     x = np.fft.irfft(spec, n=n, axis=0)

@@ -199,8 +199,8 @@ def main() -> None:
     unit_label = "freq" if USE_FREQ_UNITS else "strain"
 
     target_block_seconds = 7.0 * SEC_IN_DAY
-    block_len_samples = int(round(target_block_seconds / delta_t))
-    chunk_seconds = block_len_samples * delta_t
+    Lb = int(round(target_block_seconds / delta_t))
+    chunk_seconds = Lb * delta_t
     total_samples = int(duration / delta_t)
     print(
         f"Total duration: {duration_days:.2f} days "
@@ -208,7 +208,7 @@ def main() -> None:
     )
     print(
         "Using chunk length = 7 days: "
-        f"{block_len_samples} samples ({chunk_seconds:.0f} s)."
+        f"{Lb} samples ({chunk_seconds:.0f} s)."
     )
 
     x_t, y_t, z_t, freq_true, S_true = generate_lisatools_xyz_noise_timeseries(
@@ -228,29 +228,21 @@ def main() -> None:
     overlap = float(args.welch_overlap)
     if not (0.0 <= overlap < 1.0):
         raise ValueError("welch-overlap must be in [0, 1).")
-    n_chunks = len(x_t) // block_len_samples
+    n_chunks = len(x_t) // Lb
     if n_chunks < 1:
         n_chunks = 1
-        block_len_samples = len(x_t)
-    if L > block_len_samples:
-        L = block_len_samples
+        Lb = len(x_t)
+    if L > Lb:
+        L = Lb
     print(
         "Welch segment length: "
         f"{L} samples ({L * delta_t:.0f} s), overlap={overlap:.2f}."
     )
-    print(
-        f"Welch averaging across {n_chunks} chunk(s) of {block_len_samples} samples."
-    )
+    print(f"Welch averaging across {n_chunks} chunk(s) of {Lb} samples.")
 
-    x_chunks = x_t[: n_chunks * block_len_samples].reshape(
-        n_chunks, block_len_samples
-    )
-    y_chunks = y_t[: n_chunks * block_len_samples].reshape(
-        n_chunks, block_len_samples
-    )
-    z_chunks = z_t[: n_chunks * block_len_samples].reshape(
-        n_chunks, block_len_samples
-    )
+    x_chunks = x_t[: n_chunks * Lb].reshape(n_chunks, Lb)
+    y_chunks = y_t[: n_chunks * Lb].reshape(n_chunks, Lb)
+    z_chunks = z_t[: n_chunks * Lb].reshape(n_chunks, Lb)
 
     Sxx = Syy = Szz = 0.0
     Sxy = Syz = Szx = 0.0
@@ -368,7 +360,7 @@ def main() -> None:
             delta_t=delta_t,
             model=model,
             use_freq_units=USE_FREQ_UNITS,
-            block_len_samples=block_len_samples,
+            Lb=Lb,
             block_seconds=chunk_seconds,
         )
         print(f"Saved synthetic lisatools data to {NPZ_PATH}")

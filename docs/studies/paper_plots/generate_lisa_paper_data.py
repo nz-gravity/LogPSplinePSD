@@ -179,7 +179,7 @@ def main() -> None:
         "--block-size",
         type=int,
         default=5000,
-        help="Chunk length in samples (also stored as block_len_samples).",
+        help="Chunk length in samples (also stored as Lb).",
     )
     parser.add_argument(
         "--delta-t",
@@ -330,7 +330,7 @@ def main() -> None:
         true_matrix=true_matrix,
         delta_t=float(dt),
         model=str(args.model),
-        block_len_samples=int(chunk_len),
+        Lb=int(chunk_len),
         n_chunks=int(n_used // chunk_len),
         fmin=float(args.fmin),
         fmax=float(args.fmax),

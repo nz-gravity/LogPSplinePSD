@@ -114,6 +114,7 @@ def coarse_grain_multivar_fft(
     psd_coarse = wishart_matrix_to_psd(
         u_to_wishart_matrix(u_coarse),
         nu=int(fft.nu),
+        duration=float(getattr(fft, "duration", 1.0) or 1.0),
         scaling_factor=float(fft.scaling_factor or 1.0),
         weights=np.asarray(weights, dtype=np.float64),
     )
@@ -129,6 +130,7 @@ def coarse_grain_multivar_fft(
         nu=int(fft.nu),
         scaling_factor=fft.scaling_factor,
         fs=fft.fs,
+        duration=float(getattr(fft, "duration", 1.0) or 1.0),
         raw_psd=psd_coarse.astype(np.complex128),
         raw_freq=np.asarray(spec.f_coarse, dtype=np.float64),
         channel_stds=fft.channel_stds,

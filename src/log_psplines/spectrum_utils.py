@@ -158,6 +158,7 @@ def wishart_matrix_to_psd(
     Y: np.ndarray,
     nu: float | np.ndarray,
     *,
+    duration: float = 1.0,
     scaling_factor: float = 1.0,
     weights: Optional[np.ndarray] = None,
 ) -> np.ndarray:
@@ -166,6 +167,10 @@ def wishart_matrix_to_psd(
     Y = np.asarray(Y, dtype=np.complex128)
     if Y.ndim != 3:
         raise ValueError("Y must have shape (n_freq, n_dim, n_dim)")
+
+    duration_f = float(duration)
+    if duration_f <= 0.0:
+        raise ValueError("duration must be positive")
 
     eff_nu = compute_effective_nu(nu, weights)
     eff_nu = np.asarray(eff_nu, dtype=np.float64)
@@ -177,7 +182,7 @@ def wishart_matrix_to_psd(
             "Effective degrees of freedom must match the frequency dimension"
         )
 
-    psd = Y / eff_nu[:, None, None]
+    psd = Y / (eff_nu[:, None, None] * duration_f)
     psd *= float(scaling_factor)
     return psd
 
@@ -186,6 +191,7 @@ def wishart_u_to_psd(
     u: np.ndarray,
     nu: float | np.ndarray,
     *,
+    duration: float = 1.0,
     scaling_factor: float = 1.0,
     weights: Optional[np.ndarray] = None,
 ) -> np.ndarray:
@@ -193,7 +199,11 @@ def wishart_u_to_psd(
 
     Y = u_to_wishart_matrix(u)
     return wishart_matrix_to_psd(
-        Y, nu, scaling_factor=scaling_factor, weights=weights
+        Y,
+        nu,
+        duration=duration,
+        scaling_factor=scaling_factor,
+        weights=weights,
     )
 
 

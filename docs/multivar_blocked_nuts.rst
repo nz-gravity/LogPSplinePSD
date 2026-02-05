@@ -138,11 +138,12 @@ The blocked model implements (up to constants)
    \log \mathcal{L}_j
    \;\propto\;
    -\nu\,\sum_k w_k\,\log\big(\delta_j(f_k)^2\big)
-   \; - \sum_k \frac{\|r_j(f_k)\|_2^2}{\delta_j(f_k)^2}.
+   \; - \sum_k \frac{\|r_j(f_k)\|_2^2}{T\,\delta_j(f_k)^2}.
 
 Key points:
 
 - :math:`\nu` is the number of averaged blocks (``fft_data.nu``).
+- :math:`T` is the per-block observation duration (``fft_data.duration``).
 - :math:`w_k` are optional frequency weights (``freq_weights``). They are used
   to scale the log-determinant term when coarse graining is enabled.
 - The quadratic term uses the *summed sufficient statistics* directly, so it
@@ -211,61 +212,29 @@ and returns
 Notes on scaling conventions
 ----------------------------
 
-The derivation in ``overleaf`` writes the Whittle likelihood with an
-explicit observation-time factor :math:`T`. The exact LaTeX from
-``overleaf`` is:
+The derivation in ``overleaf`` writes the Whittle likelihood with an explicit
+observation-time factor :math:`T`. The exact LaTeX from ``overleaf`` is:
 
 .. math::
 
    \mathcal{L}(\d|\S) \propto  \prod_{k=1}^{N} \det(\S(f_k))^{-1} \times
    \exp\left(-\frac{1}{T}\d(f_k)^* \S(f_k)^{-1} \d(f_k)\right),
 
-The implementation normalises the FFTs to one-sided PSD units during
-:func:`~log_psplines.datatypes.multivar.MultivarFFT.compute_wishart`. In that
-normalisation, the time/frequency-resolution factors are absorbed into the
-construction of :math:`Y(f_k)` (and therefore :math:`U(f_k)`). As a result,
-there is no explicit :math:`T` factor in the NumPyro likelihood.
+The implementation keeps the :math:`1/T` factor explicit in the NumPyro
+likelihood. Concretely:
 
-One way to see that this is consistent is to view it as a deterministic
-reparameterisation of the Fourier coefficients.
+- :func:`~log_psplines.datatypes.multivar.MultivarFFT.compute_wishart` records
+  the per-block observation duration ``fft_data.duration`` (seconds), and scales
+  the stored frequency-domain components so the quadratic term can be written as
+  :math:`(1/T)\,d(f_k)^* S(f_k)^{-1} d(f_k)`.
+- PSD conversions divide by ``duration`` via
+  :func:`~log_psplines.spectrum_utils.wishart_matrix_to_psd(duration=...)`, so
+  the resulting PSD matrices remain in the same one-sided “per Hz” convention
+  used elsewhere in the codebase.
 
-In one common Whittle convention (also stated in ``overleaf``),
-
-.. math::
-
-   \d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; T\,\S(f_k)\right),
-
-which yields a quadratic term of the form
-
-.. math::
-
-   \exp\!\left(-\frac{1}{T}\, \d(f_k)^* \S(f_k)^{-1} \d(f_k)\right).
-
-If instead we define the rescaled coefficient
-
-.. math::
-
-   	ilde{\d}(f_k) = \frac{\d(f_k)}{\sqrt{T}},
-
-then
-
-.. math::
-
-   	ilde{\d}(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; \S(f_k)\right),
-
-and the quadratic term becomes
-
-.. math::
-
-   \exp\!\left(-\tilde{\d}(f_k)^* \S(f_k)^{-1} \tilde{\d}(f_k)\right)
-
-with no explicit :math:`T`.
-
-The code effectively makes this kind of deterministic rescaling (along with the
-standard one-sided/Welch normalisation factors) when constructing
-:math:`Y(f_k)` from the block FFTs. This is fine as long as you interpret
-:math:`S(f)` in the implementation as being expressed in the corresponding
-one-sided PSD convention.
+This is algebraically equivalent to absorbing :math:`T` into a deterministic
+rescaling of the Fourier coefficients; we keep it explicit to match the paper
+notation and to make the dependence on observation time unambiguous.
 
 Exact Cholesky factorisation (from ``overleaf``)
 -----------------------------------------------------

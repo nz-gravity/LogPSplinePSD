@@ -117,6 +117,7 @@ def _blocked_channel_model(
     beta_phi_theta: float,
     alpha_delta: float,
     beta_delta: float,
+    duration: float,
     nu: int,
     freq_weights: jnp.ndarray,
     freq_bin_counts: jnp.ndarray,
@@ -253,7 +254,10 @@ def _blocked_channel_model(
     # Sum across Wishart replicates; for coarse bins, this reflects the sum of
     # sufficient statistics across all fine-grid frequencies in that bin.
     residual_power_sum = jnp.sum(residual_power, axis=1)
-    log_likelihood = sum_log_det - jnp.sum(residual_power_sum / delta_eff_sq)
+    duration_scale = jnp.asarray(duration, dtype=log_delta_sq.dtype)
+    log_likelihood = sum_log_det - jnp.sum(
+        residual_power_sum / (duration_scale * delta_eff_sq)
+    )
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
 
@@ -545,6 +549,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.config.beta_phi_theta,
                 self.config.alpha_delta,
                 self.config.beta_delta,
+                self.duration,
                 self.nu,
                 self.freq_weights,
                 self.freq_bin_counts,

@@ -54,7 +54,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         n_warmup=n_warmup,
         outdir=full_dir,
         verbose=False,
-        n_time_blocks=2 if test_mode != "fast" else 1,
+        Nb=2 if test_mode != "fast" else 1,
         true_psd=varma.get_true_psd(),
     )
 
@@ -74,7 +74,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         n_warmup=n_warmup,
         outdir=coarse_dir,
         verbose=False,
-        n_time_blocks=2 if test_mode != "fast" else 1,
+        Nb=2 if test_mode != "fast" else 1,
         coarse_grain_config=coarse_cfg,
         true_psd=varma.get_true_psd(),
     )

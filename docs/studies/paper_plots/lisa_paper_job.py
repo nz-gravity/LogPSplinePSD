@@ -71,7 +71,7 @@ def main() -> None:
         "--block-size",
         type=int,
         default=5000,
-        help="Samples per Wishart block (used to pick n_time_blocks).",
+        help="Samples per Wishart block (used to pick Nb).",
     )
 
     parser.add_argument("--seed", type=int, default=42)
@@ -206,7 +206,7 @@ def main() -> None:
         verbose=True,
         compute_psis=False,
         skip_plot_diagnostics=False,
-        n_time_blocks=int(Nb),
+        Nb=int(Nb),
         coarse_grain_config=coarse_cfg,
         fmin=fmin,
         fmax=fmax,

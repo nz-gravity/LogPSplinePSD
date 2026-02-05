@@ -1,8 +1,8 @@
 """
-Simulation study: effect of Wishart block averaging (`n_time_blocks`) on multivariate PSD inference.
+Simulation study: effect of Wishart block averaging (`Nb`) on multivariate PSD inference.
 
 This script reuses a fixed VAR(2) process, runs the multivariate blocked NUTS
-sampler for a sweep of ``n_time_blocks`` values, and records the Relative
+sampler for a sweep of ``Nb`` values, and records the Relative
 Integrated Absolute Error (RIAE) of the posterior median PSD as well as the
 coverage of the 90% posterior intervals on the auto-spectra.
 
@@ -56,7 +56,7 @@ N = 2048  # length of time series for VARMA simulations
 class StudyConfig:
     """Configuration for the time-block sweep."""
 
-    n_time_blocks: Sequence[int]
+    Nb: Sequence[int]
     n_samples: int
     n_warmup: int
     seeds: Sequence[int] = (0, 1, 2)
@@ -143,8 +143,8 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
         varma = VARMAData(n_samples=N, seed=seed)
         timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
 
-        for Nb in config.n_time_blocks:
-            print(f"Running sampler with n_time_blocks={Nb}, seed={seed}...")
+        for Nb in config.Nb:
+            print(f"Running sampler with Nb={Nb}, seed={seed}...")
 
             block_dir = config.outdir / f"blocks_{Nb}" / f"seed_{seed}"
             if config.save_idata or config.save_psd_plots:
@@ -156,7 +156,7 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
                 sampler=config.sampler,
                 n_samples=config.n_samples,
                 n_warmup=config.n_warmup,
-                n_time_blocks=Nb,
+                Nb=Nb,
                 rng_key=seed,
                 verbose=False,
                 compute_lnz=False,
@@ -183,7 +183,7 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
 
             results.append(
                 dict(
-                    n_time_blocks=Nb,
+                    Nb=Nb,
                     seed=seed,
                     riae=riae,
                     diag_coverage=coverage,
@@ -215,7 +215,7 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
 
     df = (
         pd.DataFrame(results)
-        .sort_values(["n_time_blocks", "seed"])
+        .sort_values(["Nb", "seed"])
         .reset_index(drop=True)
     )
     return df
@@ -226,7 +226,7 @@ def plot_results(df: pd.DataFrame, outdir: Path) -> pd.DataFrame:
     _ensure_dir(outdir)
 
     summary = (
-        df.groupby("n_time_blocks")
+        df.groupby("Nb")
         .agg(
             riae_mean=("riae", "mean"),
             riae_std=("riae", "std"),
@@ -242,7 +242,7 @@ def plot_results(df: pd.DataFrame, outdir: Path) -> pd.DataFrame:
     summary.fillna(0.0, inplace=True)
     summary["n_runs"] = summary["n_runs"].astype(int)
 
-    blocks = summary["n_time_blocks"].to_numpy()
+    blocks = summary["Nb"].to_numpy()
     riae_mean = summary["riae_mean"].to_numpy()
     riae_std = summary["riae_std"].to_numpy()
     runtime_mean = summary["runtime_mean"].to_numpy()
@@ -352,7 +352,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         nargs="+",
         default=[1, 2, 4, 8],
-        help="List of n_time_blocks values to evaluate.",
+        help="List of Nb values to evaluate.",
     )
     parser.add_argument("--n-samples", type=int, default=400)
     parser.add_argument("--n-warmup", type=int, default=400)
@@ -379,7 +379,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     config = StudyConfig(
-        n_time_blocks=args.blocks,
+        Nb=args.blocks,
         n_samples=args.n_samples,
         n_warmup=args.n_warmup,
         seeds=args.seeds,

@@ -283,7 +283,7 @@ def run_mcmc(
     vi_progress_bar: Optional[bool] = None,
     vi_psd_max_draws: int = 64,
     coarse_grain_config: Optional[CoarseGrainConfig | dict] = None,
-    n_time_blocks: int = 1,
+    Nb: int = 1,
     plot_welch_overlay: bool | None = None,
     welch_nperseg: int | None = None,
     welch_noverlap: int | None = None,
@@ -385,7 +385,7 @@ def run_mcmc(
     coarse_grain_config : CoarseGrainConfig or dict, optional
         Optional frequency coarse-graining configuration for univariate periodograms
         and multivariate FFT statistics.
-    n_time_blocks : int, default=1
+    Nb : int, default=1
         Number of equal-length segments used to form block-averaged (Wishart)
         periodogram statistics for multivariate timeseries input. ``1`` reduces
         to the standard full-length periodogram.
@@ -463,16 +463,16 @@ def run_mcmc(
             )
         else:  # MultivariateTimeseries
             if sampler == "multivar_nuts":
-                if n_time_blocks != 1 and verbose:
+                if Nb != 1 and verbose:
                     logger.warning(
-                        "multivar_nuts ignores n_time_blocks; using the full-periodogram likelihood."
+                        "multivar_nuts ignores Nb; using the full-periodogram likelihood."
                     )
                 processed_data = standardized_ts.to_cross_spectral_density(
                     fmin=fmin, fmax=fmax
                 )
             else:
                 processed_data = standardized_ts.to_wishart_stats(
-                    Nb=n_time_blocks,
+                    Nb=Nb,
                     fmin=fmin,
                     fmax=fmax,
                 )

@@ -32,7 +32,7 @@ def test_multivar_rescale_matches_empirical():
     sigma = sigma_base * amplitude**2
 
     n = 120
-    n_time_blocks = 2
+    Nb = 2
     varma = VARMAData(
         n_samples=n,
         var_coeffs=var_coeffs,
@@ -49,7 +49,7 @@ def test_multivar_rescale_matches_empirical():
 
     standardized = timeseries.standardise_for_psd()
     assert standardized.scaling_factor > 5.0
-    fft_data = standardized.to_wishart_stats(Nb=n_time_blocks)
+    fft_data = standardized.to_wishart_stats(Nb=Nb)
     processed_data, _, _ = _coarse_grain_processed_data(
         fft_data, coarse_cfg, scaled_true_psd=None
     )
@@ -87,7 +87,7 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
     sigma = sigma_base * amplitude**2
 
     n = 240
-    n_time_blocks = 3
+    Nb = 3
     varma = VARMAData(
         n_samples=n,
         var_coeffs=var_coeffs,
@@ -108,7 +108,7 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
         n_knots=5,
         n_samples=12,
         n_warmup=12,
-        n_time_blocks=n_time_blocks,
+        Nb=Nb,
         coarse_grain_config=coarse_cfg,
         vi_steps=80,
         vi_posterior_draws=24,

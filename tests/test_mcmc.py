@@ -75,7 +75,7 @@ def test_multivar_mcmc(outdir, test_mode):
             verbose=verbose,
             target_accept_prob=0.8,
             true_psd=true_psd,
-            n_time_blocks=Nb,
+            Nb=Nb,
         )
 
         # Basic checks
@@ -198,7 +198,7 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
         n_knots=3,
         n_samples=1,
         n_warmup=1,
-        n_time_blocks=1,
+        Nb=1,
         vi_steps=10,
         vi_posterior_draws=6,
         vi_psd_max_draws=2,
@@ -484,7 +484,7 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
         n_knots=5,
         degree=3,
         diffMatrixOrder=2,
-        n_time_blocks=Nb,
+        Nb=Nb,
         only_vi=True,
         vi_steps=20,
         vi_lr=5e-3,
@@ -514,7 +514,7 @@ def test_multivar_blocked_nuts_records_step_size():
         n_knots=4,
         degree=3,
         diffMatrixOrder=2,
-        n_time_blocks=1,
+        Nb=1,
         init_from_vi=False,
         verbose=False,
     )

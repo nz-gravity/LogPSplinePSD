@@ -44,7 +44,7 @@ class StudyConfig:
     n_samples: int = 400
     n_warmup: int = 400
     num_chains: int = 4
-    n_time_blocks: int = 8
+    Nb: int = 8
     target_accept_prob: float = 0.8
     max_tree_depth: int = 10
     dense_mass: bool = True
@@ -335,9 +335,9 @@ def run_case(
         f"{case}: r23 p50={ratio_summary['r23_p50']:.3f}, frac(r23>0.8)={ratio_summary['r23_frac_gt']:.3f}"
     )
 
-    if cfg.n_time_blocks < 3:
+    if cfg.Nb < 3:
         logger.warning(
-            f"n_time_blocks={cfg.n_time_blocks} < p=3; Wishart matrices are rank-deficient "
+            f"Nb={cfg.Nb} < p=3; Wishart matrices are rank-deficient "
             "and eigenvalue ratio diagnostics (and geometry) will be misleading."
         )
 
@@ -349,7 +349,7 @@ def run_case(
 
     # Provide true_psd on the block-frequency grid to avoid the interpolation
     # fallback warning and to keep preprocessing diagnostics consistent.
-    Lb = int(cfg.n // cfg.n_time_blocks)
+    Lb = int(cfg.n // cfg.Nb)
     freq_block = _freq_grid(Lb, cfg.fs)
     eigvals_block = _case_psd_eigs(freq_block, case)
     true_psd_block = _build_psd_from_eigs(freq_block, q, eigvals_block)
@@ -365,7 +365,7 @@ def run_case(
         num_chains=cfg.num_chains,
         outdir=str(outdir),
         verbose=True,
-        n_time_blocks=cfg.n_time_blocks,
+        Nb=cfg.Nb,
         target_accept_prob=cfg.target_accept_prob,
         max_tree_depth=cfg.max_tree_depth,
         dense_mass=cfg.dense_mass,
@@ -392,7 +392,7 @@ def run_case(
     )
     row: Dict[str, float] = {
         "case": case,
-        "n_time_blocks": float(cfg.n_time_blocks),
+        "Nb": float(cfg.Nb),
         "alpha_phi": float(cfg.alpha_phi),
         "beta_phi": float(cfg.beta_phi),
         "alpha_delta": float(cfg.alpha_delta),
@@ -465,7 +465,7 @@ def main() -> None:
         n_samples=int(args.samples),
         n_warmup=int(args.warmup),
         num_chains=int(args.chains),
-        n_time_blocks=int(args.time_blocks),
+        Nb=int(args.time_blocks),
         target_accept_prob=float(args.target_accept),
         max_tree_depth=int(args.max_tree_depth),
         alpha_phi=float(args.alpha_phi),
@@ -494,7 +494,7 @@ def main() -> None:
     root_out = (
         here
         / str(args.out)
-        / (f"seed_{cfg.seed}_N{cfg.n}_K{cfg.n_knots}_B{cfg.n_time_blocks}")
+        / (f"seed_{cfg.seed}_N{cfg.n}_K{cfg.n_knots}_B{cfg.Nb}")
     )
     root_out.mkdir(parents=True, exist_ok=True)
     (root_out / "study_config.json").write_text(

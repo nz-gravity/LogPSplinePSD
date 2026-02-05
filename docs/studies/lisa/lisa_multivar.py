@@ -375,7 +375,7 @@ else:
         outdir=str(RESULTS_DIR),
         verbose=True,
         coarse_grain_config=coarse_cfg,
-        n_time_blocks=Nb,
+        Nb=Nb,
         fmin=FMIN,
         fmax=FMAX,
         alpha_delta=ALPHA_DELTA,

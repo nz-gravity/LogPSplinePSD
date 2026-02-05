@@ -93,7 +93,7 @@ def test_multivariate_vi_initialisation_smoke(outdir):
         verbose=False,
         compute_lnz=False,
         outdir=str(outdir),
-        n_time_blocks=2,
+        Nb=2,
     )
 
     assert "posterior" in idata.groups()

@@ -210,11 +210,9 @@ def test_plot_multivariate_fitted_data_blocks(
     varma = VARMAData(n_samples=n, seed=seed)
 
     # Build block-averaged (Wishart) FFT statistics with a few time blocks
-    n_time_blocks = 2 if test_mode != "fast" else 1
+    Nb = 2 if test_mode != "fast" else 1
     x = varma.data  # (n, p)
-    fft_full: MultivarFFT = MultivarFFT.compute_wishart(
-        x, fs=varma.fs, Nb=n_time_blocks
-    )
+    fft_full: MultivarFFT = MultivarFFT.compute_wishart(x, fs=varma.fs, Nb=Nb)
 
     N = fft_full.freq.size
     Nc = N // 2 if test_mode != "fast" else N // 4

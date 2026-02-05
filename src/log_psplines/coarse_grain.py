@@ -311,7 +311,7 @@ def apply_coarse_grain_multivar_fft(
 
     psd_coarse = wishart_matrix_to_psd(
         u_to_wishart_matrix(u_bins),
-        nu=int(fft.nu),
+        Nb=int(fft.Nb),
         duration=float(getattr(fft, "duration", 1.0) or 1.0),
         scaling_factor=float(fft.scaling_factor or 1.0),
         weights=weights,
@@ -327,7 +327,7 @@ def apply_coarse_grain_multivar_fft(
         freq=f_coarse,
         n_freq=int(f_coarse.shape[0]),
         n_dim=int(fft.n_dim),
-        nu=int(fft.nu),
+        Nb=int(fft.Nb),
         scaling_factor=fft.scaling_factor,
         fs=fft.fs,
         duration=float(getattr(fft, "duration", 1.0) or 1.0),

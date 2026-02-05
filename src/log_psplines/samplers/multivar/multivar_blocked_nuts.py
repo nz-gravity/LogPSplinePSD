@@ -118,7 +118,7 @@ def _blocked_channel_model(
     alpha_delta: float,
     beta_delta: float,
     duration: float,
-    nu: int,
+    Nb: int,
     freq_weights: jnp.ndarray,
     freq_bin_counts: jnp.ndarray,
     apply_noise_floor: bool,
@@ -144,7 +144,7 @@ def _blocked_channel_model(
     alpha_phi, beta_phi, alpha_delta, beta_delta
         Hyperparameters for the hierarchical priors used in
         :func:`sample_pspline_block`.
-    nu
+    Nb
         Degrees of freedom (number of averaged blocks) for determinant scaling.
 
     Notes
@@ -235,7 +235,7 @@ def _blocked_channel_model(
     else:
         delta_eff_sq = delta_sq
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
-    sum_log_det = -float(nu) * jnp.sum(fw * jnp.log(delta_eff_sq))
+    sum_log_det = -float(Nb) * jnp.sum(fw * jnp.log(delta_eff_sq))
 
     if n_theta_block > 0:
         contrib_re = jnp.einsum(
@@ -550,7 +550,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.config.alpha_delta,
                 self.config.beta_delta,
                 self.duration,
-                self.nu,
+                self.Nb,
                 self.freq_weights,
                 self.freq_bin_counts,
                 apply_noise_floor,

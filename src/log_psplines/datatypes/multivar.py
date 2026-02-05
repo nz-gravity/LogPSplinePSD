@@ -50,7 +50,7 @@ class MultivarFFT:
               (n_freq, n_dim, n_dim)
         u_im: Imag part of eigenvector-weighted periodogram replicates
               (n_freq, n_dim, n_dim)
-        nu: Degrees of freedom (number of averaged blocks)
+        Nb: Degrees of freedom (number of averaged blocks)
         freq: Frequency grid (n_freq,)
         n_freq: Number of frequencies
         n_dim: Number of channels
@@ -63,7 +63,7 @@ class MultivarFFT:
     freq: np.ndarray
     n_freq: int
     n_dim: int
-    nu: int = 1
+    Nb: int = 1
     scaling_factor: Optional[float] = 1.0  # Track the PSD scaling factor
     channel_stds: Optional[np.ndarray] = (
         None  # Per-channel standard deviations
@@ -286,7 +286,7 @@ class MultivarFFT:
         u_im = U.imag
         raw_psd = wishart_matrix_to_psd(
             u_to_wishart_matrix(U),
-            nu=n_blocks,
+            Nb=n_blocks,
             duration=duration,
             scaling_factor=float(scaling_factor or 1.0),
         )
@@ -301,7 +301,7 @@ class MultivarFFT:
             u_im=u_im,
             raw_psd=raw_psd,
             raw_freq=freq,
-            nu=n_blocks,
+            Nb=n_blocks,
             scaling_factor=scaling_factor,
             fs=fs,
             duration=duration,
@@ -338,7 +338,7 @@ class MultivarFFT:
             raw_psd=raw_psd,
             raw_freq=raw_freq,
             freq_bin_counts=freq_bin_counts,
-            nu=self.nu,
+            Nb=self.Nb,
             scaling_factor=self.scaling_factor,
             fs=self.fs,
             duration=self.duration,
@@ -393,7 +393,7 @@ class MultivarFFT:
         Y = np.einsum("fi,fj->fij", y_complex, np.conj(y_complex))
         psd = wishart_matrix_to_psd(
             Y,
-            nu=1.0,
+            Nb=1,
             duration=float(duration),
             scaling_factor=float(scaling),
         )

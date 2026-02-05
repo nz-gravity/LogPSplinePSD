@@ -17,7 +17,7 @@ SHORT_N="${SHORT_N:-10000}"
 LONG_N="${LONG_N:-60000}"
 BLOCK_SIZE="${BLOCK_SIZE:-5000}"
 CG_BINS="${CG_BINS:-512}"
-LISA_COARSE_N_FREQS_PER_BIN="${LISA_COARSE_N_FREQS_PER_BIN:-5}"
+LISA_COARSE_Nh="${LISA_COARSE_Nh:-5}"
 
 FMIN="${FMIN:-1e-4}"
 FMAX_RESTRICTED="${FMAX_RESTRICTED:-1e-2}"
@@ -191,12 +191,12 @@ run_var3 "var3_long_cg${CG_BINS}" "${LONG_N}" "${CG_BINS}"
 # 2) LISA restricted band (requested: [1e-4, 1e-2]; will clamp to Nyquist if needed)
 run_lisa "lisa_short_restricted_raw" "${LISA_SHORT_N}" "--coarse-n-freqs-per-bin 0" "${FMAX_RESTRICTED}" "${SHORT_NPZ}"
 run_lisa "lisa_long_restricted_raw" "${LISA_LONG_N}" "--coarse-n-freqs-per-bin 0" "${FMAX_RESTRICTED}" "${LONG_NPZ}"
-run_lisa "lisa_long_restricted_cg${LISA_COARSE_N_FREQS_PER_BIN}" "${LISA_LONG_N}" "--coarse-n-freqs-per-bin ${LISA_COARSE_N_FREQS_PER_BIN}" "${FMAX_RESTRICTED}" "${LONG_NPZ}"
+run_lisa "lisa_long_restricted_cg${LISA_COARSE_Nh}" "${LISA_LONG_N}" "--coarse-n-freqs-per-bin ${LISA_COARSE_Nh}" "${FMAX_RESTRICTED}" "${LONG_NPZ}"
 
 # 3) LISA full band (requested; will clamp to Nyquist if needed)
 run_lisa "lisa_short_full_raw" "${LISA_SHORT_N}" "--coarse-n-freqs-per-bin 0" "${FMAX_FULL}" "${SHORT_NPZ}"
 run_lisa "lisa_long_full_raw" "${LISA_LONG_N}" "--coarse-n-freqs-per-bin 0" "${FMAX_FULL}" "${LONG_NPZ}"
-run_lisa "lisa_long_full_cg${LISA_COARSE_N_FREQS_PER_BIN}" "${LISA_LONG_N}" "--coarse-n-freqs-per-bin ${LISA_COARSE_N_FREQS_PER_BIN}" "${FMAX_FULL}" "${LONG_NPZ}"
+run_lisa "lisa_long_full_cg${LISA_COARSE_Nh}" "${LISA_LONG_N}" "--coarse-n-freqs-per-bin ${LISA_COARSE_Nh}" "${FMAX_FULL}" "${LONG_NPZ}"
 
 echo
 echo "Done. Outputs are under ${OUT_BASE}/"

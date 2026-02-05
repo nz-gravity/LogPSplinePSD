@@ -6,7 +6,7 @@ using the same preprocessing pipeline as the multivariate sampler:
 - Per-channel standardisation via ``MultivariateTimeseries.standardise_for_psd``.
 - Blocked Wishart FFT statistics via ``to_wishart_stats(..., window="hann")``.
 - Optional coarse-graining using ``compute_binning_structure`` +
-  ``coarse_grain_multivar_fft``.
+  ``apply_coarse_grain_multivar_fft``.
 
 The resulting empirical matrix is the same quantity stored as
 ``idata.observed_data["periodogram"]`` and plotted as the dashed "Empirical"
@@ -30,7 +30,7 @@ for path in (SRC_ROOT, PROJECT_ROOT):
 
 from log_psplines.coarse_grain import (  # noqa: E402
     CoarseGrainConfig,
-    coarse_grain_multivar_fft,
+    apply_coarse_grain_multivar_fft,
     compute_binning_structure,
 )
 from log_psplines.datatypes import MultivariateTimeseries  # noqa: E402
@@ -140,7 +140,7 @@ def main() -> None:
         dest="coarse",
         help="Disable coarse-graining (debug raw Wishart periodogram).",
     )
-    parser.add_argument("--coarse_n_bins", type=int, default=200)
+    parser.add_argument("--coarse_Nc", type=int, default=200)
     parser.add_argument(
         "--apply_strain_to_freq_scale",
         action="store_true",
@@ -200,17 +200,17 @@ def main() -> None:
     if args.coarse:
         cfg = CoarseGrainConfig(
             enabled=True,
-            n_bins=int(args.coarse_n_bins),
+            Nc=int(args.coarse_Nc),
             f_min=float(args.fmin),
             f_max=float(args.fmax),
         )
         spec = compute_binning_structure(
             fft.freq,
-            n_bins=cfg.n_bins,
+            Nc=cfg.Nc,
             f_min=cfg.f_min,
             f_max=cfg.f_max,
         )
-        fft_used, _ = coarse_grain_multivar_fft(fft, spec)
+        fft_used, _ = apply_coarse_grain_multivar_fft(fft, spec)
         freq = np.asarray(fft_used.freq, dtype=float)
 
     if fft_used.raw_psd is None:

@@ -130,7 +130,7 @@ def _iter_runs(
             coarse_key = str(coarse).lower().strip()
             coarse_on = coarse_key in {"on", "true", "1", "yes"}
             bins_grid = list(log_bins) if coarse_on else [1]
-            for n_bins in bins_grid:
+            for Nc in bins_grid:
                 for n_time_blocks in blocks_grid:
                     for n_knots in knots:
                         for alpha_delta in alpha_deltas:
@@ -138,7 +138,7 @@ def _iter_runs(
                                 yield {
                                     "sampler": str(sampler),
                                     "coarse": str(coarse),
-                                    "n_bins": int(n_bins),
+                                    "Nc": int(Nc),
                                     "n_time_blocks": int(n_time_blocks),
                                     "n_knots": int(n_knots),
                                     "alpha_delta": float(alpha_delta),
@@ -583,9 +583,7 @@ def main() -> None:
             ad_tag = _float_tag(float(spec["alpha_delta"]))
             cg = str(spec["coarse"]).lower().strip()
             cg_tag = "on" if cg in {"on", "true", "1", "yes"} else "off"
-            bins_tag = (
-                f"bins{int(spec['n_bins'])}" if cg_tag == "on" else "raw"
-            )
+            bins_tag = f"bins{int(spec['Nc'])}" if cg_tag == "on" else "raw"
             sampler_tag = _sanitize_tag(str(spec["sampler"]))
             run_dir = (
                 root_out
@@ -609,8 +607,8 @@ def main() -> None:
             ad_tag = _float_tag(float(spec["alpha_delta"]))
             cg = str(spec["coarse"]).lower().strip()
             cg_tag = "on" if cg in {"on", "true", "1", "yes"} else "off"
-            n_bins = int(spec["n_bins"])
-            bins_tag = f"bins{n_bins}" if cg_tag == "on" else "raw"
+            Nc = int(spec["Nc"])
+            bins_tag = f"bins{Nc}" if cg_tag == "on" else "raw"
             sampler_tag = _sanitize_tag(str(spec["sampler"]))
             n_time_blocks = int(spec["n_time_blocks"])
             n_knots = int(spec["n_knots"])
@@ -753,8 +751,8 @@ def main() -> None:
         cg = str(spec["coarse"]).lower().strip()
         cg_on = cg in {"on", "true", "1", "yes"}
         cg_tag = "on" if cg_on else "off"
-        n_bins = int(spec["n_bins"])
-        bins_tag = f"bins{n_bins}" if cg_on else "raw"
+        Nc = int(spec["Nc"])
+        bins_tag = f"bins{Nc}" if cg_on else "raw"
 
         sampler_tag = _sanitize_tag(sampler)
         ad_tag = _float_tag(alpha_delta)
@@ -787,7 +785,7 @@ def main() -> None:
 
         coarse_cfg = CoarseGrainConfig(
             enabled=bool(cg_on),
-            n_bins=int(n_bins),
+            Nc=int(Nc),
             f_min=FMIN,
             f_max=FMAX,
         )
@@ -795,7 +793,7 @@ def main() -> None:
         run_config = dict(
             sampler=sampler,
             coarse_grain=bool(cg_on),
-            n_bins=int(n_bins),
+            Nc=int(Nc),
             n_time_blocks=int(n_time_blocks),
             n_knots=int(n_knots),
             alpha_delta=float(alpha_delta),

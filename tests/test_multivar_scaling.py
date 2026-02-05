@@ -44,7 +44,7 @@ def test_multivar_rescale_matches_empirical():
 
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
-        n_bins=6,
+        Nc=6,
     )
 
     standardized = timeseries.standardise_for_psd()
@@ -99,7 +99,7 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
 
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
-        n_bins=8,
+        Nc=8,
     )
 
     idata = run_mcmc(

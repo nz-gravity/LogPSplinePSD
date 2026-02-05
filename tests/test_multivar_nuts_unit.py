@@ -33,6 +33,7 @@ def _make_sampler(num_chains=2):
     sampler._default_init_strategy = lambda: "init"
     sampler._compute_empirical_psd = lambda: None
     sampler._save_vi_diagnostics = lambda empirical_psd=None: None
+    sampler.duration = 0.0
     return sampler
 
 
@@ -64,6 +65,7 @@ def test_multivariate_model_emits_sites_univariate_and_multivar(monkeypatch):
             all_penalties=all_penalties,
             freq_weights=freq_weights,
             freq_bin_counts=freq_weights,
+            duration=0.0,
         )
 
         assert "likelihood" in trace

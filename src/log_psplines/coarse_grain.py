@@ -145,7 +145,10 @@ def _resolve_equal_bin_params(
         if Nh <= 0 or (Nh % 2) == 0:
             raise ValueError("Nh must be positive and odd.")
         if Nl % Nh != 0:
-            raise ValueError(f"Nh={Nh} must divide Nl={Nl}.")
+            suggested_Nh = max(1, (Nl // (Nl // Nh)))
+            raise ValueError(
+                f"Nh={Nh} must divide Nl={Nl}. Suggested Nh={suggested_Nh}."
+            )
         Nc = Nl // Nh
         return int(Nc), int(Nh)
 

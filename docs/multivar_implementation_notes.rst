@@ -2,17 +2,29 @@ Multivariate implementation notes
 =================================
 
 This page collects implementation-level notes that are easy to forget when
-reading the multivariate derivation in ``docs/maths.tex``.
+reading the multivariate derivation in ``overleaf``.
 
 FFT / PSD normalisation
 -----------------------
 
-The derivation in ``docs/maths.tex`` defines a DFT with an explicit
+The derivation in ``overleaf`` defines a DFT with an explicit
 :math:`\Delta_t` factor and writes the Whittle likelihood with a :math:`1/T`
 scaling.
 
+For convenient cross-referencing, here is the exact LaTeX for the frequency
+resolution and DFT definition from ``overleaf``:
+
+.. math::
+
+  \Delta_f = \frac{1}{n \Delta_t} = \frac{1}{T}\, .
+
+.. math::
+
+  \d(f_k) = \Delta_t\sum_{t=1}^{n} \Z_t\exp \left(-2\pi i \frac{k}{n} t \right)\, .
+
 The implementation uses a one-sided Welch-style normalisation inside
 :func:`log_psplines.datatypes.multivar.MultivarFFT.compute_wishart`.
+Source: `src/log_psplines/datatypes/multivar.py#MultivarFFT.compute_wishart <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L165-L298>`_
 
 Practical consequences:
 
@@ -42,6 +54,7 @@ See:
 
 - :class:`log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler`
 - :func:`log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft`
+  (`source <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`_)
 - :func:`log_psplines.spectrum_utils.compute_effective_nu`
 
 Blocked vs unified multivariate NUTS
@@ -86,6 +99,7 @@ Diagnostics: coarse-bin likelihood equivalence
 ----------------------------------------------
 
 The helper :func:`log_psplines.diagnostics.coarse_grain_checks.coarse_bin_likelihood_equivalence_check`
+(`source <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/diagnostics/coarse_grain_checks.py#L383-L460>`_)
 tests the key coarse-graining invariant:
 
 - sum of fine-grid log-likelihood contributions within a bin should match the

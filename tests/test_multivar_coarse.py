@@ -1,11 +1,12 @@
 import os
+import warnings
 
 import numpy as np
 import pytest
 
 from log_psplines.coarse_grain import (
     CoarseGrainConfig,
-    coarse_grain_multivar_fft,
+    apply_coarse_grain_multivar_fft,
     compute_binning_structure,
 )
 from log_psplines.example_datasets.varma_data import VARMAData
@@ -26,7 +27,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     # Problem size and sampling budget
     n = 256 if test_mode != "fast" else 64
     n_samples = n_warmup = 120 if test_mode != "fast" else 8
-    n_knots = 6 if test_mode != "fast" else 3
+    n_knots = 12 if test_mode != "fast" else 3
 
     # Simulated data
     np.random.seed(0)
@@ -60,7 +61,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     # Coarse-grained run
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
-        n_bins=10 if test_mode != "fast" else 6,
+        Nc=16 if test_mode != "fast" else 16,
         f_min=None,
         f_max=None,
     )
@@ -149,12 +150,12 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     )
     spec_manual = compute_binning_structure(
         fft_full.freq,
-        n_bins=coarse_cfg.n_bins,
-        n_freqs_per_bin=coarse_cfg.n_freqs_per_bin,
+        Nc=coarse_cfg.Nc,
+        Nh=coarse_cfg.Nh,
         f_min=coarse_cfg.f_min,
         f_max=coarse_cfg.f_max,
     )
-    fft_manual_coarse, weights_manual = coarse_grain_multivar_fft(
+    fft_manual_coarse, weights_manual = apply_coarse_grain_multivar_fft(
         fft_full, spec_manual
     )
     periodogram_obs = idata_coarse.observed_data["periodogram"].values

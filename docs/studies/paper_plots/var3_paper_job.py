@@ -100,7 +100,7 @@ def main() -> None:
         "--coarse-bins",
         type=int,
         default=0,
-        help="Enable coarse graining with n_bins=coarse_bins (0 disables).",
+        help="Enable coarse graining with Nc=coarse_bins (0 disables).",
     )
     parser.add_argument(
         "--overwrite",
@@ -137,7 +137,7 @@ def main() -> None:
     coarse_cfg: CoarseGrainConfig | None = None
     coarse_bins = int(args.coarse_bins)
     if coarse_bins > 0:
-        coarse_cfg = CoarseGrainConfig(enabled=True, n_bins=coarse_bins)
+        coarse_cfg = CoarseGrainConfig(enabled=True, Nc=coarse_bins)
 
     logger.info(
         f"Running VAR(3) job: N={n_used}, blocks={n_blocks}, coarse_bins={coarse_bins or 'off'}, outdir={outdir}"

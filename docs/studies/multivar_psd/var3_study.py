@@ -78,7 +78,7 @@ def simulation_study(
     K: int = 15,
     SEED: int = 42,
     *,
-    coarse_n_freqs_per_bin: int | None = 5,
+    coarse_Nh: int | None = 5,
     coarse_f_min: float | None = None,
     coarse_f_max: float | None = None,
 ):
@@ -99,16 +99,16 @@ def simulation_study(
 
     coarse_grain_config = None
     knot_method = DEFAULT_KNOT_METHOD
-    if coarse_n_freqs_per_bin is not None:
-        coarse_n_freqs_per_bin = int(coarse_n_freqs_per_bin)
-        if coarse_n_freqs_per_bin <= 0:
-            raise ValueError("coarse_n_freqs_per_bin must be positive.")
-        if coarse_n_freqs_per_bin % 2 == 0:
-            raise ValueError("coarse_n_freqs_per_bin must be odd.")
+    if coarse_Nh is not None:
+        coarse_Nh = int(coarse_Nh)
+        if coarse_Nh <= 0:
+            raise ValueError("coarse_Nh must be positive.")
+        if coarse_Nh % 2 == 0:
+            raise ValueError("coarse_Nh must be odd.")
         coarse_grain_config = dict(
             enabled=True,
-            n_bins=None,
-            n_freqs_per_bin=coarse_n_freqs_per_bin,
+            Nc=None,
+            Nh=coarse_Nh,
             f_min=coarse_f_min,
             f_max=coarse_f_max,
         )
@@ -160,11 +160,11 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    coarse_n_freqs_per_bin = args.coarse_n_freqs_per_bin
-    if coarse_n_freqs_per_bin is not None and coarse_n_freqs_per_bin <= 0:
-        coarse_n_freqs_per_bin = None
+    coarse_Nh = args.coarse_Nh
+    if coarse_Nh is not None and coarse_Nh <= 0:
+        coarse_Nh = None
     simulation_study(
         N=args.N,
         SEED=args.seed,
-        coarse_n_freqs_per_bin=coarse_n_freqs_per_bin,
+        coarse_Nh=coarse_Nh,
     )

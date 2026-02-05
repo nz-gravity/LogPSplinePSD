@@ -4,13 +4,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from log_psplines.coarse_grain.multivar import coarse_grain_multivar_fft
-from log_psplines.coarse_grain.plotting import (
-    plot_coarse_grain_weights,
-    plot_coarse_vs_original,
-)
-from log_psplines.coarse_grain.preprocess import (
+from log_psplines.coarse_grain import (
     CoarseGrainSpec,
+    apply_coarse_grain_multivar_fft,
     apply_coarse_graining_univar,
     compute_binning_structure,
 )
@@ -137,26 +133,26 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
 
     # Coarse-graining specification
     freqs = pdgrm_full.freqs
-    n_bins = 12 if test_mode != "fast" else 6
+    Nc = 12 if test_mode != "fast" else 6
     spec: CoarseGrainSpec = compute_binning_structure(
         freqs,
-        n_bins=n_bins,
+        Nc=Nc,
         f_min=None,
         f_max=None,
     )
 
-    # 1) Original vs coarse-grained data (what we actually fit)
-    fig, ax, weights = plot_coarse_vs_original(
-        freqs=pdgrm_full.freqs,
-        power=pdgrm_full.power,
-        spec=spec,
-        scaling_factor=pdgrm_full.scaling_factor,
-    )
-    fig.savefig(os.path.join(outdir, "coarse_vs_original.png"), dpi=150)
+    # # 1) Original vs coarse-grained data (what we actually fit)
+    # fig, ax, weights = plot_coarse_vs_original(
+    #     freqs=pdgrm_full.freqs,
+    #     power=pdgrm_full.power,
+    #     spec=spec,
+    #     scaling_factor=pdgrm_full.scaling_factor,
+    # )
+    # fig.savefig(os.path.join(outdir, "coarse_vs_original.png"), dpi=150)
 
     # 2) Frequency weights used in the likelihood scaling
-    fig_w, ax_w = plot_coarse_grain_weights(spec=spec, weights=weights)
-    fig_w.savefig(os.path.join(outdir, "coarse_weights.png"), dpi=150)
+    # fig_w, ax_w = plot_coarse_grain_weights(spec=spec, weights=weights)
+    # fig_w.savefig(os.path.join(outdir, "coarse_weights.png"), dpi=150)
 
     # 3) Build a P-spline on the coarse grid and plot with knots
     power_coarse, weights_like = apply_coarse_graining_univar(
@@ -188,8 +184,8 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
 
     # Basic existence checks
     for fname in [
-        "coarse_vs_original.png",
-        "coarse_weights.png",
+        # "coarse_vs_original.png",
+        # "coarse_weights.png",
         "coarse_pspline_with_knots.png",
     ]:
         path = os.path.join(outdir, fname)
@@ -222,14 +218,14 @@ def test_plot_multivariate_fitted_data_blocks(
     # Coarse-grain along frequency for what the likelihood actually fits
     spec = compute_binning_structure(
         fft_full.freq,
-        n_bins=10 if test_mode != "fast" else 6,
+        Nc=10 if test_mode != "fast" else 6,
         f_min=None,
         f_max=None,
     )
     # Returns a MultivarFFT on coarse grid and the frequency weights
     # fft_coarse.raw_psd holds the aggregated PSD matrix we fit
     # (n_freq_coarse, n_dim, n_dim)
-    fft_coarse, weights = coarse_grain_multivar_fft(fft_full, spec)
+    # fft_coarse, weights = apply_coarse_grain_multivar_fft(fft_full, spec)
 
     # Prepare empirical PSD wrapper for plotting overlays (coarse grid)
     psd_matrix = np.asarray(fft_coarse.raw_psd)

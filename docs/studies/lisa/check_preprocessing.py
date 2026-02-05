@@ -16,7 +16,7 @@ for path in (SRC_ROOT, PROJECT_ROOT):
 
 from log_psplines.coarse_grain import (
     CoarseGrainConfig,
-    coarse_grain_multivar_fft,
+    apply_coarse_grain_multivar_fft,
     compute_binning_structure,
 )
 from log_psplines.datatypes import MultivariateTimeseries
@@ -33,7 +33,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 FMIN, FMAX = 1e-4, 1e-1
 COARSE_CFG = CoarseGrainConfig(
     enabled=True,
-    n_bins=200,
+    Nc=200,
     f_min=FMIN,
     f_max=FMAX,
 )
@@ -112,11 +112,11 @@ def main() -> None:
 
     spec = compute_binning_structure(
         fft.freq,
-        n_bins=COARSE_CFG.n_bins,
+        Nc=COARSE_CFG.Nc,
         f_min=COARSE_CFG.f_min,
         f_max=COARSE_CFG.f_max,
     )
-    fft, _ = coarse_grain_multivar_fft(fft, spec)
+    fft, _ = apply_coarse_grain_multivar_fft(fft, spec)
 
     psd_phys = scale_processed_psd(
         fft.raw_psd, fft.scaling_factor, fft.channel_stds

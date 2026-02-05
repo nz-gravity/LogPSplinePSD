@@ -366,8 +366,8 @@ def _expected_coarse_freq_univar(
     pdgrm = standardized.to_periodogram(fmin=fmin, fmax=fmax)
     spec = compute_binning_structure(
         pdgrm.freqs,
-        n_bins=cfg.n_bins,
-        n_freqs_per_bin=cfg.n_freqs_per_bin,
+        Nc=cfg.Nc,
+        Nh=cfg.Nh,
         f_min=cfg.f_min,
         f_max=cfg.f_max,
     )
@@ -381,8 +381,8 @@ def test_run_mcmc_coarse_grain_univariate_mcmc():
     fmin, fmax = 0.02, 0.8
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
-        n_bins=None,
-        n_freqs_per_bin=1,
+        Nc=None,
+        Nh=1,
         f_min=fmin,
         f_max=fmax,
     )
@@ -447,8 +447,8 @@ def _expected_coarse_freq_multivar(
     )
     spec = compute_binning_structure(
         fft.freq,
-        n_bins=cfg.n_bins,
-        n_freqs_per_bin=cfg.n_freqs_per_bin,
+        Nc=cfg.Nc,
+        Nh=cfg.Nh,
         f_min=cfg.f_min,
         f_max=cfg.f_max,
     )
@@ -462,8 +462,8 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
     fmin, fmax = 0.01, 0.4
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
-        n_bins=None,
-        n_freqs_per_bin=1,
+        Nc=None,
+        Nh=1,
         f_min=fmin,
         f_max=fmax,
     )

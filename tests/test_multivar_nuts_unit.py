@@ -25,7 +25,7 @@ def _make_sampler(num_chains=2):
     sampler._logpost_fn = lambda params: jnp.array(0.0)
     sampler.u_re = jnp.zeros((2, 2, 2))
     sampler.u_im = jnp.zeros((2, 2, 2))
-    sampler.nu = 2
+    sampler.Nb = 2
     sampler.all_bases = (jnp.ones((2, 1)),)
     sampler.all_penalties = (jnp.eye(1),)
     sampler.freq_weights = jnp.ones((2,))
@@ -60,7 +60,7 @@ def test_multivariate_model_emits_sites_univariate_and_multivar(monkeypatch):
         ).get_trace(
             u_re=u_re,
             u_im=u_im,
-            nu=2,
+            Nb=2,
             all_bases=all_bases,
             all_penalties=all_penalties,
             freq_weights=freq_weights,

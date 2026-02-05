@@ -74,7 +74,7 @@ def test_sum_wishart_outer_products_rejects_wrong_shape():
 
 def test_wishart_matrix_to_psd_scales_and_broadcasts():
     Y = np.arange(8.0).reshape(2, 2, 2)
-    result = wishart_matrix_to_psd(Y, 4.0, scaling_factor=2.5)
+    result = wishart_matrix_to_psd(Y, 4, scaling_factor=2.5)
     expected = Y / 4.0 * 2.5
     np.testing.assert_allclose(result, expected)
 
@@ -82,16 +82,16 @@ def test_wishart_matrix_to_psd_scales_and_broadcasts():
 def test_wishart_matrix_to_psd_with_weights():
     Y = np.arange(8.0).reshape(2, 2, 2)
     weights = np.array([1.0, 2.0])
-    result = wishart_matrix_to_psd(Y, 2.0, weights=weights)
+    result = wishart_matrix_to_psd(Y, 2, weights=weights)
     expected = Y / (weights * 2.0)[:, None, None]
     np.testing.assert_allclose(result, expected)
 
 
 def test_wishart_matrix_to_psd_rejects_bad_shapes():
     with pytest.raises(ValueError):
-        wishart_matrix_to_psd(np.zeros((2, 2)), 2.0)
+        wishart_matrix_to_psd(np.zeros((2, 2)), 2)
 
-    with pytest.raises(ValueError):
+    with pytest.raises((TypeError, ValueError)):
         wishart_matrix_to_psd(np.zeros((2, 2, 2)), np.array([1.0, 2.0, 3.0]))
 
 
@@ -105,7 +105,7 @@ def test_wishart_u_to_psd_matches_explicit_path():
     )
     weights = np.array([1.0, 0.5])
     expected = wishart_matrix_to_psd(
-        u_to_wishart_matrix(u), 2.0, scaling_factor=1.5, weights=weights
+        u_to_wishart_matrix(u), 2, scaling_factor=1.5, weights=weights
     )
-    result = wishart_u_to_psd(u, 2.0, scaling_factor=1.5, weights=weights)
+    result = wishart_u_to_psd(u, 2, scaling_factor=1.5, weights=weights)
     np.testing.assert_allclose(result, expected)

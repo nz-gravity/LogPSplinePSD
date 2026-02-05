@@ -145,16 +145,16 @@ class MultivariateLogPSplines:
             u_im = jnp.asarray(fft_data.u_im)
             u_complex = u_re + 1j * u_im
             Y = jnp.einsum("fkc,fkd->fcd", u_complex, jnp.conj(u_complex))
-            nu_scale = float(max(int(fft_data.nu), 1))
+            Nb = float(max(int(fft_data.Nb), 1))
         else:
             Y = None
-            nu_scale = 1.0
+            Nb = 1.0
 
         # Create diagonal models (one per channel)
         diagonal_models = []
         for i in range(n_channels):
             if use_wishart:
-                empirical_diag_power = jnp.real(Y[:, i, i]) / nu_scale
+                empirical_diag_power = jnp.real(Y[:, i, i]) / Nb
             else:
                 empirical_diag_power = (
                     fft_data.y_re[:, i] ** 2 + fft_data.y_im[:, i] ** 2
@@ -208,7 +208,7 @@ class MultivariateLogPSplines:
             for i in range(1, n_channels):
                 for j in range(i):
                     if use_wishart:
-                        csd_ij = jnp.abs(Y[:, i, j]) / nu_scale
+                        csd_ij = jnp.abs(Y[:, i, j]) / Nb
                     else:
                         csd_ij = (
                             fft_data.y_re[:, i] * fft_data.y_re[:, j]

@@ -416,7 +416,7 @@ def _create_multivar_inference_data(
             )
         observed_csd = wishart_u_to_psd(
             u_complex,
-            nu=getattr(fft_data, "nu", 1),
+            Nb=getattr(fft_data, "Nb", 1),
             scaling_factor=float(getattr(fft_data, "scaling_factor", 1.0)),
             weights=weights,
         )

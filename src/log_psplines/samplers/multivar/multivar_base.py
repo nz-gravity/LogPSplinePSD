@@ -89,7 +89,7 @@ class MultivarBaseSampler(BaseSampler):
         self.freq = jnp.array(self.fft_data.freq, dtype=jnp.float32)
         self.u_re = jnp.array(self.fft_data.u_re, dtype=jnp.float32)
         self.u_im = jnp.array(self.fft_data.u_im, dtype=jnp.float32)
-        self.nu = int(self.fft_data.nu)
+        self.Nb = int(self.fft_data.Nb)
         self.duration = float(getattr(self.fft_data, "duration", 1.0) or 1.0)
         if self.duration <= 0.0:
             raise ValueError("fft_data.duration must be positive")
@@ -237,7 +237,7 @@ class MultivarBaseSampler(BaseSampler):
             )
         S = wishart_matrix_to_psd(
             u_to_wishart_matrix(u_complex),
-            nu=self.fft_data.nu,
+            Nb=self.fft_data.Nb,
             duration=float(getattr(self.fft_data, "duration", 1.0) or 1.0),
             scaling_factor=float(self.fft_data.scaling_factor or 1.0),
             weights=weights,

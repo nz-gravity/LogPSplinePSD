@@ -24,6 +24,8 @@ Variable names
      - Number of channels.
    * - ``Nb``
      - Number of blocks.
+   * - ``Lb``
+     - Number of samples per block (n//Nb).
    * - ``Nc``
      - Number of coarse-grain bins.
    * - ``Nh``

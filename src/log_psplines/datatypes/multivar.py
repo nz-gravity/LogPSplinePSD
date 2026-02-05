@@ -69,6 +69,9 @@ class MultivarFFT:
         None  # Per-channel standard deviations
     )
     fs: float = field(default=1.0, repr=False)
+    # Duration (seconds) of each time-domain block used to form the FFT/Wishart
+    # statistic. This matches the "T" factor in the Whittle likelihood.
+    duration: float = field(default=1.0, repr=False)
     raw_psd: Optional[np.ndarray] = None
     raw_freq: Optional[np.ndarray] = None
     # For coarse-grained FFTs, stores the number of fine-grid frequencies that
@@ -82,6 +85,9 @@ class MultivarFFT:
         self.u_re = np.asarray(self.u_re, dtype=np.float64)
         self.u_im = np.asarray(self.u_im, dtype=np.float64)
         self.freq = np.asarray(self.freq, dtype=np.float64)
+        self.duration = float(self.duration)
+        if not np.isfinite(self.duration) or self.duration <= 0.0:
+            raise ValueError("duration must be a positive finite float")
 
         expected_fft_shape = (self.n_freq, self.n_dim)
         if self.y_re.shape != expected_fft_shape:
@@ -240,6 +246,13 @@ class MultivarFFT:
             scale[-1] = 1.0 / (taper_energy * fs)
         sqrt_scale = np.sqrt(scale, dtype=np.float64)[None, :, None]
         block_ffts = block_ffts * sqrt_scale
+        # Convert from a "per-block-periodogram" normalisation to the Whittle
+        # convention that keeps an explicit 1/T in the likelihood. This ensures
+        # the likelihood uses the observation duration explicitly while PSD
+        # conversions remain unchanged (see wishart_matrix_to_psd(duration=...)).
+        duration = float(block_len) / float(fs)
+        sqrt_duration = float(np.sqrt(np.asarray(duration, dtype=np.float64)))
+        block_ffts = block_ffts * sqrt_duration
 
         if fmin is not None or fmax is not None:
             freq_min = float(freq[0])
@@ -274,6 +287,7 @@ class MultivarFFT:
         raw_psd = wishart_matrix_to_psd(
             u_to_wishart_matrix(U),
             nu=n_blocks,
+            duration=duration,
             scaling_factor=float(scaling_factor or 1.0),
         )
 
@@ -290,6 +304,7 @@ class MultivarFFT:
             nu=n_blocks,
             scaling_factor=scaling_factor,
             fs=fs,
+            duration=duration,
             channel_stds=(
                 None
                 if channel_stds is None
@@ -326,6 +341,7 @@ class MultivarFFT:
             nu=self.nu,
             scaling_factor=self.scaling_factor,
             fs=self.fs,
+            duration=self.duration,
             channel_stds=self.channel_stds,
         )
 
@@ -340,7 +356,11 @@ class MultivarFFT:
     @property
     def empirical_psd(self) -> "EmpiricalPSD":
         psd = self.get_empirical_psd(
-            self.y_re, self.y_im, self.scaling_factor, self.fs
+            self.freq,
+            self.y_re,
+            self.y_im,
+            self.duration,
+            self.scaling_factor,
         )
         if self.channel_stds is not None:
             scale_matrix = np.outer(self.channel_stds, self.channel_stds)
@@ -355,20 +375,29 @@ class MultivarFFT:
 
     @staticmethod
     def get_empirical_psd(
-        y_re, y_im, scaling=1.0, fs: float = 1
+        freq: np.ndarray,
+        y_re: np.ndarray,
+        y_im: np.ndarray,
+        duration: float,
+        scaling: float = 1.0,
     ) -> "EmpiricalPSD":
         y_re = np.array(y_re, dtype=np.float64)
         y_im = np.array(y_im, dtype=np.float64)
+        freq = np.asarray(freq, dtype=np.float64)
         n_freq, n_dim = y_re.shape
+        if freq.shape != (n_freq,):
+            raise ValueError(
+                f"freq must have shape ({n_freq},), got {freq.shape}"
+            )
         y_complex = y_re + 1j * y_im
         Y = np.einsum("fi,fj->fij", y_complex, np.conj(y_complex))
         psd = wishart_matrix_to_psd(
             Y,
             nu=1.0,
+            duration=float(duration),
             scaling_factor=float(scaling),
         )
         coherence = _get_coherence(psd)
-        freq = np.asarray(self.freq, dtype=np.float64)
         return EmpiricalPSD(
             freq=freq,
             psd=psd,

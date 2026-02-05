@@ -42,6 +42,7 @@ class MultivarNUTSConfig(SamplerConfig):
 def multivariate_psplines_model(
     u_re: jnp.ndarray,  # Wishart replicates (real)
     u_im: jnp.ndarray,  # Wishart replicates (imag)
+    duration: float,
     nu: int,
     all_bases,
     all_penalties,
@@ -139,8 +140,9 @@ def multivariate_psplines_model(
     exp_neg_log_delta = jnp.exp(-log_delta_sq)
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
     sum_log_det = -nu_scale * jnp.sum(fw[:, None] * log_delta_sq)
+    duration_scale = jnp.asarray(duration, dtype=log_delta_sq.dtype)
     log_likelihood = sum_log_det - jnp.sum(
-        residual_power_sum * exp_neg_log_delta
+        residual_power_sum * exp_neg_log_delta / duration_scale
     )
     numpyro.factor("likelihood", log_likelihood)
 
@@ -249,6 +251,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
             self.rng_key,
             self.u_re,
             self.u_im,
+            self.duration,
             self.nu,
             self.all_bases,
             self.all_penalties,
@@ -333,6 +336,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
                 model_kwargs=dict(
                     u_re=self.u_re,
                     u_im=self.u_im,
+                    duration=self.duration,
                     nu=self.nu,
                     all_bases=self.all_bases,
                     all_penalties=self.all_penalties,
@@ -372,6 +376,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         return dict(
             u_re=self.u_re,
             u_im=self.u_im,
+            duration=self.duration,
             nu=self.nu,
             all_bases=self.all_bases,
             all_penalties=self.all_penalties,

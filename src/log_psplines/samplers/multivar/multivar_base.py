@@ -90,6 +90,9 @@ class MultivarBaseSampler(BaseSampler):
         self.u_re = jnp.array(self.fft_data.u_re, dtype=jnp.float32)
         self.u_im = jnp.array(self.fft_data.u_im, dtype=jnp.float32)
         self.nu = int(self.fft_data.nu)
+        self.duration = float(getattr(self.fft_data, "duration", 1.0) or 1.0)
+        if self.duration <= 0.0:
+            raise ValueError("fft_data.duration must be positive")
 
         # Optional frequency weights (used to scale the log-det term in the
         # multivariate coarse-grained likelihood). For paper-consistent coarse
@@ -235,6 +238,7 @@ class MultivarBaseSampler(BaseSampler):
         S = wishart_matrix_to_psd(
             u_to_wishart_matrix(u_complex),
             nu=self.fft_data.nu,
+            duration=float(getattr(self.fft_data, "duration", 1.0) or 1.0),
             scaling_factor=float(self.fft_data.scaling_factor or 1.0),
             weights=weights,
         )

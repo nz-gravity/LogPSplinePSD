@@ -398,6 +398,7 @@ def compute_vi_artifacts_multivar(
         model_args=(
             sampler.u_re,
             sampler.u_im,
+            sampler.duration,
             sampler.nu,
             sampler.all_bases,
             sampler.all_penalties,
@@ -657,6 +658,7 @@ def prepare_block_vi(
                 beta_phi_theta,
                 sampler.config.alpha_delta,
                 sampler.config.beta_delta,
+                sampler.duration,
                 sampler.nu,
                 sampler.freq_weights,
                 sampler.freq_bin_counts,

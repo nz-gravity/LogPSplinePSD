@@ -41,7 +41,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 USE_FREQ_UNITS = True
 SAVE_NPZ = True
 NPZ_PATH = RESULTS_DIR / "lisatools_synth_data.npz"
-
+SEC_IN_DAY = 86_400.0
 
 def summarize_ratio(label: str, ratio: np.ndarray) -> None:
     clean = ratio[np.isfinite(ratio)]
@@ -160,7 +160,7 @@ def main() -> None:
     parser.add_argument(
         "--duration-days",
         type=float,
-        default=365.0,
+        default=7 * 8,
         help="Total duration in days (default: 365).",
     )
     parser.add_argument(
@@ -192,12 +192,12 @@ def main() -> None:
     duration_days = float(args.duration_days)
     fmin_diag = float(args.fmin)
     fmax_diag = float(args.fmax)
-    duration = duration_days * 86_400.0
-    delta_t = 0.1
+    duration = duration_days * SEC_IN_DAY
+    delta_t = 1
     model = "scirdv1"
     unit_label = "freq" if USE_FREQ_UNITS else "strain"
 
-    target_block_seconds = 7.0 * 86_400.0
+    target_block_seconds = 7.0 * SEC_IN_DAY
     block_len_samples = int(round(target_block_seconds / delta_t))
     chunk_seconds = block_len_samples * delta_t
     total_samples = int(duration / delta_t)

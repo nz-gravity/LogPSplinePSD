@@ -508,6 +508,7 @@ class EmpiricalPSD:
         nperseg: int | None = None,
         noverlap: int | None = None,
         window: str = "hann",
+        detrend: str | bool = "constant",
     ) -> "EmpiricalPSD":
         n_channels = data.shape[1]
 
@@ -532,7 +533,7 @@ class EmpiricalPSD:
                 nperseg=nperseg,
                 noverlap=noverlap,
                 return_onesided=True,
-                detrend="constant",
+                detrend=detrend,
                 scaling="density",
             )
             psds.append(Pxx)
@@ -553,7 +554,7 @@ class EmpiricalPSD:
                     nperseg=nperseg,
                     noverlap=noverlap,
                     return_onesided=True,
-                    detrend="constant",
+                    detrend=detrend,
                     scaling="density",
                 )
                 S[:, i, j] = Sij
@@ -569,8 +570,9 @@ def _get_coherence(psd: np.ndarray) -> np.ndarray:
     for i in range(n_channels):
         coh[:, i, i] = 1.0
         for j in range(i + 1, n_channels):
-            coh[:, i, j] = np.abs(psd[:, i, j]) ** 2 / (
-                np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
-            )
+            denom = np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
+            with np.errstate(divide="ignore", invalid="ignore"):
+                coh_ij = np.abs(psd[:, i, j]) ** 2 / denom
+            coh[:, i, j] = np.where(denom > 0, coh_ij, 0.0)
             coh[:, j, i] = coh[:, i, j]
     return coh

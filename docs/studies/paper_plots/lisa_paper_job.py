@@ -1,8 +1,9 @@
 """LISA paper job runner.
 
-Loads a 3-channel XYZ time series (from ``.h5`` or ``.npz``), trims to a target
-length with a desired block structure, then runs multivariate blocked NUTS with
-optional frequency coarse graining and frequency truncation.
+Loads a 3-channel XYZ time series from a paper-sized lisatools-synth NPZ (see
+``generate_lisa_paper_data.py``), trims to a target length with a desired block
+structure, then runs multivariate blocked NUTS with optional frequency coarse
+graining and frequency truncation.
 """
 
 from __future__ import annotations
@@ -10,16 +11,11 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
-from typing import Literal
 
-import h5py
 import jax
 import numpy as np
 
 from log_psplines.coarse_grain import CoarseGrainConfig
-from log_psplines.example_datasets.lisa_data import (
-    analytic_covariance_from_model,
-)
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 
@@ -41,61 +37,34 @@ def _resolve_blocks(n_time_target: int, block_size: int) -> tuple[int, int]:
     return n_blocks, n_used
 
 
-def _load_xyz_h5(path: Path, *, stride: int) -> tuple[np.ndarray, np.ndarray]:
-    if stride < 1:
-        raise ValueError("--downsample must be >= 1.")
-    with h5py.File(path, "r") as handle:
-        t = np.asarray(handle["t"][::stride], dtype=float)
-        x = np.asarray(handle["X2"][::stride], dtype=float)
-        y = np.asarray(handle["Y2"][::stride], dtype=float)
-        z = np.asarray(handle["Z2"][::stride], dtype=float)
-    data = np.stack([x, y, z], axis=1)
-    return t, data
-
-
-def _load_xyz_npz(
-    path: Path, *, stride: int
-) -> tuple[np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray] | None]:
-    if stride < 1:
-        raise ValueError("--downsample must be >= 1.")
+def _load_paper_synth_npz(
+    path: Path,
+) -> tuple[np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray]]:
+    """Load the paper-sized lisatools-synth NPZ."""
     with np.load(path, allow_pickle=False) as npz:
-        if "time" not in npz.files or "data" not in npz.files:
-            raise ValueError("NPZ must contain 'time' and 'data' arrays.")
-        t = np.asarray(npz["time"], dtype=float)[::stride]
-        data = np.asarray(npz["data"], dtype=float)[::stride]
-        true_psd = None
-        if "freq_true" in npz.files and "true_matrix" in npz.files:
-            freq_true = np.asarray(npz["freq_true"], dtype=float)
-            true_matrix = np.asarray(npz["true_matrix"])
-            true_psd = (freq_true, true_matrix)
-    if data.ndim != 2 or data.shape[1] != 3:
-        raise ValueError(f"Expected data shape (N,3); got {data.shape}.")
-    return t, data, true_psd
-
-
-def _infer_source(path: Path) -> Literal["h5", "npz"]:
-    suffix = path.suffix.lower()
-    if suffix in {".h5", ".hdf5"}:
-        return "h5"
-    if suffix == ".npz":
-        return "npz"
-    raise ValueError("Unsupported input; expected .h5/.hdf5 or .npz")
+        required = {"time", "data", "freq_true", "true_matrix"}
+        missing = required.difference(npz.files)
+        if missing:
+            raise ValueError(
+                f"Synth NPZ is missing keys {sorted(missing)} (has {npz.files})."
+            )
+        t = np.asarray(npz["time"], dtype=float)
+        y = np.asarray(npz["data"], dtype=float)
+        freq_true = np.asarray(npz["freq_true"], dtype=float)
+        true_matrix = np.asarray(npz["true_matrix"])
+    if y.ndim != 2 or y.shape[1] != 3:
+        raise ValueError(f"Expected synth data shape (N,3); got {y.shape}.")
+    return t, y, (freq_true, true_matrix)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--outdir", required=True, help="Output directory.")
     parser.add_argument(
-        "--data",
+        "--synth-npz",
         type=str,
-        default="data/tdi.h5",
-        help="Input file path (.h5/.npz). Defaults to data/tdi.h5.",
-    )
-    parser.add_argument(
-        "--downsample",
-        type=int,
-        default=1,
-        help="Keep every k-th sample from the input.",
+        required=True,
+        help="Path to paper-sized lisatools synth NPZ (time/data/freq_true/true_matrix).",
     )
     parser.add_argument("--n-time", type=int, required=True, help="Target N.")
     parser.add_argument(
@@ -123,7 +92,7 @@ def main() -> None:
         "--init-from-vi", action=argparse.BooleanOptionalAction, default=True
     )
     parser.add_argument("--vi-steps", type=int, default=50_000)
-    parser.add_argument("--vi-guide", type=str, default="diag")
+    parser.add_argument("--vi-guide", type=str, default="lowrank:16")
     parser.add_argument("--vi-lr", type=float, default=1e-4)
     parser.add_argument("--vi-posterior-draws", type=int, default=512)
 
@@ -135,6 +104,12 @@ def main() -> None:
         type=int,
         default=0,
         help="Enable coarse graining with n_bins=coarse_bins (0 disables).",
+    )
+    parser.add_argument(
+        "--coarse-n-freqs-per-bin",
+        type=int,
+        default=0,
+        help="Enable coarse graining with this odd bin size (0 disables). If set, overrides --coarse-bins.",
     )
     parser.add_argument(
         "--overwrite",
@@ -158,15 +133,8 @@ def main() -> None:
         )
         return
 
-    data_path = Path(args.data).expanduser().resolve()
-    source = _infer_source(data_path)
-    stride = int(args.downsample)
-
-    if source == "h5":
-        t, y = _load_xyz_h5(data_path, stride=stride)
-        true_psd_source = None
-    else:
-        t, y, true_psd_source = _load_xyz_npz(data_path, stride=stride)
+    synth_path = Path(args.synth_npz).expanduser().resolve()
+    t, y, true_psd_source = _load_paper_synth_npz(synth_path)
 
     if t.size < 2:
         raise ValueError("Need at least 2 time samples.")
@@ -177,45 +145,50 @@ def main() -> None:
     n_blocks, n_used = _resolve_blocks(args.n_time, args.block_size)
     if y.shape[0] < n_used:
         raise ValueError(
-            f"Input series too short after downsampling: have {y.shape[0]}, need {n_used}."
+            f"Input series too short: have {y.shape[0]}, need {n_used}."
         )
 
     y = y[:n_used]
     t = t[:n_used]
+    duration_days = float((t[-1] - t[0]) / 86_400.0)
 
     fmin = float(args.fmin) if args.fmin is not None else None
     fmax = float(args.fmax) if args.fmax is not None else None
+    nyq = 0.5 / float(dt)
+    if fmax is not None and float(fmax) > nyq:
+        logger.warning(
+            f"Requested fmax={float(fmax):g} exceeds Nyquist={nyq:g} (dt={dt:g}); clamping to Nyquist."
+        )
+        fmax = nyq
 
     coarse_cfg: CoarseGrainConfig | None = None
+    coarse_n_freqs = int(args.coarse_n_freqs_per_bin)
     coarse_bins = int(args.coarse_bins)
-    if coarse_bins > 0:
+    if coarse_n_freqs > 0:
+        coarse_cfg = CoarseGrainConfig(
+            enabled=True,
+            n_bins=None,
+            n_freqs_per_bin=coarse_n_freqs,
+            f_min=fmin,
+            f_max=fmax,
+        )
+    elif coarse_bins > 0:
         coarse_cfg = CoarseGrainConfig(
             enabled=True,
             n_bins=coarse_bins,
+            n_freqs_per_bin=None,
             f_min=fmin,
             f_max=fmax,
         )
 
-    block_len = int(args.block_size)
-    freq_eval = np.fft.rfftfreq(block_len, d=dt)[1:]
-    if freq_eval.size == 0:
-        raise ValueError(
-            "block-size too small to retain positive frequencies."
-        )
-
     if true_psd_source is None and not args.no_true_psd:
-        true_matrix = analytic_covariance_from_model(
-            freq_eval,
-            dt=dt,
-            n_time=int(n_used),
-            model="scirdv1",
-            central_freq=None,
+        raise RuntimeError(
+            "Synth NPZ did not provide true PSD keys; rerun the synth generator."
         )
-        true_psd_source = (freq_eval, true_matrix)
 
     logger.info(
-        f"Running LISA job: data={data_path.name}, N={n_used}, dt={dt:g}, blocks={n_blocks}, "
-        f"f=[{fmin:g},{fmax:g}], coarse_bins={coarse_bins or 'off'}, outdir={outdir}"
+        f"Running LISA job: data={synth_path.name}, N={n_used}, dt={dt:g}, duration_days={duration_days:.2f}, "
+        f"blocks={n_blocks}, f=[{fmin:g},{fmax:g}], coarse={'n_freqs_per_bin='+str(coarse_n_freqs) if coarse_n_freqs>0 else ('n_bins='+str(coarse_bins) if coarse_bins>0 else 'off')}, outdir={outdir}"
     )
 
     ts = MultivariateTimeseries(t=t, y=y)
@@ -228,6 +201,7 @@ def main() -> None:
         n_samples=int(args.samples),
         n_warmup=int(args.warmup),
         num_chains=int(args.chains),
+        rng_key=int(args.seed),
         outdir=str(outdir),
         verbose=True,
         compute_psis=False,

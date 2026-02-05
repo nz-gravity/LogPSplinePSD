@@ -22,9 +22,22 @@ The multivariate pipeline is:
 
 The implementation is designed around the Whittle/Wishart sufficient statistic
 
+Code pointers (clickable)
+-------------------------
+
+The links below point to the current `main` branch on GitHub (line numbers may
+drift over time):
+
+- `Wishart FFT construction (MultivarFFT.compute_wishart) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L165-L298>`_
+- `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L104-L260>`_
+- `Coarse graining (coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`_
+- `PSD reconstruction (reconstruct_psd_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py#L387-L438>`_
+- `Wishart→PSD conversion (wishart_matrix_to_psd) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L157-L183>`_
+- `U→Y conversion (u_to_wishart_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L137-L145>`_
+
 .. math::
 
-   Y(f_k) = \sum_{b=1}^{\nu} d^{(b)}(f_k)\, d^{(b)}(f_k)^H
+   \Y(f_k)=\sum_{i=1}^{N_b} \underbrace{\d^{(i)}(f_k)\d^{(i)}(f_k)^*}_{\I^{(i)}(f_k)}
 
 with degrees of freedom :math:`\nu` equal to the number of non-overlapping
 blocks (called ``n_blocks`` in code).
@@ -108,6 +121,16 @@ Define the row residual
 
    r_j(f_k) = u_j(f_k) - \sum_{l<j} \theta_{jl}(f_k)\, u_l(f_k).
 
+Exact per-row likelihood (from ``overleaf``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The derivation expresses each factor as (verbatim LaTeX):
+
+.. math::
+
+   \mathcal{L}_j(\u_j,\u_{<j}|\btheta_j,\bdelta_j) \propto \nonumber \\
+   \prod_{k=1}^{N} \delta_{jk}^{-2N_b} \exp \left(\frac{-\sum_{\nu=1}^p\left|u_{j\nu}^{(k)}-\sum_{l=1}^{j-1}\theta_{jl}^{(k)}u_{l\nu}^{(k)} \right|^2}{T\delta_{jk}^2} \right)
+
 The blocked model implements (up to constants)
 
 .. math::
@@ -147,6 +170,15 @@ The returned `weights` vector equals the bin member counts :math:`N_h` and
 should be passed as ``freq_weights``. With this choice, each bin behaves like a
 Wishart statistic with effective degrees of freedom :math:`\nu N_h`.
 
+Exact coarse-grained likelihood form (from ``overleaf``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The coarse-grained approximation is written as (verbatim LaTeX):
+
+.. math::
+
+   \prod_{h=1}^{N_c} \left|\S(\bar{f}_h)\right|^{-N_b*N_h} \exp\left(- \tr\left[ \S(\bar{f}_h)^{-1} \bar{\Y}_h\right]\right)
+
 Symbol ↔ code mapping
 ---------------------
 
@@ -179,8 +211,14 @@ and returns
 Notes on scaling conventions
 ----------------------------
 
-The derivation in ``docs/maths.tex`` writes the Whittle likelihood with an
-explicit observation-time factor :math:`T`.
+The derivation in ``overleaf`` writes the Whittle likelihood with an
+explicit observation-time factor :math:`T`. The exact LaTeX from
+``overleaf`` is:
+
+.. math::
+
+   \mathcal{L}(\d|\S) \propto  \prod_{k=1}^{N} \det(\S(f_k))^{-1} \times
+   \exp\left(-\frac{1}{T}\d(f_k)^* \S(f_k)^{-1} \d(f_k)\right),
 
 The implementation normalises the FFTs to one-sided PSD units during
 :func:`~log_psplines.datatypes.multivar.MultivarFFT.compute_wishart`. In that
@@ -191,35 +229,35 @@ there is no explicit :math:`T` factor in the NumPyro likelihood.
 One way to see that this is consistent is to view it as a deterministic
 reparameterisation of the Fourier coefficients.
 
-In one common Whittle convention,
+In one common Whittle convention (also stated in ``overleaf``),
 
 .. math::
 
-   d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; T\,S(f_k)\right),
+   \d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; T\,\S(f_k)\right),
 
 which yields a quadratic term of the form
 
 .. math::
 
-   \exp\!\left(-\frac{1}{T}\, d(f_k)^H S(f_k)^{-1} d(f_k)\right).
+   \exp\!\left(-\frac{1}{T}\, \d(f_k)^* \S(f_k)^{-1} \d(f_k)\right).
 
 If instead we define the rescaled coefficient
 
 .. math::
 
-   	ilde d(f_k) = \frac{d(f_k)}{\sqrt{T}},
+   	ilde{\d}(f_k) = \frac{\d(f_k)}{\sqrt{T}},
 
 then
 
 .. math::
 
-   	ilde d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; S(f_k)\right),
+   	ilde{\d}(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; \S(f_k)\right),
 
 and the quadratic term becomes
 
 .. math::
 
-   \exp\!\left(-\tilde d(f_k)^H S(f_k)^{-1} \tilde d(f_k)\right)
+   \exp\!\left(-\tilde{\d}(f_k)^* \S(f_k)^{-1} \tilde{\d}(f_k)\right)
 
 with no explicit :math:`T`.
 
@@ -228,3 +266,29 @@ standard one-sided/Welch normalisation factors) when constructing
 :math:`Y(f_k)` from the block FFTs. This is fine as long as you interpret
 :math:`S(f)` in the implementation as being expressed in the corresponding
 one-sided PSD convention.
+
+Exact Cholesky factorisation (from ``overleaf``)
+-----------------------------------------------------
+
+The derivation in ``overleaf`` uses the following exact Cholesky
+parameterisation:
+
+.. math::
+
+   \mathbf{S}(f_k)^{-1} = \mathbf{T}_k^* \, \mathbf{D}_k^{-1} \, \mathbf{T}_k,
+
+with
+
+.. math::
+
+   \bold{T}_k = \begin{pmatrix}
+   1 & 0 & 0 & \cdots & 0 \\
+   -\theta_{21}^{(k)} & 1 & 0 & \cdots & 0 \\
+   -\theta_{31}^{(k)} & -\theta_{32}^{(k)} & 1 & \ddots & \vdots \\
+   \vdots & \vdots & \ddots & \ddots & 0 \\
+   -\theta_{p1}^{(k)} & -\theta_{p2}^{(k)}& \cdots & -\theta_{p,p-1}^{(k)} & 1
+   \end{pmatrix}.
+
+The blocked sampler’s internal likelihood corresponds to the per-row likelihood
+factors :math:`\mathcal{L}_j` (see Eq. (likelihoodj) in ``overleaf``),
+modulo the implementation’s FFT/PSD normalisation conventions.

@@ -31,7 +31,7 @@ launch_buttons:
   colab_url: "https://colab.research.google.com"
 
 repository:
-  url: https://github.com/nz-gravity/LogPsplinePSD
+  url: https://github.com/nz-gravity/LogPSplinePSD
   path_to_book: docs
   branch: main
 
@@ -41,3 +41,17 @@ sphinx:
     'IPython.sphinxext.ipython_console_highlighting',
 #    'sphinx.ext.matplotlib.plot',
     ]
+  config:
+    mathjax3_config:
+      tex:
+        macros:
+          d: "\\mathbf{d}"
+          S: "\\mathbf{S}"
+          Y: "\\mathbf{Y}"
+          Z: "\\mathbf{Z}"
+          u: "\\mathbf{u}"
+          I: "\\mathbf{I}"
+          tr: "\\operatorname{tr}"
+          btheta: "\\boldsymbol{\\theta}"
+          bdelta: "\\boldsymbol{\\delta}"
+          bold: ["\\mathbf{#1}", 1]

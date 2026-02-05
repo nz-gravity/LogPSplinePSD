@@ -57,7 +57,7 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'multivar_implementation_notes';</script>
     <link rel="index" title="Index" href="genindex.html" />
@@ -236,7 +236,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPsplinePSD" target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD" target="_blank"
    class="btn btn-sm btn-source-repository-button dropdown-item"
    title="Source repository"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -253,7 +253,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivar_implementation_notes.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivar_implementation_notes.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -396,14 +396,21 @@ document.write(`
   <section id="multivariate-implementation-notes">
 <h1>Multivariate implementation notes<a class="headerlink" href="#multivariate-implementation-notes" title="Link to this heading">#</a></h1>
 <p>This page collects implementation-level notes that are easy to forget when
-reading the multivariate derivation in <code class="docutils literal notranslate"><span class="pre">docs/maths.tex</span></code>.</p>
+reading the multivariate derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>.</p>
 <section id="fft-psd-normalisation">
 <h2>FFT / PSD normalisation<a class="headerlink" href="#fft-psd-normalisation" title="Link to this heading">#</a></h2>
-<p>The derivation in <code class="docutils literal notranslate"><span class="pre">docs/maths.tex</span></code> defines a DFT with an explicit
+<p>The derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> defines a DFT with an explicit
 <span class="math notranslate nohighlight">\(\Delta_t\)</span> factor and writes the Whittle likelihood with a <span class="math notranslate nohighlight">\(1/T\)</span>
 scaling.</p>
+<p>For convenient cross-referencing, here is the exact LaTeX for the frequency
+resolution and DFT definition from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>:</p>
+<div class="math notranslate nohighlight">
+\[\Delta_f = \frac{1}{n \Delta_t} = \frac{1}{T}\, .\]</div>
+<div class="math notranslate nohighlight">
+\[\d(f_k) = \Delta_t\sum_{t=1}^{n} \Z_t\exp \left(-2\pi i \frac{k}{n} t \right)\, .\]</div>
 <p>The implementation uses a one-sided Welch-style normalisation inside
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT.compute_wishart()</span></code>.</p>
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT.compute_wishart()</span></code>.
+Source: <a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L165-L298">src/log_psplines/datatypes/multivar.py#MultivarFFT.compute_wishart</a></p>
 <p>Practical consequences:</p>
 <ul class="simple">
 <li><p>the DC bin is dropped (numerical stability on log axes and to avoid leakage
@@ -429,7 +436,8 @@ raw <cite>freq_bin_counts</cite> remain available so PSD conversion does not dri
 <p>See:</p>
 <ul class="simple">
 <li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code></p></li>
-<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft()</span></code></p></li>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft()</span></code>
+(<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138">source</a>)</p></li>
 <li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.compute_effective_nu()</span></code></p></li>
 </ul>
 </section>
@@ -472,6 +480,7 @@ variances would otherwise collapse.</p>
 <section id="diagnostics-coarse-bin-likelihood-equivalence">
 <h2>Diagnostics: coarse-bin likelihood equivalence<a class="headerlink" href="#diagnostics-coarse-bin-likelihood-equivalence" title="Link to this heading">#</a></h2>
 <p>The helper <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.diagnostics.coarse_grain_checks.coarse_bin_likelihood_equivalence_check()</span></code>
+(<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/diagnostics/coarse_grain_checks.py#L383-L460">source</a>)
 tests the key coarse-graining invariant:</p>
 <ul class="simple">
 <li><p>sum of fine-grid log-likelihood contributions within a bin should match the

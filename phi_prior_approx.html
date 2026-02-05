@@ -57,7 +57,7 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'phi_prior_approx';</script>
     <link rel="index" title="Index" href="genindex.html" />
@@ -236,7 +236,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPsplinePSD" target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD" target="_blank"
    class="btn btn-sm btn-source-repository-button dropdown-item"
    title="Source repository"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -253,7 +253,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fphi_prior_approx.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fphi_prior_approx.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -395,18 +395,19 @@ document.write(`
   <section id="prior-on-phi-tex-vs-implementation">
 <h1>Prior on phi: TeX vs implementation<a class="headerlink" href="#prior-on-phi-tex-vs-implementation" title="Link to this heading">#</a></h1>
 <p>This page explains a deliberate difference between the draft math in
-<code class="docutils literal notranslate"><span class="pre">docs/maths.tex</span></code> and the sampler implementation.</p>
+<code class="docutils literal notranslate"><span class="pre">overleaf</span></code> and the sampler implementation.</p>
 <section id="background-hierarchical-p-spline-prior">
 <h2>Background: hierarchical P-spline prior<a class="headerlink" href="#background-hierarchical-p-spline-prior" title="Link to this heading">#</a></h2>
-<p>The draft writes the spline-weight prior as</p>
+<p>The draft writes the spline-weight prior as (exact LaTeX from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</p>
 <div class="math notranslate nohighlight">
-\[w\mid \phi \sim \mathcal{N}\big(0, (\phi P)^{-1}\big),\]</div>
-<p>with hyperpriors</p>
+\[\bold{w}_j | \phi_j \sim \mathcal{N}(\bold{0}, (\phi_j \bold{P}_j)^{-1})\]</div>
+<p>with hyperpriors (again copied verbatim):</p>
 <div class="math notranslate nohighlight">
-\[\phi\mid\delta \sim \mathrm{Gamma}(\alpha_\phi, \; \delta\,\beta_\phi),
-\qquad
-\delta \sim \mathrm{Gamma}(\alpha_\delta, \beta_\delta),\]</div>
-<p>where we use the <em>rate</em> parameterisation of the Gamma distribution.</p>
+\[\begin{split}\phi_j | \delta_j \sim \text{Gamma}(\alpha_\phi, \delta_j \beta_\phi)
+\\
+\delta_j \sim \text{Gamma}(\alpha_\delta, \beta_\delta)\end{split}\]</div>
+<p>In the implementation (NumPyro), we interpret these Gamma distributions using
+the <em>rate</em> parameterisation.</p>
 </section>
 <section id="what-the-code-actually-samples">
 <h2>What the code actually samples<a class="headerlink" href="#what-the-code-actually-samples" title="Link to this heading">#</a></h2>
@@ -456,7 +457,11 @@ match the first two moments of <span class="math notranslate nohighlight">\(\phi
 <section id="where-to-look-in-the-code">
 <h2>Where to look in the code<a class="headerlink" href="#where-to-look-in-the-code" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Implementation: <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>.</p></li>
+<li><dl class="simple">
+<dt>Implementation: <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>.</dt><dd><p>Source: <a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/utils.py#L46-L103">src/log_psplines/samplers/utils.py#sample_pspline_block</a></p>
+</dd>
+</dl>
+</li>
 <li><p>Usage:</p>
 <ul>
 <li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts</span></code></p></li>

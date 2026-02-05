@@ -57,7 +57,7 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'multivar_blocked_nuts';</script>
     <link rel="index" title="Index" href="genindex.html" />
@@ -236,7 +236,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPsplinePSD" target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD" target="_blank"
    class="btn btn-sm btn-source-repository-button dropdown-item"
    title="Source repository"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -253,7 +253,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPsplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivar_blocked_nuts.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivar_blocked_nuts.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -378,13 +378,21 @@ document.write(`
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-pointers-clickable">Code pointers (clickable)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-wishart-statistics">Data → Wishart statistics</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cholesky-parameterisation">Cholesky parameterisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-compatibility">Coarse-graining compatibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-per-row-likelihood-from-overleaf">Exact per-row likelihood (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-compatibility">Coarse-graining compatibility</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-coarse-grained-likelihood-form-from-overleaf">Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#symbol-code-mapping">Symbol ↔ code mapping</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction">PSD reconstruction</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes-on-scaling-conventions">Notes on scaling conventions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-cholesky-factorisation-from-overleaf">Exact Cholesky factorisation (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
 </ul>
             </nav>
         </div>
@@ -417,8 +425,21 @@ across bins.</p></li>
 sampling each Cholesky row as an <em>independent</em> NumPyro/NUTS problem.</p></li>
 </ol>
 <p>The implementation is designed around the Whittle/Wishart sufficient statistic</p>
+</section>
+<section id="code-pointers-clickable">
+<h2>Code pointers (clickable)<a class="headerlink" href="#code-pointers-clickable" title="Link to this heading">#</a></h2>
+<p>The links below point to the current <cite>main</cite> branch on GitHub (line numbers may
+drift over time):</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L165-L298">Wishart FFT construction (MultivarFFT.compute_wishart)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L104-L260">Blocked NumPyro likelihood (_blocked_channel_model)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138">Coarse graining (coarse_grain_multivar_fft)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py#L387-L438">PSD reconstruction (reconstruct_psd_matrix)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L157-L183">Wishart→PSD conversion (wishart_matrix_to_psd)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L137-L145">U→Y conversion (u_to_wishart_matrix)</a></p></li>
+</ul>
 <div class="math notranslate nohighlight">
-\[Y(f_k) = \sum_{b=1}^{\nu} d^{(b)}(f_k)\, d^{(b)}(f_k)^H\]</div>
+\[\Y(f_k)=\sum_{i=1}^{N_b} \underbrace{\d^{(i)}(f_k)\d^{(i)}(f_k)^*}_{\I^{(i)}(f_k)}\]</div>
 <p>with degrees of freedom <span class="math notranslate nohighlight">\(\nu\)</span> equal to the number of non-overlapping
 blocks (called <code class="docutils literal notranslate"><span class="pre">n_blocks</span></code> in code).</p>
 </section>
@@ -477,6 +498,12 @@ vector of replicate components for channel <span class="math notranslate nohighl
 <p>Define the row residual</p>
 <div class="math notranslate nohighlight">
 \[r_j(f_k) = u_j(f_k) - \sum_{l&lt;j} \theta_{jl}(f_k)\, u_l(f_k).\]</div>
+<section id="exact-per-row-likelihood-from-overleaf">
+<h3>Exact per-row likelihood (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-per-row-likelihood-from-overleaf" title="Link to this heading">#</a></h3>
+<p>The derivation expresses each factor as (verbatim LaTeX):</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\mathcal{L}_j(\u_j,\u_{&lt;j}|\btheta_j,\bdelta_j) \propto \nonumber \\
+\prod_{k=1}^{N} \delta_{jk}^{-2N_b} \exp \left(\frac{-\sum_{\nu=1}^p\left|u_{j\nu}^{(k)}-\sum_{l=1}^{j-1}\theta_{jl}^{(k)}u_{l\nu}^{(k)} \right|^2}{T\delta_{jk}^2} \right)\end{split}\]</div>
 <p>The blocked model implements (up to constants)</p>
 <div class="math notranslate nohighlight">
 \[\log \mathcal{L}_j
@@ -495,6 +522,7 @@ does not multiply by <span class="math notranslate nohighlight">\(w_k\)</span> a
 <code class="docutils literal notranslate"><span class="pre">_blocked_channel_model</span></code> inside
 <code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts</span></code>.</p>
 </section>
+</section>
 <section id="coarse-graining-compatibility">
 <h2>Coarse-graining compatibility<a class="headerlink" href="#coarse-graining-compatibility" title="Link to this heading">#</a></h2>
 <p>Coarse graining for multivariate FFT/Wishart statistics is performed by
@@ -506,6 +534,12 @@ does not multiply by <span class="math notranslate nohighlight">\(w_k\)</span> a
 <p>The returned <cite>weights</cite> vector equals the bin member counts <span class="math notranslate nohighlight">\(N_h\)</span> and
 should be passed as <code class="docutils literal notranslate"><span class="pre">freq_weights</span></code>. With this choice, each bin behaves like a
 Wishart statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(\nu N_h\)</span>.</p>
+<section id="exact-coarse-grained-likelihood-form-from-overleaf">
+<h3>Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-coarse-grained-likelihood-form-from-overleaf" title="Link to this heading">#</a></h3>
+<p>The coarse-grained approximation is written as (verbatim LaTeX):</p>
+<div class="math notranslate nohighlight">
+\[\prod_{h=1}^{N_c} \left|\S(\bar{f}_h)\right|^{-N_b*N_h} \exp\left(- \tr\left[ \S(\bar{f}_h)^{-1} \bar{\Y}_h\right]\right)\]</div>
+</section>
 </section>
 <section id="symbol-code-mapping">
 <h2>Symbol ↔ code mapping<a class="headerlink" href="#symbol-code-mapping" title="Link to this heading">#</a></h2>
@@ -534,8 +568,12 @@ and returns</p>
 </section>
 <section id="notes-on-scaling-conventions">
 <h2>Notes on scaling conventions<a class="headerlink" href="#notes-on-scaling-conventions" title="Link to this heading">#</a></h2>
-<p>The derivation in <code class="docutils literal notranslate"><span class="pre">docs/maths.tex</span></code> writes the Whittle likelihood with an
-explicit observation-time factor <span class="math notranslate nohighlight">\(T\)</span>.</p>
+<p>The derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> writes the Whittle likelihood with an
+explicit observation-time factor <span class="math notranslate nohighlight">\(T\)</span>. The exact LaTeX from
+<code class="docutils literal notranslate"><span class="pre">overleaf</span></code> is:</p>
+<div class="math notranslate nohighlight">
+\[\mathcal{L}(\d|\S) \propto  \prod_{k=1}^{N} \det(\S(f_k))^{-1} \times
+\exp\left(-\frac{1}{T}\d(f_k)^* \S(f_k)^{-1} \d(f_k)\right),\]</div>
 <p>The implementation normalises the FFTs to one-sided PSD units during
 <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wishart()</span></code>. In that
 normalisation, the time/frequency-resolution factors are absorbed into the
@@ -543,27 +581,46 @@ construction of <span class="math notranslate nohighlight">\(Y(f_k)\)</span> (an
 there is no explicit <span class="math notranslate nohighlight">\(T\)</span> factor in the NumPyro likelihood.</p>
 <p>One way to see that this is consistent is to view it as a deterministic
 reparameterisation of the Fourier coefficients.</p>
-<p>In one common Whittle convention,</p>
+<p>In one common Whittle convention (also stated in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>),</p>
 <div class="math notranslate nohighlight">
-\[d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; T\,S(f_k)\right),\]</div>
+\[\d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; T\,\S(f_k)\right),\]</div>
 <p>which yields a quadratic term of the form</p>
 <div class="math notranslate nohighlight">
-\[\exp\!\left(-\frac{1}{T}\, d(f_k)^H S(f_k)^{-1} d(f_k)\right).\]</div>
+\[\exp\!\left(-\frac{1}{T}\, \d(f_k)^* \S(f_k)^{-1} \d(f_k)\right).\]</div>
 <p>If instead we define the rescaled coefficient</p>
 <div class="math notranslate nohighlight">
-\[ilde d(f_k) = \frac{d(f_k)}{\sqrt{T}},\]</div>
+\[ilde{\d}(f_k) = \frac{\d(f_k)}{\sqrt{T}},\]</div>
 <p>then</p>
 <div class="math notranslate nohighlight">
-\[ilde d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; S(f_k)\right),\]</div>
+\[ilde{\d}(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; \S(f_k)\right),\]</div>
 <p>and the quadratic term becomes</p>
 <div class="math notranslate nohighlight">
-\[\exp\!\left(-\tilde d(f_k)^H S(f_k)^{-1} \tilde d(f_k)\right)\]</div>
+\[\exp\!\left(-\tilde{\d}(f_k)^* \S(f_k)^{-1} \tilde{\d}(f_k)\right)\]</div>
 <p>with no explicit <span class="math notranslate nohighlight">\(T\)</span>.</p>
 <p>The code effectively makes this kind of deterministic rescaling (along with the
 standard one-sided/Welch normalisation factors) when constructing
 <span class="math notranslate nohighlight">\(Y(f_k)\)</span> from the block FFTs. This is fine as long as you interpret
 <span class="math notranslate nohighlight">\(S(f)\)</span> in the implementation as being expressed in the corresponding
 one-sided PSD convention.</p>
+</section>
+<section id="exact-cholesky-factorisation-from-overleaf">
+<h2>Exact Cholesky factorisation (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-cholesky-factorisation-from-overleaf" title="Link to this heading">#</a></h2>
+<p>The derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> uses the following exact Cholesky
+parameterisation:</p>
+<div class="math notranslate nohighlight">
+\[\mathbf{S}(f_k)^{-1} = \mathbf{T}_k^* \, \mathbf{D}_k^{-1} \, \mathbf{T}_k,\]</div>
+<p>with</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\bold{T}_k = \begin{pmatrix}
+1 &amp; 0 &amp; 0 &amp; \cdots &amp; 0 \\
+-\theta_{21}^{(k)} &amp; 1 &amp; 0 &amp; \cdots &amp; 0 \\
+-\theta_{31}^{(k)} &amp; -\theta_{32}^{(k)} &amp; 1 &amp; \ddots &amp; \vdots \\
+\vdots &amp; \vdots &amp; \ddots &amp; \ddots &amp; 0 \\
+-\theta_{p1}^{(k)} &amp; -\theta_{p2}^{(k)}&amp; \cdots &amp; -\theta_{p,p-1}^{(k)} &amp; 1
+\end{pmatrix}.\end{split}\]</div>
+<p>The blocked sampler’s internal likelihood corresponds to the per-row likelihood
+factors <span class="math notranslate nohighlight">\(\mathcal{L}_j\)</span> (see Eq. (likelihoodj) in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>),
+modulo the implementation’s FFT/PSD normalisation conventions.</p>
 </section>
 </section>
 
@@ -632,13 +689,21 @@ one-sided PSD convention.</p>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-pointers-clickable">Code pointers (clickable)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-wishart-statistics">Data → Wishart statistics</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cholesky-parameterisation">Cholesky parameterisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-compatibility">Coarse-graining compatibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-per-row-likelihood-from-overleaf">Exact per-row likelihood (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-compatibility">Coarse-graining compatibility</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-coarse-grained-likelihood-form-from-overleaf">Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#symbol-code-mapping">Symbol ↔ code mapping</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction">PSD reconstruction</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes-on-scaling-conventions">Notes on scaling conventions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-cholesky-factorisation-from-overleaf">Exact Cholesky factorisation (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
 </ul>
   </nav></div>
 

@@ -443,7 +443,7 @@ and eigenvalues that encode (bar Y_h).</p>
 a Wishart observation with (N_b Nh) degrees of freedom:</p>
 <div class="math notranslate nohighlight">
 \[\log \mathcal{L} \propto - \sum_{h=1}^{Nc} N_b Nh \log |\S(\bar f_h)|
-- \sum_\nu \u^{(h)*}_\nu \S(\bar f_h)^{-1} \u^{(h)}_\nu.\]</div>
+- \sum_N_b \u^{(h)*}_N_b \S(\bar f_h)^{-1} \u^{(h)}_N_b.\]</div>
 <p>When coarse graining is enabled, <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code>
 accepts the <cite>weights</cite> vector (usually via <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.config.CoarseGrainConfig</span></code>)
 and stores it as <cite>freq_weights</cite>. The NumPyro model

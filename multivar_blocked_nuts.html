@@ -509,10 +509,11 @@ vector of replicate components for channel <span class="math notranslate nohighl
 \[\log \mathcal{L}_j
 \;\propto\;
 -\nu\,\sum_k w_k\,\log\big(\delta_j(f_k)^2\big)
-\; - \sum_k \frac{\|r_j(f_k)\|_2^2}{\delta_j(f_k)^2}.\]</div>
+\; - \sum_k \frac{\|r_j(f_k)\|_2^2}{T\,\delta_j(f_k)^2}.\]</div>
 <p>Key points:</p>
 <ul class="simple">
 <li><p><span class="math notranslate nohighlight">\(\nu\)</span> is the number of averaged blocks (<code class="docutils literal notranslate"><span class="pre">fft_data.nu</span></code>).</p></li>
+<li><p><span class="math notranslate nohighlight">\(T\)</span> is the per-block observation duration (<code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code>).</p></li>
 <li><p><span class="math notranslate nohighlight">\(w_k\)</span> are optional frequency weights (<code class="docutils literal notranslate"><span class="pre">freq_weights</span></code>). They are used
 to scale the log-determinant term when coarse graining is enabled.</p></li>
 <li><p>The quadratic term uses the <em>summed sufficient statistics</em> directly, so it
@@ -568,40 +569,26 @@ and returns</p>
 </section>
 <section id="notes-on-scaling-conventions">
 <h2>Notes on scaling conventions<a class="headerlink" href="#notes-on-scaling-conventions" title="Link to this heading">#</a></h2>
-<p>The derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> writes the Whittle likelihood with an
-explicit observation-time factor <span class="math notranslate nohighlight">\(T\)</span>. The exact LaTeX from
-<code class="docutils literal notranslate"><span class="pre">overleaf</span></code> is:</p>
+<p>The derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> writes the Whittle likelihood with an explicit
+observation-time factor <span class="math notranslate nohighlight">\(T\)</span>. The exact LaTeX from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> is:</p>
 <div class="math notranslate nohighlight">
 \[\mathcal{L}(\d|\S) \propto  \prod_{k=1}^{N} \det(\S(f_k))^{-1} \times
 \exp\left(-\frac{1}{T}\d(f_k)^* \S(f_k)^{-1} \d(f_k)\right),\]</div>
-<p>The implementation normalises the FFTs to one-sided PSD units during
-<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wishart()</span></code>. In that
-normalisation, the time/frequency-resolution factors are absorbed into the
-construction of <span class="math notranslate nohighlight">\(Y(f_k)\)</span> (and therefore <span class="math notranslate nohighlight">\(U(f_k)\)</span>). As a result,
-there is no explicit <span class="math notranslate nohighlight">\(T\)</span> factor in the NumPyro likelihood.</p>
-<p>One way to see that this is consistent is to view it as a deterministic
-reparameterisation of the Fourier coefficients.</p>
-<p>In one common Whittle convention (also stated in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>),</p>
-<div class="math notranslate nohighlight">
-\[\d(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; T\,\S(f_k)\right),\]</div>
-<p>which yields a quadratic term of the form</p>
-<div class="math notranslate nohighlight">
-\[\exp\!\left(-\frac{1}{T}\, \d(f_k)^* \S(f_k)^{-1} \d(f_k)\right).\]</div>
-<p>If instead we define the rescaled coefficient</p>
-<div class="math notranslate nohighlight">
-\[ilde{\d}(f_k) = \frac{\d(f_k)}{\sqrt{T}},\]</div>
-<p>then</p>
-<div class="math notranslate nohighlight">
-\[ilde{\d}(f_k) \;\dot\sim\; \mathcal{CN}\!\left(0,\; \S(f_k)\right),\]</div>
-<p>and the quadratic term becomes</p>
-<div class="math notranslate nohighlight">
-\[\exp\!\left(-\tilde{\d}(f_k)^* \S(f_k)^{-1} \tilde{\d}(f_k)\right)\]</div>
-<p>with no explicit <span class="math notranslate nohighlight">\(T\)</span>.</p>
-<p>The code effectively makes this kind of deterministic rescaling (along with the
-standard one-sided/Welch normalisation factors) when constructing
-<span class="math notranslate nohighlight">\(Y(f_k)\)</span> from the block FFTs. This is fine as long as you interpret
-<span class="math notranslate nohighlight">\(S(f)\)</span> in the implementation as being expressed in the corresponding
-one-sided PSD convention.</p>
+<p>The implementation keeps the <span class="math notranslate nohighlight">\(1/T\)</span> factor explicit in the NumPyro
+likelihood. Concretely:</p>
+<ul class="simple">
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wishart()</span></code> records
+the per-block observation duration <code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code> (seconds), and scales
+the stored frequency-domain components so the quadratic term can be written as
+<span class="math notranslate nohighlight">\((1/T)\,d(f_k)^* S(f_k)^{-1} d(f_k)\)</span>.</p></li>
+<li><p>PSD conversions divide by <code class="docutils literal notranslate"><span class="pre">duration</span></code> via
+<code class="xref py py-func docutils literal notranslate"><span class="pre">)()</span></code>, so
+the resulting PSD matrices remain in the same one-sided “per Hz” convention
+used elsewhere in the codebase.</p></li>
+</ul>
+<p>This is algebraically equivalent to absorbing <span class="math notranslate nohighlight">\(T\)</span> into a deterministic
+rescaling of the Fourier coefficients; we keep it explicit to match the paper
+notation and to make the dependence on observation time unambiguous.</p>
 </section>
 <section id="exact-cholesky-factorisation-from-overleaf">
 <h2>Exact Cholesky factorisation (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-cholesky-factorisation-from-overleaf" title="Link to this heading">#</a></h2>

@@ -54,6 +54,12 @@ class SamplerConfig:
     skip_plot_diagnostics: bool = False  # Skip plotting heavy diagnostics
     diagnostics_summary_mode: Literal["off", "light", "full"] = "light"
     diagnostics_summary_position: Literal["start", "end"] = "end"
+    # Optional extra empirical overlays for multivariate PSD matrix plots.
+    # Intended for things like full-resolution Welch estimates alongside
+    # coarse-grained empirical periodograms.
+    extra_empirical_psd: Optional[list[Any]] = None
+    extra_empirical_labels: Optional[list[str]] = None
+    extra_empirical_styles: Optional[list[Dict[str, Any]]] = None
 
     def __post_init__(self):
         if self.outdir is not None:
@@ -179,11 +185,35 @@ class BaseSampler(ABC):
                     # Report lowest-ESS parameter names when available
                     names = idata.attrs.get("ess_lowest_names")
                     vals = idata.attrs.get("ess_lowest_values")
-                    if names and vals and len(names) == len(vals):
-                        pairs = ", ".join(
-                            f"{n}: {v:.1f}" for n, v in zip(names, vals)
-                        )
-                        logger.info(f"  ESS lowest: {pairs}")
+                    if names is not None and vals is not None:
+                        if isinstance(names, np.ndarray):
+                            names_list = names.tolist()
+                        elif isinstance(names, (list, tuple)):
+                            names_list = list(names)
+                        else:
+                            names_list = [str(names)]
+
+                        if isinstance(vals, np.ndarray):
+                            vals_list = vals.tolist()
+                        elif isinstance(vals, (list, tuple)):
+                            vals_list = list(vals)
+                        else:
+                            vals_list = [vals]
+
+                        if (
+                            len(names_list) == len(vals_list)
+                            and len(names_list) > 0
+                        ):
+                            try:
+                                pairs = ", ".join(
+                                    f"{n}: {float(v):.1f}"
+                                    for n, v in zip(names_list, vals_list)
+                                )
+                                logger.info(f"  ESS lowest: {pairs}")
+                            except Exception as exc:  # pragma: no cover
+                                logger.debug(
+                                    f"  Could not format ESS lowest values: {exc}"
+                                )
 
                 if rhat_vals is not None and rhat_vals.size:
                     logger.info(

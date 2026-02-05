@@ -13,7 +13,11 @@ from .coarse_grain import (
     compute_binning_structure,
 )
 from .datatypes import Periodogram
-from .datatypes.multivar import MultivarFFT, MultivariateTimeseries
+from .datatypes.multivar import (
+    EmpiricalPSD,
+    MultivarFFT,
+    MultivariateTimeseries,
+)
 from .datatypes.univar import Timeseries
 from .psplines import LogPSplines, MultivariateLogPSplines
 from .samplers import (
@@ -290,6 +294,10 @@ def run_mcmc(
     vi_psd_max_draws: int = 64,
     coarse_grain_config: Optional[CoarseGrainConfig | dict] = None,
     n_time_blocks: int = 1,
+    plot_welch_overlay: bool | None = None,
+    welch_nperseg: int | None = None,
+    welch_noverlap: int | None = None,
+    welch_window: str = "hann",
     alpha_phi_theta: Optional[float] = None,
     beta_phi_theta: Optional[float] = None,
     # Multivariate blocked NUTS noise floor controls
@@ -450,6 +458,9 @@ def run_mcmc(
     # Handle raw timeseries input - standardize automatically
     processed_data = None
     freq_weights = None
+    raw_multivar_ts: MultivariateTimeseries | None = (
+        data if isinstance(data, MultivariateTimeseries) else None
+    )
 
     if isinstance(data, (Timeseries, MultivariateTimeseries)):
         # Standardize the raw timeseries for numerical stability
@@ -535,6 +546,63 @@ def run_mcmc(
             processed_data, cg_config, scaled_true_psd
         )
     )
+
+    extra_empirical_psd: list[EmpiricalPSD] | None = None
+    extra_empirical_labels: list[str] | None = None
+    extra_empirical_styles: list[dict] | None = None
+
+    if (
+        raw_multivar_ts is not None
+        and isinstance(processed_data, MultivarFFT)
+        and outdir is not None
+    ):
+        want_welch = plot_welch_overlay
+        if want_welch is None:
+            # Default ON for multivariate runs that will produce PSD plots.
+            want_welch = True
+
+        if want_welch:
+            try:
+                welch_emp = raw_multivar_ts.get_empirical_psd(
+                    nperseg=welch_nperseg,
+                    noverlap=welch_noverlap,
+                    window=welch_window,
+                )
+                freq_target = np.asarray(processed_data.freq, dtype=float)
+                f_lo = float(freq_target[0])
+                f_hi = float(freq_target[-1])
+                keep = (
+                    (welch_emp.freq > 0.0)
+                    & (welch_emp.freq >= f_lo)
+                    & (welch_emp.freq <= f_hi)
+                )
+                if np.any(keep):
+                    extra_empirical_psd = [
+                        EmpiricalPSD(
+                            freq=np.asarray(welch_emp.freq)[keep],
+                            psd=np.asarray(welch_emp.psd)[keep],
+                            coherence=np.asarray(welch_emp.coherence)[keep],
+                            channels=welch_emp.channels,
+                        )
+                    ]
+                    extra_empirical_labels = ["Welch"]
+                    extra_empirical_styles = [
+                        dict(
+                            color="0.25",
+                            lw=0.9,
+                            alpha=0.18,
+                            ls=":",
+                            zorder=-10,
+                        )
+                    ]
+                else:
+                    if verbose:
+                        logger.warning(
+                            "Welch overlay requested but produced no in-range positive-frequency bins; skipping."
+                        )
+            except Exception as exc:
+                if verbose:
+                    logger.warning(f"Could not compute Welch overlay: {exc}")
 
     # Align true_psd (if provided) to the processed frequency grid
     if scaled_true_psd is not None and processed_data is not None:
@@ -731,6 +799,9 @@ def run_mcmc(
         noise_floor_array=noise_floor_array,
         theory_psd=theory_psd,
         noise_floor_blocks=noise_floor_blocks,
+        extra_empirical_psd=extra_empirical_psd,
+        extra_empirical_labels=extra_empirical_labels,
+        extra_empirical_styles=extra_empirical_styles,
         **kwargs,
     )
 
@@ -792,6 +863,9 @@ def create_sampler(
     noise_floor_array: Optional[jnp.ndarray] = None,
     theory_psd: Optional[jnp.ndarray] = None,
     noise_floor_blocks: Optional[list[int] | str] = None,
+    extra_empirical_psd=None,
+    extra_empirical_labels: Optional[list[str]] = None,
+    extra_empirical_styles: Optional[list[dict]] = None,
     **kwargs,
 ):
     """Factory function to create appropriate sampler."""
@@ -820,6 +894,9 @@ def create_sampler(
         "freq_weights": freq_weights,
         "vi_psd_max_draws": vi_psd_max_draws,
         "only_vi": only_vi,
+        "extra_empirical_psd": extra_empirical_psd,
+        "extra_empirical_labels": extra_empirical_labels,
+        "extra_empirical_styles": extra_empirical_styles,
     }
 
     if isinstance(data, Periodogram):

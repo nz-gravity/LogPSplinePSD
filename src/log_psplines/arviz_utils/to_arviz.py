@@ -102,12 +102,56 @@ def _prepare_attributes_and_dims(
     model,
 ) -> None:
     """Prepare attributes, coordinates, and dimensions for InferenceData."""
-    # Convert config to attributes (handle booleans)
-    config_attrs = {
-        k: (int(v) if isinstance(v, bool) else v)
-        for k, v in asdict(config).items()
-        if v is not None
-    }
+
+    def _sanitize_attr_value(value: Any) -> Any | None:
+        """Return a NetCDF/HDF5-friendly attribute value or None if unsupported."""
+
+        if value is None:
+            return None
+
+        if isinstance(value, bool):
+            return int(value)
+
+        if isinstance(value, (int, float, str, np.number)):
+            return value
+
+        if isinstance(value, np.ndarray):
+            if value.dtype == object:
+                return None
+            if value.dtype.kind == "U":
+                # h5py cannot store numpy unicode arrays as attrs; encode to bytes.
+                return value.astype("S")
+            return value
+
+        if isinstance(value, (list, tuple)):
+            if not value:
+                return np.asarray(value, dtype=float)
+            if all(
+                isinstance(v, (bool, int, float, np.number)) for v in value
+            ):
+                arr = np.asarray(
+                    [int(v) if isinstance(v, bool) else v for v in value],
+                    dtype=float,
+                )
+                return arr
+            if all(isinstance(v, str) for v in value):
+                # Keep as a plain Python list of strings (h5py can't store
+                # numpy unicode arrays in attrs, but lists of strings work).
+                return list(value)
+            return None
+
+        return None
+
+    # Convert config to attributes (handle booleans) and drop non-serialisable
+    # objects (e.g. plotting helpers) that would break netcdf saving.
+    config_attrs: Dict[str, Any] = {}
+    for key, val in asdict(config).items():
+        if val is None:
+            continue
+        sanitized = _sanitize_attr_value(val)
+        if sanitized is None:
+            continue
+        config_attrs[key] = sanitized
 
     true_psd_attr = config_attrs.pop("true_psd", None)
     if true_psd_attr is not None:
@@ -129,7 +173,10 @@ def _prepare_attributes_and_dims(
         lowest_names = [str(name) for name in ess_sorted.index[:n_low]]
         lowest_vals = [float(val) for val in ess_sorted.iloc[:n_low]]
         attributes.update(
-            dict(ess_lowest_names=lowest_names, ess_lowest_values=lowest_vals)
+            dict(
+                ess_lowest_names=lowest_names,
+                ess_lowest_values=np.asarray(lowest_vals, dtype=float),
+            )
         )
     except Exception:
         logger.exception(

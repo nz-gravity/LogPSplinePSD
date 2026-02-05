@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from log_psplines.datatypes.multivar import EmpiricalPSD, _get_coherence
 from log_psplines.example_datasets.lisa_data import LISAData
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.plotting.psd_matrix import _pack_ci_dict, plot_psd_matrix
@@ -107,6 +108,43 @@ def test_plot_psd_matrix_scales_and_limits(outdir):
     assert im_ax.axison  # upper triangle now used for imag parts
     assert diag_ax.get_xlim() == pytest.approx(freq_range)
 
+    plt.close(fig)
+
+
+def test_plot_psd_matrix_extra_empirical_zorder():
+    freq, ci_dict = _make_simple_ci_dict(n_channels=2, n_freq=20)
+    n_freq = freq.size
+    psd_emp = np.ones((n_freq, 2, 2), dtype=np.complex128)
+    psd_welch = 2.0 * np.ones((n_freq, 2, 2), dtype=np.complex128)
+
+    empirical = EmpiricalPSD(
+        freq=freq,
+        psd=psd_emp,
+        coherence=_get_coherence(psd_emp),
+        channels=np.arange(2),
+    )
+    welch = EmpiricalPSD(
+        freq=freq,
+        psd=psd_welch,
+        coherence=_get_coherence(psd_welch),
+        channels=np.arange(2),
+    )
+
+    fig, axes = plot_psd_matrix(
+        ci_dict=ci_dict,
+        freq=freq,
+        empirical_psd=empirical,
+        extra_empirical_psd=[welch],
+        extra_empirical_labels=["Welch"],
+        extra_empirical_styles=[{"zorder": -10}],
+        save=False,
+        close=False,
+    )
+
+    z_by_label = {
+        line.get_label(): line.get_zorder() for line in axes[0, 0].lines
+    }
+    assert z_by_label["Welch"] < z_by_label["Empirical"]
     plt.close(fig)
 
 

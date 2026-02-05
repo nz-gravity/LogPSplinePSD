@@ -2,26 +2,27 @@ Prior on \phi: TeX vs implementation
 ======================================
 
 This page explains a deliberate difference between the draft math in
-``docs/maths.tex`` and the sampler implementation.
+``overleaf`` and the sampler implementation.
 
 Background: hierarchical P-spline prior
 ---------------------------------------
 
-The draft writes the spline-weight prior as
+The draft writes the spline-weight prior as (exact LaTeX from ``overleaf``)
 
 .. math::
 
-   w\mid \phi \sim \mathcal{N}\big(0, (\phi P)^{-1}\big),
+   \bold{w}_j | \phi_j \sim \mathcal{N}(\bold{0}, (\phi_j \bold{P}_j)^{-1})
 
-with hyperpriors
+with hyperpriors (again copied verbatim):
 
 .. math::
 
-   \phi\mid\delta \sim \mathrm{Gamma}(\alpha_\phi, \; \delta\,\beta_\phi),
-   \qquad
-   \delta \sim \mathrm{Gamma}(\alpha_\delta, \beta_\delta),
+   \phi_j | \delta_j \sim \text{Gamma}(\alpha_\phi, \delta_j \beta_\phi)
+   \\
+   \delta_j \sim \text{Gamma}(\alpha_\delta, \beta_\delta)
 
-where we use the *rate* parameterisation of the Gamma distribution.
+In the implementation (NumPyro), we interpret these Gamma distributions using
+the *rate* parameterisation.
 
 What the code actually samples
 ------------------------------
@@ -87,6 +88,7 @@ Where to look in the code
 -------------------------
 
 - Implementation: :func:`log_psplines.samplers.utils.sample_pspline_block`.
+   Source: `src/log_psplines/samplers/utils.py#sample_pspline_block <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/utils.py#L46-L103>`_
 - Usage:
 
   - :mod:`log_psplines.samplers.multivar.multivar_blocked_nuts`

@@ -106,6 +106,10 @@ MAX_TIME_BLOCKS = 12
 N_TIME_BLOCKS_OVERRIDE: int | None = None
 MAX_DAYS = _env_float("LISA_MAX_DAYS", 0.0)
 MAX_MONTHS = _env_float("LISA_MAX_MONTHS", 0.0)
+WELCH_NPERSEG = _env_int("LISA_WELCH_NPERSEG", 0)
+WELCH_OVERLAP_FRAC = _env_float("LISA_WELCH_OVERLAP_FRAC", 0.5)
+WELCH_WINDOW = _env_str("LISA_WELCH_WINDOW", "hann")
+WELCH_BLOCK_AVG = _env_flag("LISA_WELCH_BLOCK_AVG", True)
 USE_NOISE_FLOOR = _env_flag("LISA_USE_NOISE_FLOOR", True)
 NOISE_FLOOR_MODE = _env_str(
     "LISA_NOISE_FLOOR_MODE", "theory_scaled"
@@ -408,14 +412,137 @@ true_psd_physical = interp_matrix(
     np.asarray(true_psd_source[0]), np.asarray(true_psd_source[1]), freq_plot
 )
 
-# Traditional Welch-style empirical PSD on the original (unstandardised) data
-empirical_welch = EmpiricalPSD.from_timeseries_data(
-    data=y_full,
-    fs=fs,
-    nperseg=4096,
-    noverlap=0,
-    window="hann",
+# Pick Welch settings that can actually resolve the requested low-frequency
+# range. With dt=1 s, nperseg=4096 implies df≈2.44e-4 Hz, so anything below that
+# is missing/biased. By default we target df≈FMIN via nperseg≈fs/FMIN.
+if WELCH_NPERSEG > 0:
+    welch_nperseg = int(WELCH_NPERSEG)
+else:
+    welch_nperseg = int(round(fs / FMIN))
+    welch_nperseg = max(256, welch_nperseg)
+welch_nperseg = min(welch_nperseg, y_full.shape[0])
+if not (0.0 <= WELCH_OVERLAP_FRAC < 1.0):
+    raise ValueError("LISA_WELCH_OVERLAP_FRAC must be in [0, 1).")
+welch_noverlap = int(round(WELCH_OVERLAP_FRAC * welch_nperseg))
+welch_noverlap = min(welch_noverlap, welch_nperseg - 1)
+welch_df = fs / welch_nperseg
+logger.info(
+    "Welch settings: "
+    f"nperseg={welch_nperseg} ({welch_nperseg * dt:.0f} s), "
+    f"noverlap={welch_noverlap} ({welch_noverlap * dt:.0f} s), "
+    f"window={WELCH_WINDOW!r}, df={welch_df:.3g} Hz."
 )
+
+def _drop_dc(emp: EmpiricalPSD) -> EmpiricalPSD:
+    if emp.freq.size > 0 and np.isclose(emp.freq[0], 0.0):
+        return EmpiricalPSD(
+            freq=emp.freq[1:],
+            psd=emp.psd[1:],
+            coherence=emp.coherence[1:],
+            channels=emp.channels,
+        )
+    return emp
+
+
+def _restrict_freq_range(
+    emp: EmpiricalPSD, *, fmin: float, fmax: float
+) -> EmpiricalPSD:
+    freq = np.asarray(emp.freq, dtype=float)
+    mask = (freq >= float(fmin)) & (freq <= float(fmax))
+    if not np.any(mask):
+        raise ValueError("Welch frequency mask removed all bins.")
+    return EmpiricalPSD(
+        freq=freq[mask],
+        psd=emp.psd[mask],
+        coherence=emp.coherence[mask],
+        channels=emp.channels,
+    )
+
+
+def _blocked_welch(
+    data: np.ndarray,
+    *,
+    fs: float,
+    block_len: int,
+    nperseg: int,
+    noverlap: int,
+    window: str,
+    detrend: str | bool,
+) -> EmpiricalPSD:
+    n_time, n_channels = data.shape
+    if block_len <= 1:
+        raise ValueError("block_len must be > 1 for blocked Welch.")
+    n_blocks = n_time // block_len
+    if n_blocks < 1:
+        raise ValueError("Not enough samples for even one Welch block.")
+    n_used = n_blocks * block_len
+    if n_used != n_time:
+        data = data[:n_used]
+
+    psd_sum = None
+    freq_ref = None
+    for idx in range(n_blocks):
+        seg = data[idx * block_len : (idx + 1) * block_len]
+        seg_nperseg = min(nperseg, block_len)
+        seg_noverlap = min(noverlap, seg_nperseg - 1)
+        emp = EmpiricalPSD.from_timeseries_data(
+            data=seg,
+            fs=fs,
+            nperseg=seg_nperseg,
+            noverlap=seg_noverlap,
+            window=window,
+            detrend=detrend,
+        )
+        if freq_ref is None:
+            freq_ref = emp.freq
+            psd_sum = np.zeros_like(emp.psd)
+        if emp.freq.shape != freq_ref.shape or not np.allclose(
+            emp.freq, freq_ref
+        ):
+            raise ValueError("Blocked Welch produced inconsistent freq grids.")
+        psd_sum += emp.psd
+
+    psd_avg = psd_sum / float(n_blocks)
+    coh = np.abs(psd_avg) ** 2
+    # coherence_ij = |Sij|^2 / (|Sii| |Sjj|)
+    diag = np.abs(np.diagonal(psd_avg, axis1=1, axis2=2))
+    denom = diag[:, :, None] * diag[:, None, :]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        coherence = np.where(denom > 0, coh.real / denom, np.nan)
+    for ch in range(n_channels):
+        coherence[:, ch, ch] = 1.0
+
+    return EmpiricalPSD(freq=freq_ref, psd=psd_avg, coherence=coherence)
+
+
+# Traditional Welch-style empirical PSD on the original (unstandardised) data.
+# For lisatools synthetic data, the generator can introduce small discontinuities
+# at chunk boundaries; computing Welch within each block and averaging avoids
+# leakage from crossing those boundaries.
+if WELCH_BLOCK_AVG and block_len_samples is not None:
+    logger.info(
+        f"Welch block-averaging enabled: {n_blocks} block(s) of {block_len_samples} samples."
+    )
+    empirical_welch = _blocked_welch(
+        y_full,
+        fs=fs,
+        block_len=block_len_samples,
+        nperseg=welch_nperseg,
+        noverlap=welch_noverlap,
+        window=WELCH_WINDOW,
+        detrend=False,
+    )
+else:
+    empirical_welch = EmpiricalPSD.from_timeseries_data(
+        data=y_full,
+        fs=fs,
+        nperseg=welch_nperseg,
+        noverlap=welch_noverlap,
+        window=WELCH_WINDOW,
+        detrend=False,
+    )
+empirical_welch = _drop_dc(empirical_welch)
+empirical_welch = _restrict_freq_range(empirical_welch, fmin=FMIN, fmax=FMAX)
 
 psd_scale_plot, psd_unit_label_plot = resolve_psd_plot_units(
     base_psd_units,
@@ -431,7 +558,12 @@ plot_psd_matrix(
     freq=freq_plot,
     empirical_psd=None,  # will be extracted from idata.observed_data
     extra_empirical_psd=[empirical_welch],
-    extra_empirical_labels=["Welch"],
+    extra_empirical_labels=[
+        "Welch (block-avg)" if WELCH_BLOCK_AVG else "Welch"
+    ],
+    extra_empirical_styles=[
+        dict(color="0.5", lw=1.3, alpha=0.9, ls="-", zorder=-4),
+    ],
     outdir=str(RESULTS_DIR),
     filename="psd_matrix.png",
     diag_yscale="log",

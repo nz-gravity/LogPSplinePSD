@@ -152,6 +152,7 @@ def main() -> None:
         n_samples=int(args.samples),
         n_warmup=int(args.warmup),
         num_chains=int(args.chains),
+        rng_key=int(args.seed),
         outdir=str(outdir),
         verbose=True,
         compute_psis=False,

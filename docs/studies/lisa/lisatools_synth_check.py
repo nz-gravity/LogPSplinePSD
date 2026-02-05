@@ -43,6 +43,7 @@ SAVE_NPZ = True
 NPZ_PATH = RESULTS_DIR / "lisatools_synth_data.npz"
 SEC_IN_DAY = 86_400.0
 
+
 def summarize_ratio(label: str, ratio: np.ndarray) -> None:
     clean = ratio[np.isfinite(ratio)]
     if clean.size == 0:
@@ -99,11 +100,11 @@ def generate_lisatools_xyz_noise_timeseries(
         x_t = np.empty(n_used, dtype=np.float64)
         y_t = np.empty_like(x_t)
         z_t = np.empty_like(x_t)
-        n_freq = len(freq_chunk)
+        N = len(freq_chunk)
         for idx in range(n_chunks):
             eps = rng.normal(
-                0.0, 1.0 / np.sqrt(2.0), (3, n_freq)
-            ) + 1j * rng.normal(0.0, 1.0 / np.sqrt(2.0), (3, n_freq))
+                0.0, 1.0 / np.sqrt(2.0), (3, N)
+            ) + 1j * rng.normal(0.0, 1.0 / np.sqrt(2.0), (3, N))
             eps[:, 0] = rng.normal(0.0, 1.0, 3)
             eps[:, -1] = rng.normal(0.0, 1.0, 3)
             noise_fft = np.einsum("fij,jf->if", chol, eps)
@@ -135,10 +136,10 @@ def generate_lisatools_xyz_noise_timeseries(
     cov_fft = (n / (2.0 * delta_t)) * S_true
     chol = np.linalg.cholesky(cov_fft)
 
-    n_freq = len(freq)
+    N = len(freq)
     eps = np.random.normal(
-        0.0, 1.0 / np.sqrt(2.0), (3, n_freq)
-    ) + 1j * np.random.normal(0.0, 1.0 / np.sqrt(2.0), (3, n_freq))
+        0.0, 1.0 / np.sqrt(2.0), (3, N)
+    ) + 1j * np.random.normal(0.0, 1.0 / np.sqrt(2.0), (3, N))
     eps[:, 0] = np.random.normal(0.0, 1.0, 3)
     eps[:, -1] = np.random.normal(0.0, 1.0, 3)
 

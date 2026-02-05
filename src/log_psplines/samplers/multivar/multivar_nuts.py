@@ -57,14 +57,14 @@ def multivariate_psplines_model(
     NumPyro model for multivariate PSD estimation using P-splines and Cholesky parameterization.
     """
     # Extract dimensions from input arrays (these are static during compilation)
-    n_freq, n_dim, _ = u_re.shape
-    n_theta = int(n_dim * (n_dim - 1) / 2)
+    N, p, _ = u_re.shape
+    n_theta = int(p * (p - 1) / 2)
 
     component_idx = 0
     log_delta_components = []
 
     # Diagonal components (one per channel)
-    for j in range(n_dim):  # Now n_dim is a concrete Python int
+    for j in range(p):  # Now p is a concrete Python int
         penalty = all_penalties[component_idx]
         basis = all_bases[component_idx]
         block = sample_pspline_block(
@@ -117,8 +117,8 @@ def multivariate_psplines_model(
         component_idx += 1
         theta_im = jnp.tile(theta_im_base[:, None], (1, max(1, n_theta)))
     else:
-        theta_re = jnp.zeros((n_freq, 0))
-        theta_im = jnp.zeros((n_freq, 0))
+        theta_re = jnp.zeros((N, 0))
+        theta_im = jnp.zeros((N, 0))
 
     # Likelihood using Wishart replicates
     theta_complex = theta_re + 1j * theta_im
@@ -127,7 +127,7 @@ def multivariate_psplines_model(
     Nb = jnp.asarray(Nb, dtype=log_delta_sq.dtype)
     u_resid = u_complex
     idx = 0
-    for row in range(1, n_dim):
+    for row in range(1, p):
         count = row
         if count > 0:
             coeff = theta_complex[:, idx : idx + count]
@@ -242,7 +242,7 @@ class MultivarNUTSSampler(VIInitialisationMixin, MultivarBaseSampler):
         )
 
         logger.info(
-            f"Multivariate NUTS sampler [{self.device}] - {self.n_channels} channels"
+            f"Multivariate NUTS sampler [{self.device}] - {self.p} channels"
         )
 
         # FIXED: Run sampling with individual arrays instead of MultivarFFT object

@@ -37,7 +37,7 @@ from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 
 @dataclass(frozen=True)
 class StudyConfig:
-    n_time: int = 1024
+    n: int = 1024
     fs: float = 1.0
     seed: int = 0
     n_knots: int = 7
@@ -75,10 +75,10 @@ def _make_orthogonal(dim: int, seed: int) -> np.ndarray:
     return q
 
 
-def _freq_grid(n_time: int, fs: float) -> np.ndarray:
-    freq = np.fft.rfftfreq(n_time, d=1.0 / fs)[1:]
+def _freq_grid(n: int, fs: float) -> np.ndarray:
+    freq = np.fft.rfftfreq(n, d=1.0 / fs)[1:]
     if freq.size == 0:
-        raise ValueError("n_time must be >= 4 to retain positive frequencies.")
+        raise ValueError("n must be >= 4 to retain positive frequencies.")
     return freq
 
 
@@ -93,7 +93,9 @@ def _eig_ratio_r23(psd: np.ndarray) -> np.ndarray:
     return lam3 / (lam2 + 1e-12)
 
 
-def _summarize_ratio(ratio: np.ndarray, *, threshold: float = 0.8) -> Dict[str, float]:
+def _summarize_ratio(
+    ratio: np.ndarray, *, threshold: float = 0.8
+) -> Dict[str, float]:
     ratio = np.asarray(ratio, dtype=float)
     ratio = ratio[np.isfinite(ratio)]
     if ratio.size == 0:
@@ -119,7 +121,7 @@ def _build_psd_from_eigs(
     eigvals = np.asarray(eigvals, dtype=float)
     if eigvals.shape != (freq.size, q.shape[0]):
         raise ValueError(
-            f"eigvals must have shape (n_freq, dim)={(freq.size, q.shape[0])}, got {eigvals.shape}."
+            f"eigvals must have shape (N, dim)={(freq.size, q.shape[0])}, got {eigvals.shape}."
         )
     s = np.zeros((freq.size, q.shape[0], q.shape[0]), dtype=np.complex128)
     for k in range(freq.size):
@@ -130,9 +132,9 @@ def _build_psd_from_eigs(
 
 def simulate_from_one_sided_psd(
     *,
-    psd: np.ndarray,  # (n_freq, dim, dim), one-sided, excludes DC
+    psd: np.ndarray,  # (N, dim, dim), one-sided, excludes DC
     fs: float,
-    n_time: int,
+    n: int,
     seed: int,
 ) -> np.ndarray:
     """Simulate a real multivariate Gaussian series matching the PSD convention.
@@ -142,20 +144,18 @@ def simulate_from_one_sided_psd(
       except the Nyquist bin where scale_k = 1/(N*fs).
     """
     psd = _hermitianize(psd)
-    n_freq, dim, _ = psd.shape
-    expected_n_freq = n_time // 2
-    if n_freq != expected_n_freq:
-        raise ValueError(
-            f"psd must have n_freq=n_time//2={expected_n_freq}, got {n_freq}."
-        )
+    N, dim, _ = psd.shape
+    expected_n_freq = n // 2
+    if N != expected_n_freq:
+        raise ValueError(f"psd must have N=n//2={expected_n_freq}, got {N}.")
     rng = np.random.default_rng(seed)
 
     # rfft bins: [0..N/2], complex
-    spec = np.zeros((n_time // 2 + 1, dim), dtype=np.complex128)
+    spec = np.zeros((n // 2 + 1, dim), dtype=np.complex128)
     spec[0] = 0.0
 
-    n = float(n_time)
-    for k in range(1, n_time // 2 + 1):
+    n = float(n)
+    for k in range(1, n // 2 + 1):
         idx = k - 1  # psd excludes DC
         cov = np.asarray(psd[idx], dtype=np.complex128)
         cov = _hermitianize(cov)
@@ -164,7 +164,7 @@ def simulate_from_one_sided_psd(
         w = np.clip(w.real, a_min=0.0, a_max=None)
         cov = (v * w[None, :]) @ v.conj().T
 
-        if k == n_time // 2 and n_time % 2 == 0:
+        if k == n // 2 and n % 2 == 0:
             # Nyquist bin: real-valued coefficient for real time series.
             scale = n * float(fs)
             cov_fft = scale * cov.real
@@ -180,7 +180,7 @@ def simulate_from_one_sided_psd(
         z = (rng.normal(size=dim) + 1j * rng.normal(size=dim)) / np.sqrt(2.0)
         spec[k] = chol @ z
 
-    x = np.fft.irfft(spec, n=n_time, axis=0)
+    x = np.fft.irfft(spec, n=n, axis=0)
     x = np.asarray(x, dtype=np.float64)
     x -= np.mean(x, axis=0, keepdims=True)
     return x
@@ -195,13 +195,19 @@ def _block3_var_names(posterior_vars: Iterable[str]) -> list[str]:
         if name.startswith("weights_delta_2"):
             out.append(name)
             continue
-        if name.startswith("delta_theta_re_2_") or name.startswith("delta_theta_im_2_"):
+        if name.startswith("delta_theta_re_2_") or name.startswith(
+            "delta_theta_im_2_"
+        ):
             out.append(name)
             continue
-        if name.startswith("phi_theta_re_2_") or name.startswith("phi_theta_im_2_"):
+        if name.startswith("phi_theta_re_2_") or name.startswith(
+            "phi_theta_im_2_"
+        ):
             out.append(name)
             continue
-        if name.startswith("weights_theta_re_2_") or name.startswith("weights_theta_im_2_"):
+        if name.startswith("weights_theta_re_2_") or name.startswith(
+            "weights_theta_im_2_"
+        ):
             out.append(name)
             continue
     return sorted(set(out))
@@ -215,7 +221,7 @@ def _summarize_block3_sampling(
     stats = idata.sample_stats
     out: Dict[str, float] = {}
 
-    max_steps = (2**int(max_tree_depth)) - 1
+    max_steps = (2 ** int(max_tree_depth)) - 1
     steps_key = "num_steps_channel_2"
     if steps_key in stats:
         steps = np.asarray(stats[steps_key].values, dtype=float)
@@ -226,13 +232,17 @@ def _summarize_block3_sampling(
     if step_key in stats:
         step = np.asarray(stats[step_key].values, dtype=float)
         step = step[np.isfinite(step)]
-        out["block3_step_size_median"] = float(np.median(step)) if step.size else float("nan")
+        out["block3_step_size_median"] = (
+            float(np.median(step)) if step.size else float("nan")
+        )
 
     div_key = "diverging_channel_2"
     if div_key in stats:
         div = np.asarray(stats[div_key].values, dtype=float)
         div = div[np.isfinite(div)]
-        out["block3_divergence_frac"] = float(np.mean(div > 0.0)) if div.size else float("nan")
+        out["block3_divergence_frac"] = (
+            float(np.mean(div > 0.0)) if div.size else float("nan")
+        )
 
     if not hasattr(idata, "posterior"):
         return out
@@ -247,11 +257,15 @@ def _summarize_block3_sampling(
         if "r_hat" in summ:
             r = np.asarray(summ["r_hat"].values, dtype=float)
             r = r[np.isfinite(r)]
-            out["block3_rhat_max"] = float(np.max(r)) if r.size else float("nan")
+            out["block3_rhat_max"] = (
+                float(np.max(r)) if r.size else float("nan")
+            )
         if "ess_bulk" in summ:
             e = np.asarray(summ["ess_bulk"].values, dtype=float)
             e = e[np.isfinite(e)]
-            out["block3_ess_bulk_min"] = float(np.min(e)) if e.size else float("nan")
+            out["block3_ess_bulk_min"] = (
+                float(np.min(e)) if e.size else float("nan")
+            )
     except Exception as exc:
         logger.warning(f"Could not compute block3 summary via ArviZ: {exc}")
 
@@ -269,14 +283,16 @@ def _write_csv(path: Path, rows: list[Dict[str, float]]) -> None:
 
 
 def _case_psd_eigs(freq: np.ndarray, case: str) -> np.ndarray:
-    """Return eigenvalues (n_freq, 3) for the requested case."""
+    """Return eigenvalues (N, 3) for the requested case."""
     freq = np.asarray(freq, dtype=float)
     f0 = float(freq[len(freq) // 6])
     f1 = float(freq[len(freq) // 2])
 
     low = 40.0 / (1.0 + (freq / max(f0, 1e-6)) ** 4) + 2.0
     bump = 12.0 * _log_bump(freq, f0=f1, sigma_log=0.45) + 4.0
-    high = 1.0 + 1.6 * (freq / max(f1, 1e-6)) ** 4 / (1.0 + (freq / max(f1, 1e-6)) ** 4)
+    high = 1.0 + 1.6 * (freq / max(f1, 1e-6)) ** 4 / (
+        1.0 + (freq / max(f1, 1e-6)) ** 4
+    )
 
     if case == "separated":
         eig2 = bump
@@ -308,7 +324,7 @@ def run_case(
     case: str,
 ) -> Dict[str, float]:
     outdir.mkdir(parents=True, exist_ok=True)
-    freq = _freq_grid(cfg.n_time, cfg.fs)
+    freq = _freq_grid(cfg.n, cfg.fs)
     q = _make_orthogonal(3, seed=cfg.seed + 123)
     eigvals = _case_psd_eigs(freq, case)
     true_psd = _build_psd_from_eigs(freq, q, eigvals)
@@ -321,18 +337,20 @@ def run_case(
 
     if cfg.n_time_blocks < 3:
         logger.warning(
-            f"n_time_blocks={cfg.n_time_blocks} < n_channels=3; Wishart matrices are rank-deficient "
+            f"n_time_blocks={cfg.n_time_blocks} < p=3; Wishart matrices are rank-deficient "
             "and eigenvalue ratio diagnostics (and geometry) will be misleading."
         )
 
-    y = simulate_from_one_sided_psd(psd=true_psd, fs=cfg.fs, n_time=cfg.n_time, seed=cfg.seed)
-    t = np.arange(cfg.n_time, dtype=float) / float(cfg.fs)
+    y = simulate_from_one_sided_psd(
+        psd=true_psd, fs=cfg.fs, n=cfg.n, seed=cfg.seed
+    )
+    t = np.arange(cfg.n, dtype=float) / float(cfg.fs)
     ts = MultivariateTimeseries(t=t, y=y)
 
     # Provide true_psd on the block-frequency grid to avoid the interpolation
     # fallback warning and to keep preprocessing diagnostics consistent.
-    block_len = int(cfg.n_time // cfg.n_time_blocks)
-    freq_block = _freq_grid(block_len, cfg.fs)
+    Lb = int(cfg.n // cfg.n_time_blocks)
+    freq_block = _freq_grid(Lb, cfg.fs)
     eigvals_block = _case_psd_eigs(freq_block, case)
     true_psd_block = _build_psd_from_eigs(freq_block, q, eigvals_block)
 
@@ -369,7 +387,9 @@ def run_case(
         save_preprocessing_plots=True,
     )
 
-    block3 = _summarize_block3_sampling(idata, max_tree_depth=cfg.max_tree_depth)
+    block3 = _summarize_block3_sampling(
+        idata, max_tree_depth=cfg.max_tree_depth
+    )
     row: Dict[str, float] = {
         "case": case,
         "n_time_blocks": float(cfg.n_time_blocks),
@@ -411,8 +431,16 @@ def main() -> None:
     parser.add_argument("--beta-delta", type=float, default=1e-4)
     parser.add_argument("--alpha-phi-theta", type=float, default=None)
     parser.add_argument("--beta-phi-theta", type=float, default=None)
-    parser.add_argument("--init-from-vi", action="store_true", help="Use VI to initialise NUTS (default).")
-    parser.add_argument("--no-init-from-vi", action="store_true", help="Disable VI init and use default NUTS init.")
+    parser.add_argument(
+        "--init-from-vi",
+        action="store_true",
+        help="Use VI to initialise NUTS (default).",
+    )
+    parser.add_argument(
+        "--no-init-from-vi",
+        action="store_true",
+        help="Disable VI init and use default NUTS init.",
+    )
     parser.add_argument("--vi-steps", type=int, default=5000)
     parser.add_argument("--vi-lr", type=float, default=1e-2)
     parser.add_argument("--vi-guide", type=str, default=None)
@@ -422,13 +450,15 @@ def main() -> None:
     logger.info(f"JAX devices: {jax.devices()}")
 
     if args.init_from_vi and args.no_init_from_vi:
-        raise ValueError("Choose at most one of --init-from-vi / --no-init-from-vi.")
+        raise ValueError(
+            "Choose at most one of --init-from-vi / --no-init-from-vi."
+        )
     init_from_vi = True
     if args.no_init_from_vi:
         init_from_vi = False
 
     cfg = StudyConfig(
-        n_time=int(args.n_time),
+        n=int(args.n),
         fs=float(args.fs),
         seed=int(args.seed),
         n_knots=int(args.knots),
@@ -442,17 +472,29 @@ def main() -> None:
         beta_phi=float(args.beta_phi),
         alpha_delta=float(args.alpha_delta),
         beta_delta=float(args.beta_delta),
-        alpha_phi_theta=(None if args.alpha_phi_theta is None else float(args.alpha_phi_theta)),
-        beta_phi_theta=(None if args.beta_phi_theta is None else float(args.beta_phi_theta)),
+        alpha_phi_theta=(
+            None
+            if args.alpha_phi_theta is None
+            else float(args.alpha_phi_theta)
+        ),
+        beta_phi_theta=(
+            None if args.beta_phi_theta is None else float(args.beta_phi_theta)
+        ),
         init_from_vi=init_from_vi,
         vi_steps=int(args.vi_steps),
         vi_lr=float(args.vi_lr),
-        vi_guide=(None if args.vi_guide is None or args.vi_guide.strip() == "" else str(args.vi_guide)),
+        vi_guide=(
+            None
+            if args.vi_guide is None or args.vi_guide.strip() == ""
+            else str(args.vi_guide)
+        ),
     )
 
     here = Path(__file__).resolve().parent
-    root_out = here / str(args.out) / (
-        f"seed_{cfg.seed}_N{cfg.n_time}_K{cfg.n_knots}_B{cfg.n_time_blocks}"
+    root_out = (
+        here
+        / str(args.out)
+        / (f"seed_{cfg.seed}_N{cfg.n}_K{cfg.n_knots}_B{cfg.n_time_blocks}")
     )
     root_out.mkdir(parents=True, exist_ok=True)
     (root_out / "study_config.json").write_text(
@@ -461,9 +503,7 @@ def main() -> None:
 
     rows = []
     for case in ("separated", "force_separation", "bunched"):
-        rows.append(
-            run_case(cfg=cfg, outdir=root_out / case, case=case)
-        )
+        rows.append(run_case(cfg=cfg, outdir=root_out / case, case=case))
     _write_csv(root_out / "mode_sep_summary.csv", rows)
     logger.info(f"Wrote summary to {root_out / 'mode_sep_summary.csv'}")
 

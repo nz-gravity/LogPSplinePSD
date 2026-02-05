@@ -472,7 +472,7 @@ def run_mcmc(
                 )
             else:
                 processed_data = standardized_ts.to_wishart_stats(
-                    n_blocks=n_time_blocks,
+                    Nb=n_time_blocks,
                     fmin=fmin,
                     fmax=fmax,
                 )
@@ -524,7 +524,7 @@ def run_mcmc(
         n_points = (
             processed_data.n
             if isinstance(processed_data, Periodogram)
-            else processed_data.n_freq
+            else processed_data.N
         )
         if n_points == 0:
             raise ValueError(
@@ -629,8 +629,8 @@ def run_mcmc(
                         preprocessing_min_lambda1_quantile
                     ),
                 )
-                n_dim = int(diag.eigvals_desc.shape[1])
-                if n_dim >= 2:
+                p = int(diag.eigvals_desc.shape[1])
+                if p >= 2:
                     warn_threshold = float(preprocessing_warn_threshold)
                     warn_frac = float(preprocessing_warn_frac)
                     summaries = None

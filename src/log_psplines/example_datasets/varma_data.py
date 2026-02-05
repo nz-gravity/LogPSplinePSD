@@ -116,12 +116,12 @@ class VARMAData:
         """
         Return a one-sided PSD matrix estimate for the simulated data.
         """
-        n_freq = self.n_freq_samples
+        N = self.n_freq_samples
         dim = self.dim
         data = self.data
         N = data.shape[0]
         data = data - np.mean(data, axis=0)
-        fft_vals = rfft(data, axis=0)[1 : n_freq + 1]
+        fft_vals = rfft(data, axis=0)[1 : N + 1]
         if fft_vals.shape[0] != self.freq.shape[0]:
             raise ValueError("FFT output and frequency grid mismatch.")
         scale = np.full(self.freq.shape, 2.0 / (N * self.fs), dtype=np.float64)

@@ -158,10 +158,10 @@ def ensure_lisa_tdi_data(
 def strain_to_freq_psd(S_strain, f, L=L_ARM, nu0=LASER_FREQ):
     """
     Convert strain PSD matrix S_strain(f) -> absolute frequency PSD S_{Δν}(f).
-    S_strain : shape (n_freq, 3, 3), units 1/Hz
-    returns  : shape (n_freq, 3, 3), units Hz^2/Hz
+    S_strain : shape (N, 3, 3), units 1/Hz
+    returns  : shape (N, 3, 3), units Hz^2/Hz
     """
-    factor = (2 * np.pi * f * nu0 * L / C_LIGHT) ** 2  # shape (n_freq,)
+    factor = (2 * np.pi * f * nu0 * L / C_LIGHT) ** 2  # shape (N,)
     return S_strain * factor[:, None, None]
 
 
@@ -187,21 +187,19 @@ def generate_lisa_xyz_noise_timeseries(
     if freq[0] == 0.0:
         freq[0] = freq[1]
 
-    S_true = tdi_xyz_psd_matrix(
-        freq
-    )  # (n_freq, 3, 3) absolute frequency noise
+    S_true = tdi_xyz_psd_matrix(freq)  # (N, 3, 3) absolute frequency noise
 
     cov_fft = (n / (2.0 * delta_t)) * S_true
     chol = np.linalg.cholesky(cov_fft)
 
-    n_freq = len(freq)
+    N = len(freq)
     eps = np.random.normal(
-        0.0, 1.0 / np.sqrt(2.0), (3, n_freq)
-    ) + 1j * np.random.normal(0.0, 1.0 / np.sqrt(2.0), (3, n_freq))
+        0.0, 1.0 / np.sqrt(2.0), (3, N)
+    ) + 1j * np.random.normal(0.0, 1.0 / np.sqrt(2.0), (3, N))
     eps[:, 0] = np.random.normal(0.0, 1.0, 3)
     eps[:, -1] = np.random.normal(0.0, 1.0, 3)
 
-    noise_fft = np.einsum("fij,jf->if", chol, eps)  # (3, n_freq)
+    noise_fft = np.einsum("fij,jf->if", chol, eps)  # (3, N)
 
     x_t = np.fft.irfft(noise_fft[0], n=n)
     y_t = np.fft.irfft(noise_fft[1], n=n)
@@ -294,7 +292,7 @@ def coherence(Sii: np.ndarray, Sjj: np.ndarray, Sij: np.ndarray) -> np.ndarray:
 def analytic_covariance_from_model(
     freq: np.ndarray,
     dt: float,
-    n_time: int,
+    n: int,
     model: str = "scirdv1",
     central_freq: Optional[float] = None,
 ) -> np.ndarray:
@@ -310,7 +308,7 @@ def analytic_covariance_from_model(
         return np.transpose(sens.sens_mat, (2, 0, 1))
 
     fs = 1.0 / dt
-    fmin = 1.0 / (n_time * dt)
+    fmin = 1.0 / (n * dt)
     Spm, Sop = lisa_link_noises_ldc(freq, fs=fs, fmin=fmin)
     diag, csd = tdi2_psd_and_csd(freq, Spm, Sop)
     return covariance_matrix(diag, csd)
@@ -328,7 +326,7 @@ def plot_psd_coherence(
     Plot PSDs on the diagonal and coherences on the lower triangle.
 
     freq: frequency array
-    S_true: (n_freq, 3, 3) analytic spectral matrix
+    S_true: (N, 3, 3) analytic spectral matrix
     S_emp: dict with keys "Sxx", "Syy", "Szz", "Sxy", "Syz", "Szx"
     """
 
@@ -720,7 +718,7 @@ class LISAData:
         true_cov = analytic_covariance_from_model(
             freq_est,
             dt=dt,
-            n_time=len(t),
+            n=len(t),
             model=model,
             central_freq=central_freq,
         )

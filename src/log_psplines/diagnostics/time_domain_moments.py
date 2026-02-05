@@ -25,7 +25,7 @@ def compute_psd_variances(
     Parameters
     ----------
     psd_samples:
-        Array with shape ``(n_samples, n_channels, n_freqs)`` containing one-sided
+        Array with shape ``(n_samples, p, N)`` containing one-sided
         PSD samples for each channel.
     freqs:
         Monotonically increasing frequency grid corresponding to the last axis of
@@ -34,15 +34,13 @@ def compute_psd_variances(
     Returns
     -------
     np.ndarray
-        Array with shape ``(n_samples, n_channels)`` containing PSD-implied
+        Array with shape ``(n_samples, p)`` containing PSD-implied
         variances for each posterior draw and channel.
     """
 
     psd_arr = np.asarray(psd_samples, dtype=float)
     if psd_arr.ndim != 3:
-        raise ValueError(
-            "psd_samples must have shape (n_samples, n_channels, n_freqs)"
-        )
+        raise ValueError("psd_samples must have shape (n_samples, p, N)")
 
     freqs_arr = _validate_freqs(np.asarray(freqs, dtype=float))
     if freqs_arr.shape[0] != psd_arr.shape[-1]:
@@ -62,7 +60,7 @@ def compute_psd_covariances(
     Parameters
     ----------
     psd_samples:
-        Array with shape ``(n_samples, n_channels, n_channels, n_freqs)`` containing
+        Array with shape ``(n_samples, p, p, N)`` containing
         one-sided cross-PSDs. Only the real part contributes to the covariance.
     freqs:
         Monotonically increasing frequency grid corresponding to the last axis of
@@ -79,9 +77,7 @@ def compute_psd_covariances(
 
     psd_arr = np.asarray(psd_samples)
     if psd_arr.ndim != 4:
-        raise ValueError(
-            "psd_samples must have shape (n_samples, n_channels, n_channels, n_freqs)"
-        )
+        raise ValueError("psd_samples must have shape (n_samples, p, p, N)")
 
     freqs_arr = _validate_freqs(np.asarray(freqs, dtype=float))
     if freqs_arr.shape[0] != psd_arr.shape[-1]:
@@ -101,7 +97,7 @@ def compute_empirical_variances(data: np.ndarray) -> np.ndarray:
 
     data_arr = np.asarray(data, dtype=float)
     if data_arr.ndim != 2:
-        raise ValueError("data must have shape (n_timesteps, n_channels)")
+        raise ValueError("data must have shape (n_timesteps, p)")
 
     return np.var(data_arr, axis=0, ddof=1)
 
@@ -113,7 +109,7 @@ def compute_empirical_covariances(
 
     data_arr = np.asarray(data, dtype=float)
     if data_arr.ndim != 2:
-        raise ValueError("data must have shape (n_timesteps, n_channels)")
+        raise ValueError("data must have shape (n_timesteps, p)")
 
     cov_matrix = np.cov(data_arr, rowvar=False, ddof=1)
     pairs = list(channel_pairs)

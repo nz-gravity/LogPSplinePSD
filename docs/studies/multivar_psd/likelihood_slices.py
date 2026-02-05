@@ -100,7 +100,7 @@ def _u_components_from(npz: np.lib.npyio.NpzFile) -> np.ndarray | None:
             [np.asarray(arr, dtype=np.complex128) for arr in candidate],
             axis=-1,
         )
-        return stacked  # shape: (freq, nu, channels) after stacking
+        return stacked  # shape: (freq, Nb, channels) after stacking
 
     # Fall back to generic ``u`` keys.
     generic_keys = ("u_modes", "u_vecs", "mode_vectors", "u")
@@ -479,11 +479,11 @@ def _compute_theta_hat_and_delta(
     """Return per-frequency θ estimates (θ31, θ32) and δ₃² scalings."""
     if u_modes.ndim != 3 or u_modes.shape[2] < 3:
         raise RuntimeError("Need at least three channels in u_modes.")
-    n_freq = u_modes.shape[0]
-    theta_hat = np.empty((n_freq, 2), dtype=np.complex128)
-    delta3_sq = np.empty(n_freq, dtype=float)
+    N = u_modes.shape[0]
+    theta_hat = np.empty((N, 2), dtype=np.complex128)
+    delta3_sq = np.empty(N, dtype=float)
     tiny = np.finfo(float).tiny
-    for idx in range(n_freq):
+    for idx in range(N):
         u1 = u_modes[idx, :, 0]
         u2 = u_modes[idx, :, 1]
         u3 = u_modes[idx, :, 2]

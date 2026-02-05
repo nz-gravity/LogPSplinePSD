@@ -13,9 +13,7 @@ def _validate_psd_array(psd: np.ndarray) -> np.ndarray:
     if arr.ndim == 1:
         arr = arr[None, :]
     if arr.ndim != 2:
-        raise ValueError(
-            "PSD arrays must have shape (n_channels, n_freqs) or (n_freqs,)"
-        )
+        raise ValueError("PSD arrays must have shape (p, N) or (N,)")
     return arr
 
 
@@ -27,21 +25,19 @@ def compute_psd_credible_bands(
     Parameters
     ----------
     psd_samples : np.ndarray
-        Array of posterior PSD samples with shape ``(n_samples, n_channels, n_freqs)``.
+        Array of posterior PSD samples with shape ``(n_samples, p, N)``.
     credible_fraction : float
         Credible mass to include inside the interval (e.g. ``0.95`` for a 95% band).
 
     Returns
     -------
     tuple of np.ndarray
-        ``(median, lower, upper)`` arrays each with shape ``(n_channels, n_freqs)``.
+        ``(median, lower, upper)`` arrays each with shape ``(p, N)``.
     """
 
     samples = np.asarray(psd_samples, dtype=float)
     if samples.ndim != 3:
-        raise ValueError(
-            "psd_samples must have shape (n_samples, n_channels, n_freqs)"
-        )
+        raise ValueError("psd_samples must have shape (n_samples, p, N)")
 
     lower_q = (1.0 - credible_fraction) / 2.0 * 100.0
     upper_q = (1.0 + credible_fraction) / 2.0 * 100.0
@@ -128,21 +124,19 @@ def plot_psd_with_bands_and_welch(
         == welch_arr.shape
         == (median_arr.shape[0], freqs_arr.shape[0])
     ):
-        raise ValueError(
-            "All PSD inputs must share shape (n_channels, n_freqs)"
-        )
+        raise ValueError("All PSD inputs must share shape (p, N)")
 
-    n_channels = median_arr.shape[0]
+    p = median_arr.shape[0]
     if channel_names is None:
-        channel_names = [f"Channel {i}" for i in range(n_channels)]
+        channel_names = [f"Channel {i}" for i in range(p)]
     else:
         channel_names = list(channel_names)
-        if len(channel_names) != n_channels:
+        if len(channel_names) != p:
             raise ValueError(
                 "channel_names length must match number of channels"
             )
 
-    fig, axes = plt.subplots(n_channels, 1, figsize=figsize, sharex=True)
+    fig, axes = plt.subplots(p, 1, figsize=figsize, sharex=True)
     axes = np.atleast_1d(axes)
 
     for idx, ax in enumerate(axes):

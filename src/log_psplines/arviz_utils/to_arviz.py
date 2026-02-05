@@ -366,7 +366,7 @@ def _create_multivar_inference_data(
     sf = float(getattr(fft_data, "scaling_factor", 1.0) or 1.0)
     if channel_stds is not None:
         channel_stds = np.asarray(channel_stds, dtype=np.float64)
-        if channel_stds.shape[0] != fft_data.n_dim:
+        if channel_stds.shape[0] != fft_data.p:
             raise ValueError(
                 "channel_stds length must match number of channels in FFT data."
             )
@@ -410,7 +410,7 @@ def _create_multivar_inference_data(
             if config.freq_weights is not None
             else None
         )
-        if weights is not None and weights.shape != (fft_data.n_freq,):
+        if weights is not None and weights.shape != (fft_data.N,):
             raise ValueError(
                 "Frequency weights length must match number of frequencies."
             )
@@ -427,10 +427,10 @@ def _create_multivar_inference_data(
     else:
         y_re = observed_fft_re_rescaled
         y_im = observed_fft_im_rescaled
-        n_freq, n_dim = y_re.shape
-        observed_csd = np.zeros((n_freq, n_dim, n_dim), dtype=np.complex64)
-        for i in range(n_dim):
-            for j in range(n_dim):
+        N, p = y_re.shape
+        observed_csd = np.zeros((N, p, p), dtype=np.complex64)
+        for i in range(p):
+            for j in range(p):
                 observed_csd[:, i, j] = (
                     y_re[:, i] + 1j * y_im[:, i]
                 ) * np.conj(y_re[:, j] + 1j * y_im[:, j])
@@ -458,8 +458,8 @@ def _create_multivar_inference_data(
     coords = {
         "percentile": percentiles,
         "freq": np.array(fft_data.freq),
-        "channels": range(fft_data.n_dim),
-        "channels2": range(fft_data.n_dim),
+        "channels": range(fft_data.p),
+        "channels2": range(fft_data.p),
     }
 
     dims = {}
@@ -506,8 +506,8 @@ def _create_multivar_inference_data(
     attributes.update(
         {
             "data_type": "multivariate",
-            "n_channels": fft_data.n_dim,
-            "n_freq": fft_data.n_freq,
+            "p": fft_data.p,
+            "N": fft_data.N,
             "n_theta": spline_model.n_theta,
             "frequencies": np.array(fft_data.freq),
         }
@@ -642,8 +642,8 @@ def _pack_spline_model_multivar(spline_model) -> Dataset:
     data = {
         "degree": spline_model.degree,
         "diffMatrixOrder": spline_model.diffMatrixOrder,
-        "n_freq": spline_model.n_freq,
-        "n_channels": spline_model.n_channels,
+        "N": spline_model.N,
+        "p": spline_model.p,
         "n_theta": spline_model.n_theta,
     }
 
@@ -696,7 +696,7 @@ def _compute_posterior_predictive_multivar(
             return arr
         if arr.ndim >= 3:
             # Handle arrays with explicit chain dimension inserted by _prepare_samples_and_stats
-            if arr.shape[1] == fft_data.n_freq:
+            if arr.shape[1] == fft_data.N:
                 return arr
             if arr.shape[0] == 1:
                 arr = arr[0]
@@ -728,7 +728,7 @@ def _compute_posterior_predictive_multivar(
     percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
     # Fast-diagnostics controls from config
     n_draw_cap = 50
-    compute_coh = fft_data.n_dim > 1
+    compute_coh = fft_data.p > 1
     if config is not None:
         try:
             value = getattr(config, "posterior_psd_max_draws", None)
@@ -766,7 +766,7 @@ def _reconstruct_log_delta_sq(
     n_samples = first_sample.shape[0] * first_sample.shape[1]
     log_delta_components = []
 
-    for j in range(fft_data.n_dim):
+    for j in range(fft_data.p):
         weights_key = f"weights_delta_{j}"
         if weights_key in samples:
             weights_full = samples[weights_key]
@@ -777,7 +777,7 @@ def _reconstruct_log_delta_sq(
     if log_delta_components:
         return jnp.stack(log_delta_components, axis=2)
     else:
-        return jnp.zeros((n_samples, fft_data.n_freq, fft_data.n_dim))
+        return jnp.zeros((n_samples, fft_data.N, fft_data.p))
 
 
 def _reconstruct_theta_params(
@@ -793,7 +793,7 @@ def _reconstruct_theta_params(
     if key in samples and spline_model.n_theta > 0:
         weights_full = samples[key]
         weights = weights_full[0]
-        basis_idx = fft_data.n_dim + (0 if param_type == "re" else 1)
+        basis_idx = fft_data.p + (0 if param_type == "re" else 1)
         theta_base = batch_spline_eval(all_bases[basis_idx], weights)
         return jnp.tile(
             theta_base[:, :, None], (1, 1, max(1, spline_model.n_theta))
@@ -801,6 +801,4 @@ def _reconstruct_theta_params(
     else:
         first_sample = next(iter(samples.values()))
         n_samples = first_sample.shape[1]
-        return jnp.zeros(
-            (n_samples, fft_data.n_freq, max(1, spline_model.n_theta))
-        )
+        return jnp.zeros((n_samples, fft_data.N, max(1, spline_model.n_theta)))

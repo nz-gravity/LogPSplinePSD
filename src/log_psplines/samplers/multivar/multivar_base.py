@@ -39,11 +39,11 @@ def batch_spline_eval(
     """JIT-compiled batch spline evaluation over multiple weight vectors.
 
     Args:
-        basis: Basis matrix (n_freq, n_basis)
+        basis: Basis matrix (N, n_basis)
         weights_batch: Batch of weight vectors (n_samples, n_basis)
 
     Returns:
-        Batch of spline evaluations (n_samples, n_freq)
+        Batch of spline evaluations (n_samples, N)
     """
     return jnp.sum(basis[None, :, :] * weights_batch[:, None, :], axis=-1)
 
@@ -70,8 +70,8 @@ class MultivarBaseSampler(BaseSampler):
 
     def _setup_data(self) -> None:
         """Setup multivariate-specific data attributes."""
-        self.n_freq = self.fft_data.n_freq
-        self.n_channels = self.fft_data.n_dim
+        self.N = self.fft_data.N
+        self.p = self.fft_data.p
         self.n_theta = self.spline_model.n_theta
 
         # Get all bases and penalties for NumPyro model
@@ -99,13 +99,13 @@ class MultivarBaseSampler(BaseSampler):
         # graining these should equal the per-bin member counts.
         if self.config.freq_weights is not None:
             fw = jnp.asarray(self.config.freq_weights, dtype=jnp.float32)
-            if fw.shape[0] != self.n_freq:
+            if fw.shape[0] != self.N:
                 raise ValueError(
                     "Frequency weights length must match number of frequencies"
                 )
             self.freq_weights = fw
         else:
-            self.freq_weights = jnp.ones((self.n_freq,), dtype=jnp.float32)
+            self.freq_weights = jnp.ones((self.N,), dtype=jnp.float32)
 
         # For coarse-grained multivariate FFTs, keep the *raw* bin counts
         # (number of fine-grid frequencies per coarse bin) separate from any
@@ -114,7 +114,7 @@ class MultivarBaseSampler(BaseSampler):
         bin_counts = getattr(self.fft_data, "freq_bin_counts", None)
         if bin_counts is not None:
             bc = jnp.asarray(bin_counts, dtype=jnp.float32)
-            if bc.shape[0] != self.n_freq:
+            if bc.shape[0] != self.N:
                 raise ValueError(
                     "freq_bin_counts length must match number of frequencies"
                 )
@@ -122,12 +122,10 @@ class MultivarBaseSampler(BaseSampler):
                 raise ValueError("freq_bin_counts must be positive")
             self.freq_bin_counts = bc
         else:
-            self.freq_bin_counts = jnp.ones((self.n_freq,), dtype=jnp.float32)
+            self.freq_bin_counts = jnp.ones((self.N,), dtype=jnp.float32)
 
         if self.config.verbose:
-            logger.info(
-                f"Frequency bins used for inference (N): {self.n_freq}"
-            )
+            logger.info(f"Frequency bins used for inference (N): {self.N}")
             basis_shapes = ", ".join(
                 [f"{tuple(b.shape)}" for b in self.all_bases]
             )
@@ -217,7 +215,7 @@ class MultivarBaseSampler(BaseSampler):
         ):
             freq = np.asarray(self.fft_data.raw_freq, dtype=np.float64)
             psd = np.asarray(self.fft_data.raw_psd, dtype=np.complex128)
-            if psd.shape[0] != self.n_freq:
+            if psd.shape[0] != self.N:
                 psd = _interp_complex_matrix(freq, np.array(self.freq), psd)
                 freq = np.array(self.freq, dtype=np.float64)
             psd = self._rescale_psd(psd)
@@ -231,7 +229,7 @@ class MultivarBaseSampler(BaseSampler):
         u_im = np.asarray(self.fft_data.u_im, dtype=np.float64)
         u_complex = u_re + 1j * u_im
         weights = np.asarray(self.freq_weights, dtype=np.float64)
-        if weights.shape != (self.n_freq,):
+        if weights.shape != (self.N,):
             raise ValueError(
                 "Frequency weights must have same length as frequency grid."
             )
@@ -353,7 +351,7 @@ class MultivarBaseSampler(BaseSampler):
             return
 
         psd_quantiles = diagnostics.get("psd_quantiles")
-        channels = np.arange(self.n_channels)
+        channels = np.arange(self.p)
         freq = np.asarray(self.freq, dtype=np.float32)
         coords = {
             "freq": freq,

@@ -87,11 +87,9 @@ def main() -> None:
 
     idata = az.from_netcdf(str(args.idata))
     log_delta = np.asarray(idata.sample_stats["log_delta_sq"].values)
-    n_channels = log_delta.shape[-1]
-    if not (0 <= args.channel < n_channels):
-        raise ValueError(
-            f"channel {args.channel} out of bounds (n_channels={n_channels})."
-        )
+    p = log_delta.shape[-1]
+    if not (0 <= args.channel < p):
+        raise ValueError(f"channel {args.channel} out of bounds (p={p}).")
 
     log_delta_flat = _flatten_draws(log_delta)
     variance_samples = np.exp(log_delta_flat[..., args.channel])

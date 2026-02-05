@@ -36,13 +36,13 @@ class DiagnosticsConfig:
     trace_max_kde_series_per_group: int = 4
 
 
-def _choose_flat_indices(n_dim: int, max_dim: int) -> np.ndarray:
-    if n_dim <= 0 or max_dim <= 0:
+def _choose_flat_indices(p: int, max_dim: int) -> np.ndarray:
+    if p <= 0 or max_dim <= 0:
         return np.array([], dtype=int)
-    if n_dim <= max_dim:
-        return np.arange(n_dim, dtype=int)
+    if p <= max_dim:
+        return np.arange(p, dtype=int)
     return np.unique(
-        np.linspace(0, n_dim - 1, num=max_dim, dtype=int, endpoint=True)
+        np.linspace(0, p - 1, num=max_dim, dtype=int, endpoint=True)
     )
 
 
@@ -213,8 +213,8 @@ def plot_trace(
 def plot_diagnostics(
     idata: az.InferenceData,
     outdir: str,
-    n_channels: Optional[int] = None,
-    n_freq: Optional[int] = None,
+    p: Optional[int] = None,
+    N: Optional[int] = None,
     runtime: Optional[float] = None,
     config: Optional[DiagnosticsConfig] = None,
     *,
@@ -248,9 +248,7 @@ def plot_diagnostics(
 
     t_plots = time.perf_counter()
     logger.info("Diagnostics step: plots")
-    _create_diagnostic_plots(
-        idata, diag_dir, config, n_channels, n_freq, runtime
-    )
+    _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime)
     logger.info(
         f"Diagnostics step: plots done in {time.perf_counter() - t_plots:.2f}s"
     )
@@ -268,9 +266,7 @@ def plot_diagnostics(
     )
 
 
-def _create_diagnostic_plots(
-    idata, diag_dir, config, n_channels, n_freq, runtime
-):
+def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime):
     """Create only the essential diagnostic plots."""
     logger.debug("Generating diagnostic plots...")
 
@@ -288,7 +284,7 @@ def _create_diagnostic_plots(
     # 2. Summary dashboard with key convergence metrics
     @safe_plot(f"{diag_dir}/summary_dashboard.png", config.dpi)
     def plot_summary():
-        _plot_summary_dashboard(idata, config, n_channels, n_freq, runtime)
+        _plot_summary_dashboard(idata, config, p, N, runtime)
 
     t = time.perf_counter()
     ok = plot_summary()
@@ -333,7 +329,7 @@ def _create_diagnostic_plots(
     )
 
 
-def _plot_summary_dashboard(idata, config, n_channels, n_freq, runtime):
+def _plot_summary_dashboard(idata, config, p, N, runtime):
 
     # Create 2x2 layout
     fig, axes = plt.subplots(
@@ -356,7 +352,7 @@ def _plot_summary_dashboard(idata, config, n_channels, n_freq, runtime):
     _plot_ess_histogram(ess_ax, ess_values, config)
 
     # 2. Analysis Metadata
-    _plot_metadata(meta_ax, idata, n_channels, n_freq, runtime)
+    _plot_metadata(meta_ax, idata, p, N, runtime)
 
     # 3. Parameter Summary
     _plot_parameter_summary(param_ax, idata)
@@ -414,7 +410,7 @@ def _plot_ess_histogram(ax, ess_values, config):
     )
 
 
-def _plot_metadata(ax, idata, n_channels, n_freq, runtime):
+def _plot_metadata(ax, idata, p, N, runtime):
     """Display analysis metadata."""
     try:
         n_samples = idata.posterior.sizes.get("draw", 0)
@@ -427,10 +423,10 @@ def _plot_metadata(ax, idata, n_channels, n_freq, runtime):
             f"Samples: {n_samples} × {n_chains} chains",
             f"Parameters: {n_params}",
         ]
-        if n_channels is not None:
-            metadata_lines.append(f"Channels: {n_channels}")
-        if n_freq is not None:
-            metadata_lines.append(f"Frequencies: {n_freq}")
+        if p is not None:
+            metadata_lines.append(f"Channels: {p}")
+        if N is not None:
+            metadata_lines.append(f"Frequencies: {N}")
         if runtime is not None:
             metadata_lines.append(f"Runtime: {runtime:.2f}s")
 

@@ -143,12 +143,10 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
         varma = VARMAData(n_samples=N, seed=seed)
         timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
 
-        for n_blocks in config.n_time_blocks:
-            print(
-                f"Running sampler with n_time_blocks={n_blocks}, seed={seed}..."
-            )
+        for Nb in config.n_time_blocks:
+            print(f"Running sampler with n_time_blocks={Nb}, seed={seed}...")
 
-            block_dir = config.outdir / f"blocks_{n_blocks}" / f"seed_{seed}"
+            block_dir = config.outdir / f"blocks_{Nb}" / f"seed_{seed}"
             if config.save_idata or config.save_psd_plots:
                 _ensure_dir(block_dir)
             outdir = block_dir if config.save_idata else None
@@ -158,7 +156,7 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
                 sampler=config.sampler,
                 n_samples=config.n_samples,
                 n_warmup=config.n_warmup,
-                n_time_blocks=n_blocks,
+                n_time_blocks=Nb,
                 rng_key=seed,
                 verbose=False,
                 compute_lnz=False,
@@ -185,7 +183,7 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
 
             results.append(
                 dict(
-                    n_time_blocks=n_blocks,
+                    n_time_blocks=Nb,
                     seed=seed,
                     riae=riae,
                     diag_coverage=coverage,
@@ -202,14 +200,14 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
                         freq=freq,
                         true_psd=true_psd_aligned,
                         outdir=str(plot_dir),
-                        filename=f"psd_quantiles_blocks_{n_blocks}_seed_{seed}.png",
+                        filename=f"psd_quantiles_blocks_{Nb}_seed_{seed}.png",
                         save=True,
                     )
                 except (
                     Exception
                 ) as exc:  # pragma: no cover - plotting fallback
                     print(
-                        f"Warning: could not generate PSD plot for blocks={n_blocks}, seed={seed}: {exc}"
+                        f"Warning: could not generate PSD plot for blocks={Nb}, seed={seed}: {exc}"
                     )
 
             if config.save_idata:

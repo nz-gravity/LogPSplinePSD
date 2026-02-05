@@ -31,10 +31,10 @@ def test_multivar_rescale_matches_empirical():
     amplitude = 5.0
     sigma = sigma_base * amplitude**2
 
-    n_time = 120
+    n = 120
     n_time_blocks = 2
     varma = VARMAData(
-        n_samples=n_time,
+        n_samples=n,
         var_coeffs=var_coeffs,
         vma_coeffs=vma_coeffs,
         sigma=sigma,
@@ -49,7 +49,7 @@ def test_multivar_rescale_matches_empirical():
 
     standardized = timeseries.standardise_for_psd()
     assert standardized.scaling_factor > 5.0
-    fft_data = standardized.to_wishart_stats(n_blocks=n_time_blocks)
+    fft_data = standardized.to_wishart_stats(Nb=n_time_blocks)
     processed_data, _, _ = _coarse_grain_processed_data(
         fft_data, coarse_cfg, scaled_true_psd=None
     )
@@ -86,10 +86,10 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
     amplitude = 5.0
     sigma = sigma_base * amplitude**2
 
-    n_time = 240
+    n = 240
     n_time_blocks = 3
     varma = VARMAData(
-        n_samples=n_time,
+        n_samples=n,
         var_coeffs=var_coeffs,
         vma_coeffs=vma_coeffs,
         sigma=sigma,
@@ -177,21 +177,19 @@ def _simulate_independent_ar1(
 
 def test_univariate_and_multivar_scaling_consistency():
     """Rescaling should align univariate and multivariate empirical PSDs."""
-    n_time = 128
+    n = 128
     phi = 0.65
     sigma = 0.9
 
-    data = _simulate_independent_ar1(n_time, phi=phi, sigma=sigma, seed=123)
-    t = np.arange(n_time)
+    data = _simulate_independent_ar1(n, phi=phi, sigma=sigma, seed=123)
+    t = np.arange(n)
     ts_single_0 = Timeseries(t=t, y=data[:, 0])
     ts_single_1 = Timeseries(t=t, y=data[:, 1])
     ts_multi = MultivariateTimeseries(t=t, y=data)
 
     pdgrm0 = ts_single_0.standardise_for_psd().to_periodogram()
     pdgrm1 = ts_single_1.standardise_for_psd().to_periodogram()
-    fft = ts_multi.standardise_for_psd().to_wishart_stats(
-        n_blocks=1, window=None
-    )
+    fft = ts_multi.standardise_for_psd().to_wishart_stats(Nb=1, window=None)
     assert fft.raw_psd is not None
 
     dummy_sampler = type("DummySampler", (), {})()

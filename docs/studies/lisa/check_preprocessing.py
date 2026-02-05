@@ -39,9 +39,9 @@ COARSE_CFG = CoarseGrainConfig(
 )
 
 
-def infer_blocks(n_time: int) -> int:
-    target = max(1, 2 ** int(np.round(np.log2(n_time / (24 * 7)))))
-    while target > 1 and n_time % target != 0:
+def infer_blocks(n: int) -> int:
+    target = max(1, 2 ** int(np.round(np.log2(n / (24 * 7)))))
+    while target > 1 and n % target != 0:
         target //= 2
     while target > 4:
         target //= 2
@@ -107,8 +107,8 @@ def main() -> None:
 
     ts = MultivariateTimeseries(y=lisa.data, t=lisa.time)
     ts_std = ts.standardise_for_psd()
-    n_blocks = infer_blocks(ts_std.y.shape[0])
-    fft = ts_std.to_wishart_stats(n_blocks=n_blocks, fmin=FMIN, fmax=FMAX)
+    Nb = infer_blocks(ts_std.y.shape[0])
+    fft = ts_std.to_wishart_stats(Nb=Nb, fmin=FMIN, fmax=FMAX)
 
     spec = compute_binning_structure(
         fft.freq,

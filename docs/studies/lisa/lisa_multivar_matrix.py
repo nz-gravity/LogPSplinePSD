@@ -394,7 +394,7 @@ def _load_lisa_inputs(
         max_n = int(max_n_time)
         t_full = t_full[:max_n]
         y_full = y_full[:max_n]
-        logger.info(f"Truncated to n_time={max_n} samples for the matrix run.")
+        logger.info(f"Truncated to n={max_n} samples for the matrix run.")
 
     return (
         np.asarray(t_full, dtype=float),
@@ -494,7 +494,7 @@ def main() -> None:
         nargs="+",
         type=int,
         default=[384, 768, 1024],
-        help="n_time_blocks values (Wishart blocks). Must be >= n_channels. Prefer larger values when coarse=off.",
+        help="n_time_blocks values (Wishart blocks). Must be >= p. Prefer larger values when coarse=off.",
     )
     parser.add_argument("--knots-grid", nargs="+", type=int, default=[15, 30])
     parser.add_argument(
@@ -532,9 +532,9 @@ def main() -> None:
     knots = [int(x) for x in args.knots_grid]
     log_bins = [int(x) for x in args.log_bins_grid]
 
-    for n_blocks in time_blocks:
-        if n_blocks < 3:
-            raise ValueError("n_time_blocks must be >= 3 (n_channels=3).")
+    for Nb in time_blocks:
+        if Nb < 3:
+            raise ValueError("n_time_blocks must be >= 3 (p=3).")
 
     n_tag = (
         f"Nmax{int(args.max_n_time)}"
@@ -638,13 +638,13 @@ def main() -> None:
     # blocked-sampler run sees the same data length.
     uses_blocks = any(s == "multivar_blocked_nuts" for s in samplers)
     block_lcm = int(math.lcm(*time_blocks)) if uses_blocks else 1
-    n_time = int(y_full.shape[0])
-    n_used = n_time - (n_time % block_lcm)
+    n = int(y_full.shape[0])
+    n_used = n - (n % block_lcm)
     if n_used <= 0:
         raise ValueError("Time series too short after divisibility trimming.")
-    if n_used != n_time:
+    if n_used != n:
         logger.info(
-            f"Trimming {n_time - n_used} samples to make n_time divisible by lcm(time_blocks)={block_lcm}."
+            f"Trimming {n - n_used} samples to make n divisible by lcm(time_blocks)={block_lcm}."
         )
         y_full = y_full[:n_used]
         t_full = t_full[:n_used]
@@ -656,9 +656,9 @@ def main() -> None:
     # and/or one full-periodogram FFT for multivar_nuts.
     wishart_cache = {}
     if uses_blocks:
-        for n_blocks in sorted(set(time_blocks)):
-            wishart_cache[int(n_blocks)] = standardized_ts.to_wishart_stats(
-                n_blocks=int(n_blocks), fmin=FMIN, fmax=FMAX
+        for Nb in sorted(set(time_blocks)):
+            wishart_cache[int(Nb)] = standardized_ts.to_wishart_stats(
+                Nb=int(Nb), fmin=FMIN, fmax=FMAX
             )
 
     csd_full = None
@@ -672,25 +672,25 @@ def main() -> None:
         x in {"off", "false", "0", "no"} for x in coarse_keys
     )
     if coarse_off_requested:
-        n_channels = int(raw_series.n_channels)
+        p = int(raw_series.p)
         if wishart_cache:
-            for n_blocks, fft in sorted(wishart_cache.items()):
-                n_total = int(fft.n_freq) * n_channels
+            for Nb, fft in sorted(wishart_cache.items()):
+                n_total = int(fft.N) * p
                 if n_total > 100_000:
                     logger.warning(
-                        "coarse=off with n_time_blocks={} implies n_freq={} -> N≈{} basis rows; expect very slow NUTS. "
+                        "coarse=off with n_time_blocks={} implies N={} -> N≈{} basis rows; expect very slow NUTS. "
                         "Consider larger n_time_blocks (e.g. 384/768/1024) or --max-n-time.",
-                        int(n_blocks),
-                        int(fft.n_freq),
+                        int(Nb),
+                        int(fft.N),
                         int(n_total),
                     )
         if csd_full is not None:
-            n_total = int(csd_full.n_freq) * n_channels
+            n_total = int(csd_full.N) * p
             if n_total > 100_000:
                 logger.warning(
-                    "coarse=off with multivar_nuts implies n_freq={} -> N≈{} basis rows; expect very slow NUTS. "
+                    "coarse=off with multivar_nuts implies N={} -> N≈{} basis rows; expect very slow NUTS. "
                     "Consider --max-n-time or enabling coarse graining.",
-                    int(csd_full.n_freq),
+                    int(csd_full.N),
                     int(n_total),
                 )
 
@@ -712,7 +712,7 @@ def main() -> None:
                     fmax=float(FMAX),
                     fs=float(fs),
                     dt=float(dt),
-                    n_time=int(y_full.shape[0]),
+                    n=int(y_full.shape[0]),
                     data_source=(
                         str(npz_path)
                         if npz_path is not None

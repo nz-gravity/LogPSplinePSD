@@ -159,11 +159,23 @@ class MultivarBaseSampler(BaseSampler):
             # the posterior bands (instead of treating VI as another empirical
             # curve which is drawn behind the posterior fill).
             overlay_vi = bool(getattr(idata, "vi_posterior_psd", None))
+            extra_empirical_psd = getattr(
+                self.config, "extra_empirical_psd", None
+            )
+            extra_empirical_labels = getattr(
+                self.config, "extra_empirical_labels", None
+            )
+            extra_empirical_styles = getattr(
+                self.config, "extra_empirical_styles", None
+            )
 
             plot_psd_matrix(
                 idata=idata,
                 freq=np.array(self.freq),
                 empirical_psd=empirical_psd,
+                extra_empirical_psd=extra_empirical_psd,
+                extra_empirical_labels=extra_empirical_labels,
+                extra_empirical_styles=extra_empirical_styles,
                 true_psd=true_psd,
                 overlay_vi=overlay_vi,
                 outdir=self.config.outdir,

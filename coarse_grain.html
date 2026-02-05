@@ -399,9 +399,9 @@ This documents the design of that discretization and shows how the implementatio
 realizes the theoretical approximations stated in the repository.</p>
 <section id="frequency-bins">
 <h2>Frequency bins<a class="headerlink" href="#frequency-bins" title="Link to this heading">#</a></h2>
-<p>The retained fine-frequency grid ({f_1,dots,f_{N_l}}subset[f_{min},f_{max}])
+<p>The retained fine-frequency grid ({f_1,dots,f_{Nl}}subset[f_{min},f_{max}])
 is coarse-grained by dividing it into consecutive, disjoint subsets (J_h). Each
-(J_h) contains an <strong>odd</strong> number (N_h) of Fourier frequencies, and (bar f_h)
+(J_h) contains an <strong>odd</strong> number (Nh) of Fourier frequencies, and (bar f_h)
 denotes the <em>midpoint Fourier frequency</em> of (J_h) (the middle member on the
 discrete Fourier grid, not an average).</p>
 <p>The binning logic
@@ -410,21 +410,21 @@ which returns <code class="xref py py-class docutils literal notranslate"><span 
 Only <strong>linear, full-band</strong> binning is supported. Exactly one construction mode
 must be chosen:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">n_freqs_per_bin</span></code>: fixed membership with equal-size (odd) bins that divide
+<li><p><code class="docutils literal notranslate"><span class="pre">Nh</span></code>: fixed membership with equal-size (odd) bins that divide
 the retained frequency count exactly.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">n_bins</span></code>: fixed bin count with sizes as equal as possible, all odd.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Nc</span></code>: fixed bin count with sizes as equal as possible, all odd.</p></li>
 </ul>
 <p>The spec stores</p>
 <ul class="simple">
 <li><p>the masks that select the retained frequencies,</p></li>
 <li><p>indices to group points into contiguous bins,</p></li>
-<li><p>the member count (N_h) per bin, and</p></li>
+<li><p>the member count (Nh) per bin, and</p></li>
 <li><p>bin widths (diagnostics only).</p></li>
 </ul>
 </section>
 <section id="aggregating-fft-data">
 <h2>Aggregating FFT data<a class="headerlink" href="#aggregating-fft-data" title="Link to this heading">#</a></h2>
-<p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft()</span></code> takes the
+<p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft()</span></code> takes the
 <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code>
 and builds the coarse representation used during sampling. The frequencies are
 grouped by bin across the <strong>entire</strong> retained band. Within each (J_h), the
@@ -434,24 +434,24 @@ single (U_h) per bin. The function <code class="xref py py-func docutils literal
 implements the matrix sum, and <code class="xref py py-func docutils literal notranslate"><span class="pre">numpy.linalg.eigh()</span></code> recovers the eigenvectors
 and eigenvalues that encode (bar Y_h).</p>
 <p>The returned <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code> now has
-<cite>len(spec.f_coarse)</cite> frequencies. <cite>coarse_grain_multivar_fft</cite> also returns a
-<cite>weights</cite> array giving the member count (N_h) for each coarse bin.</p>
+<cite>len(spec.f_coarse)</cite> frequencies. <cite>apply_coarse_grain_multivar_fft</cite> also returns a
+<cite>weights</cite> array giving the member count (Nh) for each coarse bin.</p>
 </section>
 <section id="likelihood-scaling">
 <h2>Likelihood scaling<a class="headerlink" href="#likelihood-scaling" title="Link to this heading">#</a></h2>
 <p>The weights scale <strong>only</strong> the log-determinant term so that each bin behaves like
-a Wishart observation with (N_b N_h) degrees of freedom:</p>
+a Wishart observation with (N_b Nh) degrees of freedom:</p>
 <div class="math notranslate nohighlight">
-\[\log \mathcal{L} \propto - \sum_{h=1}^{N_c} N_b N_h \log |\S(\bar f_h)|
+\[\log \mathcal{L} \propto - \sum_{h=1}^{Nc} N_b Nh \log |\S(\bar f_h)|
 - \sum_\nu \u^{(h)*}_\nu \S(\bar f_h)^{-1} \u^{(h)}_\nu.\]</div>
 <p>When coarse graining is enabled, <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code>
 accepts the <cite>weights</cite> vector (usually via <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.config.CoarseGrainConfig</span></code>)
 and stores it as <cite>freq_weights</cite>. The NumPyro model
 <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_nuts.multivariate_psplines_model()</span></code>
 multiplies <cite>log_delta_sq</cite> by <cite>freq_weights</cite>, ensuring the total log-det term
-matches the aggregated (N_b N_h) DOF. The trace term uses the <strong>summed</strong>
-statistic (bar Y_h) directly, so no additional (N_h) factors appear.
-Coarse graining therefore increases information linearly in (N_h).</p>
+matches the aggregated (N_b Nh) DOF. The trace term uses the <strong>summed</strong>
+statistic (bar Y_h) directly, so no additional (Nh) factors appear.
+Coarse graining therefore increases information linearly in (Nh).</p>
 <p>No log-binning, hybrid schemes, or “preserve low frequencies” modes are
 implemented.</p>
 </section>

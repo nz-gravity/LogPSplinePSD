@@ -429,19 +429,19 @@ convention across diagnostics/plotting.</p></li>
 <h2>Coarse graining: weights vs bin counts<a class="headerlink" href="#coarse-graining-weights-vs-bin-counts" title="Link to this heading">#</a></h2>
 <p>When coarse graining multivariate data, two frequency-weight-like objects exist:</p>
 <ul class="simple">
-<li><p><cite>freq_bin_counts</cite>: the raw member count <span class="math notranslate nohighlight">\(N_h\)</span> per coarse bin, stored on
+<li><p><cite>freq_bin_counts</cite>: the raw member count <span class="math notranslate nohighlight">\(Nh\)</span> per coarse bin, stored on
 <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code>.</p></li>
 <li><p><cite>freq_weights</cite>: the weights actually used to scale the log-determinant term in
 the NumPyro likelihood.</p></li>
 </ul>
-<p>By default, <cite>run_mcmc</cite> passes <cite>freq_weights = N_h</cite>. This matches the coarse-bin
-approximation where each bin has effective DOF <span class="math notranslate nohighlight">\(\nu N_h\)</span>.</p>
+<p>By default, <cite>run_mcmc</cite> passes <cite>freq_weights = Nh</cite>. This matches the coarse-bin
+approximation where each bin has effective DOF <span class="math notranslate nohighlight">\(\nu Nh\)</span>.</p>
 <p>If users choose to normalise or temper <cite>freq_weights</cite> for sampler geometry, the
 raw <cite>freq_bin_counts</cite> remain available so PSD conversion does not drift.</p>
 <p>See:</p>
 <ul class="simple">
 <li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code></p></li>
-<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft()</span></code>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft()</span></code>
 (<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138">source</a>)</p></li>
 <li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.compute_effective_nu()</span></code></p></li>
 </ul>
@@ -490,7 +490,7 @@ tests the key coarse-graining invariant:</p>
 <ul class="simple">
 <li><p>sum of fine-grid log-likelihood contributions within a bin should match the
 coarse-bin log-likelihood (up to bin-constant offsets),</p></li>
-<li><p>there should be no “extra” factor of <span class="math notranslate nohighlight">\(N_h\)</span> introduced in the quadratic
+<li><p>there should be no “extra” factor of <span class="math notranslate nohighlight">\(Nh\)</span> introduced in the quadratic
 term.</p></li>
 </ul>
 <p>This is useful when changing coarse-grain logic or the frequency weighting

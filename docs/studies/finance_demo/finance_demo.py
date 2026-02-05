@@ -257,25 +257,25 @@ def _build_timeseries(log_returns: pd.DataFrame) -> MultivariateTimeseries:
     return MultivariateTimeseries(y=y, t=t)
 
 
-def _select_time_blocks(n_time: int, min_block_len: int = 128) -> int:
+def _select_time_blocks(n: int, min_block_len: int = 128) -> int:
     """
-    Choose a block count for Wishart averaging that divides n_time
+    Choose a block count for Wishart averaging that divides n
     and keeps block length ≥ `min_block_len`.
     """
-    if n_time <= min_block_len:
+    if n <= min_block_len:
         return 1
 
-    max_blocks = max(1, n_time // min_block_len)
+    max_blocks = max(1, n // min_block_len)
     # Prefer powers of two for FFT efficiency
-    n_blocks = 1
-    while (n_blocks * 2) <= max_blocks:
-        n_blocks *= 2
+    Nb = 1
+    while (Nb * 2) <= max_blocks:
+        Nb *= 2
 
     # Ensure divisibility
-    while n_blocks > 1 and n_time % n_blocks != 0:
-        n_blocks //= 2
+    while Nb > 1 and n % Nb != 0:
+        Nb //= 2
 
-    return max(1, n_blocks)
+    return max(1, Nb)
 
 
 def _extract_median_psd(idata) -> tuple[np.ndarray, np.ndarray]:
@@ -314,26 +314,23 @@ def estimate_spectral_matrix(
     Estimate the multivariate spectral matrix using the log-P-spline sampler.
 
     Returns:
-        freqs: np.ndarray of shape (n_freq,)
-        S:     complex ndarray of shape (n_freq, n_channels, n_channels)
+        freqs: np.ndarray of shape (N,)
+        S:     complex ndarray of shape (N, p, p)
         idata: ArviZ InferenceData with full posterior/VI diagnostics
         empirical_psd: Welch estimate for overlay/reference
     """
 
     timeseries = _build_timeseries(log_returns)
-    n_time = timeseries.y.shape[0]
-    n_blocks = _select_time_blocks(n_time)
-    if n_blocks > 1:
-        print(
-            f"Using {n_blocks} Wishart blocks "
-            f"(block_len={n_time // n_blocks} samples)"
-        )
+    n = timeseries.y.shape[0]
+    Nb = _select_time_blocks(n)
+    if Nb > 1:
+        print(f"Using {Nb} Wishart blocks " f"(Lb={n // Nb} samples)")
     else:
         print("Using full-length periodogram (1 block)")
 
     dt = timeseries.t[1] - timeseries.t[0]
     fs = 1.0 / dt
-    fmin = fs / (n_time * 1.0)
+    fmin = fs / (n * 1.0)
     fmax = 0.5 * fs
 
     coarse_cfg = CoarseGrainConfig(
@@ -358,7 +355,7 @@ def estimate_spectral_matrix(
             n_knots=10,
             degree=3,
             diffMatrixOrder=2,
-            n_time_blocks=n_blocks,
+            Nb=Nb,
             coarse_grain_config=coarse_cfg,
             only_vi=RUN_VI_ONLY,
             vi_steps=15_000,

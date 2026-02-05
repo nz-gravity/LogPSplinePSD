@@ -38,9 +38,9 @@ def _quantiles_to_ci_dict(
         return arr[idx]
 
     ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
-    n_channels = real_q.shape[2]
-    for i in range(n_channels):
-        for j in range(n_channels):
+    p = real_q.shape[2]
+    for i in range(p):
+        for j in range(p):
             q05_r = _grab(real_q[:, :, i, i], 5.0) if i == j else None
             q95_r = _grab(real_q[:, :, i, i], 95.0) if i == j else None
             if i == j:
@@ -109,15 +109,13 @@ def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
                 fft_im = obs_data["fft_im"].values
 
                 fft_complex = fft_re + 1j * fft_im
-                n_channels = len(channels)
-                n_freq = len(freq)
+                p = len(channels)
+                N = len(freq)
 
-                psd_matrix = np.zeros(
-                    (n_freq, n_channels, n_channels), dtype=np.complex128
-                )
+                psd_matrix = np.zeros((N, p, p), dtype=np.complex128)
 
-                for i in range(n_channels):
-                    for j in range(n_channels):
+                for i in range(p):
+                    for j in range(p):
                         psd_matrix[:, i, j] = fft_complex[:, i] * np.conj(
                             fft_complex[:, j]
                         )
@@ -146,9 +144,9 @@ def _pack_ci_dict(
 ):
     """Compute 5/50/95% bands for diag PSDs and requested cross terms."""
     ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
-    _, _, n_channels, _ = psd_samples.shape
-    for i in range(n_channels):
-        for j in range(n_channels):
+    _, _, p, _ = psd_samples.shape
+    for i in range(p):
+        for j in range(p):
             if i == j:
                 q05 = np.percentile(psd_samples[:, :, i, i].real, 5, axis=0)
                 q50 = np.percentile(psd_samples[:, :, i, i].real, 50, axis=0)
@@ -464,9 +462,9 @@ def plot_psd_matrix(
             true_psd = None
 
     if empirical_psd is not None:
-        n_channels = empirical_psd.psd.shape[1]
+        p = empirical_psd.psd.shape[1]
     elif "psd" in ci_dict and len(ci_dict["psd"]) > 0:
-        n_channels = max(max(i, j) for (i, j) in ci_dict["psd"].keys()) + 1
+        p = max(max(i, j) for (i, j) in ci_dict["psd"].keys()) + 1
     else:
         raise ValueError("Could not infer number of channels.")
 
@@ -474,19 +472,19 @@ def plot_psd_matrix(
     fig_provided = fig is not None and ax is not None
     if fig_provided:
         axes = np.asarray(ax)
-        if axes.shape != (n_channels, n_channels):
+        if axes.shape != (p, p):
             raise ValueError(
                 f"Provided axes have shape {axes.shape}, expected "
-                f"({n_channels}, {n_channels})."
+                f"({p}, {p})."
             )
         created_fig = False
     else:
         fig, axes = plt.subplots(
-            n_channels,
-            n_channels,
-            figsize=(3.9 * n_channels, 3.9 * n_channels),
+            p,
+            p,
+            figsize=(3.9 * p, 3.9 * p),
         )
-        if n_channels == 1:
+        if p == 1:
             axes = np.array([[axes]])
         created_fig = True
     axes = np.asarray(axes)
@@ -522,8 +520,8 @@ def plot_psd_matrix(
             extra_empirical_psd = scaled_extra
 
     vi_label_added = False
-    for i in range(n_channels):
-        for j in range(n_channels):
+    for i in range(p):
+        for j in range(p):
             ax = axes[i, j]
             ax.set_xscale(xscale)
             ax.tick_params(which="both", direction="in", top=True, right=True)
@@ -837,12 +835,12 @@ def plot_psd_matrix(
             if ylab:
                 ax.set_ylabel(ylab, fontsize=11)
 
-            if i == n_channels - 1:
+            if i == p - 1:
                 ax.set_xlabel("Frequency [Hz]", fontsize=11)
 
     if freq_range is not None:
-        for i in range(n_channels):
-            for j in range(n_channels):
+        for i in range(p):
+            for j in range(p):
                 ax = axes[i, j]
                 if ax.axison:
                     ax.set_xlim(freq_range)

@@ -32,9 +32,9 @@ def _resolve_blocks(n_time_target: int, block_size: int) -> tuple[int, int]:
     if block_size <= 0:
         raise ValueError("--block-size must be positive.")
 
-    n_blocks = max(1, n_time_target // block_size)
-    n_used = n_blocks * block_size
-    return n_blocks, n_used
+    Nb = max(1, n_time_target // block_size)
+    n_used = Nb * block_size
+    return Nb, n_used
 
 
 def _load_paper_synth_npz(
@@ -71,7 +71,7 @@ def main() -> None:
         "--block-size",
         type=int,
         default=5000,
-        help="Samples per Wishart block (used to pick n_time_blocks).",
+        help="Samples per Wishart block (used to pick Nb).",
     )
 
     parser.add_argument("--seed", type=int, default=42)
@@ -142,7 +142,7 @@ def main() -> None:
     if not np.isfinite(dt) or dt <= 0.0:
         raise ValueError(f"Invalid dt={dt}.")
 
-    n_blocks, n_used = _resolve_blocks(args.n_time, args.block_size)
+    Nb, n_used = _resolve_blocks(args.n, args.block_size)
     if y.shape[0] < n_used:
         raise ValueError(
             f"Input series too short: have {y.shape[0]}, need {n_used}."
@@ -188,7 +188,7 @@ def main() -> None:
 
     logger.info(
         f"Running LISA job: data={synth_path.name}, N={n_used}, dt={dt:g}, duration_days={duration_days:.2f}, "
-        f"blocks={n_blocks}, f=[{fmin:g},{fmax:g}], coarse={'Nh='+str(coarse_n_freqs) if coarse_n_freqs>0 else ('Nc='+str(coarse_bins) if coarse_bins>0 else 'off')}, outdir={outdir}"
+        f"blocks={Nb}, f=[{fmin:g},{fmax:g}], coarse={'Nh='+str(coarse_n_freqs) if coarse_n_freqs>0 else ('Nc='+str(coarse_bins) if coarse_bins>0 else 'off')}, outdir={outdir}"
     )
 
     ts = MultivariateTimeseries(t=t, y=y)
@@ -206,7 +206,7 @@ def main() -> None:
         verbose=True,
         compute_psis=False,
         skip_plot_diagnostics=False,
-        n_time_blocks=int(n_blocks),
+        Nb=int(Nb),
         coarse_grain_config=coarse_cfg,
         fmin=fmin,
         fmax=fmax,

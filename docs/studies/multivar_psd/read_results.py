@@ -39,7 +39,7 @@ def extract_data(idata: az.InferenceData):
         ess=np.median(idata.attrs.get("ess", [np.nan])),
         riae=idata.attrs.get("riae_matrix", idata.attrs.get("riae", np.nan)),
         coverage=idata.attrs.get("ci_coverage", np.nan),
-        N=idata.attrs["n_freq"] + 1 * 2,
+        N=idata.attrs["N"] + 1 * 2,
         K=idata.spline_model["diag_0_knots"].shape[0],
     )
 

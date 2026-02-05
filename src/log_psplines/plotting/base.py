@@ -261,16 +261,16 @@ def compute_coherence_ci(
     Compute coherence confidence intervals from multivariate PSD samples.
 
     Args:
-        psd_samples: Shape (n_samples, n_freq, n_channels, n_channels)
+        psd_samples: Shape (n_samples, N, p, p)
 
     Returns:
         Dictionary mapping (i,j) channel pairs to (q05, q50, q95) tuples
     """
     ci_dict = {}
-    n_samples, n_freq, n_channels, _ = psd_samples.shape
+    n_samples, N, p, _ = psd_samples.shape
 
-    for i in range(n_channels):
-        for j in range(n_channels):
+    for i in range(p):
+        for j in range(p):
             if i > j:  # Only compute for upper triangle
                 coh = np.abs(psd_samples[:, :, i, j]) ** 2 / (
                     np.abs(psd_samples[:, :, i, i])
@@ -289,17 +289,17 @@ def compute_cross_spectra_ci(psd_samples: np.ndarray) -> Tuple[Dict, Dict]:
     Compute real and imaginary parts of cross-spectra.
 
     Args:
-        psd_samples: Shape (n_samples, n_freq, n_channels, n_channels)
+        psd_samples: Shape (n_samples, N, p, p)
 
     Returns:
         Tuple of (real_ci_dict, imag_ci_dict)
     """
     real_dict = {}
     imag_dict = {}
-    n_samples, n_freq, n_channels, _ = psd_samples.shape
+    n_samples, N, p, _ = psd_samples.shape
 
-    for i in range(n_channels):
-        for j in range(n_channels):
+    for i in range(p):
+        for j in range(p):
             if i != j:
                 # Real part
                 re_q05 = np.percentile(psd_samples[:, :, i, j].real, 5, axis=0)

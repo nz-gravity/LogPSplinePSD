@@ -318,16 +318,16 @@ def plot_coherence_matrix(
 # ---------------------------------------------------------------------------
 # PSD estimation helpers
 # ---------------------------------------------------------------------------
-def _select_time_blocks(n_time: int, min_block_len: int = 128) -> int:
-    if n_time <= min_block_len:
+def _select_time_blocks(n: int, min_block_len: int = 128) -> int:
+    if n <= min_block_len:
         return 1
-    max_blocks = max(1, n_time // min_block_len)
-    n_blocks = 1
-    while (n_blocks * 2) <= max_blocks:
-        n_blocks *= 2
-    while n_blocks > 1 and n_time % n_blocks != 0:
-        n_blocks //= 2
-    return max(1, n_blocks)
+    max_blocks = max(1, n // min_block_len)
+    Nb = 1
+    while (Nb * 2) <= max_blocks:
+        Nb *= 2
+    while Nb > 1 and n % Nb != 0:
+        Nb //= 2
+    return max(1, Nb)
 
 
 def _build_timeseries(
@@ -389,17 +389,15 @@ def estimate_spectral_matrix(
     df: pd.DataFrame, dt_hours: float, *, cache_results: bool = True
 ) -> tuple[np.ndarray, np.ndarray, az.InferenceData, EmpiricalPSD]:
     timeseries = _build_timeseries(df, dt_hours)
-    n_time = timeseries.y.shape[0]
-    n_blocks = _select_time_blocks(n_time)
-    if n_blocks > 1:
-        print(
-            f"Using {n_blocks} Wishart blocks (block_len={n_time // n_blocks} samples)"
-        )
+    n = timeseries.y.shape[0]
+    Nb = _select_time_blocks(n)
+    if Nb > 1:
+        print(f"Using {Nb} Wishart blocks (Lb={n // Nb} samples)")
     else:
         print("Using full-length periodogram (1 block)")
 
     fs = 1.0 / dt_hours
-    fmin = fs / (n_time * 1.0)
+    fmin = fs / (n * 1.0)
     fmax = 0.5 * fs
 
     coarse_cfg = CoarseGrainConfig(
@@ -424,7 +422,7 @@ def estimate_spectral_matrix(
             n_knots=15,
             degree=3,
             diffMatrixOrder=2,
-            n_time_blocks=n_blocks,
+            Nb=Nb,
             coarse_grain_config=coarse_cfg,
             only_vi=RUN_VI_ONLY,
             vi_steps=15_000,

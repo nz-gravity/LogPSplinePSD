@@ -21,11 +21,11 @@ def _make_sampler(num_chains=2):
     sampler.rng_key = jax.random.PRNGKey(0)
     sampler.chain_method = "sequential"
     sampler.device = "cpu"
-    sampler.n_channels = 2
+    sampler.p = 2
     sampler._logpost_fn = lambda params: jnp.array(0.0)
     sampler.u_re = jnp.zeros((2, 2, 2))
     sampler.u_im = jnp.zeros((2, 2, 2))
-    sampler.nu = 2
+    sampler.Nb = 2
     sampler.all_bases = (jnp.ones((2, 1)),)
     sampler.all_penalties = (jnp.eye(1),)
     sampler.freq_weights = jnp.ones((2,))
@@ -44,15 +44,13 @@ def test_multivariate_model_emits_sites_univariate_and_multivar(monkeypatch):
 
     monkeypatch.setattr(multivar_nuts, "sample_pspline_block", fake_block)
 
-    def _run_and_assert(n_dim, n_theta):
-        n_freq = 4
-        u_re = jnp.zeros((n_freq, n_dim, n_dim))
-        u_im = jnp.zeros((n_freq, n_dim, n_dim))
-        all_bases = [
-            jnp.ones((n_freq, 3)) for _ in range(n_dim + 2 * (n_theta > 0))
-        ]
+    def _run_and_assert(p, n_theta):
+        N = 4
+        u_re = jnp.zeros((N, p, p))
+        u_im = jnp.zeros((N, p, p))
+        all_bases = [jnp.ones((N, 3)) for _ in range(p + 2 * (n_theta > 0))]
         all_penalties = [jnp.eye(3) for _ in all_bases]
-        freq_weights = jnp.ones((n_freq,))
+        freq_weights = jnp.ones((N,))
         trace = numpyro.handlers.trace(
             numpyro.handlers.seed(
                 multivariate_psplines_model, jax.random.PRNGKey(0)
@@ -60,7 +58,7 @@ def test_multivariate_model_emits_sites_univariate_and_multivar(monkeypatch):
         ).get_trace(
             u_re=u_re,
             u_im=u_im,
-            nu=2,
+            Nb=2,
             all_bases=all_bases,
             all_penalties=all_penalties,
             freq_weights=freq_weights,
@@ -73,12 +71,12 @@ def test_multivariate_model_emits_sites_univariate_and_multivar(monkeypatch):
         assert "theta_re" in trace
         assert "theta_im" in trace
         assert "log_likelihood" in trace
-        assert trace["log_delta_sq"]["value"].shape == (n_freq, n_dim)
-        assert trace["theta_re"]["value"].shape == (n_freq, n_theta)
-        assert trace["theta_im"]["value"].shape == (n_freq, n_theta)
+        assert trace["log_delta_sq"]["value"].shape == (N, p)
+        assert trace["theta_re"]["value"].shape == (N, n_theta)
+        assert trace["theta_im"]["value"].shape == (N, n_theta)
 
-    _run_and_assert(n_dim=1, n_theta=0)
-    _run_and_assert(n_dim=2, n_theta=1)
+    _run_and_assert(p=1, n_theta=0)
+    _run_and_assert(p=2, n_theta=1)
 
 
 def test_default_init_strategy_calls_default_init_values(monkeypatch):

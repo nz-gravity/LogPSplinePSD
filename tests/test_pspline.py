@@ -285,7 +285,7 @@ def test_multivar_fft_cut_preserves_scaling():
     fmax = float(fft.freq[-2])
     trimmed = fft.cut(fmin, fmax)
 
-    assert trimmed.n_freq < fft.n_freq
+    assert trimmed.N < fft.N
     assert np.all(trimmed.freq >= fmin)
     assert np.all(trimmed.freq <= fmax)
     assert trimmed.scaling_factor == pytest.approx(scaling)

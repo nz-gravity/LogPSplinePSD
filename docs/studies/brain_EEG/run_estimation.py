@@ -176,7 +176,7 @@ def _run_multivar_pspline(selected_data, fs):
             n_knots=10,
             degree=3,
             diffMatrixOrder=2,
-            n_time_blocks=200,
+            Nb=200,
             only_vi=True,
             vi_steps=20_000,
             vi_lr=1e-3,
@@ -221,18 +221,16 @@ def _extract_posterior_psd_and_coherence(idata):
 
     real_psd = np.asarray(quantiles["real"])
     coherence = np.asarray(quantiles.get("coherence"))
-    n_channels = real_psd.shape[2]
+    p = real_psd.shape[2]
 
-    psd_quantiles = np.zeros((3, n_channels, real_psd.shape[1]), dtype=float)
-    for ch in range(n_channels):
+    psd_quantiles = np.zeros((3, p, real_psd.shape[1]), dtype=float)
+    for ch in range(p):
         psd_quantiles[:, ch, :] = real_psd[:, :, ch, ch]
 
     if coherence is None:
         raise RuntimeError("Inference data missing coherence quantiles.")
 
-    pairs = [
-        (i, j) for i in range(n_channels) for j in range(i + 1, n_channels)
-    ]
+    pairs = [(i, j) for i in range(p) for j in range(i + 1, p)]
     coh_quantiles = np.zeros((3, len(pairs), coherence.shape[1]), dtype=float)
     for idx, (i, j) in enumerate(pairs):
         coh_quantiles[:, idx, :] = coherence[:, :, i, j]

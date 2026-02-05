@@ -39,44 +39,36 @@ def summarize_existing_mcmc_metrics(
     )
 
 
-def _prepare_psd_matrix(
-    psd_samples: np.ndarray, n_channels: int
-) -> np.ndarray:
+def _prepare_psd_matrix(psd_samples: np.ndarray, p: int) -> np.ndarray:
     """Ensure PSD samples are represented as full matrices.
 
-    Accepts either diagonal-only PSD samples with shape ``(n_samples, n_channels, n_freqs)``
-    or full cross-spectral matrices with shape ``(n_samples, n_channels, n_channels, n_freqs)``.
-    Returns an array of shape ``(n_samples, n_channels, n_channels, n_freqs)``.
+    Accepts either diagonal-only PSD samples with shape ``(n_samples, p, N)``
+    or full cross-spectral matrices with shape ``(n_samples, p, p, N)``.
+    Returns an array of shape ``(n_samples, p, p, N)``.
     """
 
     if psd_samples.ndim == 3:
-        n_samples, _, n_freqs = psd_samples.shape
+        n_samples, _, N = psd_samples.shape
         psd_matrix = np.zeros(
-            (n_samples, n_channels, n_channels, n_freqs),
+            (n_samples, p, p, N),
             dtype=psd_samples.dtype,
         )
-        for idx in range(n_channels):
+        for idx in range(p):
             psd_matrix[:, idx, idx, :] = psd_samples[:, idx, :]
         return psd_matrix
 
     if psd_samples.ndim == 4:
-        # Already in (n_samples, n_channels, n_channels, n_freqs) layout
-        if (
-            psd_samples.shape[1] == n_channels
-            and psd_samples.shape[2] == n_channels
-        ):
+        # Already in (n_samples, p, p, N) layout
+        if psd_samples.shape[1] == p and psd_samples.shape[2] == p:
             return psd_samples
 
-        # Frequency axis immediately after samples: (n_samples, n_freqs, n_channels, n_channels)
-        if (
-            psd_samples.shape[-1] == n_channels
-            and psd_samples.shape[-2] == n_channels
-        ):
+        # Frequency axis immediately after samples: (n_samples, N, p, p)
+        if psd_samples.shape[-1] == p and psd_samples.shape[-2] == p:
             return np.transpose(psd_samples, (0, 2, 3, 1))
 
     raise ValueError(
-        "psd_samples must have shape (n_samples, n_channels, n_freqs) or "
-        "(n_samples, n_channels, n_channels, n_freqs)."
+        "psd_samples must have shape (n_samples, p, N) or "
+        "(n_samples, p, p, N)."
     )
 
 
@@ -96,8 +88,8 @@ def compute_psd_functionals(
     Parameters
     ----------
     psd_samples
-        PSD posterior samples with shape ``(n_samples, n_channels, n_freqs)`` or
-        ``(n_samples, n_channels, n_channels, n_freqs)``.
+        PSD posterior samples with shape ``(n_samples, p, N)`` or
+        ``(n_samples, p, p, N)``.
     freqs
         Frequency grid corresponding to the PSD evaluations.
     bands
@@ -108,26 +100,26 @@ def compute_psd_functionals(
     Returns
     -------
     dict
-        Dictionary containing posterior samples for ``variance`` (shape ``(n_samples, n_channels)``),
-        ``band_powers`` (shape ``(n_samples, n_channels, n_bands)``), ``coherence``
+        Dictionary containing posterior samples for ``variance`` (shape ``(n_samples, p)``),
+        ``band_powers`` (shape ``(n_samples, p, n_bands)``), ``coherence``
         (shape ``(n_samples, n_pairs, n_bands)``), and coordinate metadata.
     """
 
     psd_samples = np.asarray(psd_samples)
     freqs = np.asarray(freqs)
-    n_samples, n_channels = psd_samples.shape[0], psd_samples.shape[1]
-    psd_matrix = _prepare_psd_matrix(psd_samples, n_channels)
+    n_samples, p = psd_samples.shape[0], psd_samples.shape[1]
+    psd_matrix = _prepare_psd_matrix(psd_samples, p)
 
     # Total variance per channel
     variance = np.trapezoid(
-        psd_matrix[:, np.arange(n_channels), np.arange(n_channels), :],
+        psd_matrix[:, np.arange(p), np.arange(p), :],
         freqs,
         axis=-1,
     )
 
     # Band powers
     n_bands = len(bands)
-    band_powers = np.zeros((n_samples, n_channels, n_bands), dtype=np.float64)
+    band_powers = np.zeros((n_samples, p, n_bands), dtype=np.float64)
     for band_idx, band in enumerate(bands):
         mask = _band_mask(freqs, band)
         band_width = (
@@ -138,9 +130,7 @@ def compute_psd_functionals(
         if not np.any(mask) or band_width <= 0:
             continue
         band_powers[:, :, band_idx] = np.trapezoid(
-            psd_matrix[:, np.arange(n_channels), np.arange(n_channels), :][
-                :, :, mask
-            ],
+            psd_matrix[:, np.arange(p), np.arange(p), :][:, :, mask],
             freqs[mask],
             axis=-1,
         )

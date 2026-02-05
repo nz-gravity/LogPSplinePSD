@@ -50,7 +50,7 @@ When coarse graining multivariate data, two frequency-weight-like objects exist:
   the NumPyro likelihood.
 
 By default, `run_mcmc` passes `freq_weights = Nh`. This matches the coarse-bin
-approximation where each bin has effective DOF :math:`\nu Nh`.
+approximation where each bin has effective DOF :math:`N_b Nh`.
 
 If users choose to normalise or temper `freq_weights` for sampler geometry, the
 raw `freq_bin_counts` remain available so PSD conversion does not drift.
@@ -60,7 +60,7 @@ See:
 - :class:`log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler`
 - :func:`log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft`
   (`source <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`_)
-- :func:`log_psplines.spectrum_utils.compute_effective_nu`
+- :func:`log_psplines.spectrum_utils.compute_effective_Nb`
 
 Blocked vs unified multivariate NUTS
 ------------------------------------

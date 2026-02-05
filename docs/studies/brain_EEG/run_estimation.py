@@ -165,7 +165,7 @@ def _run_multivar_pspline(selected_data, fs):
     else:
         coarse_cfg = CoarseGrainConfig(
             enabled=True,
-            n_bins=200,
+            Nc=200,
             f_min=1e-2,
         )
         idata = run_mcmc(

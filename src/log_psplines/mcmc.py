@@ -8,8 +8,8 @@ from loguru import logger
 
 from .coarse_grain import (
     CoarseGrainConfig,
+    apply_coarse_grain_multivar_fft,
     apply_coarse_graining_univar,
-    coarse_grain_multivar_fft,
     compute_binning_structure,
 )
 from .datatypes import Periodogram
@@ -169,8 +169,8 @@ def _coarse_grain_processed_data(
     if isinstance(processed_data, Periodogram):
         spec = compute_binning_structure(
             processed_data.freqs,
-            n_bins=cg_config.n_bins,
-            n_freqs_per_bin=cg_config.n_freqs_per_bin,
+            Nc=cg_config.Nc,
+            Nh=cg_config.Nh,
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,
         )
@@ -190,12 +190,7 @@ def _coarse_grain_processed_data(
         )
         freq_weights = weights.astype(np.float32)
 
-        logger.info(
-            "Coarse-grained periodogram: selected={} -> n_freq={} (n_bins_high={})",
-            int(spec.selection_mask.sum()),
-            processed_data.n,
-            int(spec.n_bins_high),
-        )
+        logger.info(f"Coarse-grained periodogram: {spec}")
 
         if scaled_true_psd is not None:
             try:
@@ -214,23 +209,18 @@ def _coarse_grain_processed_data(
     if isinstance(processed_data, MultivarFFT):
         spec = compute_binning_structure(
             processed_data.freq,
-            n_bins=cg_config.n_bins,
-            n_freqs_per_bin=cg_config.n_freqs_per_bin,
+            Nc=cg_config.Nc,
+            Nh=cg_config.Nh,
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,
         )
 
-        processed_data, weights = coarse_grain_multivar_fft(
+        processed_data, weights = apply_coarse_grain_multivar_fft(
             processed_data, spec
         )
         freq_weights = weights.astype(np.float32)
 
-        logger.info(
-            "Coarse-grained multivariate FFT: selected={} -> n_freq={} (n_bins_high={})",
-            int(spec.selection_mask.sum()),
-            processed_data.n_freq,
-            int(spec.n_bins_high),
-        )
+        logger.info(f"Coarse-grained multivariate FFT:  {spec})")
 
         return processed_data, freq_weights, scaled_true_psd
 

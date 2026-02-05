@@ -243,7 +243,7 @@ FMIN, FMAX = 10**-4, 10**-1
 
 coarse_cfg = CoarseGrainConfig(
     enabled=True,
-    n_bins=512,
+    Nc=512,
     f_min=FMIN,
     f_max=FMAX,
 )
@@ -283,7 +283,7 @@ if USE_NOISE_FLOOR:
         if coarse_cfg.enabled:
             spec = compute_binning_structure(
                 freq_fine,
-                n_bins=coarse_cfg.n_bins,
+                Nc=coarse_cfg.Nc,
                 f_min=coarse_cfg.f_min,
                 f_max=coarse_cfg.f_max,
             )
@@ -432,6 +432,7 @@ logger.info(
     f"noverlap={welch_noverlap} ({welch_noverlap * dt:.0f} s), "
     f"window={WELCH_WINDOW!r}, df={welch_df:.3g} Hz."
 )
+
 
 def _drop_dc(emp: EmpiricalPSD) -> EmpiricalPSD:
     if emp.freq.size > 0 and np.isclose(emp.freq[0], 0.0):

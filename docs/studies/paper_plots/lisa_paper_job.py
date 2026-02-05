@@ -103,7 +103,7 @@ def main() -> None:
         "--coarse-bins",
         type=int,
         default=0,
-        help="Enable coarse graining with n_bins=coarse_bins (0 disables).",
+        help="Enable coarse graining with Nc=coarse_bins (0 disables).",
     )
     parser.add_argument(
         "--coarse-n-freqs-per-bin",
@@ -162,21 +162,21 @@ def main() -> None:
         fmax = nyq
 
     coarse_cfg: CoarseGrainConfig | None = None
-    coarse_n_freqs = int(args.coarse_n_freqs_per_bin)
+    coarse_n_freqs = int(args.coarse_Nh)
     coarse_bins = int(args.coarse_bins)
     if coarse_n_freqs > 0:
         coarse_cfg = CoarseGrainConfig(
             enabled=True,
-            n_bins=None,
-            n_freqs_per_bin=coarse_n_freqs,
+            Nc=None,
+            Nh=coarse_n_freqs,
             f_min=fmin,
             f_max=fmax,
         )
     elif coarse_bins > 0:
         coarse_cfg = CoarseGrainConfig(
             enabled=True,
-            n_bins=coarse_bins,
-            n_freqs_per_bin=None,
+            Nc=coarse_bins,
+            Nh=None,
             f_min=fmin,
             f_max=fmax,
         )
@@ -188,7 +188,7 @@ def main() -> None:
 
     logger.info(
         f"Running LISA job: data={synth_path.name}, N={n_used}, dt={dt:g}, duration_days={duration_days:.2f}, "
-        f"blocks={n_blocks}, f=[{fmin:g},{fmax:g}], coarse={'n_freqs_per_bin='+str(coarse_n_freqs) if coarse_n_freqs>0 else ('n_bins='+str(coarse_bins) if coarse_bins>0 else 'off')}, outdir={outdir}"
+        f"blocks={n_blocks}, f=[{fmin:g},{fmax:g}], coarse={'Nh='+str(coarse_n_freqs) if coarse_n_freqs>0 else ('Nc='+str(coarse_bins) if coarse_bins>0 else 'off')}, outdir={outdir}"
     )
 
     ts = MultivariateTimeseries(t=t, y=y)

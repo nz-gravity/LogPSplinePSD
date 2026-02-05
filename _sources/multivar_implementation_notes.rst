@@ -44,13 +44,13 @@ Coarse graining: weights vs bin counts
 
 When coarse graining multivariate data, two frequency-weight-like objects exist:
 
-- `freq_bin_counts`: the raw member count :math:`N_h` per coarse bin, stored on
+- `freq_bin_counts`: the raw member count :math:`Nh` per coarse bin, stored on
   :class:`log_psplines.datatypes.multivar.MultivarFFT`.
 - `freq_weights`: the weights actually used to scale the log-determinant term in
   the NumPyro likelihood.
 
-By default, `run_mcmc` passes `freq_weights = N_h`. This matches the coarse-bin
-approximation where each bin has effective DOF :math:`\nu N_h`.
+By default, `run_mcmc` passes `freq_weights = Nh`. This matches the coarse-bin
+approximation where each bin has effective DOF :math:`\nu Nh`.
 
 If users choose to normalise or temper `freq_weights` for sampler geometry, the
 raw `freq_bin_counts` remain available so PSD conversion does not drift.
@@ -58,7 +58,7 @@ raw `freq_bin_counts` remain available so PSD conversion does not drift.
 See:
 
 - :class:`log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler`
-- :func:`log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft`
+- :func:`log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft`
   (`source <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`_)
 - :func:`log_psplines.spectrum_utils.compute_effective_nu`
 
@@ -109,7 +109,7 @@ tests the key coarse-graining invariant:
 
 - sum of fine-grid log-likelihood contributions within a bin should match the
   coarse-bin log-likelihood (up to bin-constant offsets),
-- there should be no “extra” factor of :math:`N_h` introduced in the quadratic
+- there should be no “extra” factor of :math:`Nh` introduced in the quadratic
   term.
 
 This is useful when changing coarse-grain logic or the frequency weighting

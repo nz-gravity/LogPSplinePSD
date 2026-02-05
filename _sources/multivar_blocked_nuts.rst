@@ -30,7 +30,7 @@ drift over time):
 
 - `Wishart FFT construction (MultivarFFT.compute_wishart) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L165-L298>`_
 - `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L104-L260>`_
-- `Coarse graining (coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`_
+- `Coarse graining (apply_coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`_
 - `PSD reconstruction (reconstruct_psd_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py#L387-L438>`_
 - `Wishart→PSD conversion (wishart_matrix_to_psd) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L157-L183>`_
 - `U→Y conversion (u_to_wishart_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L137-L145>`_
@@ -157,7 +157,7 @@ Coarse-graining compatibility
 -----------------------------
 
 Coarse graining for multivariate FFT/Wishart statistics is performed by
-:func:`log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft`.
+:func:`log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft`.
 
 Within each coarse bin :math:`J_h`, it sums
 
@@ -167,9 +167,9 @@ Within each coarse bin :math:`J_h`, it sums
 
 and recomputes :math:`\bar U_h` so that :math:`\bar Y_h = \bar U_h\bar U_h^H`.
 
-The returned `weights` vector equals the bin member counts :math:`N_h` and
+The returned `weights` vector equals the bin member counts :math:`Nh` and
 should be passed as ``freq_weights``. With this choice, each bin behaves like a
-Wishart statistic with effective degrees of freedom :math:`\nu N_h`.
+Wishart statistic with effective degrees of freedom :math:`\nu Nh`.
 
 Exact coarse-grained likelihood form (from ``overleaf``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -178,7 +178,7 @@ The coarse-grained approximation is written as (verbatim LaTeX):
 
 .. math::
 
-   \prod_{h=1}^{N_c} \left|\S(\bar{f}_h)\right|^{-N_b*N_h} \exp\left(- \tr\left[ \S(\bar{f}_h)^{-1} \bar{\Y}_h\right]\right)
+   \prod_{h=1}^{Nc} \left|\S(\bar{f}_h)\right|^{-N_b*Nh} \exp\left(- \tr\left[ \S(\bar{f}_h)^{-1} \bar{\Y}_h\right]\right)
 
 Symbol ↔ code mapping
 ---------------------
@@ -191,7 +191,7 @@ The table below lists the most important objects and where they appear.
 - :math:`U(f_k)` (eigen replicates) → ``fft_data.u_re`` + i ``fft_data.u_im``
 - :math:`\log \delta_j(f_k)^2` → deterministic nodes ``log_delta_sq_{j}``
 - :math:`\theta_{jl}(f_k)` → deterministic nodes ``theta_re_{j}``, ``theta_im_{j}``
-- coarse-bin member counts :math:`N_h` → ``fft_data.freq_bin_counts`` (stored)
+- coarse-bin member counts :math:`Nh` → ``fft_data.freq_bin_counts`` (stored)
 - likelihood weights :math:`w_k` → ``config.freq_weights`` / ``self.freq_weights``
 
 PSD reconstruction

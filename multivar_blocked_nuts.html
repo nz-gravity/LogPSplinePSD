@@ -433,7 +433,7 @@ drift over time):</p>
 <ul class="simple">
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L165-L298">Wishart FFT construction (MultivarFFT.compute_wishart)</a></p></li>
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L104-L260">Blocked NumPyro likelihood (_blocked_channel_model)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138">Coarse graining (coarse_grain_multivar_fft)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138">Coarse graining (apply_coarse_grain_multivar_fft)</a></p></li>
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py#L387-L438">PSD reconstruction (reconstruct_psd_matrix)</a></p></li>
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L157-L183">Wishart→PSD conversion (wishart_matrix_to_psd)</a></p></li>
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L137-L145">U→Y conversion (u_to_wishart_matrix)</a></p></li>
@@ -527,19 +527,19 @@ does not multiply by <span class="math notranslate nohighlight">\(w_k\)</span> a
 <section id="coarse-graining-compatibility">
 <h2>Coarse-graining compatibility<a class="headerlink" href="#coarse-graining-compatibility" title="Link to this heading">#</a></h2>
 <p>Coarse graining for multivariate FFT/Wishart statistics is performed by
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.coarse_grain_multivar_fft()</span></code>.</p>
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft()</span></code>.</p>
 <p>Within each coarse bin <span class="math notranslate nohighlight">\(J_h\)</span>, it sums</p>
 <div class="math notranslate nohighlight">
 \[\bar Y_h = \sum_{f\in J_h} Y(f)\]</div>
 <p>and recomputes <span class="math notranslate nohighlight">\(\bar U_h\)</span> so that <span class="math notranslate nohighlight">\(\bar Y_h = \bar U_h\bar U_h^H\)</span>.</p>
-<p>The returned <cite>weights</cite> vector equals the bin member counts <span class="math notranslate nohighlight">\(N_h\)</span> and
+<p>The returned <cite>weights</cite> vector equals the bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> and
 should be passed as <code class="docutils literal notranslate"><span class="pre">freq_weights</span></code>. With this choice, each bin behaves like a
-Wishart statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(\nu N_h\)</span>.</p>
+Wishart statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(\nu Nh\)</span>.</p>
 <section id="exact-coarse-grained-likelihood-form-from-overleaf">
 <h3>Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-coarse-grained-likelihood-form-from-overleaf" title="Link to this heading">#</a></h3>
 <p>The coarse-grained approximation is written as (verbatim LaTeX):</p>
 <div class="math notranslate nohighlight">
-\[\prod_{h=1}^{N_c} \left|\S(\bar{f}_h)\right|^{-N_b*N_h} \exp\left(- \tr\left[ \S(\bar{f}_h)^{-1} \bar{\Y}_h\right]\right)\]</div>
+\[\prod_{h=1}^{Nc} \left|\S(\bar{f}_h)\right|^{-N_b*Nh} \exp\left(- \tr\left[ \S(\bar{f}_h)^{-1} \bar{\Y}_h\right]\right)\]</div>
 </section>
 </section>
 <section id="symbol-code-mapping">
@@ -552,7 +552,7 @@ Wishart statistic with effective degrees of freedom <span class="math notranslat
 <li><p><span class="math notranslate nohighlight">\(U(f_k)\)</span> (eigen replicates) → <code class="docutils literal notranslate"><span class="pre">fft_data.u_re</span></code> + i <code class="docutils literal notranslate"><span class="pre">fft_data.u_im</span></code></p></li>
 <li><p><span class="math notranslate nohighlight">\(\log \delta_j(f_k)^2\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">log_delta_sq_{j}</span></code></p></li>
 <li><p><span class="math notranslate nohighlight">\(\theta_{jl}(f_k)\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">theta_re_{j}</span></code>, <code class="docutils literal notranslate"><span class="pre">theta_im_{j}</span></code></p></li>
-<li><p>coarse-bin member counts <span class="math notranslate nohighlight">\(N_h\)</span> → <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code> (stored)</p></li>
+<li><p>coarse-bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> → <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code> (stored)</p></li>
 <li><p>likelihood weights <span class="math notranslate nohighlight">\(w_k\)</span> → <code class="docutils literal notranslate"><span class="pre">config.freq_weights</span></code> / <code class="docutils literal notranslate"><span class="pre">self.freq_weights</span></code></p></li>
 </ul>
 </section>

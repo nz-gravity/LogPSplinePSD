@@ -38,10 +38,10 @@ def test_multivar_mcmc(outdir, test_mode):
     # Generate test data
     np.random.seed(42)
     varma = VARMAData(n_samples=n)
-    p = varma.dim
+    p = varma.p
     varma.plot(fname=os.path.join(outdir, "varma_data.png"))
 
-    print(f"VARMA data shape: {varma.data.shape}, dim={p}")
+    print(f"VARMA data shape: {varma.data.shape}, p={p}")
 
     timeseries = MultivariateTimeseries(
         t=varma.time,

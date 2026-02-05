@@ -111,10 +111,7 @@ def test_varma_data(outdir):
     # True PSD should integrate to the channel variances (within sampling noise)
     psd = varma_data.get_true_psd()
     psd_vars = np.array(
-        [
-            np.trapezoid(psd[:, i, i].real, freq_hz)
-            for i in range(varma_data.dim)
-        ]
+        [np.trapezoid(psd[:, i, i].real, freq_hz) for i in range(varma_data.p)]
     )
     empirical_vars = np.var(varma_data.data, axis=0)
     np.testing.assert_allclose(psd_vars, empirical_vars, rtol=0.1)

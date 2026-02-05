@@ -132,8 +132,9 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
     pdgrm_full = ar.periodogram
 
     # Coarse-graining specification
+    n_freqs = pdgrm_full.freqs.size
     freqs = pdgrm_full.freqs
-    Nc = 12 if test_mode != "fast" else 6
+    Nc = n_freqs // 2 if test_mode != "fast" else n_freqs // 4
     spec: CoarseGrainSpec = compute_binning_structure(
         freqs,
         Nc=Nc,
@@ -215,10 +216,12 @@ def test_plot_multivariate_fitted_data_blocks(
         x, fs=varma.fs, n_blocks=n_time_blocks
     )
 
+    n_freqs = fft_full.freq.size
+    Nc = n_freqs // 2 if test_mode != "fast" else n_freqs // 4
     # Coarse-grain along frequency for what the likelihood actually fits
     spec = compute_binning_structure(
         fft_full.freq,
-        Nc=10 if test_mode != "fast" else 6,
+        Nc=Nc,
         f_min=None,
         f_max=None,
     )
@@ -343,3 +346,7 @@ def test_plot_multivariate_fitted_data_blocks(
     for fname in expected_files:
         path = os.path.join(outdir, fname)
         assert os.path.exists(path) and os.path.getsize(path) > 0
+
+    print(
+        f"Tested plotting fitted data blocks with seed={seed} and test_mode={test_mode}."
+    )

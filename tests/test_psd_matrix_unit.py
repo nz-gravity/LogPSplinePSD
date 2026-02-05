@@ -17,12 +17,12 @@ OUTDIR = "out_PSD_matrix"
 
 
 def _make_simple_ci_dict(
-    n_channels: int = 3, n_freq: int = 1000, show_coherence: bool = True
+    p: int = 3, N: int = 1000, show_coherence: bool = True
 ):
-    freq = np.linspace(0.1, 1.0, n_freq)
-    psd_samples = np.ones((2, n_freq, n_channels, n_channels), dtype=float)
-    for i in range(n_channels):
-        for j in range(n_channels):
+    freq = np.linspace(0.1, 1.0, N)
+    psd_samples = np.ones((2, N, p, p), dtype=float)
+    for i in range(p):
+        for j in range(p):
             scale = 1.0 + 0.1 * (i + j)
             psd_samples[:, :, i, j] *= scale
     ci_dict = _pack_ci_dict(
@@ -112,10 +112,10 @@ def test_plot_psd_matrix_scales_and_limits(outdir):
 
 
 def test_plot_psd_matrix_extra_empirical_zorder():
-    freq, ci_dict = _make_simple_ci_dict(n_channels=2, n_freq=20)
-    n_freq = freq.size
-    psd_emp = np.ones((n_freq, 2, 2), dtype=np.complex128)
-    psd_welch = 2.0 * np.ones((n_freq, 2, 2), dtype=np.complex128)
+    freq, ci_dict = _make_simple_ci_dict(p=2, N=20)
+    N = freq.size
+    psd_emp = np.ones((N, 2, 2), dtype=np.complex128)
+    psd_welch = 2.0 * np.ones((N, 2, 2), dtype=np.complex128)
 
     empirical = EmpiricalPSD(
         freq=freq,

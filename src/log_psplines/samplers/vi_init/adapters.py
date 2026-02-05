@@ -185,7 +185,7 @@ def compute_vi_artifacts_multivar(
         coherence_quantiles = None
         try:
             log_delta_terms: List[jnp.ndarray] = []
-            for channel_index in range(sampler.n_channels):
+            for channel_index in range(sampler.p):
                 weights_name = f"weights_delta_{channel_index}"
                 weights = vi_result.means.get(weights_name)
                 if weights is None:
@@ -196,7 +196,7 @@ def compute_vi_artifacts_multivar(
             log_delta_sq = jnp.stack(log_delta_terms, axis=1)
 
             if sampler.n_theta > 0:
-                basis_theta = sampler.all_bases[sampler.n_channels]
+                basis_theta = sampler.all_bases[sampler.p]
                 weights_theta_re = vi_result.means.get("weights_theta_re")
                 weights_theta_im = vi_result.means.get("weights_theta_im")
                 if weights_theta_re is None or weights_theta_im is None:
@@ -214,8 +214,8 @@ def compute_vi_artifacts_multivar(
                     theta_im_base[:, None], (1, max(1, sampler.n_theta))
                 )
             else:
-                theta_re = jnp.zeros((sampler.n_freq, 0))
-                theta_im = jnp.zeros((sampler.n_freq, 0))
+                theta_re = jnp.zeros((sampler.N, 0))
+                theta_im = jnp.zeros((sampler.N, 0))
 
             vi_psd = sampler.spline_model.reconstruct_psd_matrix(
                 log_delta_sq[None, ...],
@@ -229,7 +229,7 @@ def compute_vi_artifacts_multivar(
             if samples_tree:
                 log_delta_draws = []
                 n_draws = None
-                for channel_index in range(sampler.n_channels):
+                for channel_index in range(sampler.p):
                     weights_name = f"weights_delta_{channel_index}"
                     weights_samples = samples_tree.get(weights_name)
                     if weights_samples is None:
@@ -247,7 +247,7 @@ def compute_vi_artifacts_multivar(
                 if log_delta_draws:
                     log_delta_samples = jnp.stack(log_delta_draws, axis=2)
                     if sampler.n_theta > 0:
-                        basis_theta = sampler.all_bases[sampler.n_channels]
+                        basis_theta = sampler.all_bases[sampler.p]
                         weights_theta_re_samples = samples_tree.get(
                             "weights_theta_re"
                         )
@@ -292,14 +292,14 @@ def compute_vi_artifacts_multivar(
                             theta_re_samples = jnp.zeros(
                                 (
                                     log_delta_samples.shape[0],
-                                    sampler.n_freq,
+                                    sampler.N,
                                     sampler.n_theta,
                                 )
                             )
                             theta_im_samples = jnp.zeros_like(theta_re_samples)
                     else:
                         theta_re_samples = jnp.zeros(
-                            (log_delta_samples.shape[0], sampler.n_freq, 0)
+                            (log_delta_samples.shape[0], sampler.N, 0)
                         )
                         theta_im_samples = jnp.zeros_like(theta_re_samples)
 
@@ -325,7 +325,7 @@ def compute_vi_artifacts_multivar(
                             theta_im_samples,
                             percentiles=[5.0, 50.0, 95.0],
                             n_samples_max=n_psd_draws,
-                            compute_coherence=sampler.n_channels > 1,
+                            compute_coherence=sampler.p > 1,
                         )
                     )
                     psd_real_q = _rescale_psd(psd_real_q)
@@ -461,11 +461,11 @@ def prepare_block_vi(
     draws = int(getattr(sampler.config, "vi_posterior_draws", 0) or 0)
     logger.info(
         "Running VI initialisation per block "
-        f"(n_channels={sampler.n_channels}, guide={guide_cfg}, steps={steps}, posterior_draws={draws})..."
+        f"(p={sampler.p}, guide={guide_cfg}, steps={steps}, posterior_draws={draws})..."
     )
-    n_channels = sampler.n_channels
-    init_strategies: List[Optional[Callable[[Any], Any]]] = [None] * n_channels
-    mcmc_keys: List[jax.Array] = [jax.random.PRNGKey(0)] * n_channels
+    p = sampler.p
+    init_strategies: List[Optional[Callable[[Any], Any]]] = [None] * p
+    mcmc_keys: List[jax.Array] = [jax.random.PRNGKey(0)] * p
 
     scaling = float(
         getattr(sampler.fft_data, "scaling_factor", None)
@@ -508,19 +508,19 @@ def prepare_block_vi(
     draws_recorded = 0
     if store_draws:
         log_delta_draws = np.zeros(
-            (posterior_draws, sampler.n_freq, sampler.n_channels),
+            (posterior_draws, sampler.N, sampler.p),
             dtype=np.float32,
         )
         if sampler.n_theta > 0:
             theta_re_draws = np.zeros(
-                (posterior_draws, sampler.n_freq, sampler.n_theta),
+                (posterior_draws, sampler.N, sampler.n_theta),
                 dtype=np.float32,
             )
             theta_im_draws = np.zeros_like(theta_re_draws)
 
     current_key = rng_key
 
-    for channel_index in range(n_channels):
+    for channel_index in range(p):
         current_key, block_key = jax.random.split(current_key)
 
         if sampler.config.init_from_vi:
@@ -663,7 +663,7 @@ def prepare_block_vi(
                 sampler.freq_weights,
                 sampler.freq_bin_counts,
                 False,
-                jnp.zeros((sampler.n_freq,), dtype=sampler.freq.dtype),
+                jnp.zeros((sampler.N,), dtype=sampler.freq.dtype),
             )
             if hasattr(sampler, "_get_noise_floor_args"):
                 apply_noise_floor, noise_floor_sq = (
@@ -753,10 +753,10 @@ def prepare_block_vi(
             if sampler.n_theta > 0 and theta_count > 0:
                 if vi_theta_re_mean is None:
                     vi_theta_re_mean = np.zeros(
-                        (sampler.n_freq, sampler.n_theta), dtype=np.float32
+                        (sampler.N, sampler.n_theta), dtype=np.float32
                     )
                     vi_theta_im_mean = np.zeros(
-                        (sampler.n_freq, sampler.n_theta), dtype=np.float32
+                        (sampler.N, sampler.n_theta), dtype=np.float32
                     )
 
                 theta_re_components: List[np.ndarray] = []
@@ -790,8 +790,8 @@ def prepare_block_vi(
                     theta_re_block = np.stack(theta_re_components, axis=1)
                     theta_im_block = np.stack(theta_im_components, axis=1)
                 else:
-                    theta_re_block = np.zeros((sampler.n_freq, theta_count))
-                    theta_im_block = np.zeros((sampler.n_freq, theta_count))
+                    theta_re_block = np.zeros((sampler.N, theta_count))
+                    theta_im_block = np.zeros((sampler.N, theta_count))
 
                 theta_slice = slice(theta_start, theta_start + theta_count)
                 vi_theta_re_mean[:, theta_slice] = theta_re_block
@@ -891,7 +891,7 @@ def prepare_block_vi(
     diagnostics = None
 
     if sampler.config.init_from_vi and vi_log_delta_means:
-        if len(vi_log_delta_means) == n_channels:
+        if len(vi_log_delta_means) == p:
             log_delta_vi_np = np.stack(vi_log_delta_means, axis=1)
         else:
             log_delta_vi_np = None
@@ -905,12 +905,8 @@ def prepare_block_vi(
                 theta_re_vi_np = vi_theta_re_mean
                 theta_im_vi_np = vi_theta_im_mean
             else:
-                theta_re_vi_np = np.zeros(
-                    (sampler.n_freq, 0), dtype=np.float32
-                )
-                theta_im_vi_np = np.zeros(
-                    (sampler.n_freq, 0), dtype=np.float32
-                )
+                theta_re_vi_np = np.zeros((sampler.N, 0), dtype=np.float32)
+                theta_im_vi_np = np.zeros((sampler.N, 0), dtype=np.float32)
 
             vi_psd = sampler.spline_model.reconstruct_psd_matrix(
                 jnp.asarray(log_delta_vi_np)[None, ...],
@@ -950,7 +946,7 @@ def prepare_block_vi(
                     )
                 else:
                     theta_re_samples = jnp.zeros(
-                        (draws_used, sampler.n_freq, 0), dtype=jnp.float32
+                        (draws_used, sampler.N, 0), dtype=jnp.float32
                     )
                     theta_im_samples = jnp.zeros_like(theta_re_samples)
 
@@ -962,7 +958,7 @@ def prepare_block_vi(
                         theta_im_samples,
                         percentiles=[5.0, 50.0, 95.0],
                         n_samples_max=draws_used,
-                        compute_coherence=sampler.n_channels > 1,
+                        compute_coherence=sampler.p > 1,
                     )
                 )
                 psd_real_q = _rescale_psd(psd_real_q)

@@ -203,36 +203,36 @@ if MAX_DAYS > 0.0 or MAX_MONTHS > 0.0:
 
 fmin_full = 1.0 / (len(t_full) * dt)
 
-n_time = y_full.shape[0]
+n = y_full.shape[0]
 n_duration = t_full[-1] - t_full[0]
 n_duration_days = n_duration / 86_400.0
 
 # Choose block structure. Prefer NPZ metadata when available to avoid crossing
 # chunk boundaries in synthetic generators.
 if N_TIME_BLOCKS_OVERRIDE is not None:
-    n_blocks = int(N_TIME_BLOCKS_OVERRIDE)
+    Nb = int(N_TIME_BLOCKS_OVERRIDE)
 elif block_len_samples is not None:
-    n_blocks = max(1, int(n_time // block_len_samples))
+    Nb = max(1, int(n // block_len_samples))
 else:
-    n_blocks = infer_time_blocks(n_time, max_blocks=MAX_TIME_BLOCKS)
+    Nb = infer_time_blocks(n, max_blocks=MAX_TIME_BLOCKS)
 
-block_len_samples = n_time // n_blocks
+block_len_samples = n // Nb
 block_seconds = block_len_samples * dt
-n_used = n_blocks * block_len_samples
-if n_used != n_time:
-    n_trim = n_time - n_used
+n_used = Nb * block_len_samples
+if n_used != n:
+    n_trim = n - n_used
     logger.info(
-        f"Trimming {n_trim} samples to fit {n_blocks} blocks of {block_len_samples} samples ({block_seconds:.0f} s each).",
+        f"Trimming {n_trim} samples to fit {Nb} blocks of {block_len_samples} samples ({block_seconds:.0f} s each).",
     )
     t_full = t_full[:n_used]
     y_full = y_full[:n_used]
 
 n = y_full.shape[0]
 logger.info(
-    f"Using n_blocks={n_blocks} x {block_len_samples} (n_time={n}, block_seconds={block_seconds:.0f}).",
+    f"Using Nb={Nb} x {block_len_samples} (n={n}, block_seconds={block_seconds:.0f}).",
 )
 logger.info(
-    f"Total duration: {n_duration_days:.2f} days ({n_time} samples).",
+    f"Total duration: {n_duration_days:.2f} days ({n} samples).",
 )
 logger.info(
     f"Per-block duration: {block_seconds / 86_400.0:.2f} days ({block_len_samples} samples).",
@@ -375,7 +375,7 @@ else:
         outdir=str(RESULTS_DIR),
         verbose=True,
         coarse_grain_config=coarse_cfg,
-        n_time_blocks=n_blocks,
+        n_time_blocks=Nb,
         fmin=FMIN,
         fmax=FMAX,
         alpha_delta=ALPHA_DELTA,
@@ -464,27 +464,27 @@ def _blocked_welch(
     data: np.ndarray,
     *,
     fs: float,
-    block_len: int,
+    Lb: int,
     nperseg: int,
     noverlap: int,
     window: str,
     detrend: str | bool,
 ) -> EmpiricalPSD:
-    n_time, n_channels = data.shape
-    if block_len <= 1:
-        raise ValueError("block_len must be > 1 for blocked Welch.")
-    n_blocks = n_time // block_len
-    if n_blocks < 1:
+    n, p = data.shape
+    if Lb <= 1:
+        raise ValueError("Lb must be > 1 for blocked Welch.")
+    Nb = n // Lb
+    if Nb < 1:
         raise ValueError("Not enough samples for even one Welch block.")
-    n_used = n_blocks * block_len
-    if n_used != n_time:
+    n_used = Nb * Lb
+    if n_used != n:
         data = data[:n_used]
 
     psd_sum = None
     freq_ref = None
-    for idx in range(n_blocks):
-        seg = data[idx * block_len : (idx + 1) * block_len]
-        seg_nperseg = min(nperseg, block_len)
+    for idx in range(Nb):
+        seg = data[idx * Lb : (idx + 1) * Lb]
+        seg_nperseg = min(nperseg, Lb)
         seg_noverlap = min(noverlap, seg_nperseg - 1)
         emp = EmpiricalPSD.from_timeseries_data(
             data=seg,
@@ -503,14 +503,14 @@ def _blocked_welch(
             raise ValueError("Blocked Welch produced inconsistent freq grids.")
         psd_sum += emp.psd
 
-    psd_avg = psd_sum / float(n_blocks)
+    psd_avg = psd_sum / float(Nb)
     coh = np.abs(psd_avg) ** 2
     # coherence_ij = |Sij|^2 / (|Sii| |Sjj|)
     diag = np.abs(np.diagonal(psd_avg, axis1=1, axis2=2))
     denom = diag[:, :, None] * diag[:, None, :]
     with np.errstate(divide="ignore", invalid="ignore"):
         coherence = np.where(denom > 0, coh.real / denom, np.nan)
-    for ch in range(n_channels):
+    for ch in range(p):
         coherence[:, ch, ch] = 1.0
 
     return EmpiricalPSD(freq=freq_ref, psd=psd_avg, coherence=coherence)
@@ -522,12 +522,12 @@ def _blocked_welch(
 # leakage from crossing those boundaries.
 if WELCH_BLOCK_AVG and block_len_samples is not None:
     logger.info(
-        f"Welch block-averaging enabled: {n_blocks} block(s) of {block_len_samples} samples."
+        f"Welch block-averaging enabled: {Nb} block(s) of {block_len_samples} samples."
     )
     empirical_welch = _blocked_welch(
         y_full,
         fs=fs,
-        block_len=block_len_samples,
+        Lb=block_len_samples,
         nperseg=welch_nperseg,
         noverlap=welch_noverlap,
         window=WELCH_WINDOW,

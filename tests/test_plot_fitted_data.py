@@ -38,17 +38,17 @@ def _plot_block_likelihood_components(
     """Visualize the u_j blocks and least-squares theta fits for a given FFT grid."""
     import matplotlib.pyplot as plt
 
-    n_freq, n_channels, n_reps = u_complex.shape
-    for j in range(n_channels):
+    N, p, n_reps = u_complex.shape
+    for j in range(p):
         u_j = u_complex[:, j, :]  # (freq, rep)
         delta_raw = np.sqrt(np.mean(np.abs(u_j) ** 2, axis=-1))
         theta_hat = None
         delta_resid = None
 
         if j > 0:
-            theta_hat = np.zeros((n_freq, j), dtype=np.complex128)
-            delta_resid = np.zeros(n_freq, dtype=np.float64)
-            for k in range(n_freq):
+            theta_hat = np.zeros((N, j), dtype=np.complex128)
+            delta_resid = np.zeros(N, dtype=np.float64)
+            for k in range(N):
                 design = np.transpose(u_complex[k, :j, :])  # (rep, j)
                 target = u_j[k]
                 if not np.any(design):
@@ -132,9 +132,9 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
     pdgrm_full = ar.periodogram
 
     # Coarse-graining specification
-    n_freqs = pdgrm_full.freqs.size
+    N = pdgrm_full.freqs.size
     freqs = pdgrm_full.freqs
-    Nc = n_freqs // 2 if test_mode != "fast" else n_freqs // 4
+    Nc = N // 2 if test_mode != "fast" else N // 4
     spec: CoarseGrainSpec = compute_binning_structure(
         freqs,
         Nc=Nc,
@@ -211,13 +211,13 @@ def test_plot_multivariate_fitted_data_blocks(
 
     # Build block-averaged (Wishart) FFT statistics with a few time blocks
     n_time_blocks = 2 if test_mode != "fast" else 1
-    x = varma.data  # (n_time, n_channels)
+    x = varma.data  # (n, p)
     fft_full: MultivarFFT = MultivarFFT.compute_wishart(
-        x, fs=varma.fs, n_blocks=n_time_blocks
+        x, fs=varma.fs, Nb=n_time_blocks
     )
 
-    n_freqs = fft_full.freq.size
-    Nc = n_freqs // 2 if test_mode != "fast" else n_freqs // 4
+    N = fft_full.freq.size
+    Nc = N // 2 if test_mode != "fast" else N // 4
     # Coarse-grain along frequency for what the likelihood actually fits
     spec = compute_binning_structure(
         fft_full.freq,
@@ -227,8 +227,8 @@ def test_plot_multivariate_fitted_data_blocks(
     )
     # Returns a MultivarFFT on coarse grid and the frequency weights
     # fft_coarse.raw_psd holds the aggregated PSD matrix we fit
-    # (n_freq_coarse, n_dim, n_dim)
-    # fft_coarse, weights = apply_coarse_grain_multivar_fft(fft_full, spec)
+    # (n_freq_coarse, p, p)
+    fft_coarse, weights = apply_coarse_grain_multivar_fft(fft_full, spec)
 
     # Prepare empirical PSD wrapper for plotting overlays (coarse grid)
     psd_matrix = np.asarray(fft_coarse.raw_psd)
@@ -340,7 +340,7 @@ def test_plot_multivariate_fitted_data_blocks(
                     "blocked_components",
                     f"{tag}_blocked_components_channel_{idx + 1}.png",
                 )
-                for idx in range(fft_coarse.n_dim)
+                for idx in range(fft_coarse.p)
             ]
         )
     for fname in expected_files:

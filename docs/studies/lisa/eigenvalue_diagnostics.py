@@ -74,8 +74,8 @@ def _interp_complex_matrix(
 def _ordered_eigvals_hermitian(matrix: np.ndarray) -> np.ndarray:
     """Return eigenvalues ordered descending for each frequency bin.
 
-    matrix: (n_freq, n_dim, n_dim), assumed (approximately) Hermitian.
-    returns: (n_freq, n_dim) with λ1≥…≥λd.
+    matrix: (N, p, p), assumed (approximately) Hermitian.
+    returns: (N, p) with λ1≥…≥λd.
     """
     matrix = np.asarray(matrix)
     # Numeric guard: enforce Hermitian symmetry in case of tiny imag asymmetry.
@@ -105,11 +105,11 @@ def _eig_ratios(
     eigvals_desc: np.ndarray, *, eps: float | None = None
 ) -> dict[str, np.ndarray]:
     eigvals_desc = np.asarray(eigvals_desc, dtype=float)
-    n_dim = eigvals_desc.shape[1]
+    p = eigvals_desc.shape[1]
     ratios: dict[str, np.ndarray] = {}
     if eps is None:
         eps = float(np.finfo(np.float64).tiny)
-    for i in range(n_dim - 1):
+    for i in range(p - 1):
         num = eigvals_desc[:, i + 1]
         den = eigvals_desc[:, i]
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -248,7 +248,7 @@ def main() -> None:
             )
             print(f"  {key}: {joined}")
 
-    n_dim = eig_emp.shape[1]
+    p = eig_emp.shape[1]
     if ratios_true is None:
         fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
         axes = np.asarray(axes)
@@ -273,7 +273,7 @@ def main() -> None:
 
         # Raw eigenvalues (context)
         ax = axes[1]
-        for idx in range(n_dim):
+        for idx in range(p):
             ax.loglog(freq, eig_emp[:, idx], label=f"Empirical λ{idx+1}")
         ax.set_xlabel("Frequency [Hz]")
         ax.set_ylabel("Eigenvalue scale (arb.)")
@@ -321,7 +321,7 @@ def main() -> None:
 
         # Raw eigenvalues (context)
         ax = axes[2]
-        for idx in range(n_dim):
+        for idx in range(p):
             ax.loglog(freq, eig_emp[:, idx], label=f"Empirical λ{idx+1}")
         ax.set_xlabel("Frequency [Hz]")
         ax.set_ylabel("Eigenvalue scale (arb.)")

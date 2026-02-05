@@ -70,18 +70,18 @@ def compute_noise_floor_sq(
     The constant value is interpreted as a variance-space floor (already
     squared).
     """
-    n_freq = freqs.shape[0]
+    N = freqs.shape[0]
     if mode == "constant":
-        floor_sq = jnp.full((n_freq,), float(constant), dtype=freqs.dtype)
+        floor_sq = jnp.full((N,), float(constant), dtype=freqs.dtype)
     elif mode == "theory_scaled":
         if theory_psd is None:
             raise ValueError(
                 "theory_psd is required when noise_floor_mode='theory_scaled'."
             )
         theory_psd = jnp.asarray(theory_psd, dtype=freqs.dtype)
-        if theory_psd.shape[0] != n_freq:
+        if theory_psd.shape[0] != N:
             raise ValueError(
-                f"theory_psd for block {block_j} has shape {theory_psd.shape}, expected ({n_freq},)."
+                f"theory_psd for block {block_j} has shape {theory_psd.shape}, expected ({N},)."
             )
         floor_sq = jnp.asarray(scale, dtype=freqs.dtype) * theory_psd
     elif mode == "array":
@@ -90,9 +90,9 @@ def compute_noise_floor_sq(
                 "noise_floor_array is required when noise_floor_mode='array'."
             )
         floor_sq = jnp.asarray(array, dtype=freqs.dtype)
-        if floor_sq.shape[0] != n_freq:
+        if floor_sq.shape[0] != N:
             raise ValueError(
-                f"noise_floor_array for block {block_j} has shape {floor_sq.shape}, expected ({n_freq},)."
+                f"noise_floor_array for block {block_j} has shape {floor_sq.shape}, expected ({N},)."
             )
     else:
         raise ValueError(
@@ -132,10 +132,10 @@ def _blocked_channel_model(
         0‑based row index ``j`` in the Cholesky factor (channel in the data).
     u_re_channel, u_im_channel
         Real/imag parts of the eigenvector-weighted periodogram components for
-        the active channel, shape ``(n_freq, n_rep)``.
+        the active channel, shape ``(N, n_rep)``.
     u_re_prev, u_im_prev
         Same components for the lower-triangular predecessors,
-        shape ``(n_freq, channel_index, n_rep)``. The arrays can have zero size
+        shape ``(N, channel_index, n_rep)``. The arrays can have zero size
         in the second dimension when ``channel_index == 0``.
     basis_delta, penalty_delta
         P‑spline basis/penalty for ``log δ_j(f)^2``.
@@ -179,7 +179,7 @@ def _blocked_channel_model(
     # Keep the range fairly tight to avoid exploding gradients during VI.
     log_delta_sq_safe = jnp.clip(log_delta_sq, a_min=-80.0, a_max=80.0)
 
-    n_freq = u_re_channel.shape[0]
+    N = u_re_channel.shape[0]
     n_theta_block = channel_index
     n_reps = u_re_channel.shape[1]
 
@@ -224,8 +224,8 @@ def _blocked_channel_model(
         theta_re = jnp.stack(theta_re_components, axis=1)
         theta_im = jnp.stack(theta_im_components, axis=1)
     else:
-        theta_re = jnp.zeros((n_freq, 0))
-        theta_im = jnp.zeros((n_freq, 0))
+        theta_re = jnp.zeros((N, 0))
+        theta_im = jnp.zeros((N, 0))
 
     delta_sq = jnp.exp(log_delta_sq_safe)
     if apply_noise_floor:
@@ -349,11 +349,11 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         self.config: MultivarBlockedNUTSConfig = config
         self._vi_diagnostics: Optional[Dict[str, Any]] = None
 
-        theta_basis_idx = self.n_channels
+        theta_basis_idx = self.p
         self._theta_basis = (
             self.all_bases[theta_basis_idx]
             if self.n_theta > 0
-            else jnp.zeros((self.n_freq, 0), dtype=jnp.float32)
+            else jnp.zeros((self.N, 0), dtype=jnp.float32)
         )
         self._theta_penalty = (
             self.all_penalties[theta_basis_idx]
@@ -377,11 +377,11 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             return default_value
         if not isinstance(values, (list, tuple)):
             raise TypeError(
-                f"{name} must be a sequence of length {self.n_channels}, got {type(values).__name__}."
+                f"{name} must be a sequence of length {self.p}, got {type(values).__name__}."
             )
-        if len(values) != self.n_channels:
+        if len(values) != self.p:
             raise ValueError(
-                f"{name} must have length {self.n_channels}, got {len(values)}."
+                f"{name} must have length {self.p}, got {len(values)}."
             )
         return values[channel_index]
 
@@ -412,7 +412,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.config.theory_psd,
             )
         else:
-            noise_floor_sq = jnp.zeros((self.n_freq,), dtype=self.freq.dtype)
+            noise_floor_sq = jnp.zeros((self.N,), dtype=self.freq.dtype)
         return apply_noise_floor, noise_floor_sq
 
     def sample(
@@ -437,7 +437,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         4. Sum the block log-likelihoods to obtain the joint log-likelihood.
         """
         logger.info(
-            f"Blocked multivariate NUTS sampler [{self.device}] - {self.n_channels} channels"
+            f"Blocked multivariate NUTS sampler [{self.device}] - {self.p} channels"
         )
 
         combined_samples: Dict[str, np.ndarray] = {}
@@ -484,7 +484,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                     f"VI block init completed -> guide={guide}, final ELBO {float(losses[-1]):.3f}"
                 )
 
-        for channel_index in range(self.n_channels):
+        for channel_index in range(self.p):
             delta_basis = self.all_bases[channel_index]
             delta_penalty = self.all_penalties[channel_index]
 
@@ -619,7 +619,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 if theta_re_total is None:
                     n_chains, n_draws = theta_re_block.shape[:2]
                     theta_re_total = jnp.zeros(
-                        (n_chains, n_draws, self.n_freq, self.n_theta)
+                        (n_chains, n_draws, self.N, self.n_theta)
                     )
                     theta_im_total = jnp.zeros_like(theta_re_total)
 
@@ -649,7 +649,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         if theta_re_total is None:
             theta_re_total = jnp.zeros(
-                (log_delta_sq.shape[0], log_delta_sq.shape[1], self.n_freq, 0)
+                (log_delta_sq.shape[0], log_delta_sq.shape[1], self.N, 0)
             )
             theta_im_total = jnp.zeros_like(theta_re_total)
 

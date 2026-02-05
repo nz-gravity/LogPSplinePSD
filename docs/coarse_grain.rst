@@ -58,7 +58,7 @@ a Wishart observation with \(N_b Nh\) degrees of freedom:
 .. math::
 
     \log \mathcal{L} \propto - \sum_{h=1}^{Nc} N_b Nh \log |\S(\bar f_h)|
-    - \sum_\nu \u^{(h)*}_\nu \S(\bar f_h)^{-1} \u^{(h)}_\nu.
+    - \sum_N_b \u^{(h)*}_N_b \S(\bar f_h)^{-1} \u^{(h)}_N_b.
 
 When coarse graining is enabled, :class:`log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler`
 accepts the `weights` vector (usually via :class:`log_psplines.coarse_grain.config.CoarseGrainConfig`)

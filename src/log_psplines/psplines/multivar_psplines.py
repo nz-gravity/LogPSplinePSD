@@ -29,9 +29,9 @@ class MultivariateLogPSplines:
         Polynomial degree of B-spline basis functions
     diffMatrixOrder : int
         Order of finite difference penalty matrix
-    n_freq : int
+    N : int
         Number of frequency bins
-    n_channels : int
+    p : int
         Number of channels in multivariate data
     diagonal_models : List[LogPSplines]
         P-spline models for diagonal PSD components (one per channel)
@@ -43,8 +43,8 @@ class MultivariateLogPSplines:
 
     degree: int
     diffMatrixOrder: int
-    n_freq: int
-    n_channels: int
+    N: int
+    p: int
 
     # P-spline components for each Cholesky parameter
     diagonal_models: List[LogPSplines]  # One per channel
@@ -55,17 +55,17 @@ class MultivariateLogPSplines:
 
     def __post_init__(self):
         """Validate multivariate model parameters."""
-        if len(self.diagonal_models) != self.n_channels:
+        if len(self.diagonal_models) != self.p:
             raise ValueError(
                 f"Number of diagonal models ({len(self.diagonal_models)}) "
-                f"must match number of channels ({self.n_channels})"
+                f"must match number of channels ({self.p})"
             )
 
-        # For multivariate case (n_channels > 1), we need off-diagonal models
-        if self.n_channels > 1:
+        # For multivariate case (p > 1), we need off-diagonal models
+        if self.p > 1:
             if self.offdiag_re_model is None or self.offdiag_im_model is None:
                 raise ValueError(
-                    "Off-diagonal models required for multivariate case (n_channels > 1)"
+                    "Off-diagonal models required for multivariate case (p > 1)"
                 )
 
     @classmethod
@@ -98,8 +98,8 @@ class MultivariateLogPSplines:
         MultivariateLogPSplines
             Fully initialized multivariate model
         """
-        n_freq = fft_data.n_freq
-        n_channels = fft_data.n_dim
+        N = fft_data.N
+        p = fft_data.p
 
         # Create frequency grid for knot placement (normalized to [0,1])
         freq = np.asarray(fft_data.freq, dtype=np.float64)
@@ -122,7 +122,7 @@ class MultivariateLogPSplines:
         if knot_method == "linear":
             knots = np.linspace(0, 1, n_knots)
         elif knot_method == "log":
-            if n_freq < 2:
+            if N < 2:
                 knots = np.linspace(0, 1, n_knots)
             else:
                 knots_raw = np.geomspace(
@@ -136,7 +136,7 @@ class MultivariateLogPSplines:
 
         # Create basis and penalty matrices (same for all components)
         basis, penalty = init_basis_and_penalty(
-            knots, degree, n_freq, diffMatrixOrder, grid_points=freq_norm
+            knots, degree, N, diffMatrixOrder, grid_points=freq_norm
         )
 
         use_wishart = fft_data.u_re is not None and fft_data.u_im is not None
@@ -152,7 +152,7 @@ class MultivariateLogPSplines:
 
         # Create diagonal models (one per channel)
         diagonal_models = []
-        for i in range(n_channels):
+        for i in range(p):
             if use_wishart:
                 empirical_diag_power = jnp.real(Y[:, i, i]) / Nb
             else:
@@ -167,12 +167,12 @@ class MultivariateLogPSplines:
             dummy_model = LogPSplines(
                 degree=degree,
                 diffMatrixOrder=diffMatrixOrder,
-                n=n_freq,
+                n=N,
                 basis=basis,
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=jnp.zeros(basis.shape[1]),
-                parametric_model=jnp.ones(n_freq),
+                parametric_model=jnp.ones(N),
             )
 
             # Initialize weights for this diagonal component
@@ -183,13 +183,13 @@ class MultivariateLogPSplines:
             diagonal_model = LogPSplines(
                 degree=degree,
                 diffMatrixOrder=diffMatrixOrder,
-                n=n_freq,
+                n=N,
                 basis=basis,
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=initial_weights,
                 parametric_model=jnp.ones(
-                    n_freq
+                    N
                 ),  # No parametric component for now
             )
             diagonal_models.append(diagonal_model)
@@ -198,14 +198,12 @@ class MultivariateLogPSplines:
         offdiag_re_model = None
         offdiag_im_model = None
 
-        if n_channels > 1:
+        if p > 1:
             # Simple empirical cross-spectra initialization for sanity checking
-            n_theta = int(
-                n_channels * (n_channels - 1) / 2
-            )  # Number of off-diagonal parameters
-            empirical_csd = jnp.zeros(n_freq)
+            n_theta = int(p * (p - 1) / 2)  # Number of off-diagonal parameters
+            empirical_csd = jnp.zeros(N)
             theta_idx = 0
-            for i in range(1, n_channels):
+            for i in range(1, p):
                 for j in range(i):
                     if use_wishart:
                         csd_ij = jnp.abs(Y[:, i, j]) / Nb
@@ -227,42 +225,42 @@ class MultivariateLogPSplines:
             dummy_model = LogPSplines(
                 degree=degree,
                 diffMatrixOrder=diffMatrixOrder,
-                n=n_freq,
+                n=N,
                 basis=basis,
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=jnp.zeros(basis.shape[1]),
-                parametric_model=jnp.ones(n_freq),
+                parametric_model=jnp.ones(N),
             )
             initial_weights_offdiag = init_weights(small_init, dummy_model)
 
             offdiag_re_model = LogPSplines(
                 degree=degree,
                 diffMatrixOrder=diffMatrixOrder,
-                n=n_freq,
+                n=N,
                 basis=basis,
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=initial_weights_offdiag,
-                parametric_model=jnp.ones(n_freq),
+                parametric_model=jnp.ones(N),
             )
 
             offdiag_im_model = LogPSplines(
                 degree=degree,
                 diffMatrixOrder=diffMatrixOrder,
-                n=n_freq,
+                n=N,
                 basis=basis,
                 penalty_matrix=penalty,
                 knots=knots,
                 weights=initial_weights_offdiag,  # Same initialization for real and imaginary
-                parametric_model=jnp.ones(n_freq),
+                parametric_model=jnp.ones(N),
             )
 
         return cls(
             degree=degree,
             diffMatrixOrder=diffMatrixOrder,
-            n_freq=n_freq,
-            n_channels=n_channels,
+            N=N,
+            p=p,
             diagonal_models=diagonal_models,
             offdiag_re_model=offdiag_re_model,
             offdiag_im_model=offdiag_im_model,
@@ -281,12 +279,12 @@ class MultivariateLogPSplines:
     @property
     def n_theta(self) -> int:
         """Number of off-diagonal parameters."""
-        return int(self.n_channels * (self.n_channels - 1) / 2)
+        return int(self.p * (self.p - 1) / 2)
 
     @property
     def total_components(self) -> int:
         """Total number of P-spline components."""
-        return self.n_channels + (2 if self.n_theta > 0 else 0)
+        return self.p + (2 if self.n_theta > 0 else 0)
 
     def get_all_bases_and_penalties(
         self,
@@ -329,16 +327,16 @@ class MultivariateLogPSplines:
     ):
         """Yield reconstructed PSD chunks with shape (n_samps, chunk, n, n)."""
 
-        n_freq = log_delta_sq_samples.shape[1]
-        n_channels = log_delta_sq_samples.shape[2]
+        N = log_delta_sq_samples.shape[1]
+        p = log_delta_sq_samples.shape[2]
         n_theta = (
             theta_re_samples.shape[2] if theta_re_samples is not None else 0
         )
-        tril_row, tril_col = np.tril_indices(n_channels, k=-1)
+        tril_row, tril_col = np.tril_indices(p, k=-1)
         n_lower = len(tril_row)
 
-        for start in range(0, n_freq, chunk_size):
-            end = min(start + chunk_size, n_freq)
+        for start in range(0, N, chunk_size):
+            end = min(start + chunk_size, N)
 
             log_chunk = log_delta_sq_samples[:n_samps, start:end, :]
             theta_re_chunk = (
@@ -354,7 +352,7 @@ class MultivariateLogPSplines:
 
             chunk_len = end - start
             psd_chunk = np.empty(
-                (n_samps, chunk_len, n_channels, n_channels),
+                (n_samps, chunk_len, p, p),
                 dtype=np.complex64,
             )
 
@@ -363,7 +361,7 @@ class MultivariateLogPSplines:
                     diag_vals = np.exp(log_chunk[s, local_f]).astype(
                         np.float32
                     )
-                    T = np.eye(n_channels, dtype=np.complex64)
+                    T = np.eye(p, dtype=np.complex64)
 
                     if n_theta > 0:
                         theta_complex = (
@@ -398,7 +396,7 @@ class MultivariateLogPSplines:
         The computation streams over frequency chunks (default 2048 bins) so the
         peak memory stays modest even for very long spectra. Results are returned
         as a ``complex64`` NumPy array of shape
-        ``(n_samps, n_freq, n_channels, n_channels)``.
+        ``(n_samps, N, p, p)``.
         """
         log_delta_sq_arr = np.asarray(log_delta_sq_samples)
         theta_re_arr = np.asarray(theta_re_samples)
@@ -411,20 +409,18 @@ class MultivariateLogPSplines:
         if theta_im_arr.ndim == 4:
             theta_im_arr = theta_im_arr[0]
 
-        n_samples, n_freq, n_channels = log_delta_sq_arr.shape
+        n_samples, N, p = log_delta_sq_arr.shape
         n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
         n_samps = min(int(n_samples_max), int(n_samples))
 
         if chunk_size is None or chunk_size <= 0:
-            chunk_size = n_freq
+            chunk_size = N
 
         log_delta_sq_arr = log_delta_sq_arr[:n_samps]
         theta_re_arr = theta_re_arr[:n_samps]
         theta_im_arr = theta_im_arr[:n_samps]
 
-        psd = np.empty(
-            (n_samps, n_freq, n_channels, n_channels), dtype=np.complex64
-        )
+        psd = np.empty((n_samps, N, p, p), dtype=np.complex64)
 
         for start, end, psd_chunk in self._psd_chunk_iterator(
             log_delta_sq_arr,
@@ -455,11 +451,11 @@ class MultivariateLogPSplines:
         -------
         psd_real_percentiles : np.ndarray
             Percentiles of the real part of the PSD matrix with shape
-            ``(n_percentiles, n_freq, n_channels, n_channels)``.
+            ``(n_percentiles, N, p, p)``.
         psd_imag_percentiles : np.ndarray
             Percentiles of the imaginary part of the PSD matrix with matching shape.
         coherence_percentiles : Optional[np.ndarray]
-            When ``compute_coherence`` is ``True`` and ``n_channels > 1``, contains
+            When ``compute_coherence`` is ``True`` and ``p > 1``, contains
             percentiles of the coherence matrix; otherwise ``None``.
         """
 
@@ -477,29 +473,27 @@ class MultivariateLogPSplines:
         if theta_im_arr.ndim == 4:
             theta_im_arr = theta_im_arr[0]
 
-        n_samples, n_freq, n_channels = log_delta_sq_arr.shape
+        n_samples, N, p = log_delta_sq_arr.shape
         n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
         n_samps = min(int(n_samples_max), int(n_samples))
 
         if chunk_size is None or chunk_size <= 0:
-            chunk_size = n_freq
+            chunk_size = N
 
         log_delta_sq_arr = log_delta_sq_arr[:n_samps]
         theta_re_arr = theta_re_arr[:n_samps]
         theta_im_arr = theta_im_arr[:n_samps]
 
         n_percentiles = len(percentiles)
-        psd_percentiles = np.empty(
-            (n_percentiles, n_freq, n_channels, n_channels), dtype=np.float64
-        )
+        psd_percentiles = np.empty((n_percentiles, N, p, p), dtype=np.float64)
         psd_imag_percentiles = np.empty_like(psd_percentiles)
 
         coherence_percentiles = (
             np.empty(
-                (n_percentiles, n_freq, n_channels, n_channels),
+                (n_percentiles, N, p, p),
                 dtype=np.float64,
             )
-            if compute_coherence and n_channels > 1
+            if compute_coherence and p > 1
             else None
         )
 
@@ -531,7 +525,7 @@ class MultivariateLogPSplines:
 
                 # enforce exact ones on diagonal to avoid numerical drift
                 for idx in range(n_percentiles):
-                    for c in range(n_channels):
+                    for c in range(p):
                         coh_q[idx, :, c, c] = 1.0
 
                 coherence_percentiles[:, start:end] = coh_q
@@ -540,9 +534,9 @@ class MultivariateLogPSplines:
 
     def __repr__(self):
         return (
-            f"MultivariateLogPSplines(channels={self.n_channels}, "
+            f"MultivariateLogPSplines(channels={self.p}, "
             f"knots={self.n_knots}, degree={self.degree}, "
-            f"penaltyOrder={self.diffMatrixOrder}, n_freq={self.n_freq})"
+            f"penaltyOrder={self.diffMatrixOrder}, N={self.N})"
         )
 
     def get_psd_matrix_percentiles(

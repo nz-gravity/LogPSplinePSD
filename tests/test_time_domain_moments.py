@@ -10,7 +10,7 @@ from log_psplines.diagnostics.time_domain_moments import (
 
 def test_compute_psd_variances_constant_psd():
     freqs = np.array([0.0, 0.5, 1.0])
-    psd = np.ones((2, 2, 3))  # (n_samples, n_channels, n_freqs)
+    psd = np.ones((2, 2, 3))  # (n_samples, p, N)
     # Integral of 1 over [0, 1] using trapezoid rule with points [0, 0.5, 1.0] is 1.0
     expected = np.ones((2, 2))
     result = compute_psd_variances(psd, freqs)
@@ -20,7 +20,7 @@ def test_compute_psd_variances_constant_psd():
 def test_compute_psd_covariances_real_cross_psd():
     freqs = np.array([0.0, 1.0, 2.0])
     # cross-PSD is linear in frequency for pair (0,1)
-    base = np.stack([freqs, freqs], axis=0)  # (n_samples=2, n_freqs)
+    base = np.stack([freqs, freqs], axis=0)  # (n_samples=2, N)
     psd = np.zeros((2, 2, 2, 3), dtype=float)
     psd[:, 0, 1, :] = base
     psd[:, 1, 0, :] = base

@@ -249,8 +249,8 @@ def _pack_ci_from_quantiles(
     Construct a ci_dict (same format as _pack_ci_dict) from precomputed quantiles.
 
     Args:
-        psd_quantiles: dict with keys "q05", "q50", "q95", each shaped (n_freq, n_channels, n_channels)
-        coherence_quantiles: dict with keys "q05", "q50", "q95", each shaped (n_freq, n_channels, n_channels)
+        psd_quantiles: dict with keys "q05", "q50", "q95", each shaped (N, p, p)
+        coherence_quantiles: dict with keys "q05", "q50", "q95", each shaped (N, p, p)
         show_coherence: if True, populate "coh" entries
         show_csd_magnitude: if True, populate "mag" entries with |CSD_ij| bands
 
@@ -272,10 +272,10 @@ def _pack_ci_from_quantiles(
     q50 = real_q.get("q50")
     q95 = real_q.get("q95")
 
-    n_freq, n_channels, _ = q05.shape
+    N, p, _ = q05.shape
 
-    for i in range(n_channels):
-        for j in range(n_channels):
+    for i in range(p):
+        for j in range(p):
             if i == j:
                 ci_dict["psd"][(i, i)] = (
                     q05[:, i, i],

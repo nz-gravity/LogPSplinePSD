@@ -133,7 +133,7 @@ def u_to_wishart_matrix(u: np.ndarray) -> np.ndarray:
 
     u = np.asarray(u, dtype=np.complex128)
     if u.ndim != 3:
-        raise ValueError("u must have shape (n_freq, n_dim, n_dim)")
+        raise ValueError("u must have shape (N, p, p)")
 
     return np.einsum("fkc,flc->fkl", u, np.conj(u))
 
@@ -143,7 +143,7 @@ def sum_wishart_outer_products(u_stack: np.ndarray) -> np.ndarray:
 
     u_stack = np.asarray(u_stack, dtype=np.complex128)
     if u_stack.ndim != 3:
-        raise ValueError("u_stack must have shape (n_rep, n_dim, n_dim)")
+        raise ValueError("u_stack must have shape (n_rep, p, p)")
 
     return np.einsum("rik,rjk->ij", u_stack, np.conj(u_stack))
 
@@ -160,7 +160,7 @@ def wishart_matrix_to_psd(
 
     Y = np.asarray(Y, dtype=np.complex128)
     if Y.ndim != 3:
-        raise ValueError("Y must have shape (n_freq, n_dim, n_dim)")
+        raise ValueError("Y must have shape (N, p, p)")
 
     duration_f = float(duration)
     if duration_f <= 0.0:

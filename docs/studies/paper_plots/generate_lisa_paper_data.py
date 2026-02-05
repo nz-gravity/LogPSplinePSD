@@ -24,13 +24,13 @@ from pathlib import Path
 
 import numpy as np
 
-from log_psplines.example_datasets.lisatools_backend import (
-    ensure_lisatools_backends,
-)
 from log_psplines.example_datasets.lisa_data import (
     plot_psd_coherence,
     spectral_matrix_from_components,
     welch_spectral_matrix_xyz,
+)
+from log_psplines.example_datasets.lisatools_backend import (
+    ensure_lisatools_backends,
 )
 
 ensure_lisatools_backends()
@@ -38,19 +38,22 @@ ensure_lisatools_backends()
 from lisatools import detector as lisa_models  # noqa: E402
 from lisatools.sensitivity import XYZ2SensitivityMatrix  # noqa: E402
 
-
 WEEK_SECONDS = 7.0 * 86_400.0
 
 
 def _resolve_duration_seconds(
-    *, duration_weeks: float | None, duration_days: float | None, n_time: int | None, dt: float
+    *,
+    duration_weeks: float | None,
+    duration_days: float | None,
+    n: int | None,
+    dt: float,
 ) -> tuple[int, float]:
     dt = float(dt)
     if not np.isfinite(dt) or dt <= 0.0:
         raise ValueError("--delta-t must be positive.")
 
-    if n_time is not None:
-        n_time_i = int(n_time)
+    if n is not None:
+        n_time_i = int(n)
         if n_time_i <= 0:
             raise ValueError("--n-time must be positive.")
         return n_time_i, n_time_i * dt
@@ -60,7 +63,9 @@ def _resolve_duration_seconds(
     elif duration_days is not None:
         dur = float(duration_days) * 86_400.0
     else:
-        raise ValueError("Provide --duration-weeks, --duration-days, or --n-time.")
+        raise ValueError(
+            "Provide --duration-weeks, --duration-days, or --n-time."
+        )
 
     if not np.isfinite(dur) or dur <= 0.0:
         raise ValueError("Duration must be positive.")
@@ -71,25 +76,23 @@ def _resolve_duration_seconds(
     return n_time_i, n_time_i * dt
 
 
-def _trim_to_multiple(n_time: int, multiple: int) -> int:
-    n_time = int(n_time)
+def _trim_to_multiple(n: int, multiple: int) -> int:
+    n = int(n)
     multiple = int(multiple)
     if multiple <= 0:
         raise ValueError("multiple must be positive.")
-    n_used = n_time - (n_time % multiple)
+    n_used = n - (n % multiple)
     return n_used if n_used > 0 else multiple
 
 
-def _draw_fft_noise(
-    chol: np.ndarray, rng: np.random.Generator
-) -> np.ndarray:
-    n_freq = int(chol.shape[0])
-    eps = rng.normal(
-        0.0, 1.0 / math.sqrt(2.0), (3, n_freq)
-    ) + 1j * rng.normal(0.0, 1.0 / math.sqrt(2.0), (3, n_freq))
+def _draw_fft_noise(chol: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    N = int(chol.shape[0])
+    eps = rng.normal(0.0, 1.0 / math.sqrt(2.0), (3, N)) + 1j * rng.normal(
+        0.0, 1.0 / math.sqrt(2.0), (3, N)
+    )
     eps[:, 0] = rng.normal(0.0, 1.0, 3)
     eps[:, -1] = rng.normal(0.0, 1.0, 3)
-    return np.einsum("fij,jf->if", chol, eps)  # (3, n_freq)
+    return np.einsum("fij,jf->if", chol, eps)  # (3, N)
 
 
 def generate_xyz_chunks(
@@ -125,7 +128,9 @@ def generate_xyz_chunks(
     sens_chunk = XYZ2SensitivityMatrix(freq_eval, model=model_checked)
     S_true_chunk = np.transpose(sens_chunk.sens_mat, (2, 0, 1))
 
-    cov_fft = (chunk_len / (2.0 * dt)) * np.asarray(S_true_chunk, dtype=np.complex128)
+    cov_fft = (chunk_len / (2.0 * dt)) * np.asarray(
+        S_true_chunk, dtype=np.complex128
+    )
     chol = np.linalg.cholesky(cov_fft)
 
     rng = np.random.default_rng(int(seed))
@@ -135,9 +140,15 @@ def generate_xyz_chunks(
         noise_fft = _draw_fft_noise(chol, rng)
         start = idx * chunk_len
         end = start + chunk_len
-        data[start:end, 0] = np.fft.irfft(noise_fft[0], n=chunk_len).astype(np.float32)
-        data[start:end, 1] = np.fft.irfft(noise_fft[1], n=chunk_len).astype(np.float32)
-        data[start:end, 2] = np.fft.irfft(noise_fft[2], n=chunk_len).astype(np.float32)
+        data[start:end, 0] = np.fft.irfft(noise_fft[0], n=chunk_len).astype(
+            np.float32
+        )
+        data[start:end, 1] = np.fft.irfft(noise_fft[1], n=chunk_len).astype(
+            np.float32
+        )
+        data[start:end, 2] = np.fft.irfft(noise_fft[2], n=chunk_len).astype(
+            np.float32
+        )
 
     time = (np.arange(n_used) * dt).astype(np.float64)
     return time, data
@@ -216,7 +227,7 @@ def main() -> None:
     n_target, duration_seconds = _resolve_duration_seconds(
         duration_weeks=args.duration_weeks,
         duration_days=args.duration_days,
-        n_time=args.n_time,
+        n=args.n,
         dt=dt,
     )
     n_used = _trim_to_multiple(n_target, chunk_len)
@@ -233,7 +244,9 @@ def main() -> None:
     # Store analytic PSD/CSD matrix only in the requested band on the chunk FFT grid.
     freq_chunk = np.fft.rfftfreq(int(chunk_len), d=float(dt))[1:]
     if freq_chunk.size == 0:
-        raise ValueError("Chunk length too short to retain positive frequencies.")
+        raise ValueError(
+            "Chunk length too short to retain positive frequencies."
+        )
     fmin = float(args.fmin)
     fmax = float(args.fmax)
     if fmax <= fmin:
@@ -246,7 +259,9 @@ def main() -> None:
     mask = (freq_chunk >= fmin) & (freq_chunk <= fmax)
     freq_true = freq_chunk[mask]
     if freq_true.size == 0:
-        raise ValueError("No frequencies remain in [fmin, fmax] for the chosen delta-t/chunk length.")
+        raise ValueError(
+            "No frequencies remain in [fmin, fmax] for the chosen delta-t/chunk length."
+        )
 
     model_checked = lisa_models.check_lisa_model(str(args.model))
     sens_true = XYZ2SensitivityMatrix(freq_true, model=model_checked)

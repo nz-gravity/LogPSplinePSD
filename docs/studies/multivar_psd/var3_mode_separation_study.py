@@ -36,7 +36,7 @@ from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 
 @dataclass(frozen=True)
 class StudyConfig:
-    n_time: int = 1024
+    n: int = 1024
     fs: float = 1.0
     seed: int = 0
     n_knots: int = 7
@@ -271,7 +271,7 @@ def _build_case_varma(cfg: StudyConfig, case: str) -> VARMAData:
     sigma = _sigma_from_eigvars(q, eig_vars)
 
     return VARMAData(
-        n_samples=cfg.n_time,
+        n_samples=cfg.n,
         seed=cfg.seed,
         fs=cfg.fs,
         var_coeffs=var_coeffs,
@@ -356,7 +356,7 @@ def run_case(
         "case": case,
         "output_dir": str(outdir),
         "n_time_blocks": float(cfg.n_time_blocks),
-        "n_time": float(cfg.n_time),
+        "n": float(cfg.n),
         "fs": float(cfg.fs),
         "seed": float(cfg.seed),
         "n_knots": float(cfg.n_knots),
@@ -431,7 +431,7 @@ def main() -> None:
         init_from_vi = False
 
     cfg = StudyConfig(
-        n_time=int(args.n_time),
+        n=int(args.n),
         fs=float(args.fs),
         seed=int(args.seed),
         n_knots=int(args.knots),
@@ -465,7 +465,7 @@ def main() -> None:
 
     if cfg.n_time_blocks < 3:
         logger.warning(
-            f"n_time_blocks={cfg.n_time_blocks} < n_channels=3; Wishart matrices are rank-deficient "
+            f"n_time_blocks={cfg.n_time_blocks} < p=3; Wishart matrices are rank-deficient "
             "and the blocked likelihood geometry will be pathological."
         )
 
@@ -473,9 +473,7 @@ def main() -> None:
     root_out = (
         here
         / str(args.out)
-        / (
-            f"seed_{cfg.seed}_N{cfg.n_time}_K{cfg.n_knots}_B{cfg.n_time_blocks}"
-        )
+        / (f"seed_{cfg.seed}_N{cfg.n}_K{cfg.n_knots}_B{cfg.n_time_blocks}")
     )
     root_out.mkdir(parents=True, exist_ok=True)
     (root_out / "study_config.json").write_text(

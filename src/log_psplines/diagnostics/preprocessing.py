@@ -16,10 +16,10 @@ class EigenvalueSeparationDiagnostics:
     """Eigenvalue separation diagnostics for multivariate spectral matrices.
 
     Shapes:
-        freq: (n_freq,)
-        eigvals_desc: (n_freq, n_dim) ordered λ1 ≥ … ≥ λd
-        ratios: adjacent ratios r_12 = λ2/λ1, ..., shape (n_freq,) per key
-        mask: (n_freq,) bins retained for summaries (all True if unused)
+        freq: (N,)
+        eigvals_desc: (N, p) ordered λ1 ≥ … ≥ λd
+        ratios: adjacent ratios r_12 = λ2/λ1, ..., shape (N,) per key
+        mask: (N,) bins retained for summaries (all True if unused)
     """
 
     freq: np.ndarray
@@ -59,17 +59,16 @@ def ordered_eigvals_hermitian(matrix: np.ndarray) -> np.ndarray:
     """Return ordered eigenvalues (descending) for each frequency bin.
 
     Args:
-        matrix: (n_freq, n_dim, n_dim), approximately Hermitian.
+        matrix: (N, p, p), approximately Hermitian.
 
     Returns:
-        (n_freq, n_dim) with λ1 ≥ … ≥ λd, clipped to be non-negative.
+        (N, p) with λ1 ≥ … ≥ λd, clipped to be non-negative.
     """
 
     matrix = np.asarray(matrix)
     if matrix.ndim != 3 or matrix.shape[-1] != matrix.shape[-2]:
         raise ValueError(
-            "matrix must have shape (n_freq, n_dim, n_dim); "
-            f"got {matrix.shape}."
+            "matrix must have shape (N, p, p); " f"got {matrix.shape}."
         )
     herm = 0.5 * (matrix + np.swapaxes(np.conj(matrix), -1, -2))
     eig = np.linalg.eigvalsh(herm)  # ascending
@@ -83,26 +82,26 @@ def eig_ratios(
     """Compute adjacent eigenvalue ratios λ_{i+1}/λ_i.
 
     Args:
-        eigvals_desc: (n_freq, n_dim) ordered descending.
+        eigvals_desc: (N, p) ordered descending.
         eps: Denominator cutoff; values with λ_i <= eps become NaN.
 
     Returns:
-        Dict mapping "r_12", "r_23", ... to arrays of shape (n_freq,) clipped
+        Dict mapping "r_12", "r_23", ... to arrays of shape (N,) clipped
         to [0, 1].
     """
 
     eigvals_desc = np.asarray(eigvals_desc, dtype=np.float64)
     if eigvals_desc.ndim != 2:
         raise ValueError(
-            "eigvals_desc must have shape (n_freq, n_dim); "
+            "eigvals_desc must have shape (N, p); "
             f"got {eigvals_desc.shape}."
         )
     if eps is None:
         eps = float(np.finfo(np.float64).tiny)
 
-    n_dim = int(eigvals_desc.shape[1])
+    p = int(eigvals_desc.shape[1])
     ratios: dict[str, np.ndarray] = {}
-    for idx in range(n_dim - 1):
+    for idx in range(p - 1):
         den = eigvals_desc[:, idx]
         num = eigvals_desc[:, idx + 1]
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -173,8 +172,8 @@ def eigenvalue_separation_diagnostics(
     """Compute eigenvalue separation diagnostics for a spectral matrix.
 
     Args:
-        freq: (n_freq,) frequency grid.
-        matrix: (n_freq, n_dim, n_dim) complex Hermitian spectral matrix.
+        freq: (N,) frequency grid.
+        matrix: (N, p, p) complex Hermitian spectral matrix.
         min_lambda1_quantile: If > 0, compute summaries only over bins where
             λ1 is above this quantile (useful for de-emphasizing deep notches).
         eps: Denominator cutoff for ratio computation.
@@ -259,8 +258,8 @@ def save_eigenvalue_separation_plot(
     ax_ratio.set_title("Eigenvalue separation ratios")
 
     # Eigenvalues
-    n_dim = int(eig.shape[1]) if eig.ndim == 2 else 0
-    for idx in range(n_dim):
+    p = int(eig.shape[1]) if eig.ndim == 2 else 0
+    for idx in range(p):
         if use_log_x:
             ax_eig.loglog(freq, eig[:, idx], label=f"λ{idx+1}")
         else:
@@ -268,8 +267,8 @@ def save_eigenvalue_separation_plot(
     ax_eig.set_xlabel("Frequency")
     ax_eig.set_ylabel("Eigenvalue scale")
     ax_eig.grid(True, which="both", alpha=0.2)
-    if n_dim:
-        ax_eig.legend(fontsize=8, ncol=min(3, n_dim))
+    if p:
+        ax_eig.legend(fontsize=8, ncol=min(3, p))
 
     fig.tight_layout()
     fig.savefig(out, dpi=int(dpi))

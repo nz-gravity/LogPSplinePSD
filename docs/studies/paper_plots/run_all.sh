@@ -79,11 +79,11 @@ LONG_NPZ="${LONG_NPZ:-${DATA_DIR}/lisa_synth_long_${LISA_LONG_WEEKS}w_dt${LISA_D
 
 maybe_regen () {
   local out="$1"
-  local n_time="$2"
+  local n="$2"
 	  if [[ "${LISA_REGEN}" == "1" ]]; then
 	    "${PY}" "${ROOT}/docs/studies/paper_plots/generate_lisa_paper_data.py" \
 	      --out "${out}" \
-	      --n-time "${n_time}" \
+	      --n-time "${n}" \
 	      --block-size "${LISA_BLOCK_SIZE}" \
 	      --delta-t "${LISA_DELTA_T}" \
 	      --fmin "${FMIN}" \
@@ -96,7 +96,7 @@ maybe_regen () {
 	  if [[ ! -f "${out}" ]]; then
 	    "${PY}" "${ROOT}/docs/studies/paper_plots/generate_lisa_paper_data.py" \
 	      --out "${out}" \
-	      --n-time "${n_time}" \
+	      --n-time "${n}" \
 	      --block-size "${LISA_BLOCK_SIZE}" \
 	      --delta-t "${LISA_DELTA_T}" \
 	      --fmin "${FMIN}" \
@@ -138,7 +138,7 @@ echo
 
 run_var3 () {
   local name="$1"
-  local n_time="$2"
+  local n="$2"
   local coarse_bins="$3"
   local outdir="${OUT_BASE}/${name}"
   echo "==> VAR3 ${name}"
@@ -146,7 +146,7 @@ run_var3 () {
   cmd=(
     "${PY}" "${ROOT}/docs/studies/paper_plots/var3_paper_job.py"
     --outdir "${outdir}"
-    --n-time "${n_time}"
+    --n-time "${n}"
     --coarse-bins "${coarse_bins}"
     "${VAR3_ARGS[@]}"
   )
@@ -158,7 +158,7 @@ run_var3 () {
 
 run_lisa () {
   local name="$1"
-  local n_time="$2"
+  local n="$2"
   local coarse_flag="$3"
   local fmax="$4"
   local synth_npz="$5"
@@ -169,7 +169,7 @@ run_lisa () {
 		    "${PY}" "${ROOT}/docs/studies/paper_plots/lisa_paper_job.py"
 		    --outdir "${outdir}"
 		    --synth-npz "${synth_npz}"
-		    --n-time "${n_time}"
+		    --n-time "${n}"
 	    --block-size "${LISA_BLOCK_SIZE}"
 		    ${coarse_flag}
 		    --fmin "${FMIN}"

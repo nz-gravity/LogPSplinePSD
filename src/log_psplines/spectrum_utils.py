@@ -57,58 +57,6 @@ def interp_matrix(
     )
 
 
-def strain_to_freq_psd_scale(
-    freq: np.ndarray,
-    *,
-    laser_freq: float,
-    arm_length: float,
-    c_light: float = 299_792_458.0,
-) -> np.ndarray:
-    """Return scale factor to convert strain PSD to frequency PSD."""
-
-    freq = np.asarray(freq, dtype=float)
-    return (2.0 * np.pi * freq * laser_freq * arm_length / c_light) ** 2
-
-
-def resolve_psd_plot_units(
-    base_psd_units: str,
-    plot_psd_units: str,
-    *,
-    laser_freq: float,
-    arm_length: float,
-    c_light: float = 299_792_458.0,
-) -> Tuple[Callable[[np.ndarray], np.ndarray] | None, str]:
-    """Return (scale_fn, unit_label) for plotting PSDs."""
-
-    base_psd_units = str(base_psd_units).lower().strip()
-    plot_psd_units = str(plot_psd_units).lower().strip()
-    if plot_psd_units not in {"freq", "strain"}:
-        raise ValueError(
-            f"plot_psd_units must be 'freq' or 'strain', got {plot_psd_units!r}."
-        )
-    if base_psd_units not in {"freq", "strain"}:
-        raise ValueError(
-            f"base_psd_units must be 'freq' or 'strain', got {base_psd_units!r}."
-        )
-
-    unit_label = "Hz^2/Hz" if plot_psd_units == "freq" else "1/Hz"
-    if plot_psd_units == base_psd_units:
-        return None, unit_label
-    if base_psd_units == "strain" and plot_psd_units == "freq":
-        return (
-            lambda f: strain_to_freq_psd_scale(
-                f,
-                laser_freq=laser_freq,
-                arm_length=arm_length,
-                c_light=c_light,
-            ),
-            unit_label,
-        )
-    raise NotImplementedError(
-        "Only strain→freq conversion is supported for plotting."
-    )
-
-
 def compute_effective_Nb(
     Nb: int, weights: Optional[np.ndarray] = None
 ) -> np.ndarray:
@@ -205,8 +153,6 @@ __all__ = [
     "interp_matrix",
     "compute_effective_Nb",
     "sum_wishart_outer_products",
-    "strain_to_freq_psd_scale",
-    "resolve_psd_plot_units",
     "u_to_wishart_matrix",
     "wishart_matrix_to_psd",
     "wishart_u_to_psd",

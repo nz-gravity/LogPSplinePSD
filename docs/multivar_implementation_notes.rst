@@ -39,21 +39,14 @@ Practical consequences:
   PSD conversions therefore divide by ``duration`` to preserve the same PSD
   convention across diagnostics/plotting.
 
-Coarse graining: weights vs bin counts
---------------------------------------
+Coarse graining: bin counts
+---------------------------
 
-When coarse graining multivariate data, two frequency-weight-like objects exist:
-
-- `freq_bin_counts`: the raw member count :math:`Nh` per coarse bin, stored on
-  :class:`log_psplines.datatypes.multivar.MultivarFFT`.
-- `freq_weights`: the weights actually used to scale the log-determinant term in
-  the NumPyro likelihood.
-
-By default, `run_mcmc` passes `freq_weights = Nh`. This matches the coarse-bin
-approximation where each bin has effective DOF :math:`N_b Nh`.
-
-If users choose to normalise or temper `freq_weights` for sampler geometry, the
-raw `freq_bin_counts` remain available so PSD conversion does not drift.
+When coarse graining multivariate data, the per-bin member counts :math:`Nh` are
+stored on :class:`log_psplines.datatypes.multivar.MultivarFFT` as
+``freq_bin_counts``. These counts are used directly to scale the log-determinant
+term in the NumPyro likelihood, so each bin has effective DOF :math:`N_b Nh`.
+There is no separate per-bin weighting at the likelihood level.
 
 See:
 

@@ -44,7 +44,6 @@ class SamplerConfig:
         None  # Per-channel stds for multivariate scaling
     )
     true_psd: Optional[jnp.ndarray] = None  # True PSD for diagnostics
-    freq_weights: Optional[np.ndarray] = None  # Optional frequency weights
     vi_psd_max_draws: int = (
         64  # Cap PSD reconstructions from VI/posterior draws
     )

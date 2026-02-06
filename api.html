@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>API &#8212; LogPSplinePSD</title>
+    <title>API Reference &#8212; LogPSplinePSD</title>
   
   
   
@@ -62,8 +62,8 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'api';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Multivariate blocked NUTS: math ↔ code" href="multivar_blocked_nuts.html" />
-    <link rel="prev" title="LogPSplinePSD" href="README.html" />
+    <link rel="next" title="Conventions" href="conventions.html" />
+    <link rel="prev" title="LogPSplinePSD" href="intro.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -144,7 +144,7 @@
     
   
 
-<a class="navbar-brand logo" href="README.html">
+<a class="navbar-brand logo" href="intro.html">
   
   
   
@@ -174,14 +174,22 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate blocked NUTS: math ↔ code</a></li>
-<li class="toctree-l1"><a class="reference internal" href="phi_prior_approx.html">Prior on phi: TeX vs implementation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
-<li class="toctree-l1"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
-<li class="toctree-l1"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
-<li class="toctree-l1"><a class="reference internal" href="studies/lvk/lvk_demo.html">LVK Demo</a></li>
-<li class="toctree-l1"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">API Reference</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="conventions.html">User Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="development.html">Development Guide</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Blocked NUTS: Math ↔ Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="studies/lvk/lvk_demo.html">Examples and Studies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
+</ul>
+</details></li>
 </ul>
 
     </div>
@@ -367,7 +375,7 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>API</h1>
+    <h1>API Reference</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -377,16 +385,41 @@ document.write(`
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-mcmc">run_mcmc</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.mcmc.run_mcmc"><code class="docutils literal notranslate"><span class="pre">run_mcmc()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#main-interface">Main Interface</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#run-mcmc">run_mcmc</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.mcmc.run_mcmc"><code class="docutils literal notranslate"><span class="pre">run_mcmc()</span></code></a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psplinepsd-class">PSplinePSD Class</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines"><code class="docutils literal notranslate"><span class="pre">LogPSplines</span></code></a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-allocation">Knot allocation</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.initialisation.init_knots"><code class="docutils literal notranslate"><span class="pre">init_knots()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#core-classes">Core Classes</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#psplinepsd-class">PSplinePSD Class</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines"><code class="docutils literal notranslate"><span class="pre">LogPSplines</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.basis"><code class="docutils literal notranslate"><span class="pre">LogPSplines.basis</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.degree"><code class="docutils literal notranslate"><span class="pre">LogPSplines.degree</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.diffMatrixOrder"><code class="docutils literal notranslate"><span class="pre">LogPSplines.diffMatrixOrder</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.from_periodogram"><code class="docutils literal notranslate"><span class="pre">LogPSplines.from_periodogram()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.knots"><code class="docutils literal notranslate"><span class="pre">LogPSplines.knots</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.log_parametric_model"><code class="docutils literal notranslate"><span class="pre">LogPSplines.log_parametric_model</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.n"><code class="docutils literal notranslate"><span class="pre">LogPSplines.n</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.n_basis"><code class="docutils literal notranslate"><span class="pre">LogPSplines.n_basis</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.n_knots"><code class="docutils literal notranslate"><span class="pre">LogPSplines.n_knots</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.order"><code class="docutils literal notranslate"><span class="pre">LogPSplines.order</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.parametric_model"><code class="docutils literal notranslate"><span class="pre">LogPSplines.parametric_model</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.penalty_matrix"><code class="docutils literal notranslate"><span class="pre">LogPSplines.penalty_matrix</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.plot_basis"><code class="docutils literal notranslate"><span class="pre">LogPSplines.plot_basis()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.weights"><code class="docutils literal notranslate"><span class="pre">LogPSplines.weights</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#utilities">Utilities</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-allocation">Knot Allocation</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.initialisation.init_knots"><code class="docutils literal notranslate"><span class="pre">init_knots()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -400,10 +433,13 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="api">
-<h1>API<a class="headerlink" href="#api" title="Link to this heading">#</a></h1>
+  <section id="api-reference">
+<h1>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading">#</a></h1>
+<p>This page documents the main classes and functions available in LogPSplinePSD.</p>
+<section id="main-interface">
+<h2>Main Interface<a class="headerlink" href="#main-interface" title="Link to this heading">#</a></h2>
 <section id="run-mcmc">
-<h2>run_mcmc<a class="headerlink" href="#run-mcmc" title="Link to this heading">#</a></h2>
+<h3>run_mcmc<a class="headerlink" href="#run-mcmc" title="Link to this heading">#</a></h3>
 <dl class="py function">
 <dt class="sig sig-object py" id="log_psplines.mcmc.run_mcmc">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.mcmc.</span></span><span class="sig-name descname"><span class="pre">run_mcmc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Timeseries</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultivariateTimeseries</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Periodogram</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultivarFFT</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">RunMCMCConfig</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'nuts'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'multivar_blocked_nuts'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">legacy_kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">InferenceData</span></span></span><a class="headerlink" href="#log_psplines.mcmc.run_mcmc" title="Link to this definition">#</a></dt>
@@ -411,8 +447,11 @@ document.write(`
 </dd></dl>
 
 </section>
+</section>
+<section id="core-classes">
+<h2>Core Classes<a class="headerlink" href="#core-classes" title="Link to this heading">#</a></h2>
 <section id="psplinepsd-class">
-<h2>PSplinePSD Class<a class="headerlink" href="#psplinepsd-class" title="Link to this heading">#</a></h2>
+<h3>PSplinePSD Class<a class="headerlink" href="#psplinepsd-class" title="Link to this heading">#</a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.psplines.</span></span><span class="sig-name descname"><span class="pre">LogPSplines</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">degree</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diffMatrixOrder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parametric_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.psplines.LogPSplines" title="Link to this definition">#</a></dt>
@@ -430,7 +469,7 @@ coefficients, and <span class="math notranslate nohighlight">\(S_{\text{param}}(
 Smoothness is enforced via a penalty on the <span class="math notranslate nohighlight">\(k\)</span>-th order differences of
 the coefficients.</p>
 <section id="parameters">
-<h3>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h3>
+<h4>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h4>
 <dl class="simple">
 <dt>degree<span class="classifier">int</span></dt><dd><p>Polynomial degree of B-spline basis functions (0-5). Higher degrees
 provide smoother basis functions but require more knots for flexibility.
@@ -465,7 +504,7 @@ lines, astrophysical templates). Default is None (uniform spectrum)</p>
 </dl>
 </section>
 <section id="attributes">
-<h3>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">#</a></h3>
+<h4>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">#</a></h4>
 <dl class="simple">
 <dt>log_parametric_model<span class="classifier">jnp.ndarray</span></dt><dd><p>Cached logarithm of the parametric model component</p>
 </dd>
@@ -478,7 +517,7 @@ lines, astrophysical templates). Default is None (uniform spectrum)</p>
 </dl>
 </section>
 <section id="methods">
-<h3>Methods<a class="headerlink" href="#methods" title="Link to this heading">#</a></h3>
+<h4>Methods<a class="headerlink" href="#methods" title="Link to this heading">#</a></h4>
 <dl class="simple">
 <dt>from_periodogram(periodogram, n_knots, degree, …)</dt><dd><p>Class method to construct model from periodogram data</p>
 </dd>
@@ -489,7 +528,7 @@ lines, astrophysical templates). Default is None (uniform spectrum)</p>
 </dl>
 </section>
 <section id="examples">
-<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h3>
+<h4>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h4>
 <p>Create a log P-spline model from gravitational wave periodogram data:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">mypackage</span><span class="w"> </span><span class="kn">import</span> <span class="n">Periodogram</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># Assume &#39;pdgrm&#39; is a Periodogram object from GW strain data</span>
@@ -526,7 +565,7 @@ lines, astrophysical templates). Default is None (uniform spectrum)</p>
 </div>
 </section>
 <section id="notes">
-<h3>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h3>
+<h4>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h4>
 <p><strong>Mathematical Foundation:</strong></p>
 <p>The penalized B-spline approach balances model flexibility with smoothness
 by minimizing an objective function of the form:</p>
@@ -562,7 +601,7 @@ stable with few knots</p></li>
 </ul>
 </section>
 <section id="warnings">
-<h3>Warnings<a class="headerlink" href="#warnings" title="Link to this heading">#</a></h3>
+<h4>Warnings<a class="headerlink" href="#warnings" title="Link to this heading">#</a></h4>
 <ul class="simple">
 <li><p>Very high degrees (&gt;3) may lead to numerical instability</p></li>
 <li><p>Too few knots relative to data resolution can cause underfitting</p></li>
@@ -570,31 +609,170 @@ stable with few knots</p></li>
 </ul>
 </section>
 <section id="see-also">
-<h3>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h3>
+<h4>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h4>
 <p>run_mcmc : MCMC sampling with LogPSplines models
 Periodogram : Input data structure for spectral analysis
 init_knots : Knot placement algorithms
 init_basis_and_penalty : Basis and penalty matrix construction</p>
-<dl class="field-list simple">
-<dt class="field-odd">members<span class="colon">:</span></dt>
-<dd class="field-odd"><p></p></dd>
-<dt class="field-even">undoc-members<span class="colon">:</span></dt>
-<dd class="field-even"><p></p></dd>
-<dt class="field-odd">inherited-members<span class="colon">:</span></dt>
-<dd class="field-odd"><p></p></dd>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.basis">
+<span class="sig-name descname"><span class="pre">basis</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Array</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.basis" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.degree">
+<span class="sig-name descname"><span class="pre">degree</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.degree" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.diffMatrixOrder">
+<span class="sig-name descname"><span class="pre">diffMatrixOrder</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.diffMatrixOrder" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.from_periodogram">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_periodogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">periodogram</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Periodogram</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">degree</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diffMatrixOrder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parametric_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knot_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.psplines.LogPSplines.from_periodogram" title="Link to this definition">#</a></dt>
+<dd><p>Construct LogPSplines model from periodogram data.</p>
+<p>This factory method handles the complete setup of a log P-spline model,
+including knot placement, basis construction, penalty matrix setup, and
+initial weight estimation.</p>
+<section id="id1">
+<h5>Parameters<a class="headerlink" href="#id1" title="Link to this heading">#</a></h5>
+<dl class="simple">
+<dt>periodogram<span class="classifier">Periodogram</span></dt><dd><p>Input periodogram containing frequency grid and power measurements</p>
+</dd>
+<dt>n_knots<span class="classifier">int</span></dt><dd><p>Number of interior knots to place. More knots provide greater
+flexibility but may lead to overfitting without sufficient penalty</p>
+</dd>
+<dt>degree<span class="classifier">int</span></dt><dd><p>Polynomial degree of B-spline basis (0-5)</p>
+</dd>
+<dt>diffMatrixOrder<span class="classifier">int, default=2</span></dt><dd><p>Order of difference penalty matrix for smoothness control</p>
+</dd>
+<dt>parametric_model<span class="classifier">jnp.ndarray, optional</span></dt><dd><p>Known parametric component to include in the model</p>
+</dd>
+<dt>knot_kwargs<span class="classifier">dict, default={}</span></dt><dd><p>Additional arguments passed to knot placement algorithm.
+May include placement strategy, boundary conditions, etc.</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h5>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h5>
+<dl class="simple">
+<dt>LogPSplines</dt><dd><p>Fully initialized model ready for MCMC sampling</p>
+</dd>
+</dl>
+</section>
+<section id="id2">
+<h5>Examples<a class="headerlink" href="#id2" title="Link to this heading">#</a></h5>
+<p>Basic model construction:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">LogPSplines</span><span class="o">.</span><span class="n">from_periodogram</span><span class="p">(</span><span class="n">pdgrm</span><span class="p">,</span> <span class="n">n_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">degree</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>High-resolution model for detailed spectral features:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">LogPSplines</span><span class="o">.</span><span class="n">from_periodogram</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">pdgrm</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">n_knots</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">degree</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">diffMatrixOrder</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">knot_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;placement&#39;</span><span class="p">:</span> <span class="s1">&#39;adaptive&#39;</span><span class="p">}</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.knots">
+<span class="sig-name descname"><span class="pre">knots</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.knots" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.log_parametric_model">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">log_parametric_model</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Array</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.log_parametric_model" title="Link to this definition">#</a></dt>
+<dd><p>Logarithm of the parametric model component.</p>
+<section id="id3">
+<h5>Returns<a class="headerlink" href="#id3" title="Link to this heading">#</a></h5>
+<dl class="simple">
+<dt>jnp.ndarray, shape (n,)</dt><dd><p>Log of parametric model, defaulting to log(1) = 0 if None provided</p>
+</dd>
 </dl>
 </section>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.n">
+<span class="sig-name descname"><span class="pre">n</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.n" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.n_basis">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_basis</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.n_basis" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.n_knots">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_knots</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.n_knots" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.order">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">order</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.order" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.parametric_model">
+<span class="sig-name descname"><span class="pre">parametric_model</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.parametric_model" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.penalty_matrix">
+<span class="sig-name descname"><span class="pre">penalty_matrix</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Array</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.penalty_matrix" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.plot_basis">
+<span class="sig-name descname"><span class="pre">plot_basis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.psplines.LogPSplines.plot_basis" title="Link to this definition">#</a></dt>
+<dd><p>Visualize B-spline basis functions and penalty matrix structure.</p>
+<p>Creates a three-panel plot showing:
+1. Individual B-spline basis functions
+2. Basis function overview
+3. Penalty matrix structure (sparsity pattern)</p>
+<section id="id4">
+<h5>Parameters<a class="headerlink" href="#id4" title="Link to this heading">#</a></h5>
+<dl class="simple">
+<dt>outdir<span class="classifier">str, optional</span></dt><dd><p>Directory to save the plot. If None, displays interactively</p>
+</dd>
+</dl>
 </section>
+<section id="id5">
+<h5>Examples<a class="headerlink" href="#id5" title="Link to this heading">#</a></h5>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="o">.</span><span class="n">plot_basis</span><span class="p">()</span>  <span class="c1"># Display plot</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="o">.</span><span class="n">plot_basis</span><span class="p">(</span><span class="n">outdir</span><span class="o">=</span><span class="s2">&quot;./diagnostics&quot;</span><span class="p">)</span>  <span class="c1"># Save to file</span>
+</pre></div>
+</div>
+</section>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.psplines.LogPSplines.weights">
+<span class="sig-name descname"><span class="pre">weights</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Array</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.psplines.LogPSplines.weights" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</section>
+</dd></dl>
+
+</section>
+</section>
+<section id="utilities">
+<h2>Utilities<a class="headerlink" href="#utilities" title="Link to this heading">#</a></h2>
 <section id="knot-allocation">
-<h2>Knot allocation<a class="headerlink" href="#knot-allocation" title="Link to this heading">#</a></h2>
+<h3>Knot Allocation<a class="headerlink" href="#knot-allocation" title="Link to this heading">#</a></h3>
 <dl class="py function">
 <dt class="sig sig-object py" id="log_psplines.psplines.initialisation.init_knots">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.psplines.initialisation.</span></span><span class="sig-name descname"><span class="pre">init_knots</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">periodogram</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Periodogram</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parametric_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'density'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#log_psplines.psplines.initialisation.init_knots" title="Link to this definition">#</a></dt>
 <dd><p>Select knots using various placement strategies.</p>
-<section id="id1">
-<h3>Parameters<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
+<section id="id6">
+<h4>Parameters<a class="headerlink" href="#id6" title="Link to this heading">#</a></h4>
 <dl class="simple">
 <dt>n_knots<span class="classifier">int</span></dt><dd><p>Total number of knots to select</p>
 </dd>
@@ -610,8 +788,8 @@ init_basis_and_penalty : Basis and penalty matrix construction</p>
 </dd>
 </dl>
 </section>
-<section id="returns">
-<h3>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h3>
+<section id="id7">
+<h4>Returns<a class="headerlink" href="#id7" title="Link to this heading">#</a></h4>
 <dl class="simple">
 <dt>np.ndarray</dt><dd><p>Array of knot locations normalized to [0, 1]</p>
 </dd>
@@ -619,6 +797,7 @@ init_basis_and_penalty : Basis and penalty matrix construction</p>
 </section>
 </dd></dl>
 
+</section>
 </section>
 </section>
 
@@ -653,7 +832,7 @@ init_basis_and_penalty : Basis and penalty matrix construction</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="README.html"
+       href="intro.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
@@ -662,11 +841,11 @@ init_basis_and_penalty : Basis and penalty matrix construction</p>
       </div>
     </a>
     <a class="right-next"
-       href="multivar_blocked_nuts.html"
+       href="conventions.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Multivariate blocked NUTS: math ↔ code</p>
+        <p class="prev-next-title">Conventions</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -686,16 +865,41 @@ init_basis_and_penalty : Basis and penalty matrix construction</p>
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-mcmc">run_mcmc</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.mcmc.run_mcmc"><code class="docutils literal notranslate"><span class="pre">run_mcmc()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#main-interface">Main Interface</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#run-mcmc">run_mcmc</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.mcmc.run_mcmc"><code class="docutils literal notranslate"><span class="pre">run_mcmc()</span></code></a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psplinepsd-class">PSplinePSD Class</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines"><code class="docutils literal notranslate"><span class="pre">LogPSplines</span></code></a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-allocation">Knot allocation</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.initialisation.init_knots"><code class="docutils literal notranslate"><span class="pre">init_knots()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#core-classes">Core Classes</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#psplinepsd-class">PSplinePSD Class</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines"><code class="docutils literal notranslate"><span class="pre">LogPSplines</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.basis"><code class="docutils literal notranslate"><span class="pre">LogPSplines.basis</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.degree"><code class="docutils literal notranslate"><span class="pre">LogPSplines.degree</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.diffMatrixOrder"><code class="docutils literal notranslate"><span class="pre">LogPSplines.diffMatrixOrder</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.from_periodogram"><code class="docutils literal notranslate"><span class="pre">LogPSplines.from_periodogram()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.knots"><code class="docutils literal notranslate"><span class="pre">LogPSplines.knots</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.log_parametric_model"><code class="docutils literal notranslate"><span class="pre">LogPSplines.log_parametric_model</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.n"><code class="docutils literal notranslate"><span class="pre">LogPSplines.n</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.n_basis"><code class="docutils literal notranslate"><span class="pre">LogPSplines.n_basis</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.n_knots"><code class="docutils literal notranslate"><span class="pre">LogPSplines.n_knots</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.order"><code class="docutils literal notranslate"><span class="pre">LogPSplines.order</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.parametric_model"><code class="docutils literal notranslate"><span class="pre">LogPSplines.parametric_model</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.penalty_matrix"><code class="docutils literal notranslate"><span class="pre">LogPSplines.penalty_matrix</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.plot_basis"><code class="docutils literal notranslate"><span class="pre">LogPSplines.plot_basis()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.LogPSplines.weights"><code class="docutils literal notranslate"><span class="pre">LogPSplines.weights</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#utilities">Utilities</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-allocation">Knot Allocation</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.psplines.initialisation.init_knots"><code class="docutils literal notranslate"><span class="pre">init_knots()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

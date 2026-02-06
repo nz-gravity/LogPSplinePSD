@@ -13,6 +13,16 @@ Log-spline representation of the power spectral density (PSD) in the frequency d
 - **GitHub Repository**: https://github.com/nz-gravity/LogPSplinePSD
 - **Paper**: Aimen et al (*in preparation*)
 
+Quick Links
+-----------
+
+- :doc:`api` - API Reference for main classes and functions
+- :doc:`conventions` - Naming conventions and data flow
+- :doc:`development` - Development guide for contributors
+- :doc:`coarse_grain` - Technical details on coarse-graining
+- :doc:`studies/lvk/lvk_demo` - LVK gravitational wave detector demo
+- :doc:`studies/lisa/lisa_demo` - LISA space-based detector demo
+
 
 Overview
 --------

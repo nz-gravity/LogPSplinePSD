@@ -19,7 +19,7 @@ def _lag_autocorr(signal: np.ndarray, lag: int) -> float:
     return float(np.dot(x0, x1) / ((x0.size - 1) * denom))
 
 
-def run(
+def _run(
     *,
     idata=None,
     config=None,

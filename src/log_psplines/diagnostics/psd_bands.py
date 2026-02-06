@@ -15,7 +15,7 @@ def _variance_from_psd(psd_values: np.ndarray, freqs: np.ndarray) -> float:
     return float(simpson(psd_values, x=freqs))
 
 
-def run(
+def _run(
     *,
     idata=None,
     config=None,

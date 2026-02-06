@@ -40,7 +40,6 @@ def run_analysis(
         knot_kwargs=dict(method="uniform"),
     )
 
-    inference_mh = run_mcmc(**kawrgs, sampler="mh", outdir=f"{outdir}/mh_out")
     inference_nuts = run_mcmc(
         **kawrgs, sampler="nuts", outdir=f"{outdir}/nuts_out"
     )
@@ -53,13 +52,6 @@ def run_analysis(
         linestyle="--",
         label="True PSD",
         zorder=10,
-    )
-    plot_pdgrm(
-        idata=inference_mh,
-        ax=ax,
-        model_label="MH",
-        model_color="tab:blue",
-        show_knots=False,
     )
     plot_pdgrm(
         idata=inference_nuts,
@@ -84,6 +76,7 @@ order, fs = 4, 512.0
 data = ARData(order=order, duration=2.0, fs=fs, sigma=1.0, seed=42)
 true_psd = data.psd_theoretical
 
+results = {}
 for use_parametric_model in [False, True]:
     label = "without_parametric"
     if use_parametric_model:
@@ -92,9 +85,11 @@ for use_parametric_model in [False, True]:
     run_analysis(
         data, use_parametric_model=use_parametric_model, outdir=outdir
     )
-    compare_results(
-        f"{outdir}/mh_out/inference_data.nc",
-        f"{outdir}/nuts_out/inference_data.nc",
-        labels=["MH", "NUTS"],
-        outdir=outdir,
-    )
+    results[label] = f"{outdir}/nuts_out/inference_data.nc"
+
+compare_results(
+    results["without_parametric"],
+    results["with_parametric"],
+    labels=["No parametric", "Parametric"],
+    outdir="output/parametric_compare",
+)

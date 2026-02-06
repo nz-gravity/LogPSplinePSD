@@ -24,8 +24,6 @@ from .datatypes.univar import Timeseries
 from .logger import logger
 from .psplines import LogPSplines, MultivariateLogPSplines
 from .samplers import (
-    MetropolisHastingsConfig,
-    MetropolisHastingsSampler,
     MultivarBlockedNUTSConfig,
     MultivarBlockedNUTSSampler,
     MultivarNUTSConfig,
@@ -36,7 +34,6 @@ from .samplers import (
 
 SamplerName = Literal[
     "nuts",
-    "mh",
     "multivar_blocked_nuts",
     "multivar_nuts",
 ]
@@ -94,12 +91,6 @@ class NUTSConfigOverride:
 
 
 @dataclass(frozen=True)
-class MHConfigOverride:
-    target_accept_rate: float = 0.44
-    adaptation_window: int = 50
-
-
-@dataclass(frozen=True)
 class RunMCMCConfig:
     sampler: SamplerName = "nuts"
     n_samples: int = 1000
@@ -123,7 +114,6 @@ class RunMCMCConfig:
     diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
     vi: VIConfig = field(default_factory=VIConfig)
     nuts: NUTSConfigOverride = field(default_factory=NUTSConfigOverride)
-    mh: MHConfigOverride = field(default_factory=MHConfigOverride)
     extra_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -707,6 +697,21 @@ def _normalize_run_config(
 
     kwargs = dict(legacy_kwargs)
 
+    if kwargs.get("sampler") == "mh":
+        raise ValueError(
+            "The Metropolis-Hastings sampler has been removed. Use sampler='nuts'."
+        )
+    if "mh" in kwargs:
+        raise ValueError(
+            "Metropolis-Hastings configuration is no longer supported. "
+            "Use NUTS configuration options instead."
+        )
+    if "target_accept_rate" in kwargs or "adaptation_window" in kwargs:
+        raise ValueError(
+            "Metropolis-Hastings options are no longer supported. "
+            "Use NUTS options like target_accept_prob/max_tree_depth instead."
+        )
+
     model_cfg = ModelConfig(
         n_knots=kwargs.pop("n_knots", 10),
         degree=kwargs.pop("degree", 3),
@@ -762,10 +767,6 @@ def _normalize_run_config(
         alpha_phi_theta=kwargs.pop("alpha_phi_theta", None),
         beta_phi_theta=kwargs.pop("beta_phi_theta", None),
     )
-    mh_cfg = MHConfigOverride(
-        target_accept_rate=kwargs.pop("target_accept_rate", 0.44),
-        adaptation_window=kwargs.pop("adaptation_window", 50),
-    )
     return RunMCMCConfig(
         sampler=kwargs.pop("sampler", "nuts"),
         n_samples=kwargs.pop("n_samples", 1000),
@@ -787,7 +788,6 @@ def _normalize_run_config(
         diagnostics=diagnostics_cfg,
         vi=vi_cfg,
         nuts=nuts_cfg,
-        mh=mh_cfg,
         extra_kwargs=kwargs,
     )
 
@@ -891,9 +891,9 @@ def _validate_sampler_selection(
     verbose: bool,
 ) -> SamplerName:
     if isinstance(data, Periodogram):
-        if sampler_type not in {"nuts", "mh"}:
+        if sampler_type != "nuts":
             raise ValueError(
-                f"Unknown sampler_type '{sampler_type}' for univariate data. Choose 'nuts' or 'mh'."
+                f"Unknown sampler_type '{sampler_type}' for univariate data. Choose 'nuts'."
             )
         return sampler_type
 
@@ -923,39 +923,26 @@ def _build_univar_sampler(
     common_kwargs: dict[str, Any],
 ):
     run = config.run_config
-    if sampler_type == "nuts":
-        nuts_extra_kwargs = _validate_extra_kwargs(
-            NUTSConfig, run.extra_kwargs
+    if sampler_type != "nuts":
+        raise ValueError(
+            f"Unknown sampler_type '{sampler_type}' for univariate data. Choose 'nuts'."
         )
-        nuts_config = NUTSConfig(
-            **common_kwargs,
-            target_accept_prob=run.nuts.target_accept_prob,
-            max_tree_depth=run.nuts.max_tree_depth,
-            dense_mass=run.nuts.dense_mass,
-            init_from_vi=run.vi.init_from_vi,
-            vi_steps=run.vi.vi_steps,
-            vi_lr=run.vi.vi_lr,
-            vi_guide=run.vi.vi_guide,
-            vi_posterior_draws=run.vi.vi_posterior_draws,
-            vi_progress_bar=run.vi.vi_progress_bar,
-            **nuts_extra_kwargs,
-        )
-        return NUTSSampler(data, model, nuts_config)
 
-    mh_extra_kwargs = _validate_extra_kwargs(
-        MetropolisHastingsConfig, run.extra_kwargs
-    )
-    mh_config = MetropolisHastingsConfig(
+    nuts_extra_kwargs = _validate_extra_kwargs(NUTSConfig, run.extra_kwargs)
+    nuts_config = NUTSConfig(
         **common_kwargs,
-        target_accept_rate=run.mh.target_accept_rate,
-        adaptation_window=run.mh.adaptation_window,
-        adaptation_start=100,
-        step_size_factor=1.1,
-        min_step_size=1e-6,
-        max_step_size=10.0,
-        **mh_extra_kwargs,
+        target_accept_prob=run.nuts.target_accept_prob,
+        max_tree_depth=run.nuts.max_tree_depth,
+        dense_mass=run.nuts.dense_mass,
+        init_from_vi=run.vi.init_from_vi,
+        vi_steps=run.vi.vi_steps,
+        vi_lr=run.vi.vi_lr,
+        vi_guide=run.vi.vi_guide,
+        vi_posterior_draws=run.vi.vi_posterior_draws,
+        vi_progress_bar=run.vi.vi_progress_bar,
+        **nuts_extra_kwargs,
     )
-    return MetropolisHastingsSampler(data, model, mh_config)
+    return NUTSSampler(data, model, nuts_config)
 
 
 def _build_multivar_blocked_sampler(

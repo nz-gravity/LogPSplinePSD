@@ -14,7 +14,7 @@ i2 = az.from_netcdf(f2)
 # compare_results(
 #     az.from_netcdf(f1),
 #     az.from_netcdf(f2),
-#     labels=["MH 3 knots", "MH 5 knots"],
+#     labels=["NUTS 3 knots", "NUTS 5 knots"],
 #     outdir=".",
 #     colors=["blue", "orange"],
 # )

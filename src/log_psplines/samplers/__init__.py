@@ -4,16 +4,9 @@ from .multivar import (
     MultivarNUTSConfig,
     MultivarNUTSSampler,
 )
-from .univar import (
-    MetropolisHastingsConfig,
-    MetropolisHastingsSampler,
-    NUTSConfig,
-    NUTSSampler,
-)
+from .univar import NUTSConfig, NUTSSampler
 
 __all__ = [
-    "MetropolisHastingsConfig",
-    "MetropolisHastingsSampler",
     "NUTSConfig",
     "NUTSSampler",
     "MultivarNUTSConfig",

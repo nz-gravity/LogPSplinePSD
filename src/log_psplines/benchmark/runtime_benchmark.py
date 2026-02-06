@@ -181,16 +181,16 @@ class RuntimeBenchmark:
         max_knots: int = 30,
         sampler: str = "all",
     ):
-        """run analyses for both MH and NUTS samplers."""
+        """Run analyses for the NUTS sampler."""
 
-        if sampler not in ["nuts", "mh", "all"]:
+        if sampler not in ["nuts", "all"]:
             raise ValueError(
-                f"Invalid sampler: {sampler}. Choose from 'nuts', 'mh', or 'all'."
+                f"Invalid sampler: {sampler}. Choose from 'nuts' or 'all'."
             )
 
         samplers = []
         if sampler == "all":
-            samplers = ["nuts", "mh"]
+            samplers = ["nuts"]
         elif isinstance(sampler, str):
             samplers = [sampler]
 

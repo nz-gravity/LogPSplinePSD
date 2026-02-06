@@ -9,7 +9,6 @@ from matplotlib.patches import Patch
 
 from ..logger import logger
 
-MH_COLOR = "tab:blue"
 NUTS_COLOR = "tab:orange"
 GPU_MARKER = "o--"
 CPU_MARKER = "s-"
@@ -18,7 +17,6 @@ GPU_ALPHA = 1.0
 
 CPU_KWGS = dict(alpha=0.75, filled=False)
 GPU_KWGS = dict(alpha=1.0, filled=True)
-MH_KWGS = dict(color=MH_COLOR)
 NUTS_KWGS = dict(color=NUTS_COLOR)
 
 
@@ -129,7 +127,7 @@ def plot_knots_results(filepaths: List[str]) -> None:
             data = json.load(f)
 
         kwgs = {
-            **(MH_KWGS if data["sampler"] == "mh" else NUTS_KWGS),
+            **NUTS_KWGS,
             **(CPU_KWGS if data["device"] == "cpu" else GPU_KWGS),
         }
         plot_ess(axes[0], data["ks"], data["ess"], **kwgs)
@@ -151,7 +149,7 @@ def plot_knots_results(filepaths: List[str]) -> None:
 
 def _get_kwgs(fname: str):
     return {
-        **(MH_KWGS if "_mh_" in fname else NUTS_KWGS),
+        **NUTS_KWGS,
         **(CPU_KWGS if "cpu" in fname else GPU_KWGS),
     }
 
@@ -170,7 +168,7 @@ def _add_legend(ax, fnames: List[str]) -> None:
             )
         patches.append(p)
 
-        sampler = "MH" if "mh" in fname else "NUTS"
+        sampler = "NUTS"
         device = "CPU" if "cpu" in fname else "GPU"
         labels.append(f"{sampler} ({device})")
 

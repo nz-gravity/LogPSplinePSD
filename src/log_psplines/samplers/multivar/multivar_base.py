@@ -94,23 +94,9 @@ class MultivarBaseSampler(BaseSampler):
         if self.duration <= 0.0:
             raise ValueError("fft_data.duration must be positive")
 
-        # Optional frequency weights (used to scale the log-det term in the
-        # multivariate coarse-grained likelihood). For paper-consistent coarse
-        # graining these should equal the per-bin member counts.
-        if self.config.freq_weights is not None:
-            fw = jnp.asarray(self.config.freq_weights, dtype=jnp.float32)
-            if fw.shape[0] != self.N:
-                raise ValueError(
-                    "Frequency weights length must match number of frequencies"
-                )
-            self.freq_weights = fw
-        else:
-            self.freq_weights = jnp.ones((self.N,), dtype=jnp.float32)
-
         # For coarse-grained multivariate FFTs, keep the *raw* bin counts
-        # (number of fine-grid frequencies per coarse bin) separate from any
-        # normalized/tempered freq_weights. This prevents PSD scale drift when
-        # adjusting weights for sampler geometry.
+        # (number of fine-grid frequencies per coarse bin). These are used
+        # directly in the likelihood scaling (no separate per-bin weighting).
         bin_counts = getattr(self.fft_data, "freq_bin_counts", None)
         if bin_counts is not None:
             bc = jnp.asarray(bin_counts, dtype=jnp.float32)
@@ -124,22 +110,20 @@ class MultivarBaseSampler(BaseSampler):
         else:
             self.freq_bin_counts = jnp.ones((self.N,), dtype=jnp.float32)
 
+        # For compatibility with existing model signatures, store weights as
+        # the per-bin counts.
+        self.freq_weights = self.freq_bin_counts
+
         if self.config.verbose:
             logger.info(f"Frequency bins used for inference (N): {self.N}")
             basis_shapes = ", ".join(
                 [f"{tuple(b.shape)}" for b in self.all_bases]
             )
             logger.info(f"B-spline basis shapes: {basis_shapes}")
-            if self.config.freq_weights is not None:
-                total = float(jnp.sum(self.freq_weights))
-                logger.info(
-                    f"Applied coarse-grain weights; total effective count = {total:.1f}"
-                )
-                total_raw = float(jnp.sum(self.freq_bin_counts))
-                if abs(total_raw - total) > 1e-6:
-                    logger.info(
-                        f"Raw coarse-bin counts sum = {total_raw:.1f} (independent of any weight normalization)."
-                    )
+            total = float(jnp.sum(self.freq_weights))
+            logger.info(
+                f"Applied coarse-grain weights; total effective count = {total:.1f}"
+            )
 
     @property
     def data_type(self) -> str:

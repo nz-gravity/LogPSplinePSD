@@ -144,8 +144,8 @@ Key points:
 
 - :math:`N_b` is the number of averaged blocks (``fft_data.Nb``).
 - :math:`T` is the per-block observation duration (``fft_data.duration``).
-- :math:`w_k` are optional frequency weights (``freq_weights``). They are used
-  to scale the log-determinant term when coarse graining is enabled.
+- :math:`w_k` are per-bin member counts (``fft_data.freq_bin_counts``). They are
+  used to scale the log-determinant term when coarse graining is enabled.
 - The quadratic term uses the *summed sufficient statistics* directly, so it
   does not multiply by :math:`w_k` again.
 
@@ -167,9 +167,9 @@ Within each coarse bin :math:`J_h`, it sums
 
 and recomputes :math:`\bar U_h` so that :math:`\bar Y_h = \bar U_h\bar U_h^H`.
 
-The returned `weights` vector equals the bin member counts :math:`Nh` and
-should be passed as ``freq_weights``. With this choice, each bin behaves like a
-Wishart statistic with effective degrees of freedom :math:`N_b Nh`.
+The returned `weights` vector equals the bin member counts :math:`Nh` and is
+stored as ``fft_data.freq_bin_counts``. With this choice, each bin behaves like
+a Wishart statistic with effective degrees of freedom :math:`N_b Nh`.
 
 Exact coarse-grained likelihood form (from ``overleaf``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -192,7 +192,7 @@ The table below lists the most important objects and where they appear.
 - :math:`\log \delta_j(f_k)^2` → deterministic nodes ``log_delta_sq_{j}``
 - :math:`\theta_{jl}(f_k)` → deterministic nodes ``theta_re_{j}``, ``theta_im_{j}``
 - coarse-bin member counts :math:`Nh` → ``fft_data.freq_bin_counts`` (stored)
-- likelihood weights :math:`w_k` → ``config.freq_weights`` / ``self.freq_weights``
+- likelihood weights :math:`w_k` → ``fft_data.freq_bin_counts`` / ``self.freq_weights``
 
 PSD reconstruction
 ------------------

@@ -66,18 +66,15 @@ class UnivarBaseSampler(BaseSampler):
             self.spline_model.basis, dtype=jnp.float32
         )
         self.log_parametric = jnp.array(self.spline_model.log_parametric_model)
-        if self.config.freq_weights is not None:
-            freq_weights = jnp.asarray(
-                self.config.freq_weights,
-                dtype=self.log_pdgrm.dtype,
+        freq_weights = jnp.asarray(
+            self.periodogram.weights,
+            dtype=self.log_pdgrm.dtype,
+        )
+        if freq_weights.shape[0] != self.log_pdgrm.shape[0]:
+            raise ValueError(
+                "Periodogram weights must match periodogram length"
             )
-            if freq_weights.shape[0] != self.log_pdgrm.shape[0]:
-                raise ValueError(
-                    "Frequency weights must match periodogram length"
-                )
-            self.freq_weights = freq_weights
-        else:
-            self.freq_weights = jnp.ones_like(self.log_pdgrm)
+        self.freq_weights = freq_weights
 
         if self.config.verbose:
             basis_shape = tuple(self.basis_matrix.shape)

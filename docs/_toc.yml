@@ -1,11 +1,22 @@
 format: jb-book
-root: README.rst
+root: intro.rst
 chapters:
   - file: api.rst
-  - file: multivar_blocked_nuts.rst
-  - file: phi_prior_approx.rst
-  - file: multivar_implementation_notes.rst
+
+  - file: conventions.rst
+    title: User Guide
+    sections:
+      - file: development.md
+
   - file: coarse_grain.rst
-  - file: studies/runtime/runtime.rst
+    title: Technical Documentation
+    sections:
+      - file: multivar_blocked_nuts.rst
+      - file: multivar_implementation_notes.rst
+      - file: phi_prior_approx.rst
+
   - file: studies/lvk/lvk_demo.ipynb
-  - file: studies/lisa/lisa_demo.ipynb
+    title: Examples and Studies
+    sections:
+      - file: studies/lisa/lisa_demo.ipynb
+      - file: studies/runtime/runtime.rst

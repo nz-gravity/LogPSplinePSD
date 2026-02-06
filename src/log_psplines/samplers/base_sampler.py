@@ -8,6 +8,7 @@ import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Dict, Literal, Optional, Tuple, Union
 
 import arviz as az
@@ -17,6 +18,7 @@ import numpy as np
 
 from ..arviz_utils.rhat import extract_rhat_values
 from ..arviz_utils.to_arviz import results_to_arviz
+from ..diagnostics import run_all_diagnostics
 from ..logger import logger
 from ..plotting import plot_diagnostics, plot_pdgrm
 
@@ -147,10 +149,73 @@ class BaseSampler(ABC):
         logger.debug(" InferenceData created.")
         self._attach_vi_group_safe(idata)
         rhat_vals = self._compute_chain_summaries(idata)
+        self._cache_full_diagnostics(idata)
         self._log_summary_metrics(idata, lnz, lnz_err, rhat_vals)
         self._maybe_save_outputs(idata)
 
         return idata
+
+    def _cache_full_diagnostics(self, idata: az.InferenceData) -> None:
+        """Compute scalar diagnostics and store them in ``idata.attrs``.
+
+        This runs regardless of whether ``outdir`` is set. Any diagnostic plots
+        remain gated by the diagnostic modules via ``config.outdir``.
+        """
+
+        attrs = getattr(idata, "attrs", None)
+        if attrs is None or not hasattr(attrs, "__setitem__"):
+            return
+
+        true_psd = getattr(self.config, "true_psd", None)
+        idata_vi = getattr(self, "_vi_diagnostics", None)
+
+        try:
+            results = run_all_diagnostics(
+                idata=idata,
+                config=self.config,
+                psd_ref=true_psd,
+                idata_vi=idata_vi,
+            )
+        except Exception as exc:  # pragma: no cover - best-effort hook
+            if getattr(self.config, "verbose", False):
+                logger.warning(f"Full diagnostics computation failed: {exc}")
+            return
+
+        canonical_keys = {
+            "riae",
+            "riae_matrix",
+            "coverage",
+            "coherence_riae",
+            "riae_diag_mean",
+            "riae_diag_max",
+            "riae_offdiag",
+        }
+
+        for module, metrics in (results or {}).items():
+            if not metrics:
+                continue
+            for key, val in metrics.items():
+                try:
+                    fval = float(val)
+                except Exception:
+                    continue
+                if not np.isfinite(fval):
+                    continue
+
+                out_key = key if key in canonical_keys else f"{module}_{key}"
+
+                if out_key in canonical_keys and out_key in attrs:
+                    try:
+                        existing = float(attrs.get(out_key))
+                        if np.isfinite(existing):
+                            continue
+                    except Exception:
+                        pass
+
+                attrs[out_key] = fval
+
+        attrs["full_diagnostics_computed"] = 1
+        attrs["full_diagnostics_timestamp"] = datetime.now(UTC).isoformat()
 
     def _attach_vi_group_safe(self, idata: az.InferenceData) -> None:
         """Attach optional VI diagnostics to the InferenceData object."""

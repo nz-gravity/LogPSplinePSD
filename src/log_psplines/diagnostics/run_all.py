@@ -26,6 +26,9 @@ def run_all_diagnostics(
         "idata_vi": idata_vi,
     }
 
+    def _has_psd() -> bool:
+        return psd_compare._get_psd_dataset(idata, idata_vi) is not None
+
     rules: list[
         tuple[str, Callable[..., Dict[str, float]], Callable[[], bool]]
     ] = [
@@ -39,7 +42,7 @@ def run_all_diagnostics(
         (
             "psd_bands",
             psd_bands._run,
-            lambda: truth is not None or psd_ref is not None,
+            _has_psd,
         ),
         ("time_domain", time_domain._run, lambda: signals is not None),
         ("whitening", whitening._run, lambda: signals is not None),

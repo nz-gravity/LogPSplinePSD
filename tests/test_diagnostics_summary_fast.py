@@ -94,3 +94,32 @@ def test_generate_diagnostics_summary_full_uses_run_all(monkeypatch, tmp_path):
     assert "ESS bulk: min=123" in text
     assert "PSIS k-hat" in text
     assert (tmp_path / "diagnostics_summary.txt").exists()
+
+
+def test_generate_diagnostics_summary_full_uses_cached_attrs(
+    monkeypatch, tmp_path
+):
+    import log_psplines.plotting.diagnostics as diag_mod
+
+    idata = _make_min_idata()
+    idata.attrs["full_diagnostics_computed"] = 1
+    idata.attrs["mcmc_ess_bulk_min"] = 123.0
+    idata.attrs["mcmc_ess_bulk_median"] = 456.0
+    idata.attrs["mcmc_rhat_max"] = 1.02
+    idata.attrs["mcmc_rhat_mean"] = 1.01
+    idata.attrs["mcmc_psis_khat_max"] = 0.55
+    idata.attrs["energy_ebfmi_overall"] = 0.25
+    idata.attrs["psd_bands_variance_median"] = 1.2
+
+    def boom(*args, **kwargs):  # pragma: no cover
+        raise AssertionError("This should not run when cached attrs exist")
+
+    monkeypatch.setattr(diag_mod, "run_all_diagnostics", boom)
+
+    text = diag_mod.generate_diagnostics_summary(
+        idata, str(tmp_path), mode="full"
+    )
+    assert "ESS bulk: min=123" in text
+    assert "PSIS k-hat" in text
+    assert "E-BFMI" in text
+    assert (tmp_path / "diagnostics_summary.txt").exists()

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from log_psplines.arviz_utils import get_weights
+from log_psplines.arviz_utils.compare_results import compare_results
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
 from log_psplines.coarse_grain import (
     CoarseGrainConfig,
@@ -54,7 +55,6 @@ def test_multivar_mcmc(outdir, test_mode):
     default_blocks = 2 if test_mode == "fast" else 4
     samplers = [
         ("nuts", "multivariate_blocked_nuts", False, default_blocks),
-        ("multivar_nuts", "multivariate_nuts", True, 1),
     ]
 
     for sampler_name, expected_sampler_attr, expect_lp, Nb in samplers:
@@ -157,34 +157,20 @@ def test_multivar_mcmc(outdir, test_mode):
             diag_yscale="log",
         )
 
-    res_multiar_nuts = az.from_netcdf(
-        os.path.join(outdir, "multivar_nuts", "inference_data.nc")
-    )
     res_multiar_blocked_nuts = az.from_netcdf(
         os.path.join(outdir, "multivar_blocked_nuts", "inference_data.nc")
-    )
-    fig, ax = plot_psd_matrix(
-        idata=res_multiar_nuts,
-        true_psd=true_psd,
-        xscale="linear",
-        diag_yscale="log",
-        label="Multivar NUTS (1 block)",
-        save=False,
-        close=False,
     )
     fig, ax = plot_psd_matrix(
         idata=res_multiar_blocked_nuts,
         true_psd=true_psd,
         xscale="linear",
         diag_yscale="log",
-        label=f"Multivar Factorised NUTS (Nb={default_blocks})",
-        fig=fig,
-        ax=ax,
+        label=f"Multivar Blocked NUTS (Nb={default_blocks})",
         save=False,
         close=False,
         empirical_psd=empirical_full,
     )
-    fig.savefig(os.path.join(outdir, "psd_matrix_comparison.png"))
+    fig.savefig(os.path.join(outdir, "psd_matrix_posterior.png"))
     plt.close(fig)
 
     print(f"++++ multivariate MCMC test {test_mode} COMPLETE ++++")

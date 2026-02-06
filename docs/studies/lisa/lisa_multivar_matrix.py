@@ -8,7 +8,7 @@ The intent is to mirror the VAR3 mode-separation matrix workflow, but on the
 actual LISA pipeline.
 
 Key grid knobs (defaults are intentionally small-ish):
-  - sampler: multivar_blocked_nuts vs multivar_nuts
+  - sampler: multivar_blocked_nuts
   - coarse graining: on/off (linear full-band binning)
   - Nb: Wishart averaging blocks (blocked sampler only)
   - n_knots: spline complexity
@@ -123,9 +123,7 @@ def _iter_runs(
     log_bins: Sequence[int],
 ) -> Iterable[dict[str, object]]:
     for sampler in samplers:
-        blocks_grid = (
-            [1] if str(sampler) == "multivar_nuts" else list(time_blocks)
-        )
+        blocks_grid = list(time_blocks)
         for coarse in coarse_grid:
             coarse_key = str(coarse).lower().strip()
             coarse_on = coarse_key in {"on", "true", "1", "yes"}
@@ -636,8 +634,8 @@ def main() -> None:
 
     # Keep a common length divisible by all requested time-block values so each
     # blocked-sampler run sees the same data length.
-    uses_blocks = any(s == "multivar_blocked_nuts" for s in samplers)
-    block_lcm = int(math.lcm(*time_blocks)) if uses_blocks else 1
+    uses_blocks = True
+    block_lcm = int(math.lcm(*time_blocks)) if time_blocks else 1
     n = int(y_full.shape[0])
     n_used = n - (n % block_lcm)
     if n_used <= 0:
@@ -652,20 +650,13 @@ def main() -> None:
     raw_series = MultivariateTimeseries(y=y_full, t=t_full)
     standardized_ts = raw_series.standardise_for_psd()
 
-    # Cache expensive FFT preprocessing: one MultivarFFT per Wishart block count
-    # and/or one full-periodogram FFT for multivar_nuts.
+    # Cache expensive FFT preprocessing: one MultivarFFT per Wishart block count.
     wishart_cache = {}
     if uses_blocks:
         for Nb in sorted(set(time_blocks)):
             wishart_cache[int(Nb)] = standardized_ts.to_wishart_stats(
                 Nb=int(Nb), fmin=FMIN, fmax=FMAX
             )
-
-    csd_full = None
-    if any(s == "multivar_nuts" for s in samplers):
-        csd_full = standardized_ts.to_cross_spectral_density(
-            fmin=FMIN, fmax=FMAX
-        )
 
     coarse_keys = {str(x).lower().strip() for x in coarse_grid}
     coarse_off_requested = any(
@@ -684,15 +675,6 @@ def main() -> None:
                         int(fft.N),
                         int(n_total),
                     )
-        if csd_full is not None:
-            n_total = int(csd_full.N) * p
-            if n_total > 100_000:
-                logger.warning(
-                    "coarse=off with multivar_nuts implies N={} -> N≈{} basis rows; expect very slow NUTS. "
-                    "Consider --max-n-time or enabling coarse graining.",
-                    int(csd_full.N),
-                    int(n_total),
-                )
 
     (root_out / "matrix_config.json").write_text(
         json.dumps(
@@ -774,14 +756,7 @@ def main() -> None:
             rows.append(json.loads(diag_path.read_text()))
             continue
 
-        if sampler == "multivar_nuts":
-            if csd_full is None:
-                raise RuntimeError(
-                    "Internal error: csd_full cache missing for multivar_nuts."
-                )
-            data_for_run = csd_full
-        else:
-            data_for_run = wishart_cache[Nb]
+        data_for_run = wishart_cache[Nb]
 
         coarse_cfg = CoarseGrainConfig(
             enabled=bool(cg_on),

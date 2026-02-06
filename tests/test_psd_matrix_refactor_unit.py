@@ -102,7 +102,7 @@ def test_plot_psd_matrix_validates_axes_shape():
 
 def test_plot_psd_matrix_scales_and_limits(outdir):
     """Test plotting with coherence and frequency range settings."""
-    out = f"{outdir}/out_PSD_matrix"
+    out = f"{outdir}/{OUTDIR}"
     os.makedirs(out, exist_ok=True)
 
     freq, ci_dict = _build_ci(p=3, n=1000)
@@ -198,7 +198,7 @@ def test_plot_psd_matrix_extra_empirical_zorder():
 
 def test_plot_psd_matrix_with_varma_coherence(outdir):
     """Test PSD matrix plotting with VARMA data and coherence."""
-    out = f"{outdir}/out_PSD_matrix"
+    out = f"{outdir}/{OUTDIR}"
     os.makedirs(out, exist_ok=True)
 
     var_coeffs = np.array(
@@ -277,7 +277,7 @@ def test_plot_psd_matrix_with_varma_coherence(outdir):
         save=True,
     )
     plt.close(fig)
-    
+
     fig, axes = plot_psd_matrix(
         ci_dict=ci_dict_mag,
         freq=freq,
@@ -293,7 +293,7 @@ def test_plot_psd_matrix_with_varma_coherence(outdir):
 
 def test_plot_psd_matrix_with_lisa(outdir):
     """Test PSD matrix plotting with LISA data."""
-    out = f"{outdir}/out_PSD_matrix"
+    out = f"{outdir}/{OUTDIR}"
     os.makedirs(out, exist_ok=True)
 
     lisa = LISAData.load()

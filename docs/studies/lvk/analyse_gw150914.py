@@ -344,7 +344,7 @@ def process_detector_data(
         # Run MCMC sampling
         idata = run_mcmc(
             pdgrm,
-            sampler="mh",
+            sampler="nuts",
             n_samples=DEFAULT_N_SAMPLES,
             n_warmup=DEFAULT_N_WARMUP,
             outdir=det_output_dir,

@@ -78,12 +78,12 @@ def compare_results(
     plot_ess_evolution(
         run2, ax=ax, n_points=50, ess_threshold=400, color=colors[1]
     )
-    # ax legend 2 colums, blue -- "MH", orange -- "NUTS", "black sold Bulk , dotted Tail
+    # ax legend 2 columns, run1/run2, plus bulk/tail ESS markers
     ax.legend(
         loc="upper left",
         handles=[
-            plt.Line2D([0], [0], color="blue", lw=1, label="MH"),
-            plt.Line2D([0], [0], color="orange", lw=1, label="NUTS"),
+            plt.Line2D([0], [0], color=colors[0], lw=1, label=labels[0]),
+            plt.Line2D([0], [0], color=colors[1], lw=1, label=labels[1]),
             plt.Line2D([0], [0], color="black", lw=1, label="Bulk ESS"),
             plt.Line2D(
                 [0],
@@ -94,7 +94,7 @@ def compare_results(
                 label="Tail ESS",
             ),
         ],
-        labels=["MH", "NUTS", "Bulk ESS", "Tail ESS"],
+        labels=[labels[0], labels[1], "Bulk ESS", "Tail ESS"],
         ncol=2,
         frameon=False,
         fontsize=8,

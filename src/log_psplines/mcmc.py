@@ -54,7 +54,7 @@ class DiagnosticsConfig:
     outdir: Optional[str] = None
     compute_psis: bool = True
     skip_plot_diagnostics: bool = False
-    diagnostics_summary_mode: Literal["off", "light", "full"] = "light"
+    diagnostics_summary_mode: Literal["off", "light", "full"] = "full"
     diagnostics_summary_position: Literal["start", "end"] = "end"
     save_preprocessing_plots: bool = False
     preprocessing_plot_path: Optional[str] = None

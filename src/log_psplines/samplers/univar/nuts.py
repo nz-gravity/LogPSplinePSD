@@ -259,9 +259,11 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         if "phi" in samples:
             samples["phi"] = jnp.exp(samples["phi"])
         self.runtime = 0.0
-        return self._create_vi_inference_data(
+        idata = self._create_vi_inference_data(
             samples, sample_stats, diagnostics
         )
+        self._cache_full_diagnostics(idata)
+        return idata
 
     @property
     def _logp_kwargs(self):

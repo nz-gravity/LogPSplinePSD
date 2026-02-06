@@ -2045,6 +2045,14 @@ def generate_diagnostics_summary(
     attrs = getattr(idata, "attrs", {}) or {}
     if not hasattr(attrs, "get"):
         attrs = dict(attrs)
+    have_cached_full = bool(attrs.get("full_diagnostics_computed", 0))
+
+    def _as_float(value) -> Optional[float]:
+        try:
+            fval = float(value)
+        except Exception:
+            return None
+        return fval if np.isfinite(fval) else None
 
     n_samples = idata.posterior.sizes.get("draw", 0)
     n_chains = idata.posterior.sizes.get("chain", 1)
@@ -2067,7 +2075,7 @@ def generate_diagnostics_summary(
 
     diag_results = {}
     mcmc_diag = {}
-    if mode == "full":
+    if mode == "full" and not have_cached_full:
         diag_results = run_all_diagnostics(
             idata=idata,
             truth=attrs.get("true_psd"),
@@ -2133,6 +2141,20 @@ def generate_diagnostics_summary(
             except Exception:
                 pass
 
+    cached_ess_min = _as_float(attrs.get("mcmc_ess_bulk_min"))
+    cached_ess_med = _as_float(attrs.get("mcmc_ess_bulk_median"))
+    cached_rhat_max = _as_float(attrs.get("mcmc_rhat_max"))
+    cached_rhat_mean = _as_float(attrs.get("mcmc_rhat_mean"))
+
+    if cached_ess_min is not None:
+        ess_min = cached_ess_min
+    if cached_ess_med is not None:
+        ess_med = cached_ess_med
+    if cached_rhat_max is not None:
+        rhat_max = cached_rhat_max
+    if cached_rhat_mean is not None:
+        rhat_mean = cached_rhat_mean
+
     if ess_min is not None:
         summary.append(
             f"\nESS bulk: min={ess_min:.0f}"
@@ -2193,8 +2215,27 @@ def generate_diagnostics_summary(
     khat = None
     if mode == "full":
         khat = mcmc_diag.get("psis_khat_max")
+        if khat is None:
+            khat = attrs.get("mcmc_psis_khat_max")
         if khat is not None:
-            summary.append(f"PSIS k-hat (max): {khat:.3f}")
+            try:
+                summary.append(f"PSIS k-hat (max): {float(khat):.3f}")
+            except Exception:
+                pass
+
+    ebfmi = _as_float(attrs.get("energy_ebfmi_overall"))
+    if ebfmi is None:
+        ebfmi_candidates = [
+            _as_float(val)
+            for key, val in attrs.items()
+            if str(key).startswith("energy_ebfmi")
+            and str(key).endswith("_overall")
+        ]
+        ebfmi_candidates = [v for v in ebfmi_candidates if v is not None]
+        if ebfmi_candidates:
+            ebfmi = float(np.min(ebfmi_candidates))
+    if ebfmi is not None:
+        summary.append(f"E-BFMI: {ebfmi:.3f}")
 
     tree_depth = (
         idata.sample_stats.tree_depth.values.flatten()
@@ -2327,9 +2368,29 @@ def generate_diagnostics_summary(
         if coverage is not None and np.isfinite(coverage):
             psd_lines.append(f"  Coverage: {coverage*100:.1f}%")
 
+    psd_band_lines = []
+    var_med = _as_float(attrs.get("psd_bands_variance_median"))
+    var_width = _as_float(attrs.get("psd_bands_variance_ci_width"))
+    var_med_mv = _as_float(attrs.get("psd_bands_variance_median_mean"))
+    var_width_mv = _as_float(attrs.get("psd_bands_variance_ci_width_mean"))
+    if var_med is not None:
+        psd_band_lines.append(f"  Variance (PSD median): {var_med:.3g}")
+    if var_width is not None:
+        psd_band_lines.append(f"  Variance CI width: {var_width:.3g}")
+    if var_med_mv is not None:
+        psd_band_lines.append(
+            f"  Variance mean (PSD median): {var_med_mv:.3g}"
+        )
+    if var_width_mv is not None:
+        psd_band_lines.append(f"  Variance CI width mean: {var_width_mv:.3g}")
+
     if psd_lines:
         summary.append("\nPSD accuracy diagnostics:")
         summary.extend(psd_lines)
+
+    if psd_band_lines:
+        summary.append("\nPSD band summaries:")
+        summary.extend(psd_band_lines)
 
     # Overall assessment (best-effort)
     summary.append("\nOverall Convergence Assessment:")

@@ -1,5 +1,5 @@
-Multivariate blocked NUTS: math ↔ code
-====================================
+Multivariate Blocked NUTS: Math ↔ Code
+========================================
 
 This page documents the *implemented* multivariate likelihood and
 parameterisation used by the blocked sampler

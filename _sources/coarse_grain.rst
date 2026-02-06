@@ -63,7 +63,7 @@ a Wishart observation with \(N_b Nh\) degrees of freedom:
 When coarse graining is enabled, :class:`log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler`
 accepts the `weights` vector (usually via :class:`log_psplines.coarse_grain.config.CoarseGrainConfig`)
 and stores it as `freq_weights`. The NumPyro model
-:func:`log_psplines.samplers.multivar.multivar_nuts.multivariate_psplines_model`
+:func:`log_psplines.samplers.multivar.multivar_blocked_nuts.multivariate_psplines_model`
 multiplies `log_delta_sq` by `freq_weights`, ensuring the total log-det term
 matches the aggregated \(N_b Nh\) DOF. The trace term uses the **summed**
 statistic \(\bar \Y_h\) directly, so no additional \(Nh\) factors appear.

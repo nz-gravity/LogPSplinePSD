@@ -1,4 +1,4 @@
-"""Compare the impact of different numbers of knots on IAE using MH sampler (with repeats)"""
+"""Compare the impact of different numbers of knots on IAE using NUTS (with repeats)."""
 
 import os.path
 from pathlib import Path
@@ -70,7 +70,7 @@ def run_analysis_for_knots(
             knot_kwargs=dict(method="uniform"),
         )
 
-        run_outdir = f"{outdir}/mh_out/rep_{rep}"
+        run_outdir = f"{outdir}/nuts_out/rep_{rep}"
         Path(run_outdir).mkdir(parents=True, exist_ok=True)
         inference_path = f"{run_outdir}/inference_data.nc"
 
@@ -79,20 +79,20 @@ def run_analysis_for_knots(
             inf_obj = az.from_netcdf(inference_path)
         else:
             print(f"{inference_path} not found. Running MCMC...")
-            inf_obj = run_mcmc(**kawrgs, sampler="mh", outdir=run_outdir)
+            inf_obj = run_mcmc(**kawrgs, sampler="nuts", outdir=run_outdir)
 
-        median_mh = get_posterior_psd(inf_obj)[1]
+        median_psd = get_posterior_psd(inf_obj)[1]
 
         # Compute IAE
-        iae_mh = compute_iae(median_mh, data.psd_theoretical, data.freqs)
+        iae = compute_iae(median_psd, data.psd_theoretical, data.freqs)
 
         result = {
             "n_knots": n_knots,
             "rep": rep,
-            "iae": iae_mh,
+            "iae": iae,
         }
         results.append(result)
-        print(f"Knots: {n_knots}, Rep: {rep}, IAE: {iae_mh:.6f}")
+        print(f"Knots: {n_knots}, Rep: {rep}, IAE: {iae:.6f}")
 
     return results
 
@@ -164,7 +164,7 @@ def plot_comparison_for_knots(results_dict: dict, outdir: str = "output"):
     ax.set_xticklabels([str(k) for k in all_knots])
     ax.set_xlabel("Number of Knots")
     ax.set_ylabel("Integrated Average Error")
-    # ax.set_title("IAE vs Number of Knots (MH Sampler)")
+    # ax.set_title("IAE vs Number of Knots (NUTS Sampler)")
 
     # Legend
     legend_elements = [

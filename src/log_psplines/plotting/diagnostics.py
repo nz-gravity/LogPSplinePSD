@@ -660,25 +660,19 @@ def _plot_acceptance_diagnostics(idata, config):
     fig, axes = plt.subplots(2, 2, figsize=config.figsize)
 
     accept_rates = idata.sample_stats[accept_key].values.flatten()
-    target_rate = getattr(idata.attrs, "target_accept_rate", 0.44)
-    sampler_type = (
-        idata.attrs["sampler_type"].lower()
-        if "sampler_type" in idata.attrs
+    sampler_type_attr = (
+        idata.attrs.get("sampler_type", "unknown").lower()
+        if hasattr(idata, "attrs")
         else "unknown"
     )
-    sampler_type = "NUTS" if "nuts" in sampler_type else "MH"
+    sampler_type = "NUTS" if "nuts" in sampler_type_attr else "Sampler"
+    target_rate = idata.attrs.get("target_accept_prob", 0.8)
 
-    # Define good ranges based on sampler
-    if target_rate > 0.5:  # NUTS
-        good_range = (0.7, 0.9)
-        low_range = (0.0, 0.6)
-        high_range = (0.9, 1.0)
-        concerning_range = (0.6, 0.7)
-    else:  # MH
-        good_range = (0.2, 0.5)
-        low_range = (0.0, 0.2)
-        high_range = (0.5, 1.0)
-        concerning_range = (0.1, 0.2)  # MH can be lower than NUTS
+    # NUTS acceptance-rate guidance
+    good_range = (0.7, 0.9)
+    low_range = (0.0, 0.6)
+    high_range = (0.9, 1.0)
+    concerning_range = (0.6, 0.7)
 
     # Trace plot with color zones
     # Add background zones
@@ -743,10 +737,7 @@ def _plot_acceptance_diagnostics(idata, config):
 
     # Add interpretation text
     interpretation = f"{sampler_type} aims for {target_rate:.2f}."
-    if target_rate > 0.5:
-        interpretation += " Green: efficient sampling."
-    else:
-        interpretation += " MH adapts to find optimal rate."
+    interpretation += " Green: efficient sampling."
     axes[0, 0].text(
         0.02,
         0.02,
@@ -872,24 +863,14 @@ def _plot_acceptance_diagnostics_blockaware(idata, config):
         accept_rates = np.concatenate(list(channel_series.values()))
 
     sampler_type_attr = idata.attrs.get("sampler_type", "").lower()
-    is_nuts = "nuts" in sampler_type_attr
-    target_rate = idata.attrs.get(
-        "target_accept_rate",
-        idata.attrs.get("target_accept_prob", 0.8 if is_nuts else 0.44),
-    )
-    sampler_type = "NUTS" if is_nuts else "MH"
+    sampler_type = "NUTS" if "nuts" in sampler_type_attr else "Sampler"
+    target_rate = idata.attrs.get("target_accept_prob", 0.8)
 
-    # Ranges
-    if is_nuts:
-        good_range = (0.7, 0.9)
-        low_range = (0.0, 0.6)
-        high_range = (0.9, 1.0)
-        concerning_range = (0.6, 0.7)
-    else:
-        good_range = (0.2, 0.5)
-        low_range = (0.0, 0.2)
-        high_range = (0.5, 1.0)
-        concerning_range = (0.1, 0.2)
+    # Ranges (NUTS guidance)
+    good_range = (0.7, 0.9)
+    low_range = (0.0, 0.6)
+    high_range = (0.9, 1.0)
+    concerning_range = (0.6, 0.7)
 
     # Background zones
     axes[0, 0].axhspan(good_range[0], good_range[1], alpha=0.1, color="green")
@@ -1435,7 +1416,7 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
         else "unknown"
     )
 
-    # Check for NUTS-specific fields that MH definitely doesn't have
+    # Check for NUTS-specific fields
     nuts_specific_fields = [
         "energy",
         "num_steps",
@@ -1448,9 +1429,6 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
         any(field in idata.sample_stats for field in nuts_specific_fields)
         or "nuts" in sampler_type
     )
-
-    # Check for MH-specific fields (exclude anything NUTS might have)
-    has_mh = "step_size_mean" in idata.sample_stats and not has_nuts
 
     if has_nuts:
 
@@ -1485,13 +1463,6 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
                 _plot_single_nuts_block(idata, config, channel_idx)
 
             plot_nuts_block()
-    elif has_mh:
-
-        @safe_plot(f"{diag_dir}/mh_step_sizes.png", config.dpi)
-        def plot_mh():
-            _plot_mh_step_sizes(idata, config)
-
-        plot_mh()
 
 
 def _plot_nuts_diagnostics(idata, config):
@@ -1809,70 +1780,6 @@ def _plot_nuts_diagnostics(idata, config):
         )
         summary_ax.set_title("NUTS Summary Statistics")
         summary_ax.axis("off")
-
-    plt.tight_layout()
-
-
-def _plot_mh_step_sizes(idata, config):
-    """MH step size diagnostics."""
-    fig, axes = plt.subplots(2, 2, figsize=config.figsize)
-
-    step_means = idata.sample_stats.step_size_mean.values.flatten()
-    step_stds = idata.sample_stats.step_size_std.values.flatten()
-
-    # Step size evolution
-    axes[0, 0].plot(
-        step_means, alpha=0.7, linewidth=1, label="Mean", color="blue"
-    )
-    axes[0, 0].plot(
-        step_stds, alpha=0.7, linewidth=1, label="Std", color="orange"
-    )
-    axes[0, 0].set_xlabel("Iteration")
-    axes[0, 0].set_ylabel("Step Size")
-    axes[0, 0].set_title("Step Size Evolution")
-    axes[0, 0].legend()
-    axes[0, 0].grid(True, alpha=0.3)
-
-    # Step size distributions
-    axes[0, 1].hist(step_means, bins=30, alpha=0.5, label="Mean", color="blue")
-    axes[0, 1].hist(step_stds, bins=30, alpha=0.5, label="Std", color="orange")
-    axes[0, 1].set_xlabel("Step Size")
-    axes[0, 1].set_ylabel("Count")
-    axes[0, 1].set_title("Step Size Distributions")
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-
-    # Step size adaptation quality
-    axes[1, 0].plot(step_means / step_stds, alpha=0.7, linewidth=1)
-    axes[1, 0].set_xlabel("Iteration")
-    axes[1, 0].set_ylabel("Mean / Std")
-    axes[1, 0].set_title("Step Size Consistency")
-    axes[1, 0].grid(True, alpha=0.3)
-
-    # Summary statistics
-    summary_lines = [
-        "Step Size Summary:",
-        f"Final mean: {step_means[-1]:.4f}",
-        f"Final std: {step_stds[-1]:.4f}",
-        f"Mean of means: {np.mean(step_means):.4f}",
-        f"Mean of stds: {np.mean(step_stds):.4f}",
-        "",
-        "Adaptation Quality:",
-        f"CV of means: {np.std(step_means)/np.mean(step_means):.3f}",
-        f"CV of stds: {np.std(step_stds)/np.mean(step_stds):.3f}",
-    ]
-
-    axes[1, 1].text(
-        0.05,
-        0.95,
-        "\n".join(summary_lines),
-        transform=axes[1, 1].transAxes,
-        fontsize=10,
-        verticalalignment="top",
-        fontfamily="monospace",
-    )
-    axes[1, 1].set_title("Step Size Statistics")
-    axes[1, 1].axis("off")
 
     plt.tight_layout()
 

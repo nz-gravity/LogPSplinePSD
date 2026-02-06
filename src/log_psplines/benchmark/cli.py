@@ -74,10 +74,10 @@ from .runtime_benchmark import RuntimeBenchmark
 )
 @click.option(
     "--sampler",
-    type=click.Choice(["nuts", "mh", "all"], case_sensitive=False),
-    default="all",
+    type=click.Choice(["nuts", "all"], case_sensitive=False),
+    default="nuts",
     show_default=True,
-    help="Which samplers to benchmark: 'nuts', 'mh', or 'all'",
+    help="Which samplers to benchmark: 'nuts' or 'all'",
 )
 def main(
     outdir,

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from log_psplines.arviz_utils import compare_results, get_weights
+from log_psplines.arviz_utils import get_weights
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
 from log_psplines.coarse_grain import (
     CoarseGrainConfig,
@@ -225,10 +225,11 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
 def test_mcmc_unit(synthetic_univar_timeseries):
     idata = run_mcmc(
         synthetic_univar_timeseries,
-        sampler="mh",
+        sampler="nuts",
         n_knots=3,
         n_samples=3,
         n_warmup=3,
+        init_from_vi=False,
         outdir=None,
         rng_key=0,
         compute_lnz=False,
@@ -257,13 +258,13 @@ def test_mcmc(outdir: str, test_mode: str):
     n_samples = n_warmup = 120
     n_knots = 8
     compute_lnz = True
-    sampler_names = ["nuts", "mh"]
+    sampler_names = ["nuts"]
     if test_mode == "fast":
         n_samples = n_warmup = 3
         n = 64
         n_knots = 3
         compute_lnz = False
-        sampler_names = ["nuts", "mh"]
+        sampler_names = ["nuts"]
     ar_data = ARData(
         order=4, duration=1.0, fs=n, seed=42, sigma=np.sqrt(psd_scale)
     )
@@ -289,6 +290,7 @@ def test_mcmc(outdir: str, test_mode: str):
             compute_lnz=compute_lnz,
             true_psd=ar_data.psd_theoretical,
             verbose=(test_mode != "fast"),
+            init_from_vi=(test_mode != "fast"),
             # coarse_grain=coarse_grain,
         )
 
@@ -332,13 +334,6 @@ def test_mcmc(outdir: str, test_mode: str):
         assert np.isclose(
             posd_psd_scale, psd_scale, rtol=1.0
         ), "Posterior PSD scale is not within expected range."
-
-    compare_results(
-        az.from_netcdf(os.path.join(outdir, "out_nuts", "inference_data.nc")),
-        az.from_netcdf(os.path.join(outdir, "out_mh", "inference_data.nc")),
-        labels=["NUTS", "MH"],
-        outdir=f"{outdir}/out_comparison",
-    )
 
     fig = plot_pdgrm(idata=idata, interactive=True)  # test interactive mode
     fig.write_html(os.path.join(outdir, "test_mcmc_interactive.html"))

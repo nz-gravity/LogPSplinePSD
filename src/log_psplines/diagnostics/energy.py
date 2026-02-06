@@ -266,7 +266,7 @@ def plot_ebfmi_diagnostics(
     return ebfmi_by_chain
 
 
-def run(
+def _run(
     *,
     idata=None,
     config=None,

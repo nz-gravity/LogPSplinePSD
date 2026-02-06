@@ -64,21 +64,25 @@ class ARData:
             Seed for the random number generator (if you want reproducible draws).
         """
         self.order = order
+        default_ar = {
+            1: [0.9],
+            2: [1.45, -0.9025],
+            3: [0.9, -0.8, 0.7],
+            4: [0.9, -0.8, 0.7, -0.6],
+            5: [1, -2.2137, 2.9403, -2.1697, 0.9606],
+        }
 
         if ar_coefs is None:
-            if order == 1:
-                ar_coefs = [0.9]
-            elif order == 2:
-                ar_coefs = [1.45, -0.9025]
-            elif order == 3:
-                ar_coefs = [0.9, -0.8, 0.7]
-            elif order == 4:
-                ar_coefs = [0.9, -0.8, 0.7, -0.6]
-            elif order == 5:
-                ar_coefs = [1, -2.2137, 2.9403, -2.1697, 0.9606]
-
-        else:
-            assert len(self.ar_coefs) == order
+            if order not in default_ar:
+                raise ValueError(
+                    f"No default AR coefficients for order={order}. "
+                    "Provide `ar_coefs` explicitly."
+                )
+            ar_coefs = default_ar[order]
+        elif len(ar_coefs) != order:
+            raise ValueError(
+                f"Expected {order} AR coefficients, got {len(ar_coefs)}."
+            )
 
         self.ar_coefs = np.asarray(ar_coefs, dtype=float)
         self.order = len(self.ar_coefs)

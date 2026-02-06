@@ -18,7 +18,7 @@ def test_run_univariate_identity_metrics():
     )
     idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
 
-    metrics = psd_compare.run(idata=idata, truth=truth)
+    metrics = psd_compare._run(idata=idata, truth=truth)
     assert metrics["riae"] == pytest.approx(0.0)
     assert metrics["coverage"] == pytest.approx(1.0)
     assert metrics["riae_p05"] > 0.0
@@ -37,7 +37,7 @@ def test_run_univariate_scaled_metrics():
     )
     idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
 
-    metrics = psd_compare.run(idata=idata, truth=truth)
+    metrics = psd_compare._run(idata=idata, truth=truth)
     assert metrics["riae"] == pytest.approx(1.0)
     assert "coverage" not in metrics
 
@@ -66,7 +66,7 @@ def test_run_multivariate_identity_metrics():
     )
     idata = az.InferenceData(posterior_psd=psd_ds)
 
-    metrics = psd_compare.run(idata=idata, truth=true_psd)
+    metrics = psd_compare._run(idata=idata, truth=true_psd)
     assert metrics["riae_matrix"] == pytest.approx(0.0)
     assert metrics["riae_diag_mean"] == pytest.approx(0.0)
     assert metrics["riae_diag_max"] == pytest.approx(0.0)
@@ -77,5 +77,5 @@ def test_run_returns_empty_when_missing_inputs():
     freqs = np.array([0.1, 0.2])
     truth = np.ones_like(freqs)
     idata = az.InferenceData()
-    assert psd_compare.run(idata=idata, truth=truth) == {}
-    assert psd_compare.run(idata=None, truth=None) == {}
+    assert psd_compare._run(idata=idata, truth=truth) == {}
+    assert psd_compare._run(idata=None, truth=None) == {}

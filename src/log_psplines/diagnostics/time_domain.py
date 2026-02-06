@@ -38,7 +38,7 @@ def _psd_variance(psd_ds) -> float:
     return float("nan")
 
 
-def run(
+def _run(
     *,
     idata=None,
     config=None,

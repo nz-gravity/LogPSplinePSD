@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Callable, Dict
 
 import arviz as az
 import numpy as np
@@ -10,56 +10,65 @@ import numpy as np
 from ._utils import khat_status
 
 
-def _compute_rhat(idata) -> Dict[str, float]:
+def _metric_from_attr_or_compute(
+    idata,
+    *,
+    attr_key: str,
+    attr_metrics: Callable[[np.ndarray], Dict[str, float]],
+    compute_fn: Callable[[], np.ndarray],
+    compute_metrics: Callable[[np.ndarray], Dict[str, float]],
+) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
-    # Prefer precomputed Rhat when available (avoids expensive ArviZ scans).
-    try:
-        attrs = getattr(idata, "attrs", {}) or {}
-        rhat_attr = attrs.get("rhat")
-        if rhat_attr is not None:
-            vals = np.asarray(rhat_attr).reshape(-1)
-            finite = vals[np.isfinite(vals)]
-            if finite.size:
-                metrics["rhat_max"] = float(np.max(finite))
-                metrics["rhat_mean"] = float(np.mean(finite))
-                return metrics
-    except Exception:
-        pass
-    try:
-        rhat = az.rhat(idata)
-        vals = np.asarray(rhat.to_array()).reshape(-1)
+    attrs = getattr(idata, "attrs", {}) or {}
+
+    attr_values = attrs.get(attr_key)
+    if attr_values is not None:
+        vals = np.asarray(attr_values).reshape(-1)
         finite = vals[np.isfinite(vals)]
         if finite.size:
-            metrics["rhat_max"] = float(np.max(finite))
-            metrics["rhat_mean"] = float(np.mean(finite))
+            return attr_metrics(finite)
+
+    try:
+        computed = np.asarray(compute_fn()).reshape(-1)
     except Exception:
-        pass
+        return metrics
+
+    finite = computed[np.isfinite(computed)]
+    if finite.size:
+        metrics.update(compute_metrics(finite))
     return metrics
+
+
+def _compute_rhat(idata) -> Dict[str, float]:
+    return _metric_from_attr_or_compute(
+        idata,
+        attr_key="rhat",
+        attr_metrics=lambda vals: {
+            "rhat_max": float(np.max(vals)),
+            "rhat_mean": float(np.mean(vals)),
+        },
+        compute_fn=lambda: np.asarray(az.rhat(idata).to_array()),
+        compute_metrics=lambda vals: {
+            "rhat_max": float(np.max(vals)),
+            "rhat_mean": float(np.mean(vals)),
+        },
+    )
 
 
 def _compute_ess(idata) -> Dict[str, float]:
-    metrics: Dict[str, float] = {}
-    # Prefer precomputed ESS when available (avoids expensive ArviZ scans).
-    try:
-        attrs = getattr(idata, "attrs", {}) or {}
-        ess_attr = attrs.get("ess")
-        if ess_attr is not None:
-            vals = np.asarray(ess_attr).reshape(-1)
-            finite = vals[np.isfinite(vals)]
-            if finite.size:
-                metrics["ess_bulk_min"] = float(np.min(finite))
-                metrics["ess_bulk_median"] = float(np.median(finite))
-                return metrics
-    except Exception:
-        pass
-    try:
-        ess = az.ess(idata, method="bulk")
-        vals = np.asarray(ess.to_array())
-        metrics["ess_bulk_min"] = float(np.nanmin(vals))
-        metrics["ess_bulk_median"] = float(np.nanmedian(vals))
-    except Exception:
-        pass
-    return metrics
+    return _metric_from_attr_or_compute(
+        idata,
+        attr_key="ess",
+        attr_metrics=lambda vals: {
+            "ess_bulk_min": float(np.min(vals)),
+            "ess_bulk_median": float(np.median(vals)),
+        },
+        compute_fn=lambda: np.asarray(az.ess(idata, method="bulk").to_array()),
+        compute_metrics=lambda vals: {
+            "ess_bulk_min": float(np.min(vals)),
+            "ess_bulk_median": float(np.median(vals)),
+        },
+    )
 
 
 def _compute_divergences(idata) -> Dict[str, float]:
@@ -71,15 +80,16 @@ def _compute_divergences(idata) -> Dict[str, float]:
     values = []
     for key in div_keys:
         try:
-            arr = np.asarray(idata.sample_stats[key])
-            values.append(arr)
+            values.append(np.asarray(idata.sample_stats[key]))
         except Exception:
             continue
 
-    if values:
-        div = np.concatenate([v.reshape(-1) for v in values])
-        metrics["divergence_fraction"] = float(np.mean(div))
-        metrics["divergence_total"] = float(np.sum(div))
+    if not values:
+        return metrics
+
+    div = np.concatenate([v.reshape(-1) for v in values])
+    metrics["divergence_fraction"] = float(np.mean(div))
+    metrics["divergence_total"] = float(np.sum(div))
     return metrics
 
 
@@ -87,6 +97,7 @@ def _compute_acceptance(idata) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
     if not hasattr(idata, "sample_stats"):
         return metrics
+
     for key in ("accept_prob", "acceptance_rate"):
         if key in idata.sample_stats:
             arr = np.asarray(idata.sample_stats[key])
@@ -95,13 +106,15 @@ def _compute_acceptance(idata) -> Dict[str, float]:
 
     channel_means = []
     for key in idata.sample_stats:
-        if str(key).startswith("accept_prob_channel_"):
-            try:
-                channel_means.append(
-                    float(np.mean(np.asarray(idata.sample_stats[key])))
-                )
-            except Exception:
-                continue
+        if not str(key).startswith("accept_prob_channel_"):
+            continue
+        try:
+            channel_means.append(
+                float(np.mean(np.asarray(idata.sample_stats[key])))
+            )
+        except Exception:
+            continue
+
     if channel_means:
         metrics["acceptance_rate_mean"] = float(np.mean(channel_means))
     return metrics
@@ -114,7 +127,7 @@ def _compute_psis(idata) -> Dict[str, float]:
         pareto = np.asarray(getattr(loo_res, "pareto_k", []))
         if pareto.size:
             khat_max = float(np.nanmax(pareto))
-            status_code, status_label = khat_status(khat_max)
+            status_code, _ = khat_status(khat_max)
             metrics["psis_khat_max"] = khat_max
             if status_code is not None:
                 metrics["psis_khat_status"] = float(status_code)
@@ -123,7 +136,7 @@ def _compute_psis(idata) -> Dict[str, float]:
     return metrics
 
 
-def run(
+def _run(
     *,
     idata=None,
     config=None,
@@ -136,16 +149,8 @@ def run(
     if idata is None:
         return {}
 
-    metrics: Dict[str, float] = {}
-    # Read optional toggle from idata attrs to skip PSIS
     attrs = getattr(idata, "attrs", {}) or {}
-    compute_psis_flag = True
-    try:
-        flag = attrs.get("compute_psis")
-        if flag is not None:
-            compute_psis_flag = bool(flag)
-    except Exception:
-        pass
+    compute_psis_flag = bool(attrs.get("compute_psis", True))
 
     fns = [
         _compute_rhat,
@@ -155,6 +160,8 @@ def run(
     ]
     if compute_psis_flag:
         fns.append(_compute_psis)
+
+    metrics: Dict[str, float] = {}
     for fn in fns:
         metrics.update(fn(idata))
 

@@ -8,7 +8,7 @@ import numpy as np
 
 from ._utils import as_scalar, khat_status
 from .psd_compare import _get_psd_dataset
-from .psd_compare import run as run_psd_compare
+from .psd_compare import _run as _run_psd_compare
 
 
 def _extract_field(obj, key: str):
@@ -91,7 +91,7 @@ def _moment_bias(summary: dict) -> Dict[str, float]:
     return metrics
 
 
-def run(
+def _run(
     *,
     idata=None,
     config=None,
@@ -132,7 +132,7 @@ def run(
     if ratio is not None and np.isfinite(ratio):
         metrics["variance_ratio_vs_mcmc"] = ratio
 
-    psd_metrics = run_psd_compare(
+    psd_metrics = _run_psd_compare(
         idata=None,
         idata_vi=idata_vi,
         truth=truth if truth is not None else psd_ref,

@@ -770,17 +770,7 @@ def prepare_block_vi(
                 sampler.Nb,
                 sampler.freq_weights,
                 sampler.freq_bin_counts,
-                False,
-                jnp.zeros((sampler.N,), dtype=sampler.freq.dtype),
             )
-            if hasattr(sampler, "_get_noise_floor_args"):
-                apply_noise_floor, noise_floor_sq = (
-                    sampler._get_noise_floor_args(channel_index)
-                )
-                model_args = model_args[:-2] + (
-                    apply_noise_floor,
-                    noise_floor_sq,
-                )
 
             vi_result, losses_arr = _run_single_block_vi(
                 sampler=sampler,

@@ -15,7 +15,6 @@ kawrgs = dict(
     knot_kwargs=dict(method="uniform"),
     init_from_vi=True,
 )
-inference_mh = run_mcmc(**kawrgs, sampler="mh", outdir="out/mh_out")
 inference_nuts = run_mcmc(**kawrgs, sampler="nuts", outdir="out/nuts_out")
 
 fig, ax = plt.subplots(1, 1, figsize=(4, 3))
@@ -26,13 +25,6 @@ ax.plot(
     linestyle="--",
     label="True PSD",
     zorder=10,
-)
-plot_pdgrm(
-    idata=inference_mh,
-    ax=ax,
-    model_label="MH",
-    model_color="tab:blue",
-    show_knots=False,
 )
 plot_pdgrm(
     idata=inference_nuts,

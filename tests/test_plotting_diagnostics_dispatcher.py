@@ -12,7 +12,6 @@ from log_psplines.plotting.diagnostics import (
     _create_sampler_diagnostics,
     _plot_acceptance_diagnostics,
     _plot_log_posterior,
-    _plot_mh_step_sizes,
     _plot_nuts_diagnostics,
 )
 
@@ -41,19 +40,7 @@ def _make_nuts_idata():
     }
     idata = az.from_dict(posterior=posterior, sample_stats=sample_stats)
     idata.attrs["sampler_type"] = "nuts"
-    idata.attrs["target_accept_rate"] = 0.8
-    return idata
-
-
-def _make_mh_idata():
-    rng = np.random.default_rng(2)
-    posterior = {"weights": rng.normal(size=(1, 10, 2))}
-    sample_stats = {
-        "step_size_mean": rng.uniform(0.1, 0.2, size=(1, 10)),
-        "step_size_std": rng.uniform(0.01, 0.02, size=(1, 10)),
-    }
-    idata = az.from_dict(posterior=posterior, sample_stats=sample_stats)
-    idata.attrs["sampler_type"] = "mh"
+    idata.attrs["target_accept_prob"] = 0.8
     return idata
 
 
@@ -64,8 +51,8 @@ def _make_acceptance_rate_idata():
         "acceptance_rate": rng.uniform(0.1, 0.4, size=(1, 12)),
     }
     idata = az.from_dict(posterior=posterior, sample_stats=sample_stats)
-    idata.attrs["sampler_type"] = "mh"
-    idata.attrs["target_accept_rate"] = 0.3
+    idata.attrs["sampler_type"] = "nuts"
+    idata.attrs["target_accept_prob"] = 0.8
     return idata
 
 
@@ -99,15 +86,6 @@ def test_create_sampler_diagnostics_nuts_writes_files(tmp_path):
     assert (diag_dir / "nuts_block_0_diagnostics.png").exists()
 
 
-def test_create_sampler_diagnostics_mh_writes_files(tmp_path):
-    idata = _make_mh_idata()
-    config = DiagnosticsConfig(figsize=(6, 4))
-    diag_dir = tmp_path / "diagnostics"
-    diag_dir.mkdir()
-    _create_sampler_diagnostics(idata, str(diag_dir), config)
-    assert (diag_dir / "mh_step_sizes.png").exists()
-
-
 def test_create_divergences_diagnostics_writes_file(tmp_path):
     idata = _make_nuts_idata()
     config = DiagnosticsConfig(figsize=(6, 4))
@@ -132,16 +110,6 @@ def test_plot_acceptance_acceptance_rate_branch():
     config = DiagnosticsConfig(figsize=(6, 4))
     before = set(plt.get_fignums())
     _plot_acceptance_diagnostics(idata, config)
-    fig = _latest_figure(before)
-    assert len(fig.axes) == 4
-    plt.close(fig)
-
-
-def test_plot_mh_step_sizes_smoke():
-    idata = _make_mh_idata()
-    config = DiagnosticsConfig(figsize=(6, 4))
-    before = set(plt.get_fignums())
-    _plot_mh_step_sizes(idata, config)
     fig = _latest_figure(before)
     assert len(fig.axes) == 4
     plt.close(fig)

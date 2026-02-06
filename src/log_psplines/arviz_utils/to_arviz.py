@@ -43,9 +43,9 @@ def results_to_arviz(
 
     # Compute diagnostics if true_psd is provided (using posterior_psd from idata)
     if config.true_psd is not None:
-        from ..diagnostics.psd_compare import run as run_psd_compare
+        from ..diagnostics.psd_compare import _run as _run_psd_compare
 
-        psd_metrics = run_psd_compare(
+        psd_metrics = _run_psd_compare(
             idata=idata, truth=np.asarray(config.true_psd)
         )
         idata.attrs.update(psd_metrics)

@@ -8,7 +8,7 @@ from .base import (
 )
 from .diagnostics import generate_vi_diagnostics_summary, plot_diagnostics
 from .pdgrm import plot_pdgrm
-from .psd_matrix import plot_psd_matrix
+from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 from .utils import PlottingData, unpack_data
 from .vi import (
     plot_vi_elbo,
@@ -33,6 +33,7 @@ __all__ = [
     "plot_diagnostics",
     "generate_vi_diagnostics_summary",
     "plot_psd_matrix",
+    "PSDMatrixPlotSpec",
     "plot_vi_elbo",
     "plot_vi_initial_psd_matrix",
     "plot_vi_initial_psd_univariate",

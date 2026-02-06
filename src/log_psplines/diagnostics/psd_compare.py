@@ -183,7 +183,7 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
     return metrics
 
 
-def run(
+def _run(
     *,
     idata=None,
     config=None,

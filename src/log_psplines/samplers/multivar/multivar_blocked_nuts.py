@@ -24,18 +24,6 @@ chain samples only the parameters that affect the j‑th likelihood factor and i
 therefore independent of the other chains. The per‑block results are then
 assembled into global arrays ``log_delta_sq`` with shape (draw, freq, p) and
 ``theta_re|im`` with shape (draw, freq, n_theta) matching the unified sampler.
-
-Example
--------
-Enable an innovation noise floor for Block 3 using a theory-scaled PSD:
-
->>> config = MultivarBlockedNUTSConfig(
-...     use_noise_floor=True,
-...     noise_floor_mode="theory_scaled",
-...     noise_floor_scale=1e-4,
-...     theory_psd=theory_psd,
-... )
->>> sampler = MultivarBlockedNUTSSampler(fft_data, spline_model, config=config)
 """
 
 import time
@@ -54,51 +42,6 @@ from ..base_sampler import SamplerConfig
 from ..utils import sample_pspline_block
 from ..vi_init.adapters import prepare_block_vi
 from .multivar_base import MultivarBaseSampler
-
-
-def compute_noise_floor_sq(
-    freqs: jnp.ndarray,
-    block_j: int,
-    mode: str,
-    constant: float,
-    scale: float,
-    array: Optional[jnp.ndarray],
-    theory_psd: Optional[jnp.ndarray],
-) -> jnp.ndarray:
-    """Compute innovation noise floor squared for a block.
-
-    The constant value is interpreted as a variance-space floor (already
-    squared).
-    """
-    N = freqs.shape[0]
-    if mode == "constant":
-        floor_sq = jnp.full((N,), float(constant), dtype=freqs.dtype)
-    elif mode == "theory_scaled":
-        if theory_psd is None:
-            raise ValueError(
-                "theory_psd is required when noise_floor_mode='theory_scaled'."
-            )
-        theory_psd = jnp.asarray(theory_psd, dtype=freqs.dtype)
-        if theory_psd.shape[0] != N:
-            raise ValueError(
-                f"theory_psd for block {block_j} has shape {theory_psd.shape}, expected ({N},)."
-            )
-        floor_sq = jnp.asarray(scale, dtype=freqs.dtype) * theory_psd
-    elif mode == "array":
-        if array is None:
-            raise ValueError(
-                "noise_floor_array is required when noise_floor_mode='array'."
-            )
-        floor_sq = jnp.asarray(array, dtype=freqs.dtype)
-        if floor_sq.shape[0] != N:
-            raise ValueError(
-                f"noise_floor_array for block {block_j} has shape {floor_sq.shape}, expected ({N},)."
-            )
-    else:
-        raise ValueError(
-            f"Unknown noise_floor_mode='{mode}'. Expected 'constant', 'theory_scaled', or 'array'."
-        )
-    return jnp.maximum(floor_sq, jnp.asarray(1e-30, dtype=freqs.dtype))
 
 
 def _blocked_channel_model(
@@ -121,8 +64,6 @@ def _blocked_channel_model(
     Nb: int,
     freq_weights: jnp.ndarray,
     freq_bin_counts: jnp.ndarray,
-    apply_noise_floor: bool,
-    noise_floor_sq: jnp.ndarray,
 ) -> None:
     """NumPyro model for a single Cholesky block (row of ``T``).
 
@@ -154,8 +95,6 @@ def _blocked_channel_model(
       ``y`` now replaced by the eigenvector-weighted replicates ``u``. The
       contribution to the log-likelihood is
       ``−ν Σ_k log δ_j(f_k)^2 − Σ_k ||u_j(f_k)||^2 / δ_j(f_k)^2`` up to constants.
-    - When enabled, an innovation noise floor is added to ``δ_j(f)^2`` inside
-      the likelihood terms to avoid variance collapse in near-null bands.
     - Deterministic nodes record the evaluated spline fields so downstream code
       can reconstruct the PSD matrix without re-evaluating the splines.
     """
@@ -227,13 +166,7 @@ def _blocked_channel_model(
         theta_re = jnp.zeros((N, 0))
         theta_im = jnp.zeros((N, 0))
 
-    delta_sq = jnp.exp(log_delta_sq_safe)
-    if apply_noise_floor:
-        # Innovation noise floor prevents variance collapse in near-null bands
-        # and stabilizes the likelihood geometry.
-        delta_eff_sq = delta_sq + noise_floor_sq
-    else:
-        delta_eff_sq = delta_sq
+    delta_eff_sq = jnp.exp(log_delta_sq_safe)
     fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
     sum_log_det = -float(Nb) * jnp.sum(fw * jnp.log(delta_eff_sq))
 
@@ -302,15 +235,6 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     # ``alpha_phi`` and ``beta_phi``.
     alpha_phi_theta: Optional[float] = None
     beta_phi_theta: Optional[float] = None
-
-    # Innovation noise floor controls (variance-space floor added in likelihood).
-    use_noise_floor: bool = False
-    noise_floor_mode: str = "constant"
-    noise_floor_constant: float = 0.0
-    noise_floor_scale: float = 1e-4
-    noise_floor_array: Optional[jnp.ndarray] = None
-    theory_psd: Optional[jnp.ndarray] = None
-    noise_floor_blocks: Sequence[int] | str = (3,)
 
     def __post_init__(self):
         super().__post_init__()
@@ -384,36 +308,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 f"{name} must have length {self.p}, got {len(values)}."
             )
         return values[channel_index]
-
-    def _should_apply_noise_floor(self, channel_index: int) -> bool:
-        if not self.config.use_noise_floor:
-            return False
-        blocks = self.config.noise_floor_blocks
-        if isinstance(blocks, str):
-            if blocks.lower() == "all":
-                return True
-            raise ValueError(
-                f"noise_floor_blocks must be 'all' or a sequence of indices, got '{blocks}'."
-            )
-        return channel_index in set(blocks)
-
-    def _get_noise_floor_args(
-        self, channel_index: int
-    ) -> tuple[bool, jnp.ndarray]:
-        apply_noise_floor = self._should_apply_noise_floor(channel_index)
-        if apply_noise_floor:
-            noise_floor_sq = compute_noise_floor_sq(
-                self.freq,
-                channel_index,
-                self.config.noise_floor_mode,
-                self.config.noise_floor_constant,
-                self.config.noise_floor_scale,
-                self.config.noise_floor_array,
-                self.config.theory_psd,
-            )
-        else:
-            noise_floor_sq = jnp.zeros((self.N,), dtype=self.freq.dtype)
-        return apply_noise_floor, noise_floor_sq
 
     def sample(
         self,
@@ -496,10 +390,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             u_re_prev = self.u_re[:, :channel_index, :]
             u_im_prev = self.u_im[:, :channel_index, :]
 
-            apply_noise_floor, noise_floor_sq = self._get_noise_floor_args(
-                channel_index
-            )
-
             target_accept_prob = self._get_channel_setting(
                 "target_accept_prob_by_channel",
                 channel_index,
@@ -553,8 +443,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.Nb,
                 self.freq_weights,
                 self.freq_bin_counts,
-                apply_noise_floor,
-                noise_floor_sq,
                 extra_fields=(
                     (
                         "potential_energy",

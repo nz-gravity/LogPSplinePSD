@@ -405,14 +405,12 @@ def _create_multivar_inference_data(
         u_re = np.asarray(fft_data.u_re, dtype=np.float64)
         u_im = np.asarray(fft_data.u_im, dtype=np.float64)
         u_complex = u_re + 1j * u_im
-        weights = (
-            np.asarray(config.freq_weights, dtype=np.float64)
-            if config.freq_weights is not None
-            else None
-        )
+        weights = getattr(fft_data, "freq_bin_counts", None)
+        if weights is not None:
+            weights = np.asarray(weights, dtype=np.float64)
         if weights is not None and weights.shape != (fft_data.N,):
             raise ValueError(
-                "Frequency weights length must match number of frequencies."
+                "Frequency bin counts length must match number of frequencies."
             )
         observed_csd = wishart_u_to_psd(
             u_complex,

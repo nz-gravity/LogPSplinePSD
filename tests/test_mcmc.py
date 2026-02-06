@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from log_psplines.arviz_utils import get_weights
+from log_psplines.arviz_utils.compare_results import compare_results
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
 from log_psplines.coarse_grain import (
     CoarseGrainConfig,

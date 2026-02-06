@@ -26,8 +26,6 @@ from .psplines import LogPSplines, MultivariateLogPSplines
 from .samplers import (
     MultivarBlockedNUTSConfig,
     MultivarBlockedNUTSSampler,
-    MultivarNUTSConfig,
-    MultivarNUTSSampler,
     NUTSConfig,
     NUTSSampler,
 )
@@ -35,7 +33,6 @@ from .samplers import (
 SamplerName = Literal[
     "nuts",
     "multivar_blocked_nuts",
-    "multivar_nuts",
 ]
 
 
@@ -396,21 +393,11 @@ def _prepare_processed_data(
         )
     else:
         raw_multivar_ts = data
-        if sampler == "multivar_nuts":
-            if config.Nb != 1 and config.diagnostics.verbose:
-                logger.warning(
-                    "multivar_nuts ignores Nb; using the full-periodogram likelihood."
-                )
-            processed = standardized_ts.to_cross_spectral_density(
-                fmin=config.model.fmin,
-                fmax=config.model.fmax,
-            )
-        else:
-            processed = standardized_ts.to_wishart_stats(
-                Nb=config.Nb,
-                fmin=config.model.fmin,
-                fmax=config.model.fmax,
-            )
+        processed = standardized_ts.to_wishart_stats(
+            Nb=config.Nb,
+            fmin=config.model.fmin,
+            fmax=config.model.fmax,
+        )
 
     if config.diagnostics.verbose:
         logger.info(
@@ -418,7 +405,7 @@ def _prepare_processed_data(
         )
 
     if isinstance(processed, MultivarFFT):
-        allowed = {"nuts", "multivar_blocked_nuts", "multivar_nuts"}
+        allowed = {"nuts", "multivar_blocked_nuts"}
         if sampler not in allowed:
             if config.diagnostics.verbose:
                 allowed_str = ", ".join(sorted(allowed))
@@ -801,7 +788,7 @@ def run_mcmc(
     run_config = _normalize_run_config(config, legacy_kwargs)
 
     if run_config.vi.only_vi:
-        vi_capable = {"nuts", "multivar_blocked_nuts", "multivar_nuts"}
+        vi_capable = {"nuts", "multivar_blocked_nuts"}
         if run_config.sampler not in vi_capable:
             raise ValueError(
                 f"Sampler '{run_config.sampler}' does not support variational-only execution."
@@ -897,7 +884,7 @@ def _validate_sampler_selection(
             )
         return sampler_type
 
-    allowed_types = {"nuts", "multivar_blocked_nuts", "multivar_nuts"}
+    allowed_types = {"nuts", "multivar_blocked_nuts"}
     if sampler_type not in allowed_types:
         if verbose:
             allowed = ", ".join(sorted(allowed_types))
@@ -975,32 +962,6 @@ def _build_multivar_blocked_sampler(
     return MultivarBlockedNUTSSampler(data, model, blocked_config)
 
 
-def _build_multivar_coupled_sampler(
-    data: MultivarFFT,
-    model,
-    config: SamplerFactoryConfig,
-    common_kwargs: dict[str, Any],
-):
-    run = config.run_config
-    coupled_extra_kwargs = _validate_extra_kwargs(
-        MultivarNUTSConfig, run.extra_kwargs
-    )
-    coupled_config = MultivarNUTSConfig(
-        **common_kwargs,
-        target_accept_prob=run.nuts.target_accept_prob,
-        max_tree_depth=run.nuts.max_tree_depth,
-        dense_mass=run.nuts.dense_mass,
-        init_from_vi=run.vi.init_from_vi,
-        vi_steps=run.vi.vi_steps,
-        vi_lr=run.vi.vi_lr,
-        vi_guide=run.vi.vi_guide,
-        vi_posterior_draws=run.vi.vi_posterior_draws,
-        vi_progress_bar=run.vi.vi_progress_bar,
-        **coupled_extra_kwargs,
-    )
-    return MultivarNUTSSampler(data, model, coupled_config)
-
-
 def _validate_extra_kwargs(
     config_cls: type,
     extra_kwargs: dict[str, Any],
@@ -1048,10 +1009,6 @@ def _create_sampler(
             config,
             common_kwargs,
         )
-
-    return _build_multivar_coupled_sampler(
-        data,
-        model,
-        config,
-        common_kwargs,
+    raise ValueError(
+        f"Unknown sampler_type '{sampler_type}' for multivariate data. Choose 'multivar_blocked_nuts'."
     )

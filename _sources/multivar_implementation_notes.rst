@@ -73,7 +73,7 @@ Two multivariate NUTS implementations exist:
   - samples distinct spline-weight blocks for each off-diagonal
     :math:`\theta_{jl}(f)` within a row.
 
-- Unified sampler: :class:`log_psplines.samplers.multivar.multivar_nuts.MultivarNUTSSampler`
+- Unified sampler: :class:`log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler`
 
   - fits all parameters jointly,
   - currently uses a *shared* spline field for all off-diagonal real parts and a

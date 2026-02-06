@@ -48,8 +48,11 @@ def test_run_all_registry_dispatches_private_entries(monkeypatch):
     monkeypatch.setattr(run_all.whitening, "_run", _mk("whitening"))
     monkeypatch.setattr(run_all.vi, "_run", _mk("vi"))
 
+    idata = _DummyIData(attrs={})
+    idata.posterior_psd = object()
+
     res = run_all.run_all_diagnostics(
-        idata=object(),
+        idata=idata,
         truth=np.array([1.0]),
         signals=np.array([0.0, 1.0]),
         idata_vi={},

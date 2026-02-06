@@ -196,6 +196,8 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
 
     assert idata is not None
     assert "posterior" in idata.groups()
+    assert idata.attrs.get("full_diagnostics_computed") == 1
+    assert "full_diagnostics_timestamp" in idata.attrs
     psd = idata.posterior_psd["psd_matrix_real"].sel(
         percentile=50, method="nearest"
     )
@@ -224,6 +226,8 @@ def test_mcmc_unit(synthetic_univar_timeseries):
 
     assert "posterior" in idata.groups()
     assert "sample_stats" in idata.groups()
+    assert idata.attrs.get("full_diagnostics_computed") == 1
+    assert "full_diagnostics_timestamp" in idata.attrs
     assert "lp" in idata.sample_stats.data_vars
     weights = get_weights(idata)
     assert weights.size > 0

@@ -15,7 +15,7 @@ from log_psplines.coarse_grain import (
 )
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.datatypes.multivar import EmpiricalPSD
-from log_psplines.diagnostics.psd_metrics import summarize_multivar_psd_metrics
+from log_psplines.diagnostics import psd_compare
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting.psd_matrix import plot_psd_matrix
@@ -473,24 +473,31 @@ metrics_mask = (
     (freq_plot >= FMIN) & (freq_plot <= FMAX) & (true_diag_min > dip_threshold)
 )
 metrics = []
+
+
+def _summarize_psd_accuracy(psd_ds, *, label: str):
+    if psd_ds is None:
+        return None
+    try:
+        idx = np.where(metrics_mask)[0]
+        psd_ds_use = psd_ds.isel(freq=idx) if idx.size else psd_ds
+        true_use = true_psd_physical[idx] if idx.size else true_psd_physical
+        out = psd_compare._handle_multivariate(psd_ds_use, true_use)
+        out["label"] = label
+        return out
+    except Exception as exc:
+        logger.warning(f"Could not summarize PSD accuracy ({label}): {exc}")
+        return None
+
+
 metrics.append(
-    summarize_multivar_psd_metrics(
-        getattr(idata, "posterior_psd", None),
-        label="NUTS",
-        true_psd=true_psd_physical,
-        freqs=freq_plot,
-        freq_mask=metrics_mask,
-        log_eps=METRICS_LOG_EPS,
+    _summarize_psd_accuracy(
+        getattr(idata, "posterior_psd", None), label="NUTS"
     )
 )
 metrics.append(
-    summarize_multivar_psd_metrics(
-        getattr(idata, "vi_posterior_psd", None),
-        label="VI",
-        true_psd=true_psd_physical,
-        freqs=freq_plot,
-        freq_mask=metrics_mask,
-        log_eps=METRICS_LOG_EPS,
+    _summarize_psd_accuracy(
+        getattr(idata, "vi_posterior_psd", None), label="VI"
     )
 )
 
@@ -506,20 +513,25 @@ if metrics:
         )
         for entry in metrics:
             handle.write(f"{entry['label']} metrics\n")
-            handle.write(f"  RIAE (matrix): {entry['riae_matrix']:.4g}\n")
-            handle.write(
-                f"  Relative L2 (matrix): {entry['relative_l2_matrix']:.4g}\n"
-            )
-            handle.write(
-                f"  Log10 RIAE (diag mean): {entry['log_riae_diag']:.4g}\n"
-            )
-            handle.write(
-                f"  Log10 Relative L2 (diag mean): {entry['log_l2_diag']:.4g}\n"
-            )
-            handle.write(f"  Coverage (90% CI): {entry['coverage_90']:.3f}\n")
-            handle.write(
-                f"  CI width (median): {entry['ci_width_median']:.4g}\n"
-            )
-            handle.write(f"  CI width (mean): {entry['ci_width_mean']:.4g}\n")
+            if "riae_matrix" in entry:
+                handle.write(f"  RIAE (matrix): {entry['riae_matrix']:.4g}\n")
+            if "riae_diag_mean" in entry:
+                handle.write(
+                    f"  RIAE (diag mean): {entry['riae_diag_mean']:.4g}\n"
+                )
+            if "riae_diag_max" in entry:
+                handle.write(
+                    f"  RIAE (diag max): {entry['riae_diag_max']:.4g}\n"
+                )
+            if "riae_offdiag" in entry:
+                handle.write(
+                    f"  RIAE (offdiag): {entry['riae_offdiag']:.4g}\n"
+                )
+            if "coherence_riae" in entry:
+                handle.write(
+                    f"  Coherence RIAE: {entry['coherence_riae']:.4g}\n"
+                )
+            if "coverage" in entry:
+                handle.write(f"  Coverage (90% CI): {entry['coverage']:.3f}\n")
             handle.write("\n")
     logger.info(f"Saved PSD accuracy summary to {summary_path}")

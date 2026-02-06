@@ -120,6 +120,83 @@ def _compute_acceptance(idata) -> Dict[str, float]:
     return metrics
 
 
+def _flatten_sample_stats(idata, key_prefix: str) -> np.ndarray:
+    if not hasattr(idata, "sample_stats"):
+        return np.array([])
+
+    if key_prefix in idata.sample_stats:
+        try:
+            return np.asarray(idata.sample_stats[key_prefix]).reshape(-1)
+        except Exception:
+            return np.array([])
+
+    values = []
+    for key in idata.sample_stats:
+        if not str(key).startswith(f"{key_prefix}_channel_"):
+            continue
+        try:
+            values.append(np.asarray(idata.sample_stats[key]).reshape(-1))
+        except Exception:
+            continue
+    if not values:
+        return np.array([])
+    return np.concatenate(values)
+
+
+def _compute_step_size(idata) -> Dict[str, float]:
+    arr = _flatten_sample_stats(idata, "step_size")
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return {}
+    return {
+        "step_size_median": float(np.median(arr)),
+        "step_size_min": float(np.min(arr)),
+    }
+
+
+def _resolve_max_tree_depth(idata, config) -> int | None:
+    attrs = getattr(idata, "attrs", {}) or {}
+    max_td = None
+    try:
+        max_td = attrs.get("max_tree_depth")
+    except Exception:
+        max_td = None
+    if max_td is None and config is not None:
+        max_td = getattr(config, "max_tree_depth", None)
+    if max_td is None:
+        return None
+    try:
+        return int(max_td)
+    except Exception:
+        return None
+
+
+def _compute_tree_depth_saturation(idata, config=None) -> Dict[str, float]:
+    max_td = _resolve_max_tree_depth(idata, config)
+    if max_td is None:
+        return {}
+
+    tree_depth = _flatten_sample_stats(idata, "tree_depth")
+    tree_depth = tree_depth[np.isfinite(tree_depth)]
+    if tree_depth.size:
+        hit = float(np.mean(tree_depth >= float(max_td)))
+        return {
+            "max_tree_depth_hit_frac": hit,
+            "tree_depth_max": float(np.max(tree_depth)),
+        }
+
+    num_steps = _flatten_sample_stats(idata, "num_steps")
+    num_steps = num_steps[np.isfinite(num_steps)]
+    if num_steps.size == 0:
+        return {}
+
+    # In NUTS, hitting max tree depth implies 2**max_tree_depth steps.
+    # Use a >= comparison for robustness.
+    threshold = float(2 ** int(max_td))
+    hit = float(np.mean(num_steps >= threshold))
+    return {"max_tree_depth_hit_frac": hit}
+
+
 def _compute_psis(idata) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
     try:
@@ -157,6 +234,8 @@ def _run(
         _compute_ess,
         _compute_divergences,
         _compute_acceptance,
+        _compute_step_size,
+        lambda _idata: _compute_tree_depth_saturation(_idata, config),
     ]
     if compute_psis_flag:
         fns.append(_compute_psis)

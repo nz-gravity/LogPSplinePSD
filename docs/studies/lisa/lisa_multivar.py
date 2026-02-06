@@ -429,14 +429,6 @@ else:
 empirical_welch = _drop_dc(empirical_welch)
 empirical_welch = _restrict_freq_range(empirical_welch, fmin=FMIN, fmax=FMAX)
 
-psd_scale_plot, psd_unit_label_plot = resolve_psd_plot_units(
-    base_psd_units,
-    PLOT_PSD_UNITS,
-    laser_freq=LASER_FREQ,
-    arm_length=L_ARM,
-    c_light=C_LIGHT,
-)
-
 
 plot_psd_matrix(
     idata=idata,
@@ -459,8 +451,8 @@ plot_psd_matrix(
     overlay_vi=True,
     freq_range=(FMIN, FMAX),
     true_psd=true_psd_physical,
-    psd_scale=psd_scale_plot,
-    psd_unit_label=psd_unit_label_plot,
+    psd_scale=None,
+    psd_unit_label=None,
 )
 
 true_diag = np.diagonal(true_psd_physical.real, axis1=1, axis2=2)

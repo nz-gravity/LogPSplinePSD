@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Multivariate blocked NUTS: math ↔ code &#8212; LogPSplinePSD</title>
+    <title>Multivariate Blocked NUTS: Math ↔ Code &#8212; LogPSplinePSD</title>
   
   
   
@@ -62,8 +62,8 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'multivar_blocked_nuts';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Prior on phi: TeX vs implementation" href="phi_prior_approx.html" />
-    <link rel="prev" title="API" href="api.html" />
+    <link rel="next" title="Multivariate implementation notes" href="multivar_implementation_notes.html" />
+    <link rel="prev" title="Coarse-Graining" href="coarse_grain.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -144,7 +144,7 @@
     
   
 
-<a class="navbar-brand logo" href="README.html">
+<a class="navbar-brand logo" href="intro.html">
   
   
   
@@ -174,14 +174,22 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Multivariate blocked NUTS: math ↔ code</a></li>
-<li class="toctree-l1"><a class="reference internal" href="phi_prior_approx.html">Prior on phi: TeX vs implementation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
-<li class="toctree-l1"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
-<li class="toctree-l1"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
-<li class="toctree-l1"><a class="reference internal" href="studies/lvk/lvk_demo.html">LVK Demo</a></li>
-<li class="toctree-l1"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="conventions.html">User Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="development.html">Development Guide</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Multivariate Blocked NUTS: Math ↔ Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="studies/lvk/lvk_demo.html">Examples and Studies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
+</ul>
+</details></li>
 </ul>
 
     </div>
@@ -367,7 +375,7 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Multivariate blocked NUTS: math ↔ code</h1>
+    <h1>Multivariate Blocked NUTS: Math ↔ Code</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -405,7 +413,7 @@ document.write(`
                 <article class="bd-article">
                   
   <section id="multivariate-blocked-nuts-math-code">
-<h1>Multivariate blocked NUTS: math ↔ code<a class="headerlink" href="#multivariate-blocked-nuts-math-code" title="Link to this heading">#</a></h1>
+<h1>Multivariate Blocked NUTS: Math ↔ Code<a class="headerlink" href="#multivariate-blocked-nuts-math-code" title="Link to this heading">#</a></h1>
 <p>This page documents the <em>implemented</em> multivariate likelihood and
 parameterisation used by the blocked sampler
 <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler</span></code>.</p>
@@ -642,20 +650,20 @@ modulo the implementation’s FFT/PSD normalisation conventions.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="api.html"
+       href="coarse_grain.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">API</p>
+        <p class="prev-next-title">Coarse-Graining</p>
       </div>
     </a>
     <a class="right-next"
-       href="phi_prior_approx.html"
+       href="multivar_implementation_notes.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Prior on phi: TeX vs implementation</p>
+        <p class="prev-next-title">Multivariate implementation notes</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

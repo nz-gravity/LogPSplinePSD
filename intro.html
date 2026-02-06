@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Prior on φ: Implementation vs. Theory &#8212; LogPSplinePSD</title>
+    <title>LogPSplinePSD &#8212; LogPSplinePSD</title>
   
   
   
@@ -59,11 +59,10 @@
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
     <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'phi_prior_approx';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'intro';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="LVK Demo" href="studies/lvk/lvk_demo.html" />
-    <link rel="prev" title="Multivariate implementation notes" href="multivar_implementation_notes.html" />
+    <link rel="next" title="API Reference" href="api.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -126,6 +125,8 @@
       
       
       
+        
+      
       <div class="bd-sidebar-primary bd-sidebar">
         
 
@@ -144,7 +145,7 @@
     
   
 
-<a class="navbar-brand logo" href="intro.html">
+<a class="navbar-brand logo" href="#">
   
   
   
@@ -173,16 +174,16 @@
  </script></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <ul class="current nav bd-sidenav">
+        <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="conventions.html">User Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="development.html">Development Guide</a></li>
 </ul>
 </details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Blocked NUTS: Math ↔ Code</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Prior on φ: Implementation vs. Theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="studies/lvk/lvk_demo.html">Examples and Studies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -261,7 +262,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fphi_prior_approx.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fintro.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -291,7 +292,7 @@
       
       
       
-      <li><a href="_sources/phi_prior_approx.rst" target="_blank"
+      <li><a href="_sources/intro.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -375,7 +376,7 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Prior on φ: Implementation vs. Theory</h1>
+    <h1>LogPSplinePSD</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -385,10 +386,14 @@ document.write(`
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-hierarchical-p-spline-prior">Background: hierarchical P-spline prior</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-code-actually-samples">What the code actually samples</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-this-change-exists">Why this change exists</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-look-in-the-code">Where to look in the code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-links">Quick Links</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#methodology">Methodology</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-usage">Basic Usage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#author">Author</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acknowledgements">Acknowledgements</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
 </ul>
             </nav>
         </div>
@@ -400,87 +405,90 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="prior-on-implementation-vs-theory">
-<h1>Prior on φ: Implementation vs. Theory<a class="headerlink" href="#prior-on-implementation-vs-theory" title="Link to this heading">#</a></h1>
-<p>This page explains a deliberate difference between the draft math in
-<code class="docutils literal notranslate"><span class="pre">overleaf</span></code> and the sampler implementation.</p>
-<section id="background-hierarchical-p-spline-prior">
-<h2>Background: hierarchical P-spline prior<a class="headerlink" href="#background-hierarchical-p-spline-prior" title="Link to this heading">#</a></h2>
-<p>The draft writes the spline-weight prior as (exact LaTeX from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</p>
-<div class="math notranslate nohighlight">
-\[\bold{w}_j | \phi_j \sim \mathcal{N}(\bold{0}, (\phi_j \bold{P}_j)^{-1})\]</div>
-<p>with hyperpriors (again copied verbatim):</p>
-<div class="math notranslate nohighlight">
-\[\begin{split}\phi_j | \delta_j \sim \text{Gamma}(\alpha_\phi, \delta_j \beta_\phi)
-\\
-\delta_j \sim \text{Gamma}(\alpha_\delta, \beta_\delta)\end{split}\]</div>
-<p>In the implementation (NumPyro), we interpret these Gamma distributions using
-the <em>rate</em> parameterisation.</p>
-</section>
-<section id="what-the-code-actually-samples">
-<h2>What the code actually samples<a class="headerlink" href="#what-the-code-actually-samples" title="Link to this heading">#</a></h2>
-<p>The sampler utility <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>
-keeps the same <em>intended</em> hierarchical structure but changes the sampling
-parameterisation for <span class="math notranslate nohighlight">\(\phi\)</span>:</p>
+  <a class="reference external image-reference" href="https://pypi.org/project/LogPSplinePSD/"><img alt="PyPI - Version" src="https://img.shields.io/pypi/v/LogPSplinePSD" />
+</a>
+<img alt="JAX - Accelerated" src="https://img.shields.io/badge/JAX-Accelerated-9cf.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC0AAAAaCAYAAAAjZdWPAAAIx0lEQVR42rWWBVQbWxOAkefur%2B7u3les7u7F3ZIQ3N2tbng8aXFC0uAuKf2hmlJ3AapIgobMv7t0w%2Ba50JzzJdlhlvNldubeq%2FY%2BXrTS1z%2B6sttrKfQOOY4ns13ecFImb47pVvIkukNe4y3Junr1kSZ%2Bb3Na248tx7rKiHlPo6Ryse%2F11NKQuk%2FV3tfL52yHtXm8TGYS1wk4J093wrPQPngRJH9HH1x2fAjMhcIeIaXKQCmd2Gn7IqSvG83BueT0CMkTyESUqm3vRRggTdOBIb1HFDaNl8Gdg91AFGkO7QXe8gJInpoDjEXC9gbhtWH3rjZ%2F9yK6t42Y9zyiC1iLhZA8JQe4eqKXklrJF0MqfPv2bc2wzPZjpnEyMEVlEZCKQzYCJhE8QEtIL1RaXEVFEGmEaTn96VuLDzWflLFbgvqUec3BPVBmeBnNwUiakq1I31UcPaTSR8%2B1LnditsscaB2A48K6D9SoZDD2O6bELvA0JGhl4zIYZzcWtD%2BMfdvdHNsDOHciXwBPN18lj7sy79qQCTNK3nxBZXakqbZFO2jHskA7zBs%2BJhmDmr0RhoadIZjYxKIVHpCZngPMZUKoQKrfEoz1PfZZdKAe2CvP4XnYE8k2LLMdMumwrLaNlomyVqK0UdwN%2BD7AAz73dYBpPg6gPiCN8TXFHCI2s7AWYesJgTabD%2FS5uXDTuwVaAvvghncTdk1DYGkL0daAs%2BsLiutLrn0%2BRMNXpunC7mgkCpshfbw4OhrUvMkYo%2F0c4XtHS1waY4mlG6To8oG1TKjs78xV5fAkSgqcZSL0GoszfxEAW0fUludRNWlIhGsljzVjctr8rJOkCpskKaDYIlgkVoCmF0kp%2FbW%2FU%2F%2B8QNdXPztbAc4kFxIEmNGwKuI9y5gnBMH%2BakiZxlfGaLP48kyj4qPFkeIPh0Q6lt861zZF%2BgBpDcAxT3gEOjGxMDLQRSn9XaDzPWdOstkEN7uez6jmgLOYilR7NkFwLh%2B4G0SQMnMwRp8jaCrwEs8eEmFW2VsNd07HQdP4TgWxNTYcFcKHPhRYFOWLfJJBE5FefTQsWiKRaOw6FBr6ob1RP3EoqdbHsWFDwAYvaVI28DaK8AHs51tU%2BA3Z8CUXvZ1jnSR7SRS2SnwKw4O8B1rCjwrjgt1gSrjXnWhBxjD0Hidm4vfj3e3riUP5PcUCYlZxsYFDK41XnLlUANwVeeILFde%2BGKLhk3zgyZNeQjcSHPMEKSyPPQKfIcKfIqCf8yN95MGZZ1bj98WJ%2BOorQzxsPqcYdX9orw8420jBQNfJVVmTOStEUqFz5dq%2F2tHUY3LbjMh0qYxCwCGxRep8%2FK4ZnldzuUkjJLPDhkzrUFBoHYBjk3odtNMYoJVGx9BG2JTNVehksmRaGUwMbYQITk3Xw9gOxbNoGaA8RWjwuQdsXdGvpdty7Su2%2Fqn0qbzWsXYp0nqVpet0O6zzugva1MZHUdwHk9G8aH7raHua9AIxzzjxDaw4w4cpvEQlM84kwdI0hkpsPpcOtUeaVM8hQT2Qtb4ckUbaYw4fXzGAqSVEd8CGpqamj%2F9Q2pPX7miW0NlHlDE81AxLSI2wyK6xf6vfrcgEwb0PAtPaHM1%2BNXzGXAlMRcUIrMpiE6%2Bxv0cyxSrC6FmjzvkWJE3OxpY%2BzmpsANFBxK6RuIJvXe7bUHNd4zfCwvPPh9unSO%2BbIL2JY53QDqvdbsEi2%2BuwEEHPsfFRdOqjHcjTaCLmWdBewtKzHEwKZynSGgtTaSqx7dwMeBLRhR1LETDhu76vgTFfMLi8zc8F7hoRPpAYjAWCp0Jy5dzfSEfltGU6M9oVCIATnPoGKImDUJNfK0JS37QTc9yY7eDKzIX5wR4wN8RTya4jETAvZDCmFeEPwhNXoOlQt5JnRzqhxLZBpY%2BT5mZD3M4MfLnDW6U%2Fy6jkaDXtysDm8vjxY%2FXYnLebkelXaQtSSge2IhBj9kjMLF41duDUNRiDLHEzfaigsoxRzWG6B0kZ2%2BoRA3dD2lRa44ZrM%2FBW5ANziVApGLaKCYucXOCEdhoew5Y%2Btu65VwJqxUC1j4lav6UwpIJfnRswQUIMawPSr2LGp6WwLDYJ2TwoMNbf6Tdni%2FEuNvAdEvuUZAwFERLVXg7pg9xt1djZgqV7DmuHFGQI9Sje2A9dR%2FFDd0osztIRYnln1hdW1dff%2B1gtNLN1u0ViZy9BBlu%2BzBNUK%2BrIaP9Nla2TG%2BETHwq2kXzmS4XxXmSVan9KMYUprrbgFJqCndyIw9fgdh8dMvzIiW0sngbxoGlniN6LffruTEIGE9khBw5T2FDmWlTYqrnEPa7aF%2FYYcPYiUE48Ul5jhP82tj%2FiESyJilCeLdQRpod6No3xJNNHeZBpOBsiAzm5rg2dBZYSyH9Hob0EOFqqh3vWOuHbFR5eXcORp4OzwTUA4rUzVfJ4q%2FIa1GzCrzjOMxQr5uqLAWUOwgaHOphrgF0r2epYh%2FytdjBmUAurfM6CxruT3Ee%2BDv2%2FHAwK4RUIPskqK%2Fw4%2FR1F1bWfHjbNiXcYl6RwGJcMOMdXZaEVxCutSN1SGLMx3JfzCdlU8THZFFC%2BJJuB2964wSGdmq3I2FEcpWYVfHm4jmXd%2BRn7agFn9oFaWGYhBmJs5v5a0LZUjc3Sr4Ep%2FmFYlX8OdLlFYidM%2B731v7Ly4lfu85l3SSMTAcd5Bg2Sl%2FIHBm3RuacVx%2BrHpFcWjxztavOcOBcTnUhwekkGlsfWEt2%2FkHflB7WqKomGvs9F62l7a%2BRKQQQtRBD9VIlZiLEfRBRfQEmDb32cFQcSjznUP3um%2FkcbV%2BjmNEvqhOQuonjoQh7QF%2BbK811rduN5G6ICLD%2BnmPbi0ur2hrDLKhQYiwRdQrvKjcp%2F%2BL%2BnTz%2Fa4FgvmakvluPMMxbL15Dq5MTYAhOxXM%2FmvEpsoWmtfP9RxnkAIAr%2F5pVxqPxH93msKodRSXIct2l0OU0%2FL4eY506L%2B3GyJ6UMEZfjjCDbysNcWWmFweJP0Jz%2FA0g2gk80pGkYAAAAAElFTkSuQmCC" />
+<section id="logpsplinepsd">
+<h1>LogPSplinePSD<a class="headerlink" href="#logpsplinepsd" title="Link to this heading">#</a></h1>
+<p>Log-spline representation of the power spectral density (PSD) in the frequency domain, using penalized B-splines with a discrete penalty on spline coefficients to prevent overfitting.</p>
 <ul class="simple">
-<li><p>it samples <span class="math notranslate nohighlight">\(\delta \sim \mathrm{Gamma}(\alpha_\delta, \beta_\delta)\)</span> as
-written;</p></li>
-<li><p>it does <strong>not</strong> sample <span class="math notranslate nohighlight">\(\phi\mid\delta\)</span> from a Gamma directly;</p></li>
-<li><p>instead it samples <span class="math notranslate nohighlight">\(\log \phi\)</span> from a Normal distribution chosen to
-<em>moment-match</em> the Gamma.</p></li>
+<li><p><strong>GitHub Repository</strong>: <a class="github reference external" href="https://github.com/nz-gravity/LogPSplinePSD">nz-gravity/LogPSplinePSD</a></p></li>
+<li><p><strong>Paper</strong>: Aimen et al (<em>in preparation</em>)</p></li>
 </ul>
-<p>Concretely, for</p>
-<div class="math notranslate nohighlight">
-\[\phi\mid\delta \sim \mathrm{Gamma}(\alpha_\phi, \mathrm{rate}=\beta_\phi\,\delta),\]</div>
-<p>the mean and variance are</p>
-<div class="math notranslate nohighlight">
-\[\mathbb{E}[\phi\mid\delta] = \frac{\alpha_\phi}{\beta_\phi\,\delta},
-\qquad
-\mathrm{Var}[\phi\mid\delta] = \frac{\alpha_\phi}{(\beta_\phi\,\delta)^2}.\]</div>
-<p>The code constructs a log-normal approximation</p>
-<div class="math notranslate nohighlight">
-\[\log \phi\mid\delta \sim \mathcal{N}(\mu, \sigma^2)\]</div>
-<p>with</p>
-<div class="math notranslate nohighlight">
-\[\sigma^2 = \log\Big(1 + \frac{1}{\alpha_\phi}\Big),
-\qquad
-\mu = \log\Big(\frac{\alpha_\phi}{\beta_\phi\,\delta}\Big) - \frac{\sigma^2}{2}.\]</div>
-<p>This exactly matches the formulas in
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>.</p>
-</section>
-<section id="why-this-change-exists">
-<h2>Why this change exists<a class="headerlink" href="#why-this-change-exists" title="Link to this heading">#</a></h2>
-<p>Sampling <span class="math notranslate nohighlight">\(\phi\)</span> directly under the Gamma prior frequently produces a
-“funnel” geometry once <span class="math notranslate nohighlight">\(\phi\)</span> interacts with the Gaussian spline weights.
-That geometry can make NUTS initialization and adaptation brittle.</p>
-<p>Sampling <span class="math notranslate nohighlight">\(\log\phi\)</span> under a moment-matched Normal has two practical
-benefits:</p>
+<section id="quick-links">
+<h2>Quick Links<a class="headerlink" href="#quick-links" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>it reduces extreme curvature in the posterior geometry,</p></li>
-<li><p>it tends to improve VI-based initialization and NUTS warmup stability.</p></li>
+<li><p><a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> - API Reference for main classes and functions</p></li>
+<li><p><a class="reference internal" href="conventions.html"><span class="doc">Conventions</span></a> - Naming conventions and data flow</p></li>
+<li><p><a class="reference internal" href="development.html"><span class="doc">Development Guide</span></a> - Development guide for contributors</p></li>
+<li><p><a class="reference internal" href="coarse_grain.html"><span class="doc">Coarse-Graining</span></a> - Technical details on coarse-graining</p></li>
+<li><p><a class="reference internal" href="studies/lvk/lvk_demo.html"><span class="doc">LVK Demo</span></a> - LVK gravitational wave detector demo</p></li>
+<li><p><a class="reference internal" href="studies/lisa/lisa_demo.html"><span class="doc">LISA demo</span></a> - LISA space-based detector demo</p></li>
 </ul>
-<p>Importantly, this is <strong>not</strong> the same distribution as the Gamma prior. The two
-match the first two moments of <span class="math notranslate nohighlight">\(\phi\mid\delta\)</span>, but tails differ.</p>
 </section>
-<section id="where-to-look-in-the-code">
-<h2>Where to look in the code<a class="headerlink" href="#where-to-look-in-the-code" title="Link to this heading">#</a></h2>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p><cite>LogPSplinePSD</cite> implements a Bayesian model for PSD estimation by fitting a log-spline to the periodogram. Main features:</p>
 <ul class="simple">
-<li><dl class="simple">
-<dt>Implementation: <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>.</dt><dd><p>Source: <a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/utils.py#L46-L103">src/log_psplines/samplers/utils.py#sample_pspline_block</a></p>
-</dd>
-</dl>
-</li>
-<li><p>Usage:</p>
-<ul>
-<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts</span></code></p></li>
-<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts</span></code></p></li>
+<li><p><strong>Log-frequency representation</strong>: Works on the log-scale of frequencies for numerical stability and improved resolution.</p></li>
+<li><p><strong>P-spline prior</strong>: Applies a discrete difference penalty to log B-spline coefficients, enforcing smoothness in the log-PSD domain [<a class="reference internal" href="#eilers1996">Eilers1996</a>].</p></li>
+<li><p><strong>Whittle likelihood</strong>: Employs Whittle’s approximation for fast likelihood evaluation on periodogram ordinates.</p></li>
+<li><p><strong>CPU/GPU sampling</strong>: Uses NumPyro (JAX) to perform efficient Hamiltonian Monte Carlo inference.</p></li>
 </ul>
-</li>
-</ul>
-<p>If you want the docs to reflect the implementation, you can interpret the
-written Gamma prior for <span class="math notranslate nohighlight">\(\phi\mid\delta\)</span> as an <em>idealised target</em>, and the
-code as using a numerically friendlier, moment-matched approximation.</p>
 </section>
+<section id="methodology">
+<h2>Methodology<a class="headerlink" href="#methodology" title="Link to this heading">#</a></h2>
+<p>The approach follows the P-spline framework for spectral density estimation described by Maturana-Russel &amp; Meyer (2021) [<a class="reference internal" href="#maturanarussel2021">MaturanaRussel2021</a>].</p>
+<ol class="arabic simple">
+<li><p><strong>Basis construction</strong>
+Define order-r B-spline basis functions \(B_k(\omega)\), \(k=1,\dots,K+r\), on a grid of interior knots in the log-frequency domain.</p></li>
+<li><p><strong>Penalized prior</strong>
+Apply a discrete \(D\)th-order difference penalty to the spline coefficients \(\{\beta_k\}\), which induces smoothness in the estimated log-PSD.</p></li>
+<li><p><strong>Knot placement (optional)</strong>
+For spectra with sharp features, knot locations can be set based on quantiles of the raw periodogram values to allocate flexibility where needed.</p></li>
+</ol>
+<p>4. <strong>Model and likelihood</strong>
+The log-PSD is modeled as:</p>
+<blockquote>
+<div><div class="math notranslate nohighlight">
+\[\log f(\lambda_l) = \sum_k \beta_k \, B_k(\log \lambda_l)\]</div>
+</div></blockquote>
+<p>Whittle’s approximation for the periodogram \(I_n(\lambda_l)\) yields the log-likelihood:</p>
+<div class="math notranslate nohighlight">
+\[\log L(\beta) \propto -\sum_{l=1}^{N_b} \left[ \log f(\lambda_l) + \frac{I_n(\lambda_l)}{f(\lambda_l)} \right]\]</div>
+<p>5. <strong>Inference</strong>
+We use NumPyro’s NUTS sampler to jointly sample the spline coefficients.
+When <code class="docutils literal notranslate"><span class="pre">init_from_vi</span></code> is enabled (default), the stochastic VI warm-start runs before NUTS and immediately saves convergence plots and PSD previews to <code class="docutils literal notranslate"><span class="pre">&lt;outdir&gt;/diagnostics</span></code> so you can inspect them before launching the expensive sampler.</p>
+<p>This fixed-basis P-spline approach avoids reversible-jump MCMC over knot numbers and positions, reducing computational cost while retaining flexibility to capture complex spectral features.</p>
+<p>Finally, one can also provide a ‘parametric model’ of the PSD as a function that can then be ‘corrected’ non-parametrically by the spline model.
+This is useful for cases where a known functional form (e.g., power-law) is expected, but additional flexibility is needed to account for deviations in the data.</p>
+</section>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">LogPSplinePSD</span>
+</pre></div>
+</div>
+</section>
+<section id="basic-usage">
+<h2>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading">#</a></h2>
+<p>See <a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/tree/main/docs/demo.py">demo.py</a></p>
+<img alt="Demo Image" class="align-center" src="https://github.com/nz-gravity/LogPSplinePSD/raw/main/docs/demo.png" />
+</section>
+<section id="author">
+<h2>Author<a class="headerlink" href="#author" title="Link to this heading">#</a></h2>
+<p>NZ Gravity</p>
+</section>
+<section id="acknowledgements">
+<h2>Acknowledgements<a class="headerlink" href="#acknowledgements" title="Link to this heading">#</a></h2>
+<p>Part of the NZ-Gravity and International LISA Consortium efforts on gravitational-wave data analysis.</p>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading">#</a></h2>
+<p id="eilers1996">Eilers, P. H. C., &amp; Marx, B. D. (1996). <em>Flexible smoothing with B-splines and penalties</em>. Statistical Science, 11(2), 89–121. <a class="reference external" href="https://doi.org/10.1214/ss/1038425655">DOI:10.1214/ss/1038425655</a>.</p>
+<p id="maturanarussel2021">Maturana-Russel, J., &amp; Meyer, R. (2021). <em>P-spline spectral density estimation with a discrete penalty</em>. <a class="reference external" href="https://arxiv.org/abs/1905.01832">arXiv:1905.01832</a>.</p>
+</section>
+<div class="toctree-wrapper compound">
+</div>
 </section>
 
     <script type="text/x-thebe-config">
@@ -513,21 +521,12 @@ code as using a numerically friendlier, moment-matched approximation.</p>
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
-    <a class="left-prev"
-       href="multivar_implementation_notes.html"
-       title="previous page">
-      <i class="fa-solid fa-angle-left"></i>
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Multivariate implementation notes</p>
-      </div>
-    </a>
     <a class="right-next"
-       href="studies/lvk/lvk_demo.html"
+       href="api.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">LVK Demo</p>
+        <p class="prev-next-title">API Reference</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -547,10 +546,14 @@ code as using a numerically friendlier, moment-matched approximation.</p>
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-hierarchical-p-spline-prior">Background: hierarchical P-spline prior</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-code-actually-samples">What the code actually samples</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-this-change-exists">Why this change exists</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-look-in-the-code">Where to look in the code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-links">Quick Links</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#methodology">Methodology</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-usage">Basic Usage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#author">Author</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acknowledgements">Acknowledgements</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
 </ul>
   </nav></div>
 

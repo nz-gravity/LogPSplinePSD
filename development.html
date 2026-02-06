@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>LogPSplinePSD &#8212; LogPSplinePSD</title>
+    <title>Development Guide &#8212; LogPSplinePSD</title>
   
   
   
@@ -57,12 +57,11 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'README';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'development';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="API" href="api.html" />
+    <link rel="next" title="Coarse-Graining" href="coarse_grain.html" />
+    <link rel="prev" title="Conventions" href="conventions.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -125,8 +124,6 @@
       
       
       
-        
-      
       <div class="bd-sidebar-primary bd-sidebar">
         
 
@@ -145,7 +142,7 @@
     
   
 
-<a class="navbar-brand logo" href="#">
+<a class="navbar-brand logo" href="intro.html">
   
   
   
@@ -174,15 +171,23 @@
  </script></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate blocked NUTS: math ↔ code</a></li>
-<li class="toctree-l1"><a class="reference internal" href="phi_prior_approx.html">Prior on phi: TeX vs implementation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
-<li class="toctree-l1"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
-<li class="toctree-l1"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
-<li class="toctree-l1"><a class="reference internal" href="studies/lvk/lvk_demo.html">LVK Demo</a></li>
-<li class="toctree-l1"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="conventions.html">User Guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Development Guide</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Blocked NUTS: Math ↔ Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="studies/lvk/lvk_demo.html">Examples and Studies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
+</ul>
+</details></li>
 </ul>
 
     </div>
@@ -254,7 +259,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2FREADME.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fdevelopment.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -284,7 +289,7 @@
       
       
       
-      <li><a href="_sources/README.rst" target="_blank"
+      <li><a href="_sources/development.md" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -294,7 +299,7 @@
 <span class="btn__icon-container">
   <i class="fas fa-file"></i>
   </span>
-<span class="btn__text-container">.rst</span>
+<span class="btn__text-container">.md</span>
 </a>
 </li>
       
@@ -368,7 +373,7 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>LogPSplinePSD</h1>
+    <h1>Development Guide</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -378,13 +383,12 @@ document.write(`
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#methodology">Methodology</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-usage">Basic Usage</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#author">Author</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acknowledgements">Acknowledgements</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#version-control-and-releases">Version Control and Releases</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#commit-types-for-releases">Commit Types for Releases</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-documentation">Building Documentation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-tests">Running Tests</a></li>
 </ul>
             </nav>
         </div>
@@ -396,79 +400,47 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <a class="reference external image-reference" href="https://pypi.org/project/LogPSplinePSD/"><img alt="PyPI - Version" src="https://img.shields.io/pypi/v/LogPSplinePSD" />
-</a>
-<img alt="JAX - Accelerated" src="https://img.shields.io/badge/JAX-Accelerated-9cf.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC0AAAAaCAYAAAAjZdWPAAAIx0lEQVR42rWWBVQbWxOAkefur%2B7u3les7u7F3ZIQ3N2tbng8aXFC0uAuKf2hmlJ3AapIgobMv7t0w%2Ba50JzzJdlhlvNldubeq%2FY%2BXrTS1z%2B6sttrKfQOOY4ns13ecFImb47pVvIkukNe4y3Junr1kSZ%2Bb3Na248tx7rKiHlPo6Ryse%2F11NKQuk%2FV3tfL52yHtXm8TGYS1wk4J093wrPQPngRJH9HH1x2fAjMhcIeIaXKQCmd2Gn7IqSvG83BueT0CMkTyESUqm3vRRggTdOBIb1HFDaNl8Gdg91AFGkO7QXe8gJInpoDjEXC9gbhtWH3rjZ%2F9yK6t42Y9zyiC1iLhZA8JQe4eqKXklrJF0MqfPv2bc2wzPZjpnEyMEVlEZCKQzYCJhE8QEtIL1RaXEVFEGmEaTn96VuLDzWflLFbgvqUec3BPVBmeBnNwUiakq1I31UcPaTSR8%2B1LnditsscaB2A48K6D9SoZDD2O6bELvA0JGhl4zIYZzcWtD%2BMfdvdHNsDOHciXwBPN18lj7sy79qQCTNK3nxBZXakqbZFO2jHskA7zBs%2BJhmDmr0RhoadIZjYxKIVHpCZngPMZUKoQKrfEoz1PfZZdKAe2CvP4XnYE8k2LLMdMumwrLaNlomyVqK0UdwN%2BD7AAz73dYBpPg6gPiCN8TXFHCI2s7AWYesJgTabD%2FS5uXDTuwVaAvvghncTdk1DYGkL0daAs%2BsLiutLrn0%2BRMNXpunC7mgkCpshfbw4OhrUvMkYo%2F0c4XtHS1waY4mlG6To8oG1TKjs78xV5fAkSgqcZSL0GoszfxEAW0fUludRNWlIhGsljzVjctr8rJOkCpskKaDYIlgkVoCmF0kp%2FbW%2FU%2F%2B8QNdXPztbAc4kFxIEmNGwKuI9y5gnBMH%2BakiZxlfGaLP48kyj4qPFkeIPh0Q6lt861zZF%2BgBpDcAxT3gEOjGxMDLQRSn9XaDzPWdOstkEN7uez6jmgLOYilR7NkFwLh%2B4G0SQMnMwRp8jaCrwEs8eEmFW2VsNd07HQdP4TgWxNTYcFcKHPhRYFOWLfJJBE5FefTQsWiKRaOw6FBr6ob1RP3EoqdbHsWFDwAYvaVI28DaK8AHs51tU%2BA3Z8CUXvZ1jnSR7SRS2SnwKw4O8B1rCjwrjgt1gSrjXnWhBxjD0Hidm4vfj3e3riUP5PcUCYlZxsYFDK41XnLlUANwVeeILFde%2BGKLhk3zgyZNeQjcSHPMEKSyPPQKfIcKfIqCf8yN95MGZZ1bj98WJ%2BOorQzxsPqcYdX9orw8420jBQNfJVVmTOStEUqFz5dq%2F2tHUY3LbjMh0qYxCwCGxRep8%2FK4ZnldzuUkjJLPDhkzrUFBoHYBjk3odtNMYoJVGx9BG2JTNVehksmRaGUwMbYQITk3Xw9gOxbNoGaA8RWjwuQdsXdGvpdty7Su2%2Fqn0qbzWsXYp0nqVpet0O6zzugva1MZHUdwHk9G8aH7raHua9AIxzzjxDaw4w4cpvEQlM84kwdI0hkpsPpcOtUeaVM8hQT2Qtb4ckUbaYw4fXzGAqSVEd8CGpqamj%2F9Q2pPX7miW0NlHlDE81AxLSI2wyK6xf6vfrcgEwb0PAtPaHM1%2BNXzGXAlMRcUIrMpiE6%2Bxv0cyxSrC6FmjzvkWJE3OxpY%2BzmpsANFBxK6RuIJvXe7bUHNd4zfCwvPPh9unSO%2BbIL2JY53QDqvdbsEi2%2BuwEEHPsfFRdOqjHcjTaCLmWdBewtKzHEwKZynSGgtTaSqx7dwMeBLRhR1LETDhu76vgTFfMLi8zc8F7hoRPpAYjAWCp0Jy5dzfSEfltGU6M9oVCIATnPoGKImDUJNfK0JS37QTc9yY7eDKzIX5wR4wN8RTya4jETAvZDCmFeEPwhNXoOlQt5JnRzqhxLZBpY%2BT5mZD3M4MfLnDW6U%2Fy6jkaDXtysDm8vjxY%2FXYnLebkelXaQtSSge2IhBj9kjMLF41duDUNRiDLHEzfaigsoxRzWG6B0kZ2%2BoRA3dD2lRa44ZrM%2FBW5ANziVApGLaKCYucXOCEdhoew5Y%2Btu65VwJqxUC1j4lav6UwpIJfnRswQUIMawPSr2LGp6WwLDYJ2TwoMNbf6Tdni%2FEuNvAdEvuUZAwFERLVXg7pg9xt1djZgqV7DmuHFGQI9Sje2A9dR%2FFDd0osztIRYnln1hdW1dff%2B1gtNLN1u0ViZy9BBlu%2BzBNUK%2BrIaP9Nla2TG%2BETHwq2kXzmS4XxXmSVan9KMYUprrbgFJqCndyIw9fgdh8dMvzIiW0sngbxoGlniN6LffruTEIGE9khBw5T2FDmWlTYqrnEPa7aF%2FYYcPYiUE48Ul5jhP82tj%2FiESyJilCeLdQRpod6No3xJNNHeZBpOBsiAzm5rg2dBZYSyH9Hob0EOFqqh3vWOuHbFR5eXcORp4OzwTUA4rUzVfJ4q%2FIa1GzCrzjOMxQr5uqLAWUOwgaHOphrgF0r2epYh%2FytdjBmUAurfM6CxruT3Ee%2BDv2%2FHAwK4RUIPskqK%2Fw4%2FR1F1bWfHjbNiXcYl6RwGJcMOMdXZaEVxCutSN1SGLMx3JfzCdlU8THZFFC%2BJJuB2964wSGdmq3I2FEcpWYVfHm4jmXd%2BRn7agFn9oFaWGYhBmJs5v5a0LZUjc3Sr4Ep%2FmFYlX8OdLlFYidM%2B731v7Ly4lfu85l3SSMTAcd5Bg2Sl%2FIHBm3RuacVx%2BrHpFcWjxztavOcOBcTnUhwekkGlsfWEt2%2FkHflB7WqKomGvs9F62l7a%2BRKQQQtRBD9VIlZiLEfRBRfQEmDb32cFQcSjznUP3um%2FkcbV%2BjmNEvqhOQuonjoQh7QF%2BbK811rduN5G6ICLD%2BnmPbi0ur2hrDLKhQYiwRdQrvKjcp%2F%2BL%2BnTz%2Fa4FgvmakvluPMMxbL15Dq5MTYAhOxXM%2FmvEpsoWmtfP9RxnkAIAr%2F5pVxqPxH93msKodRSXIct2l0OU0%2FL4eY506L%2B3GyJ6UMEZfjjCDbysNcWWmFweJP0Jz%2FA0g2gk80pGkYAAAAAElFTkSuQmCC" />
-<section id="logpsplinepsd">
-<h1>LogPSplinePSD<a class="headerlink" href="#logpsplinepsd" title="Link to this heading">#</a></h1>
-<p>Log-spline representation of the power spectral density (PSD) in the frequency domain, using penalized B-splines with a discrete penalty on spline coefficients to prevent overfitting.</p>
+  <section class="tex2jax_ignore mathjax_ignore" id="development-guide">
+<h1>Development Guide<a class="headerlink" href="#development-guide" title="Link to this heading">#</a></h1>
+<p>This page contains notes for developers contributing to LogPSplinePSD.</p>
+<section id="version-control-and-releases">
+<h2>Version Control and Releases<a class="headerlink" href="#version-control-and-releases" title="Link to this heading">#</a></h2>
+<section id="commit-types-for-releases">
+<h3>Commit Types for Releases<a class="headerlink" href="#commit-types-for-releases" title="Link to this heading">#</a></h3>
+<p><strong>Release-triggering commits:</strong></p>
 <ul class="simple">
-<li><p><strong>GitHub Repository</strong>: <a class="github reference external" href="https://github.com/nz-gravity/LogPSplinePSD">nz-gravity/LogPSplinePSD</a></p></li>
-<li><p><strong>Paper</strong>: Aimen et al (<em>in preparation</em>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">feat:</span></code> - New features → minor version bump (0.1.0 → 0.2.0)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fix:</span></code> - Bug fixes → patch version bump (0.1.0 → 0.1.1)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">perf:</span></code> - Performance improvements → patch version bump</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">feat!:</span></code>, <code class="docutils literal notranslate"><span class="pre">fix!:</span></code>, <code class="docutils literal notranslate"><span class="pre">perf!:</span></code> - Breaking changes → major version bump (0.1.0 → 1.0.0)</p></li>
 </ul>
-<section id="overview">
-<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
-<p><cite>LogPSplinePSD</cite> implements a Bayesian model for PSD estimation by fitting a log-spline to the periodogram. Main features:</p>
+<p><strong>Non-release commits:</strong></p>
 <ul class="simple">
-<li><p><strong>Log-frequency representation</strong>: Works on the log-scale of frequencies for numerical stability and improved resolution.</p></li>
-<li><p><strong>P-spline prior</strong>: Applies a discrete difference penalty to log B-spline coefficients, enforcing smoothness in the log-PSD domain [<a class="reference internal" href="#eilers1996">Eilers1996</a>].</p></li>
-<li><p><strong>Whittle likelihood</strong>: Employs Whittle’s approximation for fast likelihood evaluation on periodogram ordinates.</p></li>
-<li><p><strong>CPU/GPU sampling</strong>: Uses NumPyro (JAX) to perform efficient Hamiltonian Monte Carlo inference.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">docs:</span></code> - Documentation only</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">style:</span></code> - Code formatting, whitespace</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">refactor:</span></code> - Code restructuring without behavior change</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test:</span></code> - Adding or updating tests</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">build:</span></code> - Build system changes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ci:</span></code> - CI configuration changes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">chore:</span></code> - Maintenance tasks</p></li>
 </ul>
 </section>
-<section id="methodology">
-<h2>Methodology<a class="headerlink" href="#methodology" title="Link to this heading">#</a></h2>
-<p>The approach follows the P-spline framework for spectral density estimation described by Maturana-Russel &amp; Meyer (2021) [<a class="reference internal" href="#maturanarussel2021">MaturanaRussel2021</a>].</p>
-<ol class="arabic simple">
-<li><p><strong>Basis construction</strong>
-Define order-r B-spline basis functions \(B_k(\omega)\), \(k=1,\dots,K+r\), on a grid of interior knots in the log-frequency domain.</p></li>
-<li><p><strong>Penalized prior</strong>
-Apply a discrete \(D\)th-order difference penalty to the spline coefficients \(\{\beta_k\}\), which induces smoothness in the estimated log-PSD.</p></li>
-<li><p><strong>Knot placement (optional)</strong>
-For spectra with sharp features, knot locations can be set based on quantiles of the raw periodogram values to allocate flexibility where needed.</p></li>
-</ol>
-<p>4. <strong>Model and likelihood</strong>
-The log-PSD is modeled as:</p>
-<blockquote>
-<div><div class="math notranslate nohighlight">
-\[\log f(\lambda_l) = \sum_k \beta_k \, B_k(\log \lambda_l)\]</div>
-</div></blockquote>
-<p>Whittle’s approximation for the periodogram \(I_n(\lambda_l)\) yields the log-likelihood:</p>
-<div class="math notranslate nohighlight">
-\[\log L(\beta) \propto -\sum_{l=1}^{N_b} \left[ \log f(\lambda_l) + \frac{I_n(\lambda_l)}{f(\lambda_l)} \right]\]</div>
-<p>5. <strong>Inference</strong>
-We use NumPyro’s NUTS sampler to jointly sample the spline coefficients.
-When <code class="docutils literal notranslate"><span class="pre">init_from_vi</span></code> is enabled (default), the stochastic VI warm-start runs before NUTS and immediately saves convergence plots and PSD previews to <code class="docutils literal notranslate"><span class="pre">&lt;outdir&gt;/diagnostics</span></code> so you can inspect them before launching the expensive sampler.</p>
-<p>This fixed-basis P-spline approach avoids reversible-jump MCMC over knot numbers and positions, reducing computational cost while retaining flexibility to capture complex spectral features.</p>
-<p>Finally, one can also provide a ‘parametric model’ of the PSD as a function that can then be ‘corrected’ non-parametrically by the spline model.
-This is useful for cases where a known functional form (e.g., power-law) is expected, but additional flexibility is needed to account for deviations in the data.</p>
 </section>
-<section id="installation">
-<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">LogPSplinePSD</span>
+<section id="building-documentation">
+<h2>Building Documentation<a class="headerlink" href="#building-documentation" title="Link to this heading">#</a></h2>
+<p>To build the documentation locally:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>docs
+jupyter-book<span class="w"> </span>build<span class="w"> </span>.
+</pre></div>
+</div>
+<p>The built HTML documentation will be in <code class="docutils literal notranslate"><span class="pre">docs/_build/html/</span></code>.</p>
+</section>
+<section id="running-tests">
+<h2>Running Tests<a class="headerlink" href="#running-tests" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pytest<span class="w"> </span>tests/
 </pre></div>
 </div>
 </section>
-<section id="basic-usage">
-<h2>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading">#</a></h2>
-<p>See <a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/tree/main/docs/demo.py">demo.py</a></p>
-<img alt="Demo Image" class="align-center" src="https://github.com/nz-gravity/LogPSplinePSD/raw/main/docs/demo.png" />
-</section>
-<section id="author">
-<h2>Author<a class="headerlink" href="#author" title="Link to this heading">#</a></h2>
-<p>NZ Gravity</p>
-</section>
-<section id="acknowledgements">
-<h2>Acknowledgements<a class="headerlink" href="#acknowledgements" title="Link to this heading">#</a></h2>
-<p>Part of the NZ-Gravity and International LISA Consortium efforts on gravitational-wave data analysis.</p>
-</section>
-<section id="references">
-<h2>References<a class="headerlink" href="#references" title="Link to this heading">#</a></h2>
-<p id="eilers1996">Eilers, P. H. C., &amp; Marx, B. D. (1996). <em>Flexible smoothing with B-splines and penalties</em>. Statistical Science, 11(2), 89–121. <a class="reference external" href="https://doi.org/10.1214/ss/1038425655">DOI:10.1214/ss/1038425655</a>.</p>
-<p id="maturanarussel2021">Maturana-Russel, J., &amp; Meyer, R. (2021). <em>P-spline spectral density estimation with a discrete penalty</em>. <a class="reference external" href="https://arxiv.org/abs/1905.01832">arXiv:1905.01832</a>.</p>
-</section>
-<div class="toctree-wrapper compound">
-</div>
 </section>
 
     <script type="text/x-thebe-config">
@@ -501,12 +473,21 @@ This is useful for cases where a known functional form (e.g., power-law) is expe
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
+    <a class="left-prev"
+       href="conventions.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Conventions</p>
+      </div>
+    </a>
     <a class="right-next"
-       href="api.html"
+       href="coarse_grain.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">API</p>
+        <p class="prev-next-title">Coarse-Graining</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -526,13 +507,12 @@ This is useful for cases where a known functional form (e.g., power-law) is expe
   </div>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#methodology">Methodology</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-usage">Basic Usage</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#author">Author</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acknowledgements">Acknowledgements</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#version-control-and-releases">Version Control and Releases</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#commit-types-for-releases">Commit Types for Releases</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-documentation">Building Documentation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-tests">Running Tests</a></li>
 </ul>
   </nav></div>
 

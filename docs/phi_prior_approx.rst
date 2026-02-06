@@ -92,7 +92,7 @@ Where to look in the code
 - Usage:
 
   - :mod:`log_psplines.samplers.multivar.multivar_blocked_nuts`
-  - :mod:`log_psplines.samplers.multivar.multivar_nuts`
+  - :mod:`log_psplines.samplers.multivar.multivar_blocked_nuts`
 
 If you want the docs to reflect the implementation, you can interpret the
 written Gamma prior for :math:`\phi\mid\delta` as an *idealised target*, and the

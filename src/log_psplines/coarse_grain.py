@@ -262,7 +262,7 @@ def apply_coarse_graining_univar(
 
 def apply_coarse_grain_multivar_fft(
     fft: MultivarFFT, spec: CoarseGrainSpec
-) -> Tuple[MultivarFFT, np.ndarray]:
+) -> Tuple[MultivarFFT, float]:
     """Coarse-grain a MultivarFFT using equal-sized bins."""
     selection = np.asarray(spec.selection_mask, dtype=bool)
     if selection.ndim != 1:
@@ -307,14 +307,12 @@ def apply_coarse_grain_multivar_fft(
         sqrt_eig = np.sqrt(eigvals).astype(np.float64)
         u_bins[b] = eigvecs * sqrt_eig[np.newaxis, :]
 
-    weights = np.full((Nc,), float(Nh), dtype=np.float64)
-
     psd_coarse = wishart_matrix_to_psd(
         u_to_wishart_matrix(u_bins),
         Nb=int(fft.Nb),
         duration=float(getattr(fft, "duration", 1.0) or 1.0),
         scaling_factor=float(fft.scaling_factor or 1.0),
-        weights=weights,
+        weights=float(Nh),
     )
 
     f_coarse = np.asarray(spec.f_coarse, dtype=np.float64)
@@ -334,7 +332,7 @@ def apply_coarse_grain_multivar_fft(
         raw_psd=psd_coarse.astype(np.complex128),
         raw_freq=f_coarse,
         channel_stds=fft.channel_stds,
-        freq_bin_counts=weights,
+        Nh=float(Nh),
     )
 
-    return fft_coarse, weights
+    return fft_coarse, float(Nh)

@@ -62,8 +62,7 @@ def _blocked_channel_model(
     beta_delta: float,
     duration: float,
     Nb: int,
-    freq_weights: jnp.ndarray,
-    freq_bin_counts: jnp.ndarray,
+    Nh: float,
 ) -> None:
     """NumPyro model for a single Cholesky block (row of ``T``).
 
@@ -87,6 +86,8 @@ def _blocked_channel_model(
         :func:`sample_pspline_block`.
     Nb
         Degrees of freedom (number of averaged blocks) for determinant scaling.
+    Nh
+        Coarse-bin size multiplier for the determinant term.
 
     Notes
     -----
@@ -167,8 +168,8 @@ def _blocked_channel_model(
         theta_im = jnp.zeros((N, 0))
 
     delta_eff_sq = jnp.exp(log_delta_sq_safe)
-    fw = jnp.asarray(freq_weights, dtype=log_delta_sq.dtype)
-    sum_log_det = -float(Nb) * jnp.sum(fw * jnp.log(delta_eff_sq))
+    nh = jnp.asarray(Nh, dtype=log_delta_sq.dtype)
+    sum_log_det = -float(Nb) * nh * jnp.sum(jnp.log(delta_eff_sq))
 
     if n_theta_block > 0:
         contrib_re = jnp.einsum(
@@ -441,8 +442,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.config.beta_delta,
                 self.duration,
                 self.Nb,
-                self.freq_weights,
-                self.freq_bin_counts,
+                self.Nh,
                 extra_fields=(
                     (
                         "potential_energy",

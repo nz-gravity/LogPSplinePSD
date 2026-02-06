@@ -162,7 +162,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             self.basis_matrix,
             self.penalty_matrix,
             self.log_parametric,
-            self.freq_weights,
+            self.freq_counts,
             self.config.alpha_phi,
             self.config.beta_phi,
             self.config.alpha_delta,

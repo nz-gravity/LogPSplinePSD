@@ -94,25 +94,10 @@ class MultivarBaseSampler(BaseSampler):
         if self.duration <= 0.0:
             raise ValueError("fft_data.duration must be positive")
 
-        # For coarse-grained multivariate FFTs, keep the *raw* bin counts
-        # (number of fine-grid frequencies per coarse bin). These are used
-        # directly in the likelihood scaling (no separate per-bin weighting).
-        bin_counts = getattr(self.fft_data, "freq_bin_counts", None)
-        if bin_counts is not None:
-            bc = jnp.asarray(bin_counts, dtype=jnp.float32)
-            if bc.shape[0] != self.N:
-                raise ValueError(
-                    "freq_bin_counts length must match number of frequencies"
-                )
-            if jnp.any(bc <= 0):
-                raise ValueError("freq_bin_counts must be positive")
-            self.freq_bin_counts = bc
-        else:
-            self.freq_bin_counts = jnp.ones((self.N,), dtype=jnp.float32)
-
-        # For compatibility with existing model signatures, store weights as
-        # the per-bin counts.
-        self.freq_weights = self.freq_bin_counts
+        # For equal-sized coarse bins, a single Nh scalar is sufficient.
+        self.Nh = float(getattr(self.fft_data, "Nh", 1.0) or 1.0)
+        if self.Nh <= 0.0:
+            raise ValueError("fft_data.Nh must be positive")
 
         if self.config.verbose:
             logger.info(f"Frequency bins used for inference (N): {self.N}")
@@ -120,9 +105,9 @@ class MultivarBaseSampler(BaseSampler):
                 [f"{tuple(b.shape)}" for b in self.all_bases]
             )
             logger.info(f"B-spline basis shapes: {basis_shapes}")
-            total = float(jnp.sum(self.freq_weights))
+            total = float(self.N * self.Nh)
             logger.info(
-                f"Applied coarse-grain weights; total effective count = {total:.1f}"
+                f"Applied coarse-grain counts; total effective count = {total:.1f}"
             )
 
     @property
@@ -195,17 +180,12 @@ class MultivarBaseSampler(BaseSampler):
         u_re = np.asarray(self.fft_data.u_re, dtype=np.float64)
         u_im = np.asarray(self.fft_data.u_im, dtype=np.float64)
         u_complex = u_re + 1j * u_im
-        weights = np.asarray(self.freq_weights, dtype=np.float64)
-        if weights.shape != (self.N,):
-            raise ValueError(
-                "Frequency weights must have same length as frequency grid."
-            )
         S = wishart_matrix_to_psd(
             u_to_wishart_matrix(u_complex),
             Nb=self.fft_data.Nb,
             duration=float(getattr(self.fft_data, "duration", 1.0) or 1.0),
             scaling_factor=float(self.fft_data.scaling_factor or 1.0),
-            weights=weights,
+            weights=float(self.Nh),
         )
         S = self._rescale_psd(S)
         coherence = _get_coherence(S)

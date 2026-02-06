@@ -1,4 +1,4 @@
-Prior on \phi: TeX vs implementation
+Prior on φ: Implementation vs. Theory
 ======================================
 
 This page explains a deliberate difference between the draft math in

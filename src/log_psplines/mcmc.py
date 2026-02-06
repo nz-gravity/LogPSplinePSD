@@ -313,7 +313,7 @@ def _coarse_grain_processed_data(
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,
         )
-        processed_data, weights = apply_coarse_grain_multivar_fft(
+        processed_data, _ = apply_coarse_grain_multivar_fft(
             processed_data, spec
         )
         logger.info(f"Coarse-grained multivariate FFT: {spec}")
@@ -689,6 +689,11 @@ def _normalize_run_config(
         raise ValueError(
             "Metropolis-Hastings options are no longer supported. "
             "Use NUTS options like target_accept_prob/max_tree_depth instead."
+        )
+    if "freq_weights" in kwargs:
+        raise ValueError(
+            "freq_weights has been removed. Use periodogram.weights or "
+            "coarse-grain bin counts (Nh) instead."
         )
 
     model_cfg = ModelConfig(

@@ -590,4 +590,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 samples[key] = jnp.exp(samples[key])
 
         self.runtime = 0.0
-        return self._create_vi_inference_data(samples, {}, diagnostics)
+        idata = self._create_vi_inference_data(samples, {}, diagnostics)
+        self._cache_full_diagnostics(idata)
+        return idata

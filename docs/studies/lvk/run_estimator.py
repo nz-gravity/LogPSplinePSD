@@ -13,7 +13,6 @@ from log_psplines.datatypes import Periodogram, Timeseries
 from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm
-from log_psplines.psd_diagnostics import PSDDiagnostics
 from log_psplines.psplines import LogPSplines
 
 FMIN, FMAX = 20, 1024
@@ -83,25 +82,6 @@ else:
     ax.set_xscale("log")
     fig.savefig(os.path.join(out, f"test_mcmc_log_no_knots.png"))
 
-
-# get posterior median PSD
-spline_model = get_spline_model(idata)
-pdrgm = get_periodogram(idata)
-weights = get_weights(idata)
-ln_splines = np.array([spline_model(w) for w in weights])
-# combine to median
-posterior_median_psd = np.exp(np.median(ln_splines, axis=0))
-
-
-#
-diag = PSDDiagnostics(
-    ts_data=lvk_data.strain,
-    fs=lvk_data.fs,
-    psd=pdrgm.power,
-    freqs=pdrgm.freqs,
-    reference_psd=posterior_median_psd,
-)
-diag.plot_diagnostics(f"{out}/psd_diagnostics.png")
 
 fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6), show_knots=True)
 ax.set_xscale("log")

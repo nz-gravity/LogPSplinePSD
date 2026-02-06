@@ -82,24 +82,6 @@ Two multivariate NUTS implementations exist:
 If the intended model is “one spline per :math:`\theta_{jl}`”, the blocked
 sampler aligns more closely with that intent.
 
-Noise-floor option (blocked sampler)
-------------------------------------
-
-The blocked sampler can add an “innovation noise floor” in variance space,
-replacing
-
-.. math::
-
-   \delta_j(f)^2 \mapsto \delta_j(f)^2 + \mathrm{floor}(f)
-
-inside the likelihood. This can stabilise inference in near-null bands where
-variances would otherwise collapse.
-
-See:
-
-- :class:`log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSConfig`
-- :func:`log_psplines.samplers.multivar.multivar_blocked_nuts.compute_noise_floor_sq`
-
 Diagnostics: coarse-bin likelihood equivalence
 ----------------------------------------------
 

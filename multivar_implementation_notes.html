@@ -380,7 +380,6 @@ document.write(`
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-weights-vs-bin-counts">Coarse graining: weights vs bin counts</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#noise-floor-option-blocked-sampler">Noise-floor option (blocked sampler)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
 </ul>
             </nav>
@@ -468,20 +467,6 @@ shared field for all imaginary parts (tiled across <span class="math notranslate
 <p>If the intended model is “one spline per <span class="math notranslate nohighlight">\(\theta_{jl}\)</span>”, the blocked
 sampler aligns more closely with that intent.</p>
 </section>
-<section id="noise-floor-option-blocked-sampler">
-<h2>Noise-floor option (blocked sampler)<a class="headerlink" href="#noise-floor-option-blocked-sampler" title="Link to this heading">#</a></h2>
-<p>The blocked sampler can add an “innovation noise floor” in variance space,
-replacing</p>
-<div class="math notranslate nohighlight">
-\[\delta_j(f)^2 \mapsto \delta_j(f)^2 + \mathrm{floor}(f)\]</div>
-<p>inside the likelihood. This can stabilise inference in near-null bands where
-variances would otherwise collapse.</p>
-<p>See:</p>
-<ul class="simple">
-<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSConfig</span></code></p></li>
-<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.compute_noise_floor_sq()</span></code></p></li>
-</ul>
-</section>
 <section id="diagnostics-coarse-bin-likelihood-equivalence">
 <h2>Diagnostics: coarse-bin likelihood equivalence<a class="headerlink" href="#diagnostics-coarse-bin-likelihood-equivalence" title="Link to this heading">#</a></h2>
 <p>The helper <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.diagnostics.coarse_grain_checks.coarse_bin_likelihood_equivalence_check()</span></code>
@@ -565,7 +550,6 @@ convention.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-weights-vs-bin-counts">Coarse graining: weights vs bin counts</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#noise-floor-option-blocked-sampler">Noise-floor option (blocked sampler)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
 </ul>
   </nav></div>

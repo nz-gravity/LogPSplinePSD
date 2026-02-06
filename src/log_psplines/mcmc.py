@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Literal, Optional, Tuple, Union
 
@@ -97,17 +97,6 @@ class NUTSConfigOverride:
 class MHConfigOverride:
     target_accept_rate: float = 0.44
     adaptation_window: int = 50
-
-
-@dataclass(frozen=True)
-class NoiseFloorConfig:
-    use_noise_floor: bool = False
-    mode: str = "constant"
-    constant: float = 0.0
-    scale: float = 1e-4
-    array: Optional[jnp.ndarray] = None
-    theory_psd: Optional[jnp.ndarray] = None
-    blocks: Optional[list[int] | str] = None
 
 
 @dataclass(frozen=True)
@@ -777,16 +766,6 @@ def _normalize_run_config(
         target_accept_rate=kwargs.pop("target_accept_rate", 0.44),
         adaptation_window=kwargs.pop("adaptation_window", 50),
     )
-    noise_floor_cfg = NoiseFloorConfig(
-        use_noise_floor=kwargs.pop("use_noise_floor", False),
-        mode=kwargs.pop("noise_floor_mode", "constant"),
-        constant=kwargs.pop("noise_floor_constant", 0.0),
-        scale=kwargs.pop("noise_floor_scale", 1e-4),
-        array=kwargs.pop("noise_floor_array", None),
-        theory_psd=kwargs.pop("theory_psd", None),
-        blocks=kwargs.pop("noise_floor_blocks", None),
-    )
-
     return RunMCMCConfig(
         sampler=kwargs.pop("sampler", "nuts"),
         n_samples=kwargs.pop("n_samples", 1000),
@@ -945,6 +924,9 @@ def _build_univar_sampler(
 ):
     run = config.run_config
     if sampler_type == "nuts":
+        nuts_extra_kwargs = _validate_extra_kwargs(
+            NUTSConfig, run.extra_kwargs
+        )
         nuts_config = NUTSConfig(
             **common_kwargs,
             target_accept_prob=run.nuts.target_accept_prob,
@@ -956,10 +938,13 @@ def _build_univar_sampler(
             vi_guide=run.vi.vi_guide,
             vi_posterior_draws=run.vi.vi_posterior_draws,
             vi_progress_bar=run.vi.vi_progress_bar,
-            **run.extra_kwargs,
+            **nuts_extra_kwargs,
         )
         return NUTSSampler(data, model, nuts_config)
 
+    mh_extra_kwargs = _validate_extra_kwargs(
+        MetropolisHastingsConfig, run.extra_kwargs
+    )
     mh_config = MetropolisHastingsConfig(
         **common_kwargs,
         target_accept_rate=run.mh.target_accept_rate,
@@ -968,7 +953,7 @@ def _build_univar_sampler(
         step_size_factor=1.1,
         min_step_size=1e-6,
         max_step_size=10.0,
-        **run.extra_kwargs,
+        **mh_extra_kwargs,
     )
     return MetropolisHastingsSampler(data, model, mh_config)
 
@@ -980,6 +965,9 @@ def _build_multivar_blocked_sampler(
     common_kwargs: dict[str, Any],
 ):
     run = config.run_config
+    blocked_extra_kwargs = _validate_extra_kwargs(
+        MultivarBlockedNUTSConfig, run.extra_kwargs
+    )
     blocked_config = MultivarBlockedNUTSConfig(
         **common_kwargs,
         target_accept_prob=run.nuts.target_accept_prob,
@@ -995,18 +983,7 @@ def _build_multivar_blocked_sampler(
         vi_progress_bar=run.vi.vi_progress_bar,
         alpha_phi_theta=run.nuts.alpha_phi_theta,
         beta_phi_theta=run.nuts.beta_phi_theta,
-        use_noise_floor=run.noise_floor.use_noise_floor,
-        noise_floor_mode=run.noise_floor.mode,
-        noise_floor_constant=run.noise_floor.constant,
-        noise_floor_scale=run.noise_floor.scale,
-        noise_floor_array=run.noise_floor.array,
-        theory_psd=run.noise_floor.theory_psd,
-        noise_floor_blocks=(
-            run.noise_floor.blocks
-            if run.noise_floor.blocks is not None
-            else MultivarBlockedNUTSConfig.noise_floor_blocks
-        ),
-        **run.extra_kwargs,
+        **blocked_extra_kwargs,
     )
     return MultivarBlockedNUTSSampler(data, model, blocked_config)
 
@@ -1018,6 +995,9 @@ def _build_multivar_coupled_sampler(
     common_kwargs: dict[str, Any],
 ):
     run = config.run_config
+    coupled_extra_kwargs = _validate_extra_kwargs(
+        MultivarNUTSConfig, run.extra_kwargs
+    )
     coupled_config = MultivarNUTSConfig(
         **common_kwargs,
         target_accept_prob=run.nuts.target_accept_prob,
@@ -1029,9 +1009,27 @@ def _build_multivar_coupled_sampler(
         vi_guide=run.vi.vi_guide,
         vi_posterior_draws=run.vi.vi_posterior_draws,
         vi_progress_bar=run.vi.vi_progress_bar,
-        **run.extra_kwargs,
+        **coupled_extra_kwargs,
     )
     return MultivarNUTSSampler(data, model, coupled_config)
+
+
+def _validate_extra_kwargs(
+    config_cls: type,
+    extra_kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    if not extra_kwargs:
+        return {}
+    if not is_dataclass(config_cls):
+        return dict(extra_kwargs)
+
+    allowed = {item.name for item in fields(config_cls)}
+    unknown = sorted(set(extra_kwargs) - allowed)
+    if unknown:
+        raise ValueError(
+            f"Unsupported keyword arguments for {config_cls.__name__}: {unknown}"
+        )
+    return dict(extra_kwargs)
 
 
 def _create_sampler(

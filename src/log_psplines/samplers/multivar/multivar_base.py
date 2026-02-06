@@ -182,23 +182,6 @@ class MultivarBaseSampler(BaseSampler):
                 outdir=self.config.outdir,
             )
 
-            # Noise floor overlays (if attached by sampler).
-            if getattr(self.config, "outdir", None) is not None and hasattr(
-                idata, "noise_floor"
-            ):
-                try:
-                    from ...plotting.noise_floor import (
-                        plot_noise_floor_overlay,
-                    )
-
-                    plot_noise_floor_overlay(
-                        idata=idata, outdir=self.config.outdir, block_idx=2
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        f"Could not plot noise floor overlay: {exc}"
-                    )
-
             self._save_vi_diagnostics(
                 empirical_psd=empirical_psd, log_summary=False
             )

@@ -405,18 +405,14 @@ def _create_multivar_inference_data(
         u_re = np.asarray(fft_data.u_re, dtype=np.float64)
         u_im = np.asarray(fft_data.u_im, dtype=np.float64)
         u_complex = u_re + 1j * u_im
-        weights = getattr(fft_data, "freq_bin_counts", None)
-        if weights is not None:
-            weights = np.asarray(weights, dtype=np.float64)
-        if weights is not None and weights.shape != (fft_data.N,):
-            raise ValueError(
-                "Frequency bin counts length must match number of frequencies."
-            )
+        Nh = float(getattr(fft_data, "Nh", 1.0) or 1.0)
+        if Nh <= 0.0:
+            raise ValueError("fft_data.Nh must be positive")
         observed_csd = wishart_u_to_psd(
             u_complex,
             Nb=getattr(fft_data, "Nb", 1),
             scaling_factor=float(getattr(fft_data, "scaling_factor", 1.0)),
-            weights=weights,
+            weights=Nh,
         )
         psd_has_global_scale = True
         # wishart_u_to_psd already has scaling_factor applied, so remove it before rescaling

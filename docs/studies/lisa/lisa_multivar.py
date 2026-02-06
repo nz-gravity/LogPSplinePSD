@@ -110,16 +110,6 @@ WELCH_NPERSEG = _env_int("LISA_WELCH_NPERSEG", 0)
 WELCH_OVERLAP_FRAC = _env_float("LISA_WELCH_OVERLAP_FRAC", 0.5)
 WELCH_WINDOW = _env_str("LISA_WELCH_WINDOW", "hann")
 WELCH_BLOCK_AVG = _env_flag("LISA_WELCH_BLOCK_AVG", True)
-USE_NOISE_FLOOR = _env_flag("LISA_USE_NOISE_FLOOR", True)
-NOISE_FLOOR_MODE = _env_str(
-    "LISA_NOISE_FLOOR_MODE", "theory_scaled"
-)  # "constant", "theory_scaled", "array"
-NOISE_FLOOR_SCALE = _env_float("LISA_NOISE_FLOOR_SCALE", 1e-4)
-NOISE_FLOOR_CONSTANT = _env_float("LISA_NOISE_FLOOR_CONSTANT", 1e-6)
-NOISE_FLOOR_BLOCKS: tuple[int, ...] | str = _env_blocks(
-    "LISA_NOISE_FLOOR_BLOCKS", (2,)
-)  # block 3 (0-based)
-NOISE_FLOOR_ARRAY: np.ndarray | None = None
 
 C_LIGHT = 299_792_458.0  # m / s
 L_ARM = 2.5e9  # m
@@ -248,108 +238,6 @@ coarse_cfg = CoarseGrainConfig(
     f_max=FMAX,
 )
 
-noise_floor_kwargs: dict = {}
-if USE_NOISE_FLOOR:
-    noise_floor_psd = None
-    if NOISE_FLOOR_MODE == "theory_scaled":
-        blocks = NOISE_FLOOR_BLOCKS
-        if isinstance(blocks, str):
-            raise ValueError(
-                "NOISE_FLOOR_BLOCKS must be a sequence when using theory_scaled."
-            )
-        if blocks is None or len(blocks) != 1:
-            raise ValueError(
-                "theory_scaled noise floor requires exactly one block index."
-            )
-        block_idx = int(blocks[0])
-        if block_idx < 0 or block_idx >= y_full.shape[1]:
-            raise ValueError(
-                f"Block index {block_idx} is out of range for {y_full.shape[1]} channels."
-            )
-        freq_true = np.asarray(true_psd_source[0], dtype=float)
-        true_matrix = np.asarray(true_psd_source[1])
-
-        freq_fine = np.fft.rfftfreq(Lb, 1 / fs)[1:]
-        freq_mask = (freq_fine >= FMIN) & (freq_fine <= FMAX)
-        freq_fine = freq_fine[freq_mask]
-        if freq_fine.size == 0:
-            raise ValueError("No frequencies remain after fmin/fmax.")
-
-        true_matrix_interp = interp_matrix(freq_true, true_matrix, freq_fine)
-        true_diag_fine = np.real(
-            np.diagonal(true_matrix_interp, axis1=1, axis2=2)
-        )
-
-        if coarse_cfg.enabled:
-            spec = compute_binning_structure(
-                freq_fine,
-                Nc=coarse_cfg.Nc,
-                f_min=coarse_cfg.f_min,
-                f_max=coarse_cfg.f_max,
-            )
-            diag_bins = []
-            for ch in range(true_diag_fine.shape[1]):
-                diag_coarse, _ = apply_coarse_graining_univar(
-                    true_diag_fine[:, ch], spec, freq_fine
-                )
-                diag_bins.append(diag_coarse)
-            true_diag = np.stack(diag_bins, axis=1)
-        else:
-            true_diag = true_diag_fine
-
-        stds = np.std(y_full, axis=0)
-        scale = 1.0 / (stds**2)
-        true_diag_std = true_diag * scale[None, :]
-        noise_floor_psd = true_diag_std[:, block_idx]
-    elif NOISE_FLOOR_MODE == "array":
-        if NOISE_FLOOR_ARRAY is None:
-            raise ValueError(
-                "NOISE_FLOOR_ARRAY must be set when NOISE_FLOOR_MODE='array'."
-            )
-        noise_floor_psd = np.asarray(NOISE_FLOOR_ARRAY, dtype=float)
-
-    noise_floor_kwargs = {
-        "use_noise_floor": True,
-        "noise_floor_mode": NOISE_FLOOR_MODE,
-        "noise_floor_constant": NOISE_FLOOR_CONSTANT,
-        "noise_floor_scale": NOISE_FLOOR_SCALE,
-        "noise_floor_array": NOISE_FLOOR_ARRAY,
-        "theory_psd": noise_floor_psd,
-        "noise_floor_blocks": NOISE_FLOOR_BLOCKS,
-    }
-    if noise_floor_psd is not None:
-        floor_min = float(np.min(noise_floor_psd))
-        floor_med = float(np.median(noise_floor_psd))
-        floor_max = float(np.max(noise_floor_psd))
-        logger.info(
-            f"Noise floor PSD (std units) for block {int(NOISE_FLOOR_BLOCKS[0])}: "
-            f"min={floor_min:.3e}, median={floor_med:.3e}, max={floor_max:.3e}."
-        )
-        effective_floor = noise_floor_psd * float(NOISE_FLOOR_SCALE)
-        eff_min = float(np.min(effective_floor))
-        eff_med = float(np.median(effective_floor))
-        eff_max = float(np.max(effective_floor))
-        logger.info(
-            f"Effective noise floor (std units): min={eff_min:.3e}, "
-            f"median={eff_med:.3e}, max={eff_max:.3e}."
-        )
-    elif NOISE_FLOOR_MODE == "constant":
-        logger.info(
-            f"Effective noise floor (std units): constant={NOISE_FLOOR_CONSTANT:.3e}."
-        )
-    elif NOISE_FLOOR_MODE == "array" and NOISE_FLOOR_ARRAY is not None:
-        eff_min = float(np.min(NOISE_FLOOR_ARRAY))
-        eff_med = float(np.median(NOISE_FLOOR_ARRAY))
-        eff_max = float(np.max(NOISE_FLOOR_ARRAY))
-        logger.info(
-            f"Effective noise floor (std units): min={eff_min:.3e}, "
-            f"median={eff_med:.3e}, max={eff_max:.3e}."
-        )
-    logger.info(
-        f"Noise floor enabled: mode={NOISE_FLOOR_MODE}, blocks={NOISE_FLOOR_BLOCKS}, "
-        f"scale={NOISE_FLOOR_SCALE:g}, constant={NOISE_FLOOR_CONSTANT:g}."
-    )
-
 raw_series = MultivariateTimeseries(y=y_full, t=t_full)
 
 idata = None
@@ -393,7 +281,6 @@ else:
         max_tree_depth_by_channel=MAX_TREE_DEPTH_BY_CHANNEL,
         dense_mass=DENSE_MASS,
         true_psd=true_psd_source,
-        **noise_floor_kwargs,
     )
     idata.to_netcdf(str(RESULT_FN))
 

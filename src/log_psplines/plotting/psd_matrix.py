@@ -1,4 +1,5 @@
-from typing import Callable, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -326,39 +327,550 @@ def _scale_empirical_psd(
     )
 
 
-def plot_psd_matrix(
-    idata=None,
-    ci_dict: dict | None = None,
-    freq: np.ndarray | None = None,
-    empirical_psd: EmpiricalPSD | None = None,
-    extra_empirical_psd: list[EmpiricalPSD] | None = None,
-    extra_empirical_labels: list[str] | None = None,
-    extra_empirical_styles: list[dict] | None = None,
-    true_psd: np.ndarray | None = None,
-    outdir: str = ".",
-    filename: str = "psd_matrix.png",
-    dpi: int = 150,
-    show_coherence: bool = True,
-    show_csd_magnitude: bool = False,
-    channel_labels: list[str] | str | None = None,
-    diag_yscale: str = "log",
-    offdiag_yscale: str = "linear",
-    xscale: str = "linear",
-    label: Optional[str] = None,
-    model_color: Optional[str] = "tab:blue",
-    fig: Optional[plt.Figure] = None,
-    ax: Optional[np.ndarray] = None,
-    save: bool = True,
-    close: Optional[bool] = None,
-    overlay_vi: bool = False,
-    vi_color: Optional[str] = "tab:orange",
-    vi_label: str = "VI median",
-    vi_alpha: float = 0.2,
-    freq_range: Optional[tuple[float, float]] = None,
+@dataclass(frozen=True)
+class PSDMatrixPlotSpec:
+    """Specification object for `plot_psd_matrix` inputs/options."""
+
+    idata: Any = None
+    ci_dict: dict | None = None
+    freq: np.ndarray | None = None
+    empirical_psd: EmpiricalPSD | None = None
+    extra_empirical_psd: list[EmpiricalPSD] | None = None
+    extra_empirical_labels: list[str] | None = None
+    extra_empirical_styles: list[dict] | None = None
+    true_psd: np.ndarray | None = None
+    outdir: str = "."
+    filename: str = "psd_matrix.png"
+    dpi: int = 150
+    show_coherence: bool = True
+    show_csd_magnitude: bool = False
+    channel_labels: list[str] | str | None = None
+    diag_yscale: str = "log"
+    offdiag_yscale: str = "linear"
+    xscale: str = "linear"
+    label: Optional[str] = None
+    model_color: Optional[str] = "tab:blue"
+    fig: Optional[plt.Figure] = None
+    ax: Optional[np.ndarray] = None
+    save: bool = True
+    close: Optional[bool] = None
+    overlay_vi: bool = False
+    vi_color: Optional[str] = "tab:orange"
+    vi_label: str = "VI median"
+    vi_alpha: float = 0.2
+    freq_range: Optional[tuple[float, float]] = None
     psd_scale: (
         np.ndarray | float | Callable[[np.ndarray], np.ndarray] | None
-    ) = None,
-    psd_unit_label: str = "1/Hz",
+    ) = None
+    psd_unit_label: str = "1/Hz"
+
+
+def _prepare_plot_inputs(
+    spec: PSDMatrixPlotSpec,
+) -> tuple[
+    dict,
+    np.ndarray,
+    EmpiricalPSD | None,
+    list[EmpiricalPSD],
+    list[str],
+    list[dict],
+    np.ndarray | None,
+    dict | None,
+]:
+    """Extract plotting inputs and normalise idata/spec variants."""
+    if spec.show_coherence and spec.show_csd_magnitude:
+        raise ValueError(
+            "Choose either coherence display or |CSD| magnitude, not both."
+        )
+
+    ci_dict = spec.ci_dict
+    freq = spec.freq
+    empirical_psd = spec.empirical_psd
+    true_psd = spec.true_psd
+    vi_ci_dict = None
+
+    if spec.idata is not None:
+        extracted = extract_plotting_data(spec.idata)
+        quantiles = extracted.get("posterior_psd_matrix_quantiles")
+        vi_quantiles = extracted.get("vi_psd_matrix_quantiles")
+
+        using_vi_only = False
+        if quantiles is None:
+            quantiles = vi_quantiles
+            using_vi_only = quantiles is not None
+        if quantiles is None:
+            raise ValueError(
+                "idata missing posterior_psd matrix quantiles for plotting"
+            )
+
+        freq = extracted.get("frequencies", freq)
+        true_psd = extracted.get("true_psd", true_psd)
+        if empirical_psd is None:
+            empirical_psd = _extract_empirical_psd_from_idata(spec.idata)
+
+        ci_dict = _quantiles_to_ci_dict(
+            quantiles,
+            show_coherence=spec.show_coherence,
+            show_csd_magnitude=spec.show_csd_magnitude,
+        )
+        if spec.overlay_vi and not using_vi_only and vi_quantiles is not None:
+            vi_ci_dict = _quantiles_to_ci_dict(
+                vi_quantiles,
+                show_coherence=spec.show_coherence,
+                show_csd_magnitude=spec.show_csd_magnitude,
+            )
+        elif spec.overlay_vi and vi_quantiles is None:
+            logger.warning(
+                "overlay_vi requested but VI quantiles unavailable; ignoring."
+            )
+    elif ci_dict is None:
+        raise ValueError("Provide either `idata` or `ci_dict`.")
+
+    if freq is None:
+        raise ValueError("Frequency array `freq` is required.")
+
+    if true_psd is not None:
+        true_psd = np.asarray(true_psd)
+        if true_psd.shape[0] != len(freq):
+            logger.warning(
+                f"Skipping true PSD overlay: expected {len(freq)} frequency bins, got {true_psd.shape[0]}."
+            )
+            true_psd = None
+
+    extra_empirical_psd = spec.extra_empirical_psd or []
+    extra_empirical_labels = spec.extra_empirical_labels or []
+    extra_empirical_styles = spec.extra_empirical_styles or []
+
+    scale_main = _resolve_scale(freq, spec.psd_scale)
+    if scale_main is not None:
+        ci_dict = _scale_ci_dict(ci_dict, scale_main)
+        if vi_ci_dict is not None:
+            vi_ci_dict = _scale_ci_dict(vi_ci_dict, scale_main)
+        if true_psd is not None:
+            true_psd = true_psd * scale_main[:, None, None]
+        if empirical_psd is not None:
+            scale_emp = _resolve_scale(
+                empirical_psd.freq,
+                spec.psd_scale,
+                base_freq=freq,
+            )
+            empirical_psd = _scale_empirical_psd(empirical_psd, scale_emp)
+        if extra_empirical_psd:
+            scaled_extra = []
+            for extra in extra_empirical_psd:
+                scale_extra = _resolve_scale(
+                    extra.freq,
+                    spec.psd_scale,
+                    base_freq=freq,
+                )
+                scaled_extra.append(_scale_empirical_psd(extra, scale_extra))
+            extra_empirical_psd = scaled_extra
+
+    return (
+        ci_dict,
+        np.asarray(freq),
+        empirical_psd,
+        extra_empirical_psd,
+        extra_empirical_labels,
+        extra_empirical_styles,
+        true_psd,
+        vi_ci_dict,
+    )
+
+
+def _plot_ci_band(
+    ax: plt.Axes,
+    freq: np.ndarray,
+    q05: np.ndarray,
+    q50: np.ndarray,
+    q95: np.ndarray,
+    *,
+    color: str | None,
+    label: str | None,
+    alpha: float = 0.25,
+    lw: float = 1.5,
+    ls: str = "-",
+) -> None:
+    ax.fill_between(freq, q05, q95, color=color, alpha=alpha)
+    ax.plot(freq, q50, color=color, lw=lw, ls=ls, label=label)
+
+
+def _plot_empirical_overlays(
+    ax: plt.Axes,
+    series_getter: Callable[[EmpiricalPSD], np.ndarray],
+    i: int,
+    j: int,
+    empirical_psd: EmpiricalPSD | None,
+    extra_empirical_psd: list[EmpiricalPSD],
+    extra_empirical_labels: list[str],
+    extra_empirical_styles: list[dict],
+) -> None:
+    if empirical_psd is not None:
+        ax.plot(
+            empirical_psd.freq,
+            series_getter(empirical_psd),
+            **EMPIRICAL_KWGS,
+        )
+
+    for idx, extra_emp in enumerate(extra_empirical_psd):
+        kw = dict(EMPIRICAL_KWGS)
+        if idx < len(extra_empirical_styles):
+            kw.update(extra_empirical_styles[idx] or {})
+        if idx < len(extra_empirical_labels):
+            kw["label"] = extra_empirical_labels[idx]
+        else:
+            kw.setdefault("label", f"Empirical {idx + 2}")
+        ax.plot(extra_emp.freq, series_getter(extra_emp), **kw)
+
+
+def _render_diag_panel(
+    ax: plt.Axes,
+    i: int,
+    j: int,
+    freq: np.ndarray,
+    ci_dict: dict,
+    empirical_psd: EmpiricalPSD | None,
+    extra_empirical_psd: list[EmpiricalPSD],
+    extra_empirical_labels: list[str],
+    extra_empirical_styles: list[dict],
+    true_psd: np.ndarray | None,
+    spec: PSDMatrixPlotSpec,
+    vi_ci_dict: dict | None,
+    vi_label_added: bool,
+) -> bool:
+    q05, q50, q95 = ci_dict["psd"][(i, i)]
+    _plot_empirical_overlays(
+        ax,
+        lambda emp: emp.psd[:, i, i].real,
+        i,
+        j,
+        empirical_psd,
+        extra_empirical_psd,
+        extra_empirical_labels,
+        extra_empirical_styles,
+    )
+    line_label = (
+        spec.label
+        if spec.label is not None
+        else ("Posterior median" if spec.overlay_vi else "Median")
+    )
+    _plot_ci_band(
+        ax,
+        freq,
+        q05,
+        q50,
+        q95,
+        color=spec.model_color,
+        label=line_label,
+    )
+    if true_psd is not None:
+        ax.plot(freq, true_psd[:, i, i].real, **TRUE_KWGS)
+    if vi_ci_dict and (i, i) in vi_ci_dict["psd"]:
+        vi_q05, vi_q50, vi_q95 = vi_ci_dict["psd"][(i, i)]
+        _plot_ci_band(
+            ax,
+            freq,
+            vi_q05,
+            vi_q50,
+            vi_q95,
+            color=spec.vi_color,
+            label=spec.vi_label if not vi_label_added else None,
+            alpha=spec.vi_alpha,
+            lw=1.3,
+            ls="--",
+        )
+        vi_label_added = True
+    ax.set_yscale(spec.diag_yscale)
+    if i == 0 and j == 0:
+        ax.legend(frameon=False, fontsize=9)
+    return vi_label_added
+
+
+def _render_coherence_panel(
+    ax: plt.Axes,
+    i: int,
+    j: int,
+    freq: np.ndarray,
+    ci_dict: dict,
+    empirical_psd: EmpiricalPSD | None,
+    extra_empirical_psd: list[EmpiricalPSD],
+    extra_empirical_labels: list[str],
+    extra_empirical_styles: list[dict],
+    true_psd: np.ndarray | None,
+    spec: PSDMatrixPlotSpec,
+    vi_ci_dict: dict | None,
+    vi_label_added: bool,
+) -> bool:
+    if "coh" not in ci_dict or (i, j) not in ci_dict["coh"]:
+        raise ValueError("ci_dict missing coherence (i,j)={i,j}")
+    q05, q50, q95 = ci_dict["coh"][(i, j)]
+    _plot_empirical_overlays(
+        ax,
+        lambda emp: emp.coherence[:, i, j],
+        i,
+        j,
+        empirical_psd,
+        extra_empirical_psd,
+        extra_empirical_labels,
+        extra_empirical_styles,
+    )
+    _plot_ci_band(
+        ax,
+        freq,
+        q05,
+        q50,
+        q95,
+        color=spec.model_color,
+        label=spec.label if spec.label is not None else "Median",
+    )
+    if true_psd is not None:
+        true_coh = np.abs(true_psd[:, i, j]) ** 2 / (
+            np.abs(true_psd[:, i, i]) * np.abs(true_psd[:, j, j])
+        )
+        ax.plot(freq, true_coh, **TRUE_KWGS)
+    ax.set_ylim(0, 1)
+    if vi_ci_dict and "coh" in vi_ci_dict and (i, j) in vi_ci_dict["coh"]:
+        vi_q05, vi_q50, vi_q95 = vi_ci_dict["coh"][(i, j)]
+        _plot_ci_band(
+            ax,
+            freq,
+            vi_q05,
+            vi_q50,
+            vi_q95,
+            color=spec.vi_color,
+            label=spec.vi_label if not vi_label_added else None,
+            alpha=spec.vi_alpha,
+            lw=1.2,
+            ls="--",
+        )
+        vi_label_added = True
+    ax.set_yscale(spec.offdiag_yscale)
+    return vi_label_added
+
+
+def _render_magnitude_panel(
+    ax: plt.Axes,
+    i: int,
+    j: int,
+    freq: np.ndarray,
+    ci_dict: dict,
+    empirical_psd: EmpiricalPSD | None,
+    extra_empirical_psd: list[EmpiricalPSD],
+    extra_empirical_labels: list[str],
+    extra_empirical_styles: list[dict],
+    true_psd: np.ndarray | None,
+    spec: PSDMatrixPlotSpec,
+    vi_ci_dict: dict | None,
+    vi_label_added: bool,
+) -> bool:
+    if "mag" not in ci_dict or (i, j) not in ci_dict["mag"]:
+        raise ValueError(
+            f"ci_dict missing |CSD| quantiles for (i,j)=({i},{j})"
+        )
+    q05, q50, q95 = ci_dict["mag"][(i, j)]
+    _plot_ci_band(
+        ax,
+        freq,
+        q05,
+        q50,
+        q95,
+        color=spec.model_color,
+        label=spec.label if spec.label is not None else "Median",
+    )
+    _plot_empirical_overlays(
+        ax,
+        lambda emp: np.abs(emp.psd[:, i, j]),
+        i,
+        j,
+        empirical_psd,
+        extra_empirical_psd,
+        extra_empirical_labels,
+        extra_empirical_styles,
+    )
+    if true_psd is not None:
+        ax.plot(freq, np.abs(true_psd[:, i, j]), **TRUE_KWGS)
+    if vi_ci_dict and (i, j) in vi_ci_dict["mag"]:
+        vi_q05, vi_q50, vi_q95 = vi_ci_dict["mag"][(i, j)]
+        _plot_ci_band(
+            ax,
+            freq,
+            vi_q05,
+            vi_q50,
+            vi_q95,
+            color=spec.vi_color,
+            label=spec.vi_label if not vi_label_added else None,
+            alpha=spec.vi_alpha,
+            lw=1.3,
+            ls="--",
+        )
+        vi_label_added = True
+    ax.set_yscale(spec.offdiag_yscale)
+    return vi_label_added
+
+
+def _render_re_panel(
+    ax: plt.Axes,
+    i: int,
+    j: int,
+    freq: np.ndarray,
+    ci_dict: dict,
+    empirical_psd: EmpiricalPSD | None,
+    extra_empirical_psd: list[EmpiricalPSD],
+    extra_empirical_labels: list[str],
+    extra_empirical_styles: list[dict],
+    true_psd: np.ndarray | None,
+    spec: PSDMatrixPlotSpec,
+    vi_ci_dict: dict | None,
+    vi_label_added: bool,
+) -> bool:
+    q05, q50, q95 = ci_dict["re"][(i, j)]
+    _plot_ci_band(
+        ax,
+        freq,
+        q05,
+        q50,
+        q95,
+        color=spec.model_color,
+        label=spec.label if spec.label is not None else None,
+    )
+    _plot_empirical_overlays(
+        ax,
+        lambda emp: emp.psd[:, i, j].real,
+        i,
+        j,
+        empirical_psd,
+        extra_empirical_psd,
+        extra_empirical_labels,
+        extra_empirical_styles,
+    )
+    if true_psd is not None:
+        ax.plot(freq, true_psd[:, i, j].real, **TRUE_KWGS)
+    if vi_ci_dict and (i, j) in vi_ci_dict["re"]:
+        vi_q05, vi_q50, vi_q95 = vi_ci_dict["re"][(i, j)]
+        _plot_ci_band(
+            ax,
+            freq,
+            vi_q05,
+            vi_q50,
+            vi_q95,
+            color=spec.vi_color,
+            label=spec.vi_label if not vi_label_added else None,
+            alpha=spec.vi_alpha,
+            lw=1.3,
+            ls="--",
+        )
+        vi_label_added = True
+    ax.set_yscale(spec.offdiag_yscale)
+    return vi_label_added
+
+
+def _render_im_panel(
+    ax: plt.Axes,
+    i: int,
+    j: int,
+    freq: np.ndarray,
+    ci_dict: dict,
+    empirical_psd: EmpiricalPSD | None,
+    extra_empirical_psd: list[EmpiricalPSD],
+    extra_empirical_labels: list[str],
+    extra_empirical_styles: list[dict],
+    true_psd: np.ndarray | None,
+    spec: PSDMatrixPlotSpec,
+    vi_ci_dict: dict | None,
+    vi_label_added: bool,
+) -> bool:
+    q05, q50, q95 = ci_dict["im"][(i, j)]
+    _plot_ci_band(
+        ax,
+        freq,
+        q05,
+        q50,
+        q95,
+        color=spec.model_color,
+        label=spec.label if spec.label is not None else None,
+    )
+    _plot_empirical_overlays(
+        ax,
+        lambda emp: emp.psd[:, i, j].imag,
+        i,
+        j,
+        empirical_psd,
+        extra_empirical_psd,
+        extra_empirical_labels,
+        extra_empirical_styles,
+    )
+    if true_psd is not None:
+        ax.plot(freq, true_psd[:, i, j].imag, **TRUE_KWGS)
+    if vi_ci_dict and (i, j) in vi_ci_dict["im"]:
+        vi_q05, vi_q50, vi_q95 = vi_ci_dict["im"][(i, j)]
+        _plot_ci_band(
+            ax,
+            freq,
+            vi_q05,
+            vi_q50,
+            vi_q95,
+            color=spec.vi_color,
+            label=spec.vi_label if not vi_label_added else None,
+            alpha=spec.vi_alpha,
+            lw=1.3,
+            ls="--",
+        )
+        vi_label_added = True
+    return vi_label_added
+
+
+def _finalize_psd_matrix_figure(
+    *,
+    fig: plt.Figure,
+    axes: np.ndarray,
+    p: int,
+    freq_range: Optional[tuple[float, float]],
+    created_fig: bool,
+    spec: PSDMatrixPlotSpec,
+) -> None:
+    if freq_range is not None:
+        for i in range(p):
+            for j in range(p):
+                ax = axes[i, j]
+                if ax.axison:
+                    ax.set_xlim(freq_range)
+
+    if created_fig:
+        _format_text(
+            axes,
+            channel_labels=spec.channel_labels,
+            show_coherence=spec.show_coherence,
+            show_csd_magnitude=spec.show_csd_magnitude,
+        )
+        plt.subplots_adjust(
+            left=0.12,
+            right=0.98,
+            top=0.98,
+            bottom=0.10,
+            wspace=0.30,
+            hspace=0.30,
+        )
+
+    effective_save = (
+        spec.save and created_fig and spec.outdir and spec.filename
+    )
+    if effective_save:
+        fig.savefig(
+            f"{spec.outdir}/{spec.filename}", dpi=spec.dpi, bbox_inches="tight"
+        )
+
+    close_fig = (
+        spec.close
+        if spec.close is not None
+        else (created_fig and effective_save)
+    )
+    if close_fig:
+        plt.close(fig)
+
+
+def plot_psd_matrix(
+    spec: PSDMatrixPlotSpec | None = None,
+    **kwargs,
 ):
     """
     Publication-ready multivariate PSD matrix plotter with adaptive per-axis y-labels.
@@ -399,67 +911,17 @@ def plot_psd_matrix(
     vi_label : str, optional
         Legend label for the VI median when overlaying.
     """
-    # ----- Extract/validate -----
-    if show_coherence and show_csd_magnitude:
-        raise ValueError(
-            "Choose either coherence display or |CSD| magnitude, not both."
-        )
-
-    vi_ci_dict = None
-
-    if idata is not None:
-        # Check for required data
-        extracted = extract_plotting_data(idata)
-        quantiles = extracted.get("posterior_psd_matrix_quantiles")
-        vi_quantiles = extracted.get("vi_psd_matrix_quantiles")
-
-        using_vi_only = False
-        if quantiles is None:
-            quantiles = vi_quantiles
-            using_vi_only = quantiles is not None
-
-        if quantiles is None:
-            raise ValueError(
-                "idata missing posterior_psd matrix quantiles for plotting"
-            )
-
-        freq = extracted.get("frequencies", freq)
-        true_psd = extracted.get("true_psd", true_psd)
-
-        # For multivariate data, try to extract empirical PSD if not provided
-        if empirical_psd is None:
-            empirical_psd = _extract_empirical_psd_from_idata(idata)
-
-        ci_dict = _quantiles_to_ci_dict(
-            quantiles,
-            show_coherence=show_coherence,
-            show_csd_magnitude=show_csd_magnitude,
-        )
-
-        if overlay_vi and not using_vi_only and vi_quantiles is not None:
-            vi_ci_dict = _quantiles_to_ci_dict(
-                vi_quantiles,
-                show_coherence=show_coherence,
-                show_csd_magnitude=show_csd_magnitude,
-            )
-        elif overlay_vi and vi_quantiles is None:
-            logger.warning(
-                "overlay_vi requested but VI quantiles unavailable; ignoring."
-            )
-
-    elif ci_dict is None:
-        raise ValueError("Provide either `idata` or `ci_dict`.")
-
-    if freq is None:
-        raise ValueError("Frequency array `freq` is required.")
-
-    if true_psd is not None:
-        true_psd = np.asarray(true_psd)
-        if true_psd.shape[0] != len(freq):
-            logger.warning(
-                f"Skipping true PSD overlay: expected {len(freq)} frequency bins, got {true_psd.shape[0]}.",
-            )
-            true_psd = None
+    spec = spec or PSDMatrixPlotSpec(**kwargs)
+    (
+        ci_dict,
+        freq,
+        empirical_psd,
+        extra_empirical_psd,
+        extra_empirical_labels,
+        extra_empirical_styles,
+        true_psd,
+        vi_ci_dict,
+    ) = _prepare_plot_inputs(spec)
 
     if empirical_psd is not None:
         p = empirical_psd.psd.shape[1]
@@ -468,407 +930,137 @@ def plot_psd_matrix(
     else:
         raise ValueError("Could not infer number of channels.")
 
-    # ----- Figure -----
-    fig_provided = fig is not None and ax is not None
+    fig_provided = spec.fig is not None and spec.ax is not None
     if fig_provided:
-        axes = np.asarray(ax)
+        axes = np.asarray(spec.ax)
         if axes.shape != (p, p):
             raise ValueError(
-                f"Provided axes have shape {axes.shape}, expected "
-                f"({p}, {p})."
+                f"Provided axes have shape {axes.shape}, expected ({p}, {p})."
             )
+        fig = spec.fig
         created_fig = False
     else:
-        fig, axes = plt.subplots(
-            p,
-            p,
-            figsize=(3.9 * p, 3.9 * p),
-        )
+        fig, axes = plt.subplots(p, p, figsize=(3.9 * p, 3.9 * p))
         if p == 1:
             axes = np.array([[axes]])
         created_fig = True
     axes = np.asarray(axes)
 
-    # ----- Plot -----
-    # Normalise optional extra empirical inputs
-    if extra_empirical_psd is None:
-        extra_empirical_psd = []
-    if extra_empirical_labels is None:
-        extra_empirical_labels = []
-    if extra_empirical_styles is None:
-        extra_empirical_styles = []
-
-    scale_main = _resolve_scale(freq, psd_scale)
-    if scale_main is not None:
-        ci_dict = _scale_ci_dict(ci_dict, scale_main)
-        if vi_ci_dict is not None:
-            vi_ci_dict = _scale_ci_dict(vi_ci_dict, scale_main)
-        if true_psd is not None:
-            true_psd = true_psd * scale_main[:, None, None]
-        if empirical_psd is not None:
-            scale_emp = _resolve_scale(
-                empirical_psd.freq, psd_scale, base_freq=freq
-            )
-            empirical_psd = _scale_empirical_psd(empirical_psd, scale_emp)
-        if extra_empirical_psd:
-            scaled_extra = []
-            for extra in extra_empirical_psd:
-                scale_extra = _resolve_scale(
-                    extra.freq, psd_scale, base_freq=freq
-                )
-                scaled_extra.append(_scale_empirical_psd(extra, scale_extra))
-            extra_empirical_psd = scaled_extra
-
     vi_label_added = False
     for i in range(p):
         for j in range(p):
-            ax = axes[i, j]
-            ax.set_xscale(xscale)
-            ax.tick_params(which="both", direction="in", top=True, right=True)
+            axis = axes[i, j]
+            axis.set_xscale(spec.xscale)
+            axis.tick_params(
+                which="both", direction="in", top=True, right=True
+            )
 
-            if i == j:  # auto-PSDs
-                q05, q50, q95 = ci_dict["psd"][(i, i)]
-                if empirical_psd is not None:
-                    ax.plot(
-                        empirical_psd.freq,
-                        empirical_psd.psd[:, i, i].real,
-                        **EMPIRICAL_KWGS,
-                    )
-                # Additional empirical overlays (e.g. Welch PSD)
-                for idx, extra_emp in enumerate(extra_empirical_psd):
-                    kw = dict(EMPIRICAL_KWGS)
-                    if idx < len(extra_empirical_styles):
-                        kw.update(extra_empirical_styles[idx] or {})
-                    if idx < len(extra_empirical_labels):
-                        kw["label"] = extra_empirical_labels[idx]
-                    else:
-                        kw.setdefault("label", f"Empirical {idx + 2}")
-                    ax.plot(
-                        extra_emp.freq,
-                        extra_emp.psd[:, i, i].real,
-                        **kw,
-                    )
-                line_kwargs = {"lw": 1.5}
-                if label is not None:
-                    line_kwargs["label"] = label
-                else:
-                    line_kwargs["label"] = (
-                        "Posterior median" if overlay_vi else "Median"
-                    )
+            if spec.show_coherence and i < j:
+                axis.axis("off")
+                continue
+            if spec.show_csd_magnitude and i < j:
+                axis.axis("off")
+                continue
 
-                line_kwargs["color"] = model_color
-                line = ax.plot(freq, q50, **line_kwargs)[0]
-                ax.fill_between(
+            if i == j:
+                vi_label_added = _render_diag_panel(
+                    axis,
+                    i,
+                    j,
                     freq,
-                    q05,
-                    q95,
-                    color=line.get_color(),
-                    alpha=0.25,
-                    zorder=line.get_zorder() - 1,
+                    ci_dict,
+                    empirical_psd,
+                    extra_empirical_psd,
+                    extra_empirical_labels,
+                    extra_empirical_styles,
+                    true_psd,
+                    spec,
+                    vi_ci_dict,
+                    vi_label_added,
                 )
-                if true_psd is not None:
-                    ax.plot(
-                        freq,
-                        true_psd[:, i, i].real,
-                        **TRUE_KWGS,
-                    )
-                if vi_ci_dict and (i, i) in vi_ci_dict["psd"]:
-                    vi_q05, vi_q50, vi_q95 = vi_ci_dict["psd"][(i, i)]
-                    ax.fill_between(
-                        freq,
-                        vi_q05,
-                        vi_q95,
-                        color=vi_color,
-                        alpha=vi_alpha,
-                        zorder=line.get_zorder() - 2,
-                    )
-                    ax.plot(
-                        freq,
-                        vi_q50,
-                        color=vi_color,
-                        lw=1.3,
-                        ls="--",
-                        label=vi_label if not vi_label_added else None,
-                    )
-                    vi_label_added = True
-                ax.set_yscale(diag_yscale)
-                if i == 0 and j == 0:
-                    ax.legend(frameon=False, fontsize=9)
+            elif i > j and spec.show_coherence:
+                vi_label_added = _render_coherence_panel(
+                    axis,
+                    i,
+                    j,
+                    freq,
+                    ci_dict,
+                    empirical_psd,
+                    extra_empirical_psd,
+                    extra_empirical_labels,
+                    extra_empirical_styles,
+                    true_psd,
+                    spec,
+                    vi_ci_dict,
+                    vi_label_added,
+                )
+            elif i > j and spec.show_csd_magnitude:
+                vi_label_added = _render_magnitude_panel(
+                    axis,
+                    i,
+                    j,
+                    freq,
+                    ci_dict,
+                    empirical_psd,
+                    extra_empirical_psd,
+                    extra_empirical_labels,
+                    extra_empirical_styles,
+                    true_psd,
+                    spec,
+                    vi_ci_dict,
+                    vi_label_added,
+                )
+            elif i > j:
+                vi_label_added = _render_re_panel(
+                    axis,
+                    i,
+                    j,
+                    freq,
+                    ci_dict,
+                    empirical_psd,
+                    extra_empirical_psd,
+                    extra_empirical_labels,
+                    extra_empirical_styles,
+                    true_psd,
+                    spec,
+                    vi_ci_dict,
+                    vi_label_added,
+                )
+            elif i < j:
+                vi_label_added = _render_im_panel(
+                    axis,
+                    i,
+                    j,
+                    freq,
+                    ci_dict,
+                    empirical_psd,
+                    extra_empirical_psd,
+                    extra_empirical_labels,
+                    extra_empirical_styles,
+                    true_psd,
+                    spec,
+                    vi_ci_dict,
+                    vi_label_added,
+                )
 
-            elif i > j:  # lower triangle cross terms
-                if show_coherence:
-                    if "coh" in ci_dict and (i, j) in ci_dict["coh"]:
-                        q05, q50, q95 = ci_dict["coh"][(i, j)]
-                        # draw empirical first so it's visible under the band
-                        if empirical_psd is not None:
-                            ax.plot(
-                                empirical_psd.freq,
-                                empirical_psd.coherence[:, i, j],
-                                **EMPIRICAL_KWGS,
-                            )
-                        for idx, extra_emp in enumerate(extra_empirical_psd):
-                            kw = dict(EMPIRICAL_KWGS)
-                            if idx < len(extra_empirical_styles):
-                                kw.update(extra_empirical_styles[idx] or {})
-                            if idx < len(extra_empirical_labels):
-                                kw["label"] = extra_empirical_labels[idx]
-                            else:
-                                kw.setdefault("label", f"Empirical {idx + 2}")
-                            ax.plot(
-                                extra_emp.freq,
-                                extra_emp.coherence[:, i, j],
-                                **kw,
-                            )
-                        ax.fill_between(
-                            freq, q05, q95, color=model_color, alpha=0.25
-                        )
-                        ax.plot(
-                            freq,
-                            q50,
-                            color=model_color,
-                            lw=1.5,
-                            label="Median" if label is None else label,
-                        )
-                        if true_psd is not None:
-                            true_coh = np.abs(true_psd[:, i, j]) ** 2 / (
-                                np.abs(true_psd[:, i, i])
-                                * np.abs(true_psd[:, j, j])
-                            )
-                            ax.plot(
-                                freq,
-                                true_coh,
-                                **TRUE_KWGS,
-                            )
-                        ax.set_ylim(0, 1)
-                        if (
-                            vi_ci_dict
-                            and "coh" in vi_ci_dict
-                            and (i, j) in vi_ci_dict["coh"]
-                        ):
-                            vi_q05, vi_q50, vi_q95 = vi_ci_dict["coh"][(i, j)]
-                            ax.fill_between(
-                                freq,
-                                vi_q05,
-                                vi_q95,
-                                color=vi_color,
-                                alpha=vi_alpha,
-                                zorder=1,
-                            )
-                            ax.plot(
-                                freq,
-                                vi_q50,
-                                color=vi_color,
-                                lw=1.2,
-                                ls="--",
-                                label=vi_label if not vi_label_added else None,
-                            )
-                            vi_label_added = True
-                    else:
-                        raise ValueError(
-                            "ci_dict missing coherence (i,j)={i,j}"
-                        )
-                elif show_csd_magnitude:
-                    if "mag" not in ci_dict or (i, j) not in ci_dict["mag"]:
-                        raise ValueError(
-                            f"ci_dict missing |CSD| quantiles for (i,j)=({i},{j})"
-                        )
-                    q05, q50, q95 = ci_dict["mag"][(i, j)]
-                    ax.fill_between(
-                        freq, q05, q95, color=model_color, alpha=0.25
-                    )
-                    ax.plot(
-                        freq,
-                        q50,
-                        color=model_color,
-                        lw=1.5,
-                        label="Median" if label is None else label,
-                    )
-                    if empirical_psd is not None:
-                        ax.plot(
-                            empirical_psd.freq,
-                            np.abs(empirical_psd.psd[:, i, j]),
-                            **EMPIRICAL_KWGS,
-                        )
-                    for idx, extra_emp in enumerate(extra_empirical_psd):
-                        kw = dict(EMPIRICAL_KWGS)
-                        if idx < len(extra_empirical_styles):
-                            kw.update(extra_empirical_styles[idx] or {})
-                        if idx < len(extra_empirical_labels):
-                            kw["label"] = extra_empirical_labels[idx]
-                        else:
-                            kw.setdefault("label", f"Empirical {idx + 2}")
-                        ax.plot(
-                            extra_emp.freq,
-                            np.abs(extra_emp.psd[:, i, j]),
-                            **kw,
-                        )
-                    if true_psd is not None:
-                        ax.plot(
-                            freq,
-                            np.abs(true_psd[:, i, j]),
-                            **TRUE_KWGS,
-                        )
-                    if vi_ci_dict and (i, j) in vi_ci_dict["mag"]:
-                        vi_q05, vi_q50, vi_q95 = vi_ci_dict["mag"][(i, j)]
-                        ax.fill_between(
-                            freq,
-                            vi_q05,
-                            vi_q95,
-                            color=vi_color,
-                            alpha=vi_alpha,
-                        )
-                        ax.plot(
-                            freq,
-                            vi_q50,
-                            color=vi_color,
-                            lw=1.3,
-                            ls="--",
-                            label=vi_label if not vi_label_added else None,
-                        )
-                        vi_label_added = True
-                else:
-                    q05, q50, q95 = ci_dict["re"][(i, j)]
-                    ax.fill_between(
-                        freq, q05, q95, color=model_color, alpha=0.25
-                    )
-                    ax.plot(freq, q50, color=model_color, lw=1.5)
-                    if empirical_psd is not None:
-                        ax.plot(
-                            empirical_psd.freq,
-                            empirical_psd.psd[:, i, j].real,
-                            **EMPIRICAL_KWGS,
-                        )
-                    for idx, extra_emp in enumerate(extra_empirical_psd):
-                        kw = dict(EMPIRICAL_KWGS)
-                        if idx < len(extra_empirical_styles):
-                            kw.update(extra_empirical_styles[idx] or {})
-                        if idx < len(extra_empirical_labels):
-                            kw["label"] = extra_empirical_labels[idx]
-                        else:
-                            kw.setdefault("label", f"Empirical {idx + 2}")
-                        ax.plot(
-                            extra_emp.freq,
-                            extra_emp.psd[:, i, j].real,
-                            **kw,
-                        )
-                    if true_psd is not None:
-                        ax.plot(freq, true_psd[:, i, j].real, **TRUE_KWGS)
-                    if vi_ci_dict and (i, j) in vi_ci_dict["re"]:
-                        vi_q05, vi_q50, vi_q95 = vi_ci_dict["re"][(i, j)]
-                        ax.fill_between(
-                            freq,
-                            vi_q05,
-                            vi_q95,
-                            color=vi_color,
-                            alpha=vi_alpha,
-                        )
-                        ax.plot(
-                            freq,
-                            vi_q50,
-                            color=vi_color,
-                            lw=1.3,
-                            ls="--",
-                            label=vi_label if not vi_label_added else None,
-                        )
-                        vi_label_added = True
-                ax.set_yscale(offdiag_yscale)
-
-            elif not show_coherence and not show_csd_magnitude and i < j:
-                q05, q50, q95 = ci_dict["im"][(i, j)]
-                ax.fill_between(freq, q05, q95, color=model_color, alpha=0.25)
-                ax.plot(freq, q50, color=model_color, lw=1.5)
-                if empirical_psd is not None:
-                    ax.plot(
-                        empirical_psd.freq,
-                        empirical_psd.psd[:, i, j].imag,
-                        **EMPIRICAL_KWGS,
-                    )
-                for idx, extra_emp in enumerate(extra_empirical_psd):
-                    kw = dict(EMPIRICAL_KWGS)
-                    if idx < len(extra_empirical_styles):
-                        kw.update(extra_empirical_styles[idx] or {})
-                    if idx < len(extra_empirical_labels):
-                        kw["label"] = extra_empirical_labels[idx]
-                    else:
-                        kw.setdefault("label", f"Empirical {idx + 2}")
-                    ax.plot(
-                        extra_emp.freq,
-                        extra_emp.psd[:, i, j].imag,
-                        **kw,
-                    )
-                if true_psd is not None:
-                    ax.plot(freq, true_psd[:, i, j].imag, **TRUE_KWGS)
-                if (
-                    not show_coherence
-                    and not show_csd_magnitude
-                    and vi_ci_dict
-                    and (i, j) in vi_ci_dict["im"]
-                ):
-                    vi_q05, vi_q50, vi_q95 = vi_ci_dict["im"][(i, j)]
-                    ax.fill_between(
-                        freq,
-                        vi_q05,
-                        vi_q95,
-                        color=vi_color,
-                        alpha=vi_alpha,
-                    )
-                    ax.plot(
-                        freq,
-                        vi_q50,
-                        color=vi_color,
-                        lw=1.3,
-                        ls="--",
-                        label=vi_label if not vi_label_added else None,
-                    )
-                    vi_label_added = True
-            else:
-                ax.axis("off")
-
-            # adaptive y-labels only for visible panels
             ylab = _ylabel_for(
                 i,
                 j,
-                show_coherence,
-                show_csd_magnitude,
-                psd_unit_label,
+                spec.show_coherence,
+                spec.show_csd_magnitude,
+                spec.psd_unit_label,
             )
             if ylab:
-                ax.set_ylabel(ylab, fontsize=11)
-
+                axis.set_ylabel(ylab, fontsize=11)
             if i == p - 1:
-                ax.set_xlabel("Frequency [Hz]", fontsize=11)
+                axis.set_xlabel("Frequency [Hz]", fontsize=11)
 
-    if freq_range is not None:
-        for i in range(p):
-            for j in range(p):
-                ax = axes[i, j]
-                if ax.axison:
-                    ax.set_xlim(freq_range)
-
-    if created_fig:
-        _format_text(
-            axes,
-            channel_labels=channel_labels,
-            show_coherence=show_coherence,
-            show_csd_magnitude=show_csd_magnitude,
-        )
-        plt.subplots_adjust(
-            left=0.12,
-            right=0.98,
-            top=0.98,
-            bottom=0.10,
-            wspace=0.30,
-            hspace=0.30,
-        )
-
-    effective_save = save and created_fig and outdir is not None and filename
-    if effective_save:
-        fig.savefig(f"{outdir}/{filename}", dpi=dpi, bbox_inches="tight")
-
-    close_fig = (
-        close if close is not None else (created_fig and effective_save)
+    _finalize_psd_matrix_figure(
+        fig=fig,
+        axes=axes,
+        p=p,
+        freq_range=spec.freq_range,
+        created_fig=created_fig,
+        spec=spec,
     )
-    if close_fig:
-        plt.close(fig)
-
     return fig, axes

@@ -145,6 +145,66 @@ def _count_multivar_latents(sampler) -> int:
     return total_latents
 
 
+def _add_theta_init_values(
+    *,
+    init_values: Dict[str, jnp.ndarray],
+    channel_index: int,
+    theta_count: int,
+    delta_init: jnp.ndarray,
+    phi_theta_init: jnp.ndarray,
+    theta_weights_re: jnp.ndarray,
+    theta_weights_im: jnp.ndarray,
+) -> None:
+    """Populate per-theta initial values for blocked VI."""
+    if theta_count <= 0:
+        return
+
+    init_values.update(
+        {
+            f"delta_theta_re_{channel_index}_{theta_idx}": jnp.asarray(
+                delta_init
+            )
+            for theta_idx in range(theta_count)
+        }
+    )
+    init_values.update(
+        {
+            f"phi_theta_re_{channel_index}_{theta_idx}": jnp.log(
+                jnp.asarray(phi_theta_init)
+            )
+            for theta_idx in range(theta_count)
+        }
+    )
+    init_values.update(
+        {
+            f"weights_theta_re_{channel_index}_{theta_idx}": theta_weights_re
+            for theta_idx in range(theta_count)
+        }
+    )
+    init_values.update(
+        {
+            f"delta_theta_im_{channel_index}_{theta_idx}": jnp.asarray(
+                delta_init
+            )
+            for theta_idx in range(theta_count)
+        }
+    )
+    init_values.update(
+        {
+            f"phi_theta_im_{channel_index}_{theta_idx}": jnp.log(
+                jnp.asarray(phi_theta_init)
+            )
+            for theta_idx in range(theta_count)
+        }
+    )
+    init_values.update(
+        {
+            f"weights_theta_im_{channel_index}_{theta_idx}": theta_weights_im
+            for theta_idx in range(theta_count)
+        }
+    )
+
+
 def compute_vi_artifacts_multivar(
     sampler,
     *,
@@ -431,6 +491,135 @@ class BlockVIArtifacts:
     diagnostics: Optional[Dict[str, Any]]
 
 
+def _prepare_vi_buffers(sampler) -> Dict[str, Any]:
+    """Prepare mutable buffers used during blocked VI initialisation."""
+    posterior_draws = (
+        sampler.config.vi_posterior_draws
+        if getattr(sampler.config, "vi_posterior_draws", 0) > 0
+        else 0
+    )
+    store_draws = sampler.config.init_from_vi and posterior_draws > 0
+    log_delta_draws = None
+    theta_re_draws = None
+    theta_im_draws = None
+    if store_draws:
+        log_delta_draws = np.zeros(
+            (posterior_draws, sampler.N, sampler.p),
+            dtype=np.float32,
+        )
+        if sampler.n_theta > 0:
+            theta_re_draws = np.zeros(
+                (posterior_draws, sampler.N, sampler.n_theta),
+                dtype=np.float32,
+            )
+            theta_im_draws = np.zeros_like(theta_re_draws)
+
+    return {
+        "posterior_draws": posterior_draws,
+        "store_draws": store_draws,
+        "vi_samples": {},
+        "log_delta_draws": log_delta_draws,
+        "theta_re_draws": theta_re_draws,
+        "theta_im_draws": theta_im_draws,
+        "draws_missing": False,
+        "draws_recorded": 0,
+    }
+
+
+def _build_block_init_values(
+    *,
+    sampler,
+    channel_index: int,
+    theta_count: int,
+    delta_weights_init: jnp.ndarray,
+    alpha_phi_theta: float,
+    beta_phi_theta: float,
+) -> Dict[str, jnp.ndarray]:
+    """Build initial values for a single blocked channel model."""
+    alpha_phi_delta = sampler.config.alpha_phi
+    beta_phi_delta = sampler.config.beta_phi
+    delta_init, phi_delta_init = pspline_hyperparameter_initials(
+        alpha_phi_delta,
+        beta_phi_delta,
+        sampler.config.alpha_delta,
+        sampler.config.beta_delta,
+        divide_phi_by_delta=True,
+    )
+    _, phi_theta_init = pspline_hyperparameter_initials(
+        alpha_phi_theta,
+        beta_phi_theta,
+        sampler.config.alpha_delta,
+        sampler.config.beta_delta,
+        divide_phi_by_delta=True,
+    )
+    init_values = {
+        f"delta_{channel_index}": jnp.asarray(delta_init),
+        f"phi_delta_{channel_index}": jnp.log(jnp.asarray(phi_delta_init)),
+        f"weights_delta_{channel_index}": delta_weights_init,
+    }
+    if theta_count > 0:
+        theta_weights_re = jnp.asarray(
+            sampler.spline_model.offdiag_re_model.weights
+        )
+        theta_weights_im = jnp.asarray(
+            sampler.spline_model.offdiag_im_model.weights
+        )
+        _add_theta_init_values(
+            init_values=init_values,
+            channel_index=channel_index,
+            theta_count=theta_count,
+            delta_init=jnp.asarray(delta_init),
+            phi_theta_init=jnp.asarray(phi_theta_init),
+            theta_weights_re=theta_weights_re,
+            theta_weights_im=theta_weights_im,
+        )
+    return init_values
+
+
+def _run_single_block_vi(
+    *,
+    sampler,
+    block_model: Callable[..., Any],
+    vi_key: jax.Array,
+    model_args: tuple[Any, ...],
+    guide_spec: str,
+    progress_bar: bool,
+    init_values: Dict[str, jnp.ndarray],
+):
+    """Execute one VI run with a guarded retry for unstable ELBOs."""
+    vi_result = fit_vi(
+        model=block_model,
+        rng_key=vi_key,
+        vi_steps=sampler.config.vi_steps,
+        optimizer_lr=sampler.config.vi_lr,
+        model_args=model_args,
+        guide=guide_spec,
+        posterior_draws=sampler.config.vi_posterior_draws,
+        progress_bar=progress_bar,
+        init_values=init_values,
+    )
+    losses_arr = np.asarray(jax.device_get(vi_result.losses))
+    if not (losses_arr.size and not np.isfinite(losses_arr[-1])):
+        return vi_result, losses_arr
+
+    logger.warning(
+        f"VI returned a non-finite ELBO (guide={vi_result.guide_name}); retrying with diag guide."
+    )
+    vi_result = fit_vi(
+        model=block_model,
+        rng_key=vi_key,
+        vi_steps=min(int(sampler.config.vi_steps), 2000),
+        optimizer_lr=min(float(sampler.config.vi_lr), 1e-3),
+        model_args=model_args,
+        guide="diag",
+        posterior_draws=sampler.config.vi_posterior_draws,
+        progress_bar=progress_bar,
+        init_values=init_values,
+    )
+    losses_arr = np.asarray(jax.device_get(vi_result.losses))
+    return vi_result, losses_arr
+
+
 def prepare_block_vi(
     sampler,
     *,
@@ -494,29 +683,15 @@ def prepare_block_vi(
     vi_theta_im_mean: Optional[np.ndarray] = None
     psis_khat_values: List[float] = []
 
-    posterior_draws = (
-        sampler.config.vi_posterior_draws
-        if getattr(sampler.config, "vi_posterior_draws", 0) > 0
-        else 0
-    )
-    store_draws = sampler.config.init_from_vi and posterior_draws > 0
-    vi_samples: Dict[str, np.ndarray] = {}
-    log_delta_draws = None
-    theta_re_draws = None
-    theta_im_draws = None
-    draws_missing = False
-    draws_recorded = 0
-    if store_draws:
-        log_delta_draws = np.zeros(
-            (posterior_draws, sampler.N, sampler.p),
-            dtype=np.float32,
-        )
-        if sampler.n_theta > 0:
-            theta_re_draws = np.zeros(
-                (posterior_draws, sampler.N, sampler.n_theta),
-                dtype=np.float32,
-            )
-            theta_im_draws = np.zeros_like(theta_re_draws)
+    buffers = _prepare_vi_buffers(sampler)
+    posterior_draws = buffers["posterior_draws"]
+    store_draws = buffers["store_draws"]
+    vi_samples: Dict[str, np.ndarray] = buffers["vi_samples"]
+    log_delta_draws = buffers["log_delta_draws"]
+    theta_re_draws = buffers["theta_re_draws"]
+    theta_im_draws = buffers["theta_im_draws"]
+    draws_missing = buffers["draws_missing"]
+    draws_recorded = buffers["draws_recorded"]
 
     current_key = rng_key
 
@@ -558,10 +733,7 @@ def prepare_block_vi(
             u_im_prev = sampler.u_im[:, :channel_index, :]
 
             # Build init values consistent with NUTS defaults (non-centred phi)
-            # Use diagonal hyperparameters for delta_j and theta-specific ones
-            # for the off-diagonal blocks.
-            alpha_phi_delta = sampler.config.alpha_phi
-            beta_phi_delta = sampler.config.beta_phi
+            # and theta-specific hyperparameters for off-diagonal blocks.
             alpha_phi_theta = getattr(
                 sampler.config, "alpha_phi_theta", sampler.config.alpha_phi
             )
@@ -569,78 +741,14 @@ def prepare_block_vi(
                 sampler.config, "beta_phi_theta", sampler.config.beta_phi
             )
 
-            delta_init, phi_delta_init = pspline_hyperparameter_initials(
-                alpha_phi_delta,
-                beta_phi_delta,
-                sampler.config.alpha_delta,
-                sampler.config.beta_delta,
-                divide_phi_by_delta=True,
+            init_values = _build_block_init_values(
+                sampler=sampler,
+                channel_index=channel_index,
+                theta_count=theta_count,
+                delta_weights_init=delta_weights_init,
+                alpha_phi_theta=alpha_phi_theta,
+                beta_phi_theta=beta_phi_theta,
             )
-            _, phi_theta_init = pspline_hyperparameter_initials(
-                alpha_phi_theta,
-                beta_phi_theta,
-                sampler.config.alpha_delta,
-                sampler.config.beta_delta,
-                divide_phi_by_delta=True,
-            )
-
-            init_values = {
-                f"delta_{channel_index}": jnp.asarray(delta_init),
-                f"phi_delta_{channel_index}": jnp.log(
-                    jnp.asarray(phi_delta_init)
-                ),
-                f"weights_delta_{channel_index}": delta_weights_init,
-            }
-            if theta_count > 0:
-                theta_weights_init = jnp.asarray(
-                    sampler.spline_model.offdiag_re_model.weights
-                )
-                init_values.update(
-                    {
-                        f"delta_theta_re_{channel_index}_{theta_idx}": jnp.asarray(
-                            delta_init
-                        )
-                        for theta_idx in range(theta_count)
-                    }
-                )
-                init_values.update(
-                    {
-                        f"phi_theta_re_{channel_index}_{theta_idx}": jnp.log(
-                            jnp.asarray(phi_theta_init)
-                        )
-                        for theta_idx in range(theta_count)
-                    }
-                )
-                init_values.update(
-                    {
-                        f"weights_theta_re_{channel_index}_{theta_idx}": theta_weights_init
-                        for theta_idx in range(theta_count)
-                    }
-                )
-                init_values.update(
-                    {
-                        f"delta_theta_im_{channel_index}_{theta_idx}": jnp.asarray(
-                            delta_init
-                        )
-                        for theta_idx in range(theta_count)
-                    }
-                )
-                init_values.update(
-                    {
-                        f"phi_theta_im_{channel_index}_{theta_idx}": jnp.log(
-                            jnp.asarray(phi_theta_init)
-                        )
-                        for theta_idx in range(theta_count)
-                    }
-                )
-                init_values.update(
-                    {
-                        f"weights_theta_im_{channel_index}_{theta_idx}": jnp.asarray(
-                            sampler.spline_model.offdiag_im_model.weights
-                        )
-                        for theta_idx in range(theta_count)
-                    }
-                )
 
             model_args = (
                 channel_index,
@@ -662,47 +770,17 @@ def prepare_block_vi(
                 sampler.Nb,
                 sampler.freq_weights,
                 sampler.freq_bin_counts,
-                False,
-                jnp.zeros((sampler.N,), dtype=sampler.freq.dtype),
             )
-            if hasattr(sampler, "_get_noise_floor_args"):
-                apply_noise_floor, noise_floor_sq = (
-                    sampler._get_noise_floor_args(channel_index)
-                )
-                model_args = model_args[:-2] + (
-                    apply_noise_floor,
-                    noise_floor_sq,
-                )
 
-            vi_result = fit_vi(
-                model=block_model,
-                rng_key=vi_key,
-                vi_steps=sampler.config.vi_steps,
-                optimizer_lr=sampler.config.vi_lr,
+            vi_result, losses_arr = _run_single_block_vi(
+                sampler=sampler,
+                block_model=block_model,
+                vi_key=vi_key,
                 model_args=model_args,
-                guide=guide_spec,
-                posterior_draws=sampler.config.vi_posterior_draws,
+                guide_spec=guide_spec,
                 progress_bar=progress_bar,
                 init_values=init_values,
             )
-            losses_arr = np.asarray(jax.device_get(vi_result.losses))
-            if losses_arr.size and not np.isfinite(losses_arr[-1]):
-                logger.warning(
-                    f"VI returned a non-finite ELBO for block {channel_index} "
-                    f"(guide={vi_result.guide_name}); retrying with diag guide."
-                )
-                vi_result = fit_vi(
-                    model=block_model,
-                    rng_key=vi_key,
-                    vi_steps=min(int(sampler.config.vi_steps), 2000),
-                    optimizer_lr=min(float(sampler.config.vi_lr), 1e-3),
-                    model_args=model_args,
-                    guide="diag",
-                    posterior_draws=sampler.config.vi_posterior_draws,
-                    progress_bar=progress_bar,
-                    init_values=init_values,
-                )
-                losses_arr = np.asarray(jax.device_get(vi_result.losses))
 
             vi_losses_blocks.append(losses_arr)
             vi_guides.append(vi_result.guide_name)

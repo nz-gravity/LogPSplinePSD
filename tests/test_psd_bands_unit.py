@@ -9,7 +9,7 @@ from log_psplines.diagnostics import psd_bands
 
 def test_run_returns_empty_without_psd():
     idata = az.InferenceData()
-    assert psd_bands.run(idata=idata) == {}
+    assert psd_bands._run(idata=idata) == {}
 
 
 def test_run_univariate_with_percentiles():
@@ -28,7 +28,7 @@ def test_run_univariate_with_percentiles():
         dims=("percentile", "freq"),
     )
     idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
-    metrics = psd_bands.run(idata=idata)
+    metrics = psd_bands._run(idata=idata)
     expected_median = float(simpson(values[1], x=freqs))
     expected_width = float(
         simpson(values[2], x=freqs) - simpson(values[0], x=freqs)
@@ -50,7 +50,7 @@ def test_run_univariate_without_percentile_coord():
         values, coords={"freq": freqs}, dims=("sample", "freq")
     )
     idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
-    metrics = psd_bands.run(idata=idata)
+    metrics = psd_bands._run(idata=idata)
     assert "variance_median" in metrics
     assert "variance_ci_width" in metrics
 
@@ -81,7 +81,7 @@ def test_run_multivariate_with_coherence():
             {"psd_matrix_real": psd_da, "coherence": coh_da}
         )
     )
-    metrics = psd_bands.run(idata=idata)
+    metrics = psd_bands._run(idata=idata)
     expected_var0 = float(simpson(base[:, 0, 0], x=freqs))
     expected_var1 = float(simpson(base[:, 1, 1], x=freqs))
     assert metrics["variance_median_mean"] == pytest.approx(

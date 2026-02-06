@@ -141,111 +141,124 @@ class BaseSampler(ABC):
     ) -> az.InferenceData:
         """Convert samples to ArviZ InferenceData with diagnostics and plotting."""
         lnz, lnz_err = self._get_lnz(samples, sample_stats)
-
-        # Call the appropriate results_to_arviz based on data type
         idata = self._create_inference_data(
             samples, sample_stats, lnz, lnz_err
         )
         logger.debug(" InferenceData created.")
-
-        # Attach VI PSD summaries when available (from VI initialisation)
-        vi_diag = getattr(self, "_vi_diagnostics", None)
-        if vi_diag and hasattr(self, "_attach_vi_psd_group"):
-            try:
-                self._attach_vi_psd_group(idata, vi_diag)
-            except Exception as exc:  # pragma: no cover - best-effort hook
-                logger.warning(f"Could not attach VI diagnostics: {exc}")
-
-        # Summary statistics
-        rhat_vals = None
-
-        # Compute and store Rhat when multiple chains are available
-        if (
-            self.config.num_chains > 1
-            and idata.posterior.sizes.get("chain", 1) > 1
-        ):
-            try:
-                rhat_vals = extract_rhat_values(idata)
-                if rhat_vals.size:
-                    idata.attrs["rhat"] = rhat_vals
-            except Exception as exc:  # pragma: no cover - best effort
-                logger.debug(f"  Could not compute Rhat: {exc}")
-
-        if self.config.verbose:
-            if not (np.isnan(lnz) or np.isnan(lnz_err)):
-                logger.info(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
-
-            if hasattr(idata.attrs, "get"):
-
-                if "ess" in idata.attrs:
-                    ess = idata.attrs["ess"]
-                    logger.info(
-                        f"  ESS min: {np.min(ess):.1f}, max: {np.max(ess):.1f}"
-                    )
-                    # Report lowest-ESS parameter names when available
-                    names = idata.attrs.get("ess_lowest_names")
-                    vals = idata.attrs.get("ess_lowest_values")
-                    if names is not None and vals is not None:
-                        if isinstance(names, np.ndarray):
-                            names_list = names.tolist()
-                        elif isinstance(names, (list, tuple)):
-                            names_list = list(names)
-                        else:
-                            names_list = [str(names)]
-
-                        if isinstance(vals, np.ndarray):
-                            vals_list = vals.tolist()
-                        elif isinstance(vals, (list, tuple)):
-                            vals_list = list(vals)
-                        else:
-                            vals_list = [vals]
-
-                        if (
-                            len(names_list) == len(vals_list)
-                            and len(names_list) > 0
-                        ):
-                            try:
-                                pairs = ", ".join(
-                                    f"{n}: {float(v):.1f}"
-                                    for n, v in zip(names_list, vals_list)
-                                )
-                                logger.info(f"  ESS lowest: {pairs}")
-                            except Exception as exc:  # pragma: no cover
-                                logger.debug(
-                                    f"  Could not format ESS lowest values: {exc}"
-                                )
-
-                if rhat_vals is not None and rhat_vals.size:
-                    logger.info(
-                        f"  Rhat: min={np.min(rhat_vals):.3f}, mean={np.mean(rhat_vals):.3f}, max={np.max(rhat_vals):.3f}"
-                    )
-                    logger.info(
-                        f"  Rhat ≤ 1.01: {(rhat_vals <= 1.01).mean() * 100:.1f}%"
-                    )
-
-                if "riae" in idata.attrs:
-                    # Univariate case
-                    riae_median = idata.attrs["riae"]
-                    errorbars = idata.attrs.get("riae_errorbars", [])
-                    if len(errorbars) >= 5:
-                        iqr_half = (errorbars[3] - errorbars[1]) / 2.0
-                        logger.info(
-                            f"  RIAE: {riae_median:.3f} ± {iqr_half:.3f}"
-                        )
-                    else:
-                        logger.info(f"  RIAE: {riae_median:.3f}")
-
-                # Check for multivariate RIAE
-                if "riae_matrix" in idata.attrs:
-                    riae_matrix = idata.attrs["riae_matrix"]
-                    logger.info(f"  RIAE (matrix): {riae_matrix:.3f}")
-
-        # Save outputs if requested
-        if self.config.outdir is not None:
-            logger.debug(" Saving results to disk...")
-            self._save_results(idata)
+        self._attach_vi_group_safe(idata)
+        rhat_vals = self._compute_chain_summaries(idata)
+        self._log_summary_metrics(idata, lnz, lnz_err, rhat_vals)
+        self._maybe_save_outputs(idata)
 
         return idata
+
+    def _attach_vi_group_safe(self, idata: az.InferenceData) -> None:
+        """Attach optional VI diagnostics to the InferenceData object."""
+        vi_diag = getattr(self, "_vi_diagnostics", None)
+        if not vi_diag or not hasattr(self, "_attach_vi_psd_group"):
+            return
+        try:
+            self._attach_vi_psd_group(idata, vi_diag)
+        except Exception as exc:  # pragma: no cover - best-effort hook
+            logger.warning(f"Could not attach VI diagnostics: {exc}")
+
+    def _compute_chain_summaries(
+        self, idata: az.InferenceData
+    ) -> Optional[np.ndarray]:
+        """Compute optional per-parameter chain summaries such as R-hat."""
+        multi_chain = (
+            self.config.num_chains > 1
+            and idata.posterior.sizes.get("chain", 1) > 1
+        )
+        if not multi_chain:
+            return None
+        try:
+            rhat_vals = extract_rhat_values(idata)
+            if rhat_vals.size:
+                idata.attrs["rhat"] = rhat_vals
+            return rhat_vals
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.debug(f"  Could not compute Rhat: {exc}")
+            return None
+
+    def _log_summary_metrics(
+        self,
+        idata: az.InferenceData,
+        lnz: float,
+        lnz_err: float,
+        rhat_vals: Optional[np.ndarray],
+    ) -> None:
+        """Log human-readable summary metrics for quick terminal inspection."""
+        if not self.config.verbose:
+            return
+        if not hasattr(idata.attrs, "get"):
+            return
+
+        attrs = idata.attrs
+        if not (np.isnan(lnz) or np.isnan(lnz_err)):
+            logger.info(f"  lnz: {lnz:.2f} ± {lnz_err:.2f}")
+
+        ess = attrs.get("ess")
+        if ess is not None:
+            logger.info(
+                f"  ESS min: {np.min(ess):.1f}, max: {np.max(ess):.1f}"
+            )
+            names = attrs.get("ess_lowest_names")
+            vals = attrs.get("ess_lowest_values")
+            if names is not None and vals is not None:
+                if isinstance(names, np.ndarray):
+                    names_list = names.tolist()
+                elif isinstance(names, (list, tuple)):
+                    names_list = list(names)
+                else:
+                    names_list = [str(names)]
+
+                if isinstance(vals, np.ndarray):
+                    vals_list = vals.tolist()
+                elif isinstance(vals, (list, tuple)):
+                    vals_list = list(vals)
+                else:
+                    vals_list = [vals]
+
+                if len(names_list) == len(vals_list) and len(names_list) > 0:
+                    try:
+                        pairs = ", ".join(
+                            f"{n}: {float(v):.1f}"
+                            for n, v in zip(names_list, vals_list)
+                        )
+                        logger.info(f"  ESS lowest: {pairs}")
+                    except Exception as exc:  # pragma: no cover
+                        logger.debug(
+                            f"  Could not format ESS lowest values: {exc}"
+                        )
+
+        if rhat_vals is not None and rhat_vals.size:
+            logger.info(
+                f"  Rhat: min={np.min(rhat_vals):.3f}, mean={np.mean(rhat_vals):.3f}, max={np.max(rhat_vals):.3f}"
+            )
+            logger.info(
+                f"  Rhat ≤ 1.01: {(rhat_vals <= 1.01).mean() * 100:.1f}%"
+            )
+
+        riae = attrs.get("riae")
+        if riae is not None:
+            errorbars = attrs.get("riae_errorbars", [])
+            if len(errorbars) >= 5:
+                iqr_half = (errorbars[3] - errorbars[1]) / 2.0
+                logger.info(f"  RIAE: {riae:.3f} ± {iqr_half:.3f}")
+            else:
+                logger.info(f"  RIAE: {riae:.3f}")
+
+        riae_matrix = attrs.get("riae_matrix")
+        if riae_matrix is not None:
+            logger.info(f"  RIAE (matrix): {riae_matrix:.3f}")
+
+    def _maybe_save_outputs(self, idata: az.InferenceData) -> None:
+        """Persist sampler outputs when an output directory is configured."""
+        if self.config.outdir is None:
+            return
+        logger.debug(" Saving results to disk...")
+        self._save_results(idata)
 
     def _create_inference_data(
         self,

@@ -38,7 +38,7 @@ def _build_idata_with_psd(truth: np.ndarray, q50_scale: float = 1.1):
 def test_psd_compare_matches_manual_riae():
     truth = np.linspace(1.0, 2.0, 5)
     idata, freqs, psd_values = _build_idata_with_psd(truth)
-    result = psd_compare.run(idata=idata, truth=truth)
+    result = psd_compare._run(idata=idata, truth=truth)
 
     expected_riae = compute_riae(psd_values[1], truth, freqs)
     assert np.isclose(result["riae"], expected_riae)

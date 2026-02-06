@@ -20,7 +20,6 @@ from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting.psd_matrix import plot_psd_matrix
 from log_psplines.spectrum_utils import interp_matrix, resolve_psd_plot_units
-from log_psplines.utils.blocking import infer_time_blocks
 
 logger.info(f"JAX devices: {jax.devices()}")
 
@@ -203,8 +202,6 @@ if N_TIME_BLOCKS_OVERRIDE is not None:
     Nb = int(N_TIME_BLOCKS_OVERRIDE)
 elif Lb is not None:
     Nb = max(1, int(n // Lb))
-else:
-    Nb = infer_time_blocks(n, max_blocks=MAX_TIME_BLOCKS)
 
 Lb = n // Nb
 block_seconds = Lb * dt

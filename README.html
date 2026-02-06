@@ -437,12 +437,8 @@ The log-PSD is modeled as:</p>
 <div class="math notranslate nohighlight">
 \[\log L(\beta) \propto -\sum_{l=1}^{N_b} \left[ \log f(\lambda_l) + \frac{I_n(\lambda_l)}{f(\lambda_l)} \right]\]</div>
 <p>5. <strong>Inference</strong>
-We have two options for inference:</p>
-<ul class="simple">
-<li><p>Use Metropolis-Hastings to sample from the posterior distribution of the spline coefficients.</p></li>
-<li><p>Use NumPyro’s NUTS sampler to jointly sample the spline coefficients.</p></li>
-<li><p>When <code class="docutils literal notranslate"><span class="pre">init_from_vi</span></code> is enabled (default), the stochastic VI warm-start runs before NUTS and immediately saves convergence plots and PSD previews to <code class="docutils literal notranslate"><span class="pre">&lt;outdir&gt;/diagnostics</span></code> so you can inspect them before launching the expensive sampler.</p></li>
-</ul>
+We use NumPyro’s NUTS sampler to jointly sample the spline coefficients.
+When <code class="docutils literal notranslate"><span class="pre">init_from_vi</span></code> is enabled (default), the stochastic VI warm-start runs before NUTS and immediately saves convergence plots and PSD previews to <code class="docutils literal notranslate"><span class="pre">&lt;outdir&gt;/diagnostics</span></code> so you can inspect them before launching the expensive sampler.</p>
 <p>This fixed-basis P-spline approach avoids reversible-jump MCMC over knot numbers and positions, reducing computational cost while retaining flexibility to capture complex spectral features.</p>
 <p>Finally, one can also provide a ‘parametric model’ of the PSD as a function that can then be ‘corrected’ non-parametrically by the spline model.
 This is useful for cases where a known functional form (e.g., power-law) is expected, but additional flexibility is needed to account for deviations in the data.</p>

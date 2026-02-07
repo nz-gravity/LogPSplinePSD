@@ -6,7 +6,7 @@ parameterisation used by the blocked sampler
 :class:`log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler`.
 
 It is intended as a durable bridge between the draft derivation in our paper
- and the code under ``src/log_psplines/``.
+and the code under ``src/log_psplines/``.
 
 Overview
 --------
@@ -21,6 +21,7 @@ The multivariate pipeline is:
    sampling each Cholesky row as an *independent* NumPyro/NUTS problem.
 
 The implementation is designed around the Whittle/Wishart sufficient statistic
+at each retained Fourier frequency.
 
 Code pointers (clickable)
 -------------------------
@@ -137,17 +138,17 @@ The blocked model implements (up to constants)
 
    \log \mathcal{L}_j
    \;\propto\;
-   -N_b\,\sum_k w_k\,\log\big(\delta_j(f_k)^2\big)
+   -N_b\,N_h\,\sum_k \log\big(\delta_j(f_k)^2\big)
    \; - \sum_k \frac{\|r_j(f_k)\|_2^2}{T\,\delta_j(f_k)^2}.
 
 Key points:
 
 - :math:`N_b` is the number of averaged blocks (``fft_data.Nb``).
 - :math:`T` is the per-block observation duration (``fft_data.duration``).
-- :math:`w_k` are per-bin member counts (``fft_data.freq_bin_counts``). They are
-  used to scale the log-determinant term when coarse graining is enabled.
+- :math:`N_h` is the constant coarse-bin size (``fft_data.Nh``). It scales the
+  log-determinant term when coarse graining is enabled.
 - The quadratic term uses the *summed sufficient statistics* directly, so it
-  does not multiply by :math:`w_k` again.
+  does not introduce an additional :math:`N_h` factor.
 
 This is implemented in the internal NumPyro model
 ``_blocked_channel_model`` inside
@@ -167,9 +168,9 @@ Within each coarse bin :math:`J_h`, it sums
 
 and recomputes :math:`\bar U_h` so that :math:`\bar Y_h = \bar U_h\bar U_h^H`.
 
-The returned `weights` vector equals the bin member counts :math:`Nh` and is
-stored as ``fft_data.freq_bin_counts``. With this choice, each bin behaves like
-a Wishart statistic with effective degrees of freedom :math:`N_b Nh`.
+The returned scalar ``Nh`` equals the bin member count for equal bins and is
+stored as ``fft_data.Nh``. With this choice, each bin behaves like a Wishart
+statistic with effective degrees of freedom :math:`N_b Nh`.
 
 Exact coarse-grained likelihood form (from ``overleaf``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -191,8 +192,7 @@ The table below lists the most important objects and where they appear.
 - :math:`U(f_k)` (eigen replicates) → ``fft_data.u_re`` + i ``fft_data.u_im``
 - :math:`\log \delta_j(f_k)^2` → deterministic nodes ``log_delta_sq_{j}``
 - :math:`\theta_{jl}(f_k)` → deterministic nodes ``theta_re_{j}``, ``theta_im_{j}``
-- coarse-bin member counts :math:`Nh` → ``fft_data.freq_bin_counts`` (stored)
-- likelihood weights :math:`w_k` → ``fft_data.freq_bin_counts`` / ``self.freq_weights``
+- coarse-bin member counts :math:`Nh` → ``fft_data.Nh`` / ``self.Nh``
 
 PSD reconstruction
 ------------------

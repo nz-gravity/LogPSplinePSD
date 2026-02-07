@@ -66,7 +66,9 @@ def safe_plot(filename: str, dpi: int = 150):
     return decorator
 
 
-def extract_plotting_data(idata, weights_key: str = None) -> Dict[str, Any]:
+def extract_plotting_data(
+    idata, weights_key: int | None = None
+) -> Dict[str, Any]:
     """
     Extract common plotting data from inference data object.
 
@@ -83,7 +85,7 @@ def extract_plotting_data(idata, weights_key: str = None) -> Dict[str, Any]:
         get_weights,
     )
 
-    data = {}
+    data: Dict[str, Any] = {}
 
     # Extract core data - handle univariate, multivariate, and VI cases
     try:
@@ -102,7 +104,10 @@ def extract_plotting_data(idata, weights_key: str = None) -> Dict[str, Any]:
 
     # Extract weights - handle different data structures
     try:
-        data["weights"] = get_weights(idata, weights_key)
+        if isinstance(weights_key, int):
+            data["weights"] = get_weights(idata, weights_key)
+        else:
+            data["weights"] = get_weights(idata)
     except (KeyError, AttributeError):
         # For VI data, weights might be stored differently
         data["weights"] = None
@@ -216,7 +221,10 @@ def compute_confidence_intervals(
         Tuple of (lower_bound, median, upper_bound)
     """
     if method == "percentile":
-        return jnp.percentile(samples, q=jnp.array(quantiles), axis=0)
+        ci = np.asarray(
+            jnp.percentile(samples, q=jnp.array(quantiles), axis=0)
+        )
+        return ci[0], ci[1], ci[2]
     elif method == "uniform":
         return _compute_uniform_ci(samples, alpha)
     else:

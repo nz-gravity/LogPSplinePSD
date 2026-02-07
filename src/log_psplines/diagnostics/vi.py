@@ -67,7 +67,7 @@ def _variance_ratio_vs_mcmc(idata_vi, idata) -> Optional[float]:
         return None
     vi_var = _psd_variance_from_ds(vi_ds)
     ref_var = _psd_variance_from_ds(ref_ds)
-    if vi_var is None or ref_var in (None, 0):
+    if vi_var is None or ref_var is None or ref_var == 0.0:
         return None
     return float(vi_var / ref_var)
 

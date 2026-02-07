@@ -60,6 +60,8 @@ class UnivarBaseSampler(BaseSampler):
 
     def _setup_data(self) -> None:
         """Setup univariate-specific data attributes."""
+        if self.spline_model.weights is None:
+            raise ValueError("spline_model.weights must be initialized.")
         self.n_weights = len(self.spline_model.weights)
         self.log_pdgrm = jnp.log(self.periodogram.power)
         self.penalty_matrix = jnp.array(self.spline_model.penalty_matrix)
@@ -116,7 +118,7 @@ class UnivarBaseSampler(BaseSampler):
                 )
 
     def _get_lnz(
-        self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
+        self, samples: Dict[str, Any], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
         """Default implementation for univariate LnZ computation."""
         if not self.config.compute_lnz:

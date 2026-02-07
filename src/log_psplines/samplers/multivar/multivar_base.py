@@ -313,7 +313,7 @@ class MultivarBaseSampler(BaseSampler):
         }
 
         if psd_quantiles:
-            percentiles = []
+            percentile_values: list[float] = []
             real_entries = []
             imag_entries = []
             for label, percentile in [
@@ -325,17 +325,17 @@ class MultivarBaseSampler(BaseSampler):
                 imag_val = psd_quantiles.get("imag", {}).get(label)
                 if real_val is None:
                     continue
-                percentiles.append(percentile)
+                percentile_values.append(percentile)
                 real_entries.append(np.asarray(real_val))
                 if imag_val is not None:
                     imag_entries.append(np.asarray(imag_val))
                 else:
                     imag_entries.append(np.zeros_like(real_entries[-1]))
-            if not percentiles:
+            if not percentile_values:
                 return
             real_array = np.stack(real_entries, axis=0)
             imag_array = np.stack(imag_entries, axis=0)
-            percentiles = np.asarray(percentiles, dtype=np.float32)
+            percentiles = np.asarray(percentile_values, dtype=np.float32)
         else:
             median = diagnostics.get("psd_matrix")
             if median is None:
@@ -360,7 +360,7 @@ class MultivarBaseSampler(BaseSampler):
         coherence_quantiles = diagnostics.get("coherence_quantiles")
         if coherence_quantiles:
             coh_entries = []
-            coh_percentiles = []
+            coh_percentile_values: list[float] = []
             for label, percentile in [
                 ("q05", 5.0),
                 ("q50", 50.0),
@@ -370,10 +370,12 @@ class MultivarBaseSampler(BaseSampler):
                 if value is None:
                     continue
                 coh_entries.append(np.asarray(value))
-                coh_percentiles.append(percentile)
+                coh_percentile_values.append(percentile)
             if coh_entries:
                 coh_array = np.stack(coh_entries, axis=0)
-                coh_percentiles = np.asarray(coh_percentiles, dtype=np.float32)
+                coh_percentiles = np.asarray(
+                    coh_percentile_values, dtype=np.float32
+                )
                 data_vars["coherence"] = DataArray(
                     coh_array,
                     dims=["percentile", "freq", "channels", "channels2"],
@@ -402,7 +404,7 @@ class MultivarBaseSampler(BaseSampler):
         idata.add_groups(vi_posterior_psd=dataset)
 
     def _get_lnz(
-        self, samples: Dict[str, np.ndarray], sample_stats: Dict[str, Any]
+        self, samples: Dict[str, Any], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
         """Multivariate LnZ computation using morphZ."""
         if not self.config.compute_lnz:

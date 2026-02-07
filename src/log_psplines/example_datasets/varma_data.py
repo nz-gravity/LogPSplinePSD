@@ -18,7 +18,7 @@ class VARMAData:
             [[[0.5, 0.0], [0.0, -0.3]], [[0.0, 0.0], [0.0, -0.5]]]
         ),
         vma_coeffs: np.ndarray = np.array([[[1.0, 0.0], [0.0, 1.0]]]),
-        seed: int = None,
+        seed: int | None = None,
         fs: float = 1.0,
     ):
         """
@@ -42,11 +42,16 @@ class VARMAData:
         # Frequency grid in Hz (drop the DC bin to match PSD plotting expectations)
         self.freq = np.fft.rfftfreq(n_samples, d=1.0 / self.fs)[1:]
         self.time = np.arange(n_samples) / self.fs
-        self.data = None  # set in "resimulate"
-        self.periodogram = None  # set in "resimulate"
-        self.welch_psd = None  # set in "resimulate"
-        self.welch_f = None  # set in "resimulate"
+        self.data: np.ndarray | None = None  # set in "resimulate"
+        self.periodogram: np.ndarray | None = None  # set in "resimulate"
+        self.welch_psd: np.ndarray | None = None  # set in "resimulate"
+        self.welch_f: np.ndarray | None = None  # set in "resimulate"
+        self.psd: np.ndarray = np.zeros(
+            (self.freq.size, self.p, self.p), dtype=np.complex128
+        )
         self.resimulate(seed=seed)
+        if self.data is None:
+            raise ValueError("VARMA simulation produced no data.")
 
         self.channel_stds = np.std(self.data, axis=0)
         self.psd_scaling = float(np.std(self.data) ** 2)
@@ -116,9 +121,11 @@ class VARMAData:
         """
         Return a one-sided PSD matrix estimate for the simulated data.
         """
-        N = self.n_freq_samples
-        p = self.p
+        _ = self.n_freq_samples
+        _ = self.p
         data = self.data
+        if data is None:
+            raise ValueError("No simulated data available.")
         N = data.shape[0]
         data = data - np.mean(data, axis=0)
         fft_vals = rfft(data, axis=0)[1 : N + 1]
@@ -274,7 +281,7 @@ def _calculate_true_varma_psd(
         denom = np.outer(channel_stds, channel_stds).astype(np.float64)
         denom = np.where(denom == 0.0, np.nan, denom)
         psd = psd / denom[None, :, :]
-    if scaling_factor not in (None, 0):
+    if scaling_factor is not None and scaling_factor != 0:
         psd = psd * float(scaling_factor)
     return psd
 

@@ -131,8 +131,8 @@ class MultivarFFT:
         cls,
         x: np.ndarray,
         fs: float = 1.0,
-        fmin: float = None,
-        fmax: float = None,
+        fmin: Optional[float] = None,
+        fmax: Optional[float] = None,
         scaling_factor: Optional[float] = 1.0,
         channel_stds: Optional[np.ndarray] = None,
         window: Optional[str | tuple] = "hann",
@@ -326,8 +326,9 @@ class MultivarFFT:
 
     @property
     def amplitude_range(self) -> Tuple[float, float]:
-        amps = (np.min(self.y_re), np.max(self.y_re))
-        return (float(f"{amps[0]:.3g}"), float(f"{amps[1]:.3g}"))
+        min_amp = float(np.min(self.y_re))
+        max_amp = float(np.max(self.y_re))
+        return (float(f"{min_amp:.3g}"), float(f"{max_amp:.3g}"))
 
     def __repr__(self):
         return f"MultivarFFT(N={self.N}, p={self.p}, amplitudes={self.amplitude_range})"
@@ -339,7 +340,7 @@ class MultivarFFT:
             self.y_re,
             self.y_im,
             self.duration,
-            self.scaling_factor,
+            float(self.scaling_factor or 1.0),
         )
         if self.channel_stds is not None:
             scale_matrix = np.outer(self.channel_stds, self.channel_stds)
@@ -385,8 +386,8 @@ class MultivarFFT:
 @dataclass
 class MultivariateTimeseries:
     y: np.ndarray  # numpy array (n, p) for numerical stability
-    t: np.ndarray = None  # numpy array
-    std: np.ndarray = None  # numpy array, per-channel std
+    t: Optional[np.ndarray] = None  # numpy array
+    std: Optional[np.ndarray] = None  # numpy array, per-channel std
     scaling_factor: Optional[float] = (
         1.0  # numpy array for per-channel scaling
     )
@@ -410,6 +411,10 @@ class MultivariateTimeseries:
 
     @property
     def fs(self) -> float:
+        if self.t is None:
+            raise ValueError(
+                "t must be set before accessing sampling frequency."
+            )
         return float(1 / (self.t[1] - self.t[0]))
 
     def standardise(self):
@@ -433,7 +438,9 @@ class MultivariateTimeseries:
         )
 
     def to_cross_spectral_density(
-        self, fmin: float = None, fmax: float = None
+        self,
+        fmin: Optional[float] = None,
+        fmax: Optional[float] = None,
     ) -> "MultivarFFT":
         return MultivarFFT.compute_fft(
             self.y,
@@ -481,8 +488,9 @@ class MultivariateTimeseries:
 
     @property
     def amplitude_range(self) -> Tuple[float, float]:
-        amps = (np.min(self.y), np.max(self.y))
-        return (float(f"{amps[0]:.3g}"), float(f"{amps[1]:.3g}"))
+        min_amp = float(np.min(self.y))
+        max_amp = float(np.max(self.y))
+        return (float(f"{min_amp:.3g}"), float(f"{max_amp:.3g}"))
 
     def __repr__(self):
         return f"MultivariateTimeseries(n={self.y.shape[0]}, p={self.p}, fs={self.fs:.3f}, amplitudes={self.amplitude_range})"
@@ -528,8 +536,8 @@ class EmpiricalPSD:
             noverlap = nperseg // 2
 
         # --- auto spectra ---
-        psds = []
-        f_ref = None
+        psds: list[np.ndarray] = []
+        f_ref: Optional[np.ndarray] = None
         for i in range(p):
             f, Pxx = welch(
                 data[:, i],
@@ -544,12 +552,14 @@ class EmpiricalPSD:
             psds.append(Pxx)
             if f_ref is None:
                 f_ref = f
-        psds = np.stack(psds, axis=1)  # (N, p)
+        if f_ref is None:
+            raise ValueError("Failed to compute Welch frequencies.")
+        psd_auto = np.stack(psds, axis=1)  # (N, p)
 
         # --- full CSD matrix ---
         S = np.zeros((len(f_ref), p, p), dtype=complex)
         for i in range(p):
-            S[:, i, i] = psds[:, i]
+            S[:, i, i] = psd_auto[:, i]
             for j in range(i + 1, p):
                 _, Sij = csd(
                     data[:, i],

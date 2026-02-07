@@ -95,8 +95,11 @@ class MultivarBaseSampler(BaseSampler):
             raise ValueError("fft_data.duration must be positive")
 
         # For equal-sized coarse bins, a single Nh scalar is sufficient.
-        self.Nh = float(getattr(self.fft_data, "Nh", 1.0) or 1.0)
-        if self.Nh <= 0.0:
+        Nh = getattr(self.fft_data, "Nh", 1)
+        if isinstance(Nh, bool) or not isinstance(Nh, (int, np.integer)):
+            raise TypeError("fft_data.Nh must be a positive integer")
+        self.Nh = int(Nh)
+        if self.Nh <= 0:
             raise ValueError("fft_data.Nh must be positive")
 
         if self.config.verbose:
@@ -105,9 +108,9 @@ class MultivarBaseSampler(BaseSampler):
                 [f"{tuple(b.shape)}" for b in self.all_bases]
             )
             logger.info(f"B-spline basis shapes: {basis_shapes}")
-            total = float(self.N * self.Nh)
+            total = self.N * self.Nh
             logger.info(
-                f"Applied coarse-grain counts; total effective count = {total:.1f}"
+                f"Applied coarse-grain counts; total effective count = {total}"
             )
 
     @property
@@ -185,7 +188,7 @@ class MultivarBaseSampler(BaseSampler):
             Nb=self.fft_data.Nb,
             duration=float(getattr(self.fft_data, "duration", 1.0) or 1.0),
             scaling_factor=float(self.fft_data.scaling_factor or 1.0),
-            weights=float(self.Nh),
+            Nh=self.Nh,
         )
         S = self._rescale_psd(S)
         coherence = _get_coherence(S)

@@ -2,37 +2,11 @@ import numpy as np
 import pytest
 
 from log_psplines.spectrum_utils import (
-    compute_effective_Nb,
     sum_wishart_outer_products,
     u_to_wishart_matrix,
     wishart_matrix_to_psd,
     wishart_u_to_psd,
 )
-
-
-def test_compute_effective_Nb_scalar_no_weights():
-    result = compute_effective_Nb(3.5)
-    assert result.shape == ()
-    assert float(result) == pytest.approx(3)
-
-
-def test_compute_effective_Nb_scalar_with_weights():
-    weights = np.array([0.5, 1.0, 2.0])
-    result = compute_effective_Nb(4.0, weights=weights)
-    np.testing.assert_allclose(result, weights * 4.0)
-
-
-def test_compute_effective_Nb_rejects_bad_inputs():
-    with pytest.raises(TypeError):
-        compute_effective_Nb(np.array([[1.0, 2.0]]))
-
-    with pytest.raises(ValueError):
-        compute_effective_Nb(2.0, weights=np.array([1.0, 0.0]))
-
-    with pytest.raises(TypeError):
-        compute_effective_Nb(
-            np.array([1.0, 2.0]), weights=np.array([1.0, 2.0, 3.0])
-        )
 
 
 def test_u_to_wishart_matrix_matches_manual_product():
@@ -79,11 +53,10 @@ def test_wishart_matrix_to_psd_scales_and_broadcasts():
     np.testing.assert_allclose(result, expected)
 
 
-def test_wishart_matrix_to_psd_with_weights():
+def test_wishart_matrix_to_psd_with_Nh():
     Y = np.arange(8.0).reshape(2, 2, 2)
-    weights = np.array([1.0, 2.0])
-    result = wishart_matrix_to_psd(Y, 2, weights=weights)
-    expected = Y / (weights * 2.0)[:, None, None]
+    result = wishart_matrix_to_psd(Y, 2, Nh=2)
+    expected = Y / (2.0 * 2.0)
     np.testing.assert_allclose(result, expected)
 
 
@@ -94,6 +67,12 @@ def test_wishart_matrix_to_psd_rejects_bad_shapes():
     with pytest.raises((TypeError, ValueError)):
         wishart_matrix_to_psd(np.zeros((2, 2, 2)), np.array([1.0, 2.0, 3.0]))
 
+    with pytest.raises(TypeError):
+        wishart_matrix_to_psd(np.zeros((2, 2, 2)), 2, Nh=0.0)
+
+    with pytest.raises(ValueError):
+        wishart_matrix_to_psd(np.zeros((2, 2, 2)), 2, Nh=0)
+
 
 def test_wishart_u_to_psd_matches_explicit_path():
     u = np.array(
@@ -103,9 +82,17 @@ def test_wishart_u_to_psd_matches_explicit_path():
         ],
         dtype=np.complex128,
     )
-    weights = np.array([1.0, 0.5])
     expected = wishart_matrix_to_psd(
-        u_to_wishart_matrix(u), 2, scaling_factor=1.5, weights=weights
+        u_to_wishart_matrix(u),
+        2,
+        scaling_factor=1.5,
+        Nh=1,
     )
-    result = wishart_u_to_psd(u, 2, scaling_factor=1.5, weights=weights)
+    result = wishart_u_to_psd(u, 2, scaling_factor=1.5, Nh=1)
     np.testing.assert_allclose(result, expected)
+
+
+def test_wishart_u_to_psd_rejects_non_integer_Nh():
+    u = np.ones((1, 1, 1), dtype=np.complex128)
+    with pytest.raises(TypeError):
+        wishart_u_to_psd(u, 2, Nh=0.5)

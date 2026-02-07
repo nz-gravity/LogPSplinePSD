@@ -62,7 +62,7 @@ def _blocked_channel_model(
     beta_delta: float,
     duration: float,
     Nb: int,
-    Nh: float,
+    Nh: int,
 ) -> None:
     """NumPyro model for a single Cholesky block (row of ``T``).
 

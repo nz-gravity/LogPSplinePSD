@@ -429,8 +429,11 @@ document.write(`
 <section id="building-documentation">
 <h2>Building Documentation<a class="headerlink" href="#building-documentation" title="Link to this heading">#</a></h2>
 <p>To build the documentation locally:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>docs
-jupyter-book<span class="w"> </span>build<span class="w"> </span>.
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
+<span class="nb">cd</span><span class="w"> </span>docs
+<span class="c1"># The docs in this repo are RST/Sphinx-based and require Jupyter Book 1.x.</span>
+<span class="c1"># Ensure you have installed the dev extras (or at least `jupyter-book&lt;2.0`).</span>
+../.venv/bin/jupyter-book<span class="w"> </span>build<span class="w"> </span>.
 </pre></div>
 </div>
 <p>The built HTML documentation will be in <code class="docutils literal notranslate"><span class="pre">docs/_build/html/</span></code>.</p>

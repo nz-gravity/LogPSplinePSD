@@ -417,10 +417,8 @@ document.write(`
 <p>This page documents the <em>implemented</em> multivariate likelihood and
 parameterisation used by the blocked sampler
 <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler</span></code>.</p>
-<dl class="simple">
-<dt>It is intended as a durable bridge between the draft derivation in our paper</dt><dd><p>and the code under <code class="docutils literal notranslate"><span class="pre">src/log_psplines/</span></code>.</p>
-</dd>
-</dl>
+<p>It is intended as a durable bridge between the draft derivation in our paper
+and the code under <code class="docutils literal notranslate"><span class="pre">src/log_psplines/</span></code>.</p>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
 <p>The multivariate pipeline is:</p>
@@ -432,7 +430,8 @@ across bins.</p></li>
 <li><p>Fit a Cholesky-parameterised spectral density matrix with P-splines,
 sampling each Cholesky row as an <em>independent</em> NumPyro/NUTS problem.</p></li>
 </ol>
-<p>The implementation is designed around the Whittle/Wishart sufficient statistic</p>
+<p>The implementation is designed around the Whittle/Wishart sufficient statistic
+at each retained Fourier frequency.</p>
 </section>
 <section id="code-pointers-clickable">
 <h2>Code pointers (clickable)<a class="headerlink" href="#code-pointers-clickable" title="Link to this heading">#</a></h2>
@@ -516,16 +515,16 @@ vector of replicate components for channel <span class="math notranslate nohighl
 <div class="math notranslate nohighlight">
 \[\log \mathcal{L}_j
 \;\propto\;
--N_b\,\sum_k w_k\,\log\big(\delta_j(f_k)^2\big)
+-N_b\,N_h\,\sum_k \log\big(\delta_j(f_k)^2\big)
 \; - \sum_k \frac{\|r_j(f_k)\|_2^2}{T\,\delta_j(f_k)^2}.\]</div>
 <p>Key points:</p>
 <ul class="simple">
 <li><p><span class="math notranslate nohighlight">\(N_b\)</span> is the number of averaged blocks (<code class="docutils literal notranslate"><span class="pre">fft_data.Nb</span></code>).</p></li>
 <li><p><span class="math notranslate nohighlight">\(T\)</span> is the per-block observation duration (<code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code>).</p></li>
-<li><p><span class="math notranslate nohighlight">\(w_k\)</span> are per-bin member counts (<code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code>). They are
-used to scale the log-determinant term when coarse graining is enabled.</p></li>
+<li><p><span class="math notranslate nohighlight">\(N_h\)</span> is the constant coarse-bin size (<code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>). It scales the
+log-determinant term when coarse graining is enabled.</p></li>
 <li><p>The quadratic term uses the <em>summed sufficient statistics</em> directly, so it
-does not multiply by <span class="math notranslate nohighlight">\(w_k\)</span> again.</p></li>
+does not introduce an additional <span class="math notranslate nohighlight">\(N_h\)</span> factor.</p></li>
 </ul>
 <p>This is implemented in the internal NumPyro model
 <code class="docutils literal notranslate"><span class="pre">_blocked_channel_model</span></code> inside
@@ -540,9 +539,9 @@ does not multiply by <span class="math notranslate nohighlight">\(w_k\)</span> a
 <div class="math notranslate nohighlight">
 \[\bar Y_h = \sum_{f\in J_h} Y(f)\]</div>
 <p>and recomputes <span class="math notranslate nohighlight">\(\bar U_h\)</span> so that <span class="math notranslate nohighlight">\(\bar Y_h = \bar U_h\bar U_h^H\)</span>.</p>
-<p>The returned <cite>weights</cite> vector equals the bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> and is
-stored as <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code>. With this choice, each bin behaves like
-a Wishart statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(N_b Nh\)</span>.</p>
+<p>The returned scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code> equals the bin member count for equal bins and is
+stored as <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>. With this choice, each bin behaves like a Wishart
+statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(N_b Nh\)</span>.</p>
 <section id="exact-coarse-grained-likelihood-form-from-overleaf">
 <h3>Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-coarse-grained-likelihood-form-from-overleaf" title="Link to this heading">#</a></h3>
 <p>The coarse-grained approximation is written as (verbatim LaTeX):</p>
@@ -560,8 +559,7 @@ a Wishart statistic with effective degrees of freedom <span class="math notransl
 <li><p><span class="math notranslate nohighlight">\(U(f_k)\)</span> (eigen replicates) → <code class="docutils literal notranslate"><span class="pre">fft_data.u_re</span></code> + i <code class="docutils literal notranslate"><span class="pre">fft_data.u_im</span></code></p></li>
 <li><p><span class="math notranslate nohighlight">\(\log \delta_j(f_k)^2\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">log_delta_sq_{j}</span></code></p></li>
 <li><p><span class="math notranslate nohighlight">\(\theta_{jl}(f_k)\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">theta_re_{j}</span></code>, <code class="docutils literal notranslate"><span class="pre">theta_im_{j}</span></code></p></li>
-<li><p>coarse-bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> → <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code> (stored)</p></li>
-<li><p>likelihood weights <span class="math notranslate nohighlight">\(w_k\)</span> → <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code> / <code class="docutils literal notranslate"><span class="pre">self.freq_weights</span></code></p></li>
+<li><p>coarse-bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> → <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code> / <code class="docutils literal notranslate"><span class="pre">self.Nh</span></code></p></li>
 </ul>
 </section>
 <section id="psd-reconstruction">

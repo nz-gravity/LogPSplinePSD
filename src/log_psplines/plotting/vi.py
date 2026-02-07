@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -257,7 +257,15 @@ def _pack_ci_from_quantiles(
     Returns:
         ci_dict in the same format as _pack_ci_dict()
     """
-    ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
+    ci_dict: dict[
+        str, dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]]
+    ] = {
+        "psd": {},
+        "coh": {},
+        "re": {},
+        "im": {},
+        "mag": {},
+    }
 
     # Guard against missing input
     if psd_quantiles is None:
@@ -334,7 +342,7 @@ def save_vi_diagnostics_univariate(
     outdir: Optional[str],
     periodogram,
     spline_model,
-    diagnostics: Optional[Dict[str, np.ndarray]],
+    diagnostics: Optional[Dict[str, Any]],
 ) -> None:
     """Persist VI diagnostics for univariate samplers as soon as they are available."""
 
@@ -350,21 +358,28 @@ def save_vi_diagnostics_univariate(
         if losses_arr.ndim > 1:
             losses_arr = losses_arr.mean(axis=0)
         if losses_arr.size:
+            guide_name = str(diagnostics.get("guide", "vi"))
             plot_vi_elbo(
                 losses=losses_arr,
-                guide_name=diagnostics.get("guide", "vi"),
+                guide_name=guide_name,
                 outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
             )
 
     weights = diagnostics.get("weights")
     if weights is not None:
+        psd_quantiles_val = diagnostics.get("psd_quantiles")
+        psd_quantiles = (
+            cast(Dict[str, np.ndarray], psd_quantiles_val)
+            if isinstance(psd_quantiles_val, dict)
+            else None
+        )
         plot_vi_initial_psd_univariate(
             outfile=os.path.join(diagnostics_dir, "vi_initial_psd.png"),
             periodogram=periodogram,
             spline_model=spline_model,
             weights=weights,
             true_psd=diagnostics.get("true_psd"),
-            psd_quantiles=diagnostics.get("psd_quantiles"),
+            psd_quantiles=psd_quantiles,
         )
 
 
@@ -372,8 +387,8 @@ def save_vi_diagnostics_multivariate(
     *,
     outdir: Optional[str],
     freq: np.ndarray,
-    empirical_psd: Optional[np.ndarray],
-    diagnostics: Optional[Dict[str, np.ndarray]],
+    empirical_psd: Optional[EmpiricalPSD],
+    diagnostics: Optional[Dict[str, Any]],
 ) -> None:
     """Persist VI diagnostics for multivariate samplers right after VI initialisation."""
 
@@ -404,14 +419,21 @@ def save_vi_diagnostics_multivariate(
     if losses is not None:
         losses_arr = np.asarray(losses)
         if losses_arr.ndim == 1 and losses_arr.size:
-            plot_kwargs = dict(
-                losses=losses_arr,
-                guide_name=diagnostics.get("guide", "vi"),
-                outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
-            )
+            guide_name = str(diagnostics.get("guide", "vi"))
+            outfile = os.path.join(diagnostics_dir, "vi_elbo_trace.png")
             if component_dict:
-                plot_kwargs["loss_components"] = component_dict
-            plot_vi_elbo(**plot_kwargs)
+                plot_vi_elbo(
+                    losses=losses_arr,
+                    guide_name=guide_name,
+                    outfile=outfile,
+                    loss_components=component_dict,
+                )
+            else:
+                plot_vi_elbo(
+                    losses=losses_arr,
+                    guide_name=guide_name,
+                    outfile=outfile,
+                )
         elif losses_arr.ndim > 1 and losses_arr.shape[1] > 0:
             mean_loss = losses_arr.mean(axis=0)
             components = {
@@ -420,31 +442,38 @@ def save_vi_diagnostics_multivariate(
             }
             if component_dict:
                 components.update(component_dict)
+            guide_name = str(diagnostics.get("guide", "vi"))
             plot_vi_elbo(
                 losses=mean_loss,
-                guide_name=diagnostics.get("guide", "vi"),
+                guide_name=guide_name,
                 outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
                 loss_components=components if components else None,
             )
     elif component_dict:
         # No aggregate losses stored; fall back to plotting components only
         mean_loss = np.mean(np.vstack(list(component_dict.values())), axis=0)
+        guide_name = str(diagnostics.get("guide", "vi"))
         plot_vi_elbo(
             losses=mean_loss,
-            guide_name=diagnostics.get("guide", "vi"),
+            guide_name=guide_name,
             outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
             loss_components=component_dict,
         )
 
-    psd_quantiles = diagnostics.get("psd_quantiles")
-    if psd_quantiles is not None:
+    psd_quantiles_val = diagnostics.get("psd_quantiles")
+    coherence_quantiles_val = diagnostics.get("coherence_quantiles")
+    if isinstance(psd_quantiles_val, dict):
         plot_vi_initial_psd_matrix(
             outfile=os.path.join(diagnostics_dir, "vi_initial_psd_matrix.png"),
             freq=freq,
             empirical_psd=empirical_psd,
             true_psd=diagnostics.get("true_psd"),
-            psd_quantiles=psd_quantiles,
-            coherence_quantiles=diagnostics.get("coherence_quantiles"),
+            psd_quantiles=cast(Dict[str, np.ndarray], psd_quantiles_val),
+            coherence_quantiles=(
+                cast(Dict[str, np.ndarray], coherence_quantiles_val)
+                if isinstance(coherence_quantiles_val, dict)
+                else None
+            ),
             show_coherence=True,
             show_csd_magnitude=False,
         )

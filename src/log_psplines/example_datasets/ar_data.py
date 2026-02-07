@@ -45,7 +45,7 @@ class ARData:
         fs: float,
         sigma: float = 1.0,
         seed: Optional[int] = None,
-        ar_coefs: Sequence[float] = None,
+        ar_coefs: Sequence[float] | None = None,
     ) -> None:
         """
         Parameters
@@ -92,13 +92,13 @@ class ARData:
         self.n = int(self.duration * self.fs)
         self.seed = seed
 
-        self.ts = self._generate_timeseries()
+        ts_values = self._generate_timeseries()
         self.freqs = np.fft.rfftfreq(self.n, d=1.0 / self.fs)[1:]
         self.times = np.arange(self.n) / self.fs
         self.psd_theoretical = self._compute_theoretical_psd()
 
         # convert to Timeseries and Periodogram datatypes
-        self.ts = Timeseries(t=self.times, y=self.ts, std=self.sigma)
+        self.ts = Timeseries(t=self.times, y=ts_values, std=self.sigma)
         self.periodogram = self.ts.to_periodogram()
         self.welch_psd = self._compute_welch_psd()
 
@@ -251,7 +251,12 @@ class ARData:
 if __name__ == "__main__":
     # --- Simulate AR(2) over 8 seconds at 1024 Hz ---
     ar2 = ARData(
-        ar_coefs=[0.9, -0.5], duration=8.0, fs=1024.0, sigma=1.0, seed=42
+        order=2,
+        ar_coefs=[0.9, -0.5],
+        duration=8.0,
+        fs=1024.0,
+        sigma=1.0,
+        seed=42,
     )
     fig, ax = plt.subplots(figsize=(8, 4))
     ar2.plot(ax=ax)
@@ -260,7 +265,11 @@ if __name__ == "__main__":
     # --- Simulate AR(4) over 4 seconds at 2048 Hz ---
     # e.g. coefficients [0.5, -0.3, 0.1, -0.05]
     ar4 = ARData(
-        ar_coefs=[0.5, -0.3, 0.1, -0.05], duration=4.0, fs=2048.0, sigma=1.0
+        order=4,
+        ar_coefs=[0.5, -0.3, 0.1, -0.05],
+        duration=4.0,
+        fs=2048.0,
+        sigma=1.0,
     )
     fig2, ax2 = plt.subplots(figsize=(8, 4))
     ar4.plot(

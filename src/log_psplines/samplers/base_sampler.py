@@ -9,7 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Dict, Literal, Optional, Tuple, Union
+from typing import Any, Dict, Literal, Mapping, Optional, Tuple, Union
 
 import arviz as az
 import jax
@@ -22,6 +22,9 @@ from ..diagnostics import run_all_diagnostics
 from ..logger import logger
 from ..plotting import plot_diagnostics, plot_pdgrm
 
+ChainMethod = Literal["parallel", "vectorized", "sequential"]
+SampleArray = Union[jnp.ndarray, np.ndarray]
+
 
 @dataclass
 class SamplerConfig:
@@ -32,9 +35,7 @@ class SamplerConfig:
     alpha_delta: float = 1e-4
     beta_delta: float = 1e-4
     num_chains: int = 1
-    chain_method: Optional[Literal["parallel", "vectorized", "sequential"]] = (
-        None
-    )
+    chain_method: Optional[ChainMethod] = None
     rng_key: int = 42
     verbose: bool = True
     outdir: Optional[str] = None
@@ -81,7 +82,7 @@ class BaseSampler(ABC):
         self.config = config
 
         # Common attributes for all samplers
-        self.rng_key = jax.random.PRNGKey(config.rng_key)
+        self.rng_key: jax.Array = jax.random.PRNGKey(config.rng_key)
         if config.chain_method is not None:
             allowed = {"parallel", "vectorized", "sequential"}
             if config.chain_method not in allowed:
@@ -89,7 +90,7 @@ class BaseSampler(ABC):
                     f"Unknown chain_method='{config.chain_method}'. "
                     f"Expected one of {sorted(allowed)}."
                 )
-            self.chain_method = config.chain_method
+            self.chain_method: ChainMethod = config.chain_method
             logger.info(
                 f"Using requested NumPyro chain_method='{self.chain_method}'."
             )
@@ -120,7 +121,7 @@ class BaseSampler(ABC):
 
     @abstractmethod
     def _get_lnz(
-        self, samples: Dict[str, jnp.ndarray], sample_stats: Dict[str, Any]
+        self, samples: Dict[str, Any], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
         """Extract log normalizing constant from samples."""
         pass
@@ -138,10 +139,10 @@ class BaseSampler(ABC):
         pass
 
     def to_arviz(
-        self, samples: Dict[str, jnp.ndarray], sample_stats: Dict[str, Any]
+        self, samples: Mapping[str, SampleArray], sample_stats: Dict[str, Any]
     ) -> az.InferenceData:
         """Convert samples to ArviZ InferenceData with diagnostics and plotting."""
-        lnz, lnz_err = self._get_lnz(samples, sample_stats)
+        lnz, lnz_err = self._get_lnz(dict(samples), sample_stats)
         idata = self._create_inference_data(
             samples, sample_stats, lnz, lnz_err
         )
@@ -230,10 +231,13 @@ class BaseSampler(ABC):
         self, idata: az.InferenceData
     ) -> Optional[np.ndarray]:
         """Compute optional per-parameter chain summaries such as R-hat."""
-        multi_chain = (
-            self.config.num_chains > 1
-            and idata.posterior.sizes.get("chain", 1) > 1
+        posterior = getattr(idata, "posterior", None)
+        chain_count = (
+            int(posterior.sizes.get("chain", 1))
+            if posterior is not None
+            else 1
         )
+        multi_chain = self.config.num_chains > 1 and chain_count > 1
         if not multi_chain:
             return None
         try:
@@ -326,14 +330,14 @@ class BaseSampler(ABC):
 
     def _create_inference_data(
         self,
-        samples: Dict[str, jnp.ndarray],
+        samples: Mapping[str, SampleArray],
         sample_stats: Dict[str, Any],
         lnz: float,
         lnz_err: float,
     ) -> az.InferenceData:
         """Create InferenceData object for both univar and multivar cases."""
         return results_to_arviz(
-            samples=samples,
+            samples=dict(samples),
             sample_stats=sample_stats,
             data=self.data,
             model=self.model,
@@ -350,6 +354,7 @@ class BaseSampler(ABC):
 
     def _save_results(self, idata: az.InferenceData) -> None:
         """Save inference results to disk."""
+        assert self.config.outdir is not None
         az.to_netcdf(idata, f"{self.config.outdir}/inference_data.nc")
         # Optionally skip heavy MCMC diagnostics plots/summaries.
         if not getattr(self.config, "skip_plot_diagnostics", False):
@@ -383,7 +388,7 @@ class BaseSampler(ABC):
         """Save data-type specific plots."""
         pass
 
-    def _select_chain_method(self) -> str:
+    def _select_chain_method(self) -> ChainMethod:
         """Choose an appropriate NumPyro chain_method based on hardware.
 
         NumPyro defaults to ``parallel`` for ``num_chains > 1`` which fails when
@@ -407,11 +412,9 @@ class BaseSampler(ABC):
         )
         if n_devs > 1 and self.config.num_chains > n_devs:
             logger.warning(
-                "num_chains (%d) exceeds available JAX devices (%d); "
+                f"num_chains ({self.config.num_chains}) exceeds available JAX devices ({n_devs}); "
                 "for true multiprocessing with chain_method='parallel', "
-                "set num_chains <= number of devices.",
-                self.config.num_chains,
-                n_devs,
+                "set num_chains <= number of devices."
             )
 
         return "vectorized"

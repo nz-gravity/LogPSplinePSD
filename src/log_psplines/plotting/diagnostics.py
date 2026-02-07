@@ -68,18 +68,17 @@ def plot_trace(
     _ = compact  # Backwards-compatibility with older call sites.
     if config is None:
         config = DiagnosticsConfig()
+    posterior = getattr(idata, "posterior", None)
+    if posterior is None:
+        raise ValueError("InferenceData is missing posterior samples.")
 
     groups = {
         "delta": [
-            v for v in idata.posterior.data_vars if str(v).startswith("delta")
+            v for v in posterior.data_vars if str(v).startswith("delta")
         ],
-        "phi": [
-            v for v in idata.posterior.data_vars if str(v).startswith("phi")
-        ],
+        "phi": [v for v in posterior.data_vars if str(v).startswith("phi")],
         "weights": [
-            v
-            for v in idata.posterior.data_vars
-            if str(v).startswith("weights")
+            v for v in posterior.data_vars if str(v).startswith("weights")
         ],
     }
 
@@ -108,7 +107,7 @@ def plot_trace(
 
         for var in list(var_names)[: config.max_trace_vars_per_group]:
             try:
-                values = np.asarray(idata.posterior[var].values)
+                values = np.asarray(posterior[var].values)
             except Exception:
                 continue
 
@@ -174,7 +173,9 @@ def plot_trace(
                 lo = float(np.min(s))
                 hi = float(np.max(s))
                 if lo > 0 and hi > lo:
-                    bins = np.logspace(np.log10(lo), np.log10(hi), 30)
+                    bins: int | np.ndarray = np.logspace(
+                        np.log10(lo), np.log10(hi), 30
+                    )
                 else:
                     bins = 30
             else:
@@ -1044,18 +1045,24 @@ def _max_tree_depth_stats(
     if steps.size == 0:
         return None
 
-    max_depth = _coerce_int(max_tree_depth)
-    max_steps = int(2**max_depth - 1) if max_depth is not None else None
-    if max_steps is None:
-        max_steps = int(np.max(steps))
-        max_depth = (
-            int(np.floor(np.log2(max_steps + 1))) if max_steps > 0 else None
+    max_depth_from_steps = _coerce_int(max_tree_depth)
+    max_steps_from_steps = (
+        int(2**max_depth_from_steps - 1)
+        if max_depth_from_steps is not None
+        else None
+    )
+    if max_steps_from_steps is None:
+        max_steps_from_steps = int(np.max(steps))
+        max_depth_from_steps = (
+            int(np.floor(np.log2(max_steps_from_steps + 1)))
+            if max_steps_from_steps > 0
+            else None
         )
-    frac = float(np.mean(steps >= max_steps))
+    frac = float(np.mean(steps >= max_steps_from_steps))
     return {
         "frac": frac,
-        "max_steps": max_steps,
-        "max_depth": max_depth,
+        "max_steps": max_steps_from_steps,
+        "max_depth": max_depth_from_steps,
         "source": "num_steps",
     }
 
@@ -1805,7 +1812,7 @@ def _create_divergences_diagnostics(idata, diag_dir, config):
 def _plot_divergences(idata, config):
     """Plot divergences diagnostics."""
     # Collect all divergence data
-    divergences_data = {}
+    divergences_data: dict[str | int, np.ndarray] = {}
 
     # Check for main divergences (single chain NUTS)
     if "diverging" in idata.sample_stats:
@@ -1814,7 +1821,7 @@ def _plot_divergences(idata, config):
         )
 
     # Check for channel-specific divergences (blocked NUTS)
-    channel_divergences = {}
+    channel_divergences: dict[int, np.ndarray] = {}
     for key in idata.sample_stats:
         if key.startswith("diverging_channel_"):
             channel_idx = key.replace("diverging_channel_", "")
@@ -1823,7 +1830,8 @@ def _plot_divergences(idata, config):
             ].values.flatten()
 
     if channel_divergences:
-        divergences_data.update(channel_divergences)
+        for ch, values in channel_divergences.items():
+            divergences_data[ch] = values
 
     if not divergences_data:
         fig, ax = plt.subplots(figsize=config.figsize)
@@ -1954,7 +1962,9 @@ def _plot_divergences(idata, config):
     plt.tight_layout()
 
 
-def _get_divergences_summary(divergences_data):
+def _get_divergences_summary(
+    divergences_data: dict[str | int, np.ndarray],
+):
     """Generate text summary of divergences."""
     lines = ["Divergences Summary:", ""]
 
@@ -2008,17 +2018,26 @@ def _get_divergences_summary(divergences_data):
 
 def _group_parameters_simple(idata):
     """Simple parameter grouping for counting."""
-    param_groups = {"phi": [], "delta": [], "weights": [], "other": []}
+    posterior = getattr(idata, "posterior", None)
+    if posterior is None:
+        return {}
+    param_groups: dict[str, list[str]] = {
+        "phi": [],
+        "delta": [],
+        "weights": [],
+        "other": [],
+    }
 
-    for param in idata.posterior.data_vars:
-        if param.startswith("phi"):
-            param_groups["phi"].append(param)
-        elif param.startswith("delta"):
-            param_groups["delta"].append(param)
-        elif param.startswith("weights"):
-            param_groups["weights"].append(param)
+    for param in posterior.data_vars:
+        param_name = str(param)
+        if param_name.startswith("phi"):
+            param_groups["phi"].append(param_name)
+        elif param_name.startswith("delta"):
+            param_groups["delta"].append(param_name)
+        elif param_name.startswith("weights"):
+            param_groups["weights"].append(param_name)
         else:
-            param_groups["other"].append(param)
+            param_groups["other"].append(param_name)
 
     return {k: v for k, v in param_groups.items() if v}
 
@@ -2225,13 +2244,14 @@ def generate_diagnostics_summary(
 
     ebfmi = _as_float(attrs.get("energy_ebfmi_overall"))
     if ebfmi is None:
-        ebfmi_candidates = [
-            _as_float(val)
+        ebfmi_candidates: list[float] = [
+            float(v)
             for key, val in attrs.items()
             if str(key).startswith("energy_ebfmi")
             and str(key).endswith("_overall")
+            for v in [_as_float(val)]
+            if v is not None
         ]
-        ebfmi_candidates = [v for v in ebfmi_candidates if v is not None]
         if ebfmi_candidates:
             ebfmi = float(np.min(ebfmi_candidates))
     if ebfmi is not None:
@@ -2326,7 +2346,9 @@ def generate_diagnostics_summary(
                     f"  Channel {ch}: divergences={np.mean(div)*100:.2f}%"
                 )
 
-    psd_diag = diag_results.get("psd_compare", {}) if mode == "full" else {}
+    psd_diag: dict[str, object] = (
+        dict(diag_results.get("psd_compare", {})) if mode == "full" else {}
+    )
 
     # Prefer cached PSD diagnostics from attrs (computed during ArviZ conversion).
     cached_psd_keys = [
@@ -2344,29 +2366,17 @@ def generate_diagnostics_summary(
 
     psd_lines = []
     if psd_diag:
-        riae = psd_diag.get("riae")
-        try:
-            riae = float(riae)
-        except Exception:
-            riae = None
-        if riae is not None and np.isfinite(riae):
-            psd_lines.append(f"  RIAE: {riae:.3f}")
+        riae_value = _as_float(psd_diag.get("riae"))
+        if riae_value is not None and np.isfinite(riae_value):
+            psd_lines.append(f"  RIAE: {riae_value:.3f}")
 
-        riae_matrix = psd_diag.get("riae_matrix")
-        try:
-            riae_matrix = float(riae_matrix)
-        except Exception:
-            riae_matrix = None
-        if riae_matrix is not None and np.isfinite(riae_matrix):
-            psd_lines.append(f"  RIAE (matrix): {riae_matrix:.3f}")
+        riae_matrix_value = _as_float(psd_diag.get("riae_matrix"))
+        if riae_matrix_value is not None and np.isfinite(riae_matrix_value):
+            psd_lines.append(f"  RIAE (matrix): {riae_matrix_value:.3f}")
 
-        coverage = psd_diag.get("coverage")
-        try:
-            coverage = float(coverage)
-        except Exception:
-            coverage = None
-        if coverage is not None and np.isfinite(coverage):
-            psd_lines.append(f"  Coverage: {coverage*100:.1f}%")
+        coverage_value = _as_float(psd_diag.get("coverage"))
+        if coverage_value is not None and np.isfinite(coverage_value):
+            psd_lines.append(f"  Coverage: {coverage_value*100:.1f}%")
 
     psd_band_lines = []
     var_med = _as_float(attrs.get("psd_bands_variance_median"))

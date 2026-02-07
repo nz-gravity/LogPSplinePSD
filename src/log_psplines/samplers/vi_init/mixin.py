@@ -82,11 +82,11 @@ class VIInitialisationMixin:
             return VIInitialisationArtifacts(None, self.rng_key, None)
 
         key_vi, key_run = jax.random.split(self.rng_key)
-        progress_bar = (
-            getattr(self.config, "vi_progress_bar", None)
-            if getattr(self.config, "vi_progress_bar", None) is not None
-            else getattr(self.config, "verbose", False)
-        )
+        progress_cfg = getattr(self.config, "vi_progress_bar", None)
+        if progress_cfg is None:
+            progress_bar = bool(getattr(self.config, "verbose", False))
+        else:
+            progress_bar = bool(progress_cfg)
         model_kwargs = model_kwargs or {}
 
         try:

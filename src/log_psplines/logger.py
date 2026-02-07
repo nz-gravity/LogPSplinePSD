@@ -1,15 +1,19 @@
 import logging
 import sys
 import time
+from typing import Any
 
+_loguru_logger: Any | None = None
 try:
     from loguru import logger as _loguru_logger
 except ImportError:  # pragma: no cover - fallback when loguru missing
     _loguru_logger = None
 
+logger: Any
 if _loguru_logger is None:
-    logger = logging.getLogger("LogPSpline")
-    logger.setLevel(logging.INFO)
+    _std_logger = logging.getLogger("LogPSpline")
+    _std_logger.setLevel(logging.INFO)
+    logger = _std_logger
 else:
     logger = _loguru_logger
 

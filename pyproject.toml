@@ -44,6 +44,10 @@ gw = [
     "gwosc",
     "pycbc",
 ]
+typecheck = [
+    "jaxtyping>=0.2.36",
+    "beartype>=0.18.5",
+]
 dev = [
     "pytest",
     "pytest-cov",
@@ -55,6 +59,8 @@ dev = [
     "mypy",
     "jupyter-book<2.0",
     "pre-commit",
+    "jaxtyping>=0.2.36",
+    "beartype>=0.18.5",
     "gwpy>=1.3.0",
     "GitPython"
 ]
@@ -148,9 +154,40 @@ ignore_errors = true
 title = "log_psplines Coverage Test Report"
 
 
+[tool.mypy]
+python_version = "3.12"
+show_error_codes = true
+warn_unused_ignores = true
+check_untyped_defs = true
+
 [[tool.mypy.overrides]]
-module = "matplotlib.*,scipy.*,numba.*,bilby.*"
+module = [
+    "matplotlib.*",
+    "scipy.*",
+    "numba.*",
+    "bilby.*",
+]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "log_psplines.example_datasets.lisatools_backend",
+    "log_psplines.example_datasets.lisa_data",
+    "log_psplines.example_datasets.lvk_data",
+    "log_psplines.samplers.vi_init.core",
+    "log_psplines.samplers.vi_init.mixin",
+    "log_psplines.samplers.vi_init.adapters",
+    "log_psplines.diagnostics.vi_psis",
+    "log_psplines.plotting.pdgrm",
+    "log_psplines.samplers.univar.univar_base",
+    "log_psplines.samplers.univar.nuts",
+    "log_psplines.samplers.utils",
+    "log_psplines.samplers.multivar.multivar_base",
+    "log_psplines.samplers.multivar.multivar_blocked_nuts",
+    "log_psplines.psplines.initialisation",
+    "log_psplines.benchmark.runtime_benchmark",
+]
+disable_error_code = ["import-untyped", "import-not-found"]
 
 
 [project.scripts]

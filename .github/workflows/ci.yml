@@ -60,5 +60,9 @@ jobs:
       - name: pytest
         run: pytest --cov='log_psplines' --cov-report term-missing --cov-report=xml --durations=0 -m 'not slow'
 
+      - name: mypy (full package)
+        run: |
+          python -m mypy --config-file pyproject.toml src/log_psplines
+
       - name: Coveralls
         uses: coverallsapp/github-action@v2

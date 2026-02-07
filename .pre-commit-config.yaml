@@ -22,6 +22,11 @@ repos:
       - id: black-jupyter
   - repo: local
     hooks:
+      - id: mypy-full-package-local
+        name: mypy (full package)
+        entry: python -m mypy --config-file pyproject.toml src/log_psplines
+        language: system
+        pass_filenames: false
       - id: vulture-local
         name: Vulture (Dead Code Check)
         entry: bash -c 'vulture "$@" 2>&1 || true'

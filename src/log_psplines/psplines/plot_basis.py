@@ -1,13 +1,14 @@
-from typing import Tuple
+from typing import Tuple, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import TwoSlopeNorm
+from matplotlib.figure import Figure
 
 
 def plot_basis(
-    basis: np.ndarray, axes: np.ndarray = None, fname=None
-) -> Tuple[plt.Figure, plt.Axes]:
+    basis: np.ndarray, axes: np.ndarray | None = None, fname=None
+) -> Tuple[Figure, np.ndarray]:
     """Plot the basis functions, and a histogram of the basis values"""
     if axes is None:
         fig, axes = plt.subplots(1, 2, figsize=(6, 4))
@@ -46,7 +47,7 @@ def plot_basis(
 
     plt.tight_layout()
 
-    fig = ax.get_figure()
+    fig = cast(Figure, axes[0].figure)
 
     if fname is not None:
         plt.savefig(fname)
@@ -56,8 +57,8 @@ def plot_basis(
 
 
 def plot_penalty(
-    penalty: np.ndarray, ax: plt.Axes = None
-) -> Tuple[plt.Figure, plt.Axes]:
+    penalty: np.ndarray, ax: plt.Axes | None = None
+) -> Tuple[Figure, plt.Axes]:
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 4))
 
@@ -74,5 +75,5 @@ def plot_penalty(
     ax.set_ylabel("Basis Index")
     # add a colorbar to fig
     plt.colorbar(ax.collections[0], ax=ax)
-    fig = ax.get_figure()
+    fig = cast(Figure, ax.figure)
     return fig, ax

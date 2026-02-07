@@ -12,8 +12,9 @@ def get_posterior_psd(idata: az.InferenceData):
     """Return (freqs, median_psd, lower, upper) from stored percentiles."""
 
     try:
-        psd = idata.posterior_psd["psd"]
-    except (AttributeError, KeyError):
+        posterior_psd = getattr(idata, "posterior_psd")
+        psd = posterior_psd["psd"]
+    except (AttributeError, KeyError, TypeError):
         raise KeyError("InferenceData missing posterior_psd 'psd' variable.")
 
     freqs = np.asarray(psd.coords["freq"].values)

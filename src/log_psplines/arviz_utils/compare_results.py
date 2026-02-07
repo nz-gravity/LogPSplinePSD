@@ -1,33 +1,39 @@
 import os
-from typing import List, Union
+from typing import List, cast
 
 import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.typing import NDArray
 
 from ..logger import logger
 from ..plotting.plot_ess_evolution import plot_ess_evolution
 
 
+def _load_inference_data(run: az.InferenceData | str) -> az.InferenceData:
+    if isinstance(run, str):
+        loaded = az.from_netcdf(run)
+        return cast(az.InferenceData, loaded)
+    return run
+
+
 def compare_results(
-    run1: Union[az.InferenceData, str],
-    run2: Union[az.InferenceData, str],
+    run1: az.InferenceData | str,
+    run2: az.InferenceData | str,
     labels: List[str],
     outdir: str,
-    colors: List[str] = None,
+    colors: List[str] | None = None,
 ):
     if colors is None:
         colors = ["tab:blue", "tab:orange"]
     os.makedirs(outdir, exist_ok=True)
 
-    if isinstance(run1, str):
-        run1 = az.from_netcdf(run1)
-    if isinstance(run2, str):
-        run2 = az.from_netcdf(run2)
+    run1_idata = _load_inference_data(run1)
+    run2_idata = _load_inference_data(run2)
 
     # Ensure both runs have the same variables
-    common_vars = set(run1["posterior"].data_vars) & set(
-        run2["posterior"].data_vars
+    common_vars = set(run1_idata["posterior"].data_vars) & set(
+        run2_idata["posterior"].data_vars
     )
     if not common_vars:
         raise ValueError("No common variables found in the two runs.")
@@ -35,7 +41,7 @@ def compare_results(
     ### 1) Plot density
     try:
         az.plot_density(
-            [run1["posterior"], run2["posterior"]],
+            [run1_idata["posterior"], run2_idata["posterior"]],
             data_labels=labels,
             shade=0.2,
             hdi_prob=0.94,
@@ -50,8 +56,8 @@ def compare_results(
         plt.close()
 
     ### 2) Plot ESS
-    ess1 = _get_ess(run1)
-    ess2 = _get_ess(run2)
+    ess1 = _get_ess(run1_idata)
+    ess2 = _get_ess(run2_idata)
     plt.figure(figsize=(8, 5))
     plt.boxplot(
         [ess1, ess2],
@@ -62,7 +68,8 @@ def compare_results(
         medianprops=dict(color="black"),
     )
     for patch, color in zip(plt.gca().artists, colors):
-        patch.set_facecolor(color)
+        if hasattr(patch, "set_facecolor"):
+            patch.set_facecolor(color)
     plt.ylabel("Effective Sample Size (ESS)")
     plt.title("Comparison of ESS Distributions")
     plt.grid(True, axis="y")
@@ -73,10 +80,10 @@ def compare_results(
     ### 3) Plot ESS evolution
     fig, ax = plt.subplots(1, 1, figsize=(4, 3))
     plot_ess_evolution(
-        run1, ax=ax, n_points=50, ess_threshold=400, color=colors[0]
+        run1_idata, ax=ax, n_points=50, ess_threshold=400, color=colors[0]
     )
     plot_ess_evolution(
-        run2, ax=ax, n_points=50, ess_threshold=400, color=colors[1]
+        run2_idata, ax=ax, n_points=50, ess_threshold=400, color=colors[1]
     )
     # ax legend 2 columns, run1/run2, plus bulk/tail ESS markers
     ax.legend(
@@ -106,8 +113,8 @@ def compare_results(
     plt.savefig(f"{outdir}/ess_evolution.png", dpi=300, bbox_inches="tight")
 
     ### 3) Get summaries
-    summary1 = az.summary(run1)
-    summary2 = az.summary(run2)
+    summary1 = az.summary(run1_idata)
+    summary2 = az.summary(run2_idata)
 
     # Compute difference in summaries
     common_vars = summary1.index.intersection(summary2.index)
@@ -118,7 +125,7 @@ def compare_results(
     logger.info(f"\n{diff}")
 
 
-def _get_ess(run: az.InferenceData) -> np.array:
+def _get_ess(run: az.InferenceData) -> NDArray[np.float64]:
     """
     Get the effective sample size (ESS) for each variable in the run.
     """

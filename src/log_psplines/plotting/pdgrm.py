@@ -20,8 +20,8 @@ KNOTS_COL = COLORS["knots"]
 
 
 def plot_pdgrm(
-    pdgrm: Periodogram = None,
-    spline_model: LogPSplines = None,
+    pdgrm: Periodogram | None = None,
+    spline_model: LogPSplines | None = None,
     weights=None,
     show_knots=True,
     use_uniform_ci=True,

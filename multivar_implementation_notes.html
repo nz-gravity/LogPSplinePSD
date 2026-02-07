@@ -386,7 +386,7 @@ document.write(`
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-bin-counts">Coarse graining: bin counts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-scalar-nh">Coarse graining: scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
 </ul>
@@ -432,42 +432,36 @@ PSD conversions therefore divide by <code class="docutils literal notranslate"><
 convention across diagnostics/plotting.</p></li>
 </ul>
 </section>
-<section id="coarse-graining-bin-counts">
-<h2>Coarse graining: bin counts<a class="headerlink" href="#coarse-graining-bin-counts" title="Link to this heading">#</a></h2>
-<p>When coarse graining multivariate data, the per-bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> are
-stored on <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code> as
-<code class="docutils literal notranslate"><span class="pre">freq_bin_counts</span></code>. These counts are used directly to scale the log-determinant
-term in the NumPyro likelihood, so each bin has effective DOF <span class="math notranslate nohighlight">\(N_b Nh\)</span>.
-There is no separate per-bin weighting at the likelihood level.</p>
+<section id="coarse-graining-scalar-nh">
+<h2>Coarse graining: scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code><a class="headerlink" href="#coarse-graining-scalar-nh" title="Link to this heading">#</a></h2>
+<p>When coarse graining multivariate data, the coarse-bin membership is carried as
+the scalar <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>. This scalar is used directly to scale the
+log-determinant term in the NumPyro likelihood, so each bin has effective DOF
+<span class="math notranslate nohighlight">\(N_b N_h\)</span>. There is no separate per-bin weighting vector.</p>
 <p>See:</p>
 <ul class="simple">
 <li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code></p></li>
 <li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft()</span></code>
 (<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138">source</a>)</p></li>
-<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.compute_effective_Nb()</span></code></p></li>
 </ul>
 </section>
 <section id="blocked-vs-unified-multivariate-nuts">
 <h2>Blocked vs unified multivariate NUTS<a class="headerlink" href="#blocked-vs-unified-multivariate-nuts" title="Link to this heading">#</a></h2>
-<p>Two multivariate NUTS implementations exist:</p>
+<p>The repository currently contains a single multivariate NUTS implementation:</p>
 <ul class="simple">
-<li><p>Blocked sampler: <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler</span></code></p>
+<li><p>Blocked sampler:
+<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler</span></code></p>
 <ul>
 <li><p>fits each Cholesky row as an independent NUTS problem,</p></li>
 <li><p>samples distinct spline-weight blocks for each off-diagonal
 <span class="math notranslate nohighlight">\(\theta_{jl}(f)\)</span> within a row.</p></li>
 </ul>
 </li>
-<li><p>Unified sampler: <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler</span></code></p>
-<ul>
-<li><p>fits all parameters jointly,</p></li>
-<li><p>currently uses a <em>shared</em> spline field for all off-diagonal real parts and a
-shared field for all imaginary parts (tiled across <span class="math notranslate nohighlight">\(\theta\)</span> indices).</p></li>
 </ul>
-</li>
-</ul>
-<p>If the intended model is “one spline per <span class="math notranslate nohighlight">\(\theta_{jl}\)</span>”, the blocked
-sampler aligns more closely with that intent.</p>
+<p>If you are looking for a “unified” (all-parameters-joint) multivariate NUTS
+sampler, it is not currently implemented in <code class="docutils literal notranslate"><span class="pre">src/log_psplines/</span></code>. The blocked
+sampler is the reference implementation for the multivariate model described in
+the technical notes.</p>
 </section>
 <section id="diagnostics-coarse-bin-likelihood-equivalence">
 <h2>Diagnostics: coarse-bin likelihood equivalence<a class="headerlink" href="#diagnostics-coarse-bin-likelihood-equivalence" title="Link to this heading">#</a></h2>
@@ -477,7 +471,7 @@ tests the key coarse-graining invariant:</p>
 <ul class="simple">
 <li><p>sum of fine-grid log-likelihood contributions within a bin should match the
 coarse-bin log-likelihood (up to bin-constant offsets),</p></li>
-<li><p>there should be no “extra” factor of <span class="math notranslate nohighlight">\(Nh\)</span> introduced in the quadratic
+<li><p>there should be no “extra” factor of <span class="math notranslate nohighlight">\(N_h\)</span> introduced in the quadratic
 term.</p></li>
 </ul>
 <p>This is useful when changing coarse-grain logic or the frequency weighting
@@ -550,7 +544,7 @@ convention.</p>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-bin-counts">Coarse graining: bin counts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-scalar-nh">Coarse graining: scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
 </ul>

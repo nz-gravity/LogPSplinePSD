@@ -441,24 +441,30 @@ document.write(`
 <p>The approach follows the P-spline framework for spectral density estimation described by Maturana-Russel &amp; Meyer (2021) [<a class="reference internal" href="#maturanarussel2021">MaturanaRussel2021</a>].</p>
 <ol class="arabic simple">
 <li><p><strong>Basis construction</strong>
-Define order-r B-spline basis functions \(B_k(\omega)\), \(k=1,\dots,K+r\), on a grid of interior knots in the log-frequency domain.</p></li>
+Define order-<span class="math notranslate nohighlight">\(r\)</span> B-spline basis functions <span class="math notranslate nohighlight">\(B_k(\omega)\)</span>, <span class="math notranslate nohighlight">\(k=1,\dots,K+r\)</span>,
+on a grid of interior knots in the log-frequency domain.</p></li>
 <li><p><strong>Penalized prior</strong>
-Apply a discrete \(D\)th-order difference penalty to the spline coefficients \(\{\beta_k\}\), which induces smoothness in the estimated log-PSD.</p></li>
+Apply a discrete <span class="math notranslate nohighlight">\(D`th-order difference penalty to the spline coefficients
+:math:\)</span>{beta_k}`, which induces smoothness in the estimated log-PSD.</p></li>
 <li><p><strong>Knot placement (optional)</strong>
 For spectra with sharp features, knot locations can be set based on quantiles of the raw periodogram values to allocate flexibility where needed.</p></li>
+<li><p><strong>Model and likelihood</strong>
+The log-PSD is modeled as:</p></li>
 </ol>
-<p>4. <strong>Model and likelihood</strong>
-The log-PSD is modeled as:</p>
 <blockquote>
 <div><div class="math notranslate nohighlight">
-\[\log f(\lambda_l) = \sum_k \beta_k \, B_k(\log \lambda_l)\]</div>
+\[ \begin{align}\begin{aligned}  \log f(\lambda_\ell) = \sum_k \beta_k \, B_k(\log \lambda_\ell)\\
+Whittle’s approximation for the periodogram :math:`I_n(\lambda_\ell)` yields the log-likelihood:\end{aligned}\end{align} \]</div>
 </div></blockquote>
-<p>Whittle’s approximation for the periodogram \(I_n(\lambda_l)\) yields the log-likelihood:</p>
 <div class="math notranslate nohighlight">
-\[\log L(\beta) \propto -\sum_{l=1}^{N_b} \left[ \log f(\lambda_l) + \frac{I_n(\lambda_l)}{f(\lambda_l)} \right]\]</div>
-<p>5. <strong>Inference</strong>
+\[\log L(\beta) \propto -\sum_{\ell=1}^{N_\ell} \left[ \log f(\lambda_\ell) + \frac{I_n(\lambda_\ell)}{f(\lambda_\ell)} \right]\]</div>
+<ol class="arabic simple" start="5">
+<li><p><strong>Inference</strong>
 We use NumPyro’s NUTS sampler to jointly sample the spline coefficients.
-When <code class="docutils literal notranslate"><span class="pre">init_from_vi</span></code> is enabled (default), the stochastic VI warm-start runs before NUTS and immediately saves convergence plots and PSD previews to <code class="docutils literal notranslate"><span class="pre">&lt;outdir&gt;/diagnostics</span></code> so you can inspect them before launching the expensive sampler.</p>
+When <code class="docutils literal notranslate"><span class="pre">init_from_vi</span></code> is enabled (default), the stochastic VI warm-start runs before NUTS and
+saves convergence plots and PSD previews to <code class="docutils literal notranslate"><span class="pre">&lt;outdir&gt;/diagnostics</span></code> so you can inspect them
+before launching the expensive sampler.</p></li>
+</ol>
 <p>This fixed-basis P-spline approach avoids reversible-jump MCMC over knot numbers and positions, reducing computational cost while retaining flexibility to capture complex spectral features.</p>
 <p>Finally, one can also provide a ‘parametric model’ of the PSD as a function that can then be ‘corrected’ non-parametrically by the spline model.
 This is useful for cases where a known functional form (e.g., power-law) is expected, but additional flexibility is needed to account for deviations in the data.</p>

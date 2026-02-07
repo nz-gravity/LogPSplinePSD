@@ -39,52 +39,47 @@ Practical consequences:
   PSD conversions therefore divide by ``duration`` to preserve the same PSD
   convention across diagnostics/plotting.
 
-Coarse graining: bin counts
----------------------------
+Coarse graining: scalar ``Nh``
+------------------------------
 
-When coarse graining multivariate data, the per-bin member counts :math:`Nh` are
-stored on :class:`log_psplines.datatypes.multivar.MultivarFFT` as
-``freq_bin_counts``. These counts are used directly to scale the log-determinant
-term in the NumPyro likelihood, so each bin has effective DOF :math:`N_b Nh`.
-There is no separate per-bin weighting at the likelihood level.
+When coarse graining multivariate data, the coarse-bin membership is carried as
+the scalar ``fft_data.Nh``. This scalar is used directly to scale the
+log-determinant term in the NumPyro likelihood, so each bin has effective DOF
+:math:`N_b N_h`. There is no separate per-bin weighting vector.
 
 See:
 
 - :class:`log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler`
 - :func:`log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft`
-  (`source <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`_)
-- :func:`log_psplines.spectrum_utils.compute_effective_Nb`
+  (`source <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`__)
 
 Blocked vs unified multivariate NUTS
 ------------------------------------
 
-Two multivariate NUTS implementations exist:
+The repository currently contains a single multivariate NUTS implementation:
 
-- Blocked sampler: :class:`log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler`
+- Blocked sampler:
+  :class:`log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler`
 
   - fits each Cholesky row as an independent NUTS problem,
   - samples distinct spline-weight blocks for each off-diagonal
     :math:`\theta_{jl}(f)` within a row.
 
-- Unified sampler: :class:`log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler`
-
-  - fits all parameters jointly,
-  - currently uses a *shared* spline field for all off-diagonal real parts and a
-    shared field for all imaginary parts (tiled across :math:`\theta` indices).
-
-If the intended model is “one spline per :math:`\theta_{jl}`”, the blocked
-sampler aligns more closely with that intent.
+If you are looking for a “unified” (all-parameters-joint) multivariate NUTS
+sampler, it is not currently implemented in ``src/log_psplines/``. The blocked
+sampler is the reference implementation for the multivariate model described in
+the technical notes.
 
 Diagnostics: coarse-bin likelihood equivalence
 ----------------------------------------------
 
 The helper :func:`log_psplines.diagnostics.coarse_grain_checks.coarse_bin_likelihood_equivalence_check`
-(`source <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/diagnostics/coarse_grain_checks.py#L383-L460>`_)
+(`source <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/diagnostics/coarse_grain_checks.py#L383-L460>`__)
 tests the key coarse-graining invariant:
 
 - sum of fine-grid log-likelihood contributions within a bin should match the
   coarse-bin log-likelihood (up to bin-constant offsets),
-- there should be no “extra” factor of :math:`Nh` introduced in the quadratic
+- there should be no “extra” factor of :math:`N_h` introduced in the quadratic
   term.
 
 This is useful when changing coarse-grain logic or the frequency weighting

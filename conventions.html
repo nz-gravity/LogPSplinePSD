@@ -429,39 +429,43 @@ document.write(`
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">N</span></code></p></td>
 <td><p>Number of frequency points (from the discrete FFT).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">p</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">N_ell</span></code></p></td>
+<td><p>Number of <strong>retained</strong> positive-frequency points (after dropping DC and applying any band limits).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">p</span></code></p></td>
 <td><p>Number of channels.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Nb</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Nb</span></code></p></td>
 <td><p>Number of blocks.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Lb</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Lb</span></code></p></td>
 <td><p>Number of samples per block (n//Nb).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Nc</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Nc</span></code></p></td>
 <td><p>Number of coarse-grain bins.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Nh</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Nh</span></code></p></td>
 <td><p>Number of frequencies in each coarse-grain bin.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Z</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Z</span></code></p></td>
 <td><p>Raw time series data, <span class="math notranslate nohighlight">\(Z = (Z_1, \ldots, Z_n)^\top \in \mathbb{R}^{n \times p}\)</span>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">d_k</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">d_k</span></code></p></td>
 <td><p>Fourier transform (or DFT) vector at frequency <span class="math notranslate nohighlight">\(f_k\)</span>,
 <span class="math notranslate nohighlight">\(d_k = (d_1(f_k), d_2(f_k), \ldots, d_p(f_k))^\top\)</span>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">S(fk)</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">S(f_k)</span></code></p></td>
 <td><p><span class="math notranslate nohighlight">\(p \times p\)</span> Hermitian positive semidefinite spectral density matrix at <span class="math notranslate nohighlight">\(f_k\)</span>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">I</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">I</span></code></p></td>
 <td><p>Periodogram.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Ibar</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Ibar</span></code></p></td>
 <td><p>Block-averaged periodogram.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Y</span></code></p></td>
-<td><p>Sum over all blocked FFT periodograms, <span class="math notranslate nohighlight">\(Y = \bar{I}\,N_b\)</span> (not averaged).</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Y</span></code></p></td>
+<td><p>Summed multivariate periodogram/Wishart statistic,
+<span class="math notranslate nohighlight">\(\mathbf{Y}(f_k)=\sum_{b=1}^{N_b}\mathbf{d}^{(b)}(f_k)\mathbf{d}^{(b)}(f_k)^H\)</span> (not averaged).</p></td>
 </tr>
 </tbody>
 </table>
@@ -502,10 +506,9 @@ statistics and PSD matrices. The current conventions are:</p>
 <ul class="simple">
 <li><p><strong>Normalisation</strong> – PSD matrices are <strong>one-sided</strong> and expressed per Hz. The
 helper <code class="xref py py-func docutils literal notranslate"><span class="pre">wishart_matrix_to_psd()</span></code> simply divides the summed Wishart
-matrices by the effective degrees of freedom, i.e., <span class="math notranslate nohighlight">\(S(f) = Y(f) / N_b\)</span>.</p></li>
-<li><p><strong>Degrees of freedom</strong> – <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_effective_Nb()</span></code> multiplies the baseline
-block count by the coarse-grain bin counts, so the PSD conversion always uses
-the correct <code class="docutils literal notranslate"><span class="pre">ν</span></code> for each frequency bin.</p></li>
+matrices by <span class="math notranslate nohighlight">\(N_b N_h\)</span>, i.e., <span class="math notranslate nohighlight">\(S(f) = Y(f) / (N_b N_h)\)</span>.</p></li>
+<li><p><strong>Degrees of freedom</strong> – <code class="docutils literal notranslate"><span class="pre">N_b</span></code> is the block count and <code class="docutils literal notranslate"><span class="pre">N_h</span></code> is the
+(constant) coarse-bin size multiplier.</p></li>
 <li><p><strong>Scaling factor</strong> – The optional <code class="docutils literal notranslate"><span class="pre">scaling_factor</span></code> tracks variance
 adjustments applied during time-domain standardisation and is folded into the
 PSD conversion exactly once.</p></li>
@@ -525,7 +528,7 @@ code all consume spectra with the same units and sidedness.</p>
 the eigenvector replicates <code class="docutils literal notranslate"><span class="pre">U(f)</span></code> on the positive-frequency grid.</p></li>
 <li><p><strong>CoarseGrain</strong> – optional <strong>linear, full-band</strong> binning combines nearby
 frequencies by summing <span class="math notranslate nohighlight">\(\bar Y_h = \sum_{f\in J_h} Y(f)\)</span> and assigns each
-bin the member count <span class="math notranslate nohighlight">\(Nh\)</span> for log-determinant scaling.</p></li>
+bin the member count <span class="math notranslate nohighlight">\(N_h\)</span> for log-determinant scaling.</p></li>
 <li><p><strong>Sampler</strong> – NumPyro samplers consume the (possibly coarse) Wishart stats
 and spline models.</p></li>
 <li><p><strong>ArviZ conversion</strong> – <code class="docutils literal notranslate"><span class="pre">wishart_u_to_psd</span></code> populates

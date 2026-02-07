@@ -145,10 +145,10 @@ class MultivariateLogPSplines:
             u_im = jnp.asarray(fft_data.u_im)
             u_complex = u_re + 1j * u_im
             Y = jnp.einsum("fkc,fkd->fcd", u_complex, jnp.conj(u_complex))
-            Nb = float(max(int(fft_data.Nb), 1))
+            Nb = max(int(fft_data.Nb), 1)
         else:
             Y = None
-            Nb = 1.0
+            Nb = 1
 
         # Create diagonal models (one per channel)
         diagonal_models = []

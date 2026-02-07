@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from .._jaxtypes import Complex, Float
+from .._typecheck import runtime_typecheck
+
 
 def _as_positive_int(name: str, value: int) -> int:
     """Validate positive integer inputs used in spectral scaling."""
@@ -15,9 +18,12 @@ def _as_positive_int(name: str, value: int) -> int:
     return value_int
 
 
+@runtime_typecheck
 def interp_matrix(
-    freq_src: np.ndarray, mat: np.ndarray, freq_tgt: np.ndarray
-) -> np.ndarray:
+    freq_src: Float[np.ndarray, "f_src"],
+    mat: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],
+    freq_tgt: Float[np.ndarray, "f_tgt"],
+) -> Complex[np.ndarray, "f_tgt ..."]:
     """Interpolate a frequency-indexed matrix onto a new frequency grid.
 
     Parameters
@@ -65,9 +71,12 @@ def interp_matrix(
     )
 
 
+@runtime_typecheck
 def _interp_complex_matrix(
-    freq_src: np.ndarray, freq_tgt: np.ndarray, matrix: np.ndarray
-) -> np.ndarray:
+    freq_src: Float[np.ndarray, "f_src"],
+    freq_tgt: Float[np.ndarray, "f_tgt"],
+    matrix: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],
+) -> Complex[np.ndarray, "f_tgt ..."]:
     """Linearly interpolate a complex-valued matrix along the frequency axis."""
     freq_src = np.asarray(freq_src, dtype=float)
     freq_tgt = np.asarray(freq_tgt, dtype=float)
@@ -94,7 +103,10 @@ def _interp_complex_matrix(
     return res.reshape((freq_tgt.size,) + matrix.shape[1:])
 
 
-def u_to_wishart_matrix(u: np.ndarray) -> np.ndarray:
+@runtime_typecheck
+def u_to_wishart_matrix(
+    u: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
+) -> Complex[np.ndarray, "..."]:
     """Convert eigenvector-weighted periodogram components to Wishart matrices."""
 
     u = np.asarray(u, dtype=np.complex128)
@@ -104,7 +116,10 @@ def u_to_wishart_matrix(u: np.ndarray) -> np.ndarray:
     return np.einsum("fkc,flc->fkl", u, np.conj(u))
 
 
-def sum_wishart_outer_products(u_stack: np.ndarray) -> np.ndarray:
+@runtime_typecheck
+def sum_wishart_outer_products(
+    u_stack: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
+) -> Complex[np.ndarray, "..."]:
     """Sum Wishart contributions across a stack of ``U`` matrices."""
 
     u_stack = np.asarray(u_stack, dtype=np.complex128)
@@ -114,14 +129,15 @@ def sum_wishart_outer_products(u_stack: np.ndarray) -> np.ndarray:
     return np.einsum("rik,rjk->ij", u_stack, np.conj(u_stack))
 
 
+@runtime_typecheck
 def wishart_matrix_to_psd(
-    Y: np.ndarray,
+    Y: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
     Nb: int,
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
     Nh: int = 1,
-) -> np.ndarray:
+) -> Complex[np.ndarray, "..."]:
     """Convert Wishart matrices into one-sided PSD matrices."""
 
     Y = np.asarray(Y, dtype=np.complex128)
@@ -140,14 +156,15 @@ def wishart_matrix_to_psd(
     return psd
 
 
+@runtime_typecheck
 def wishart_u_to_psd(
-    u: np.ndarray,
+    u: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
     Nb: int,
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
     Nh: int = 1,
-) -> np.ndarray:
+) -> Complex[np.ndarray, "..."]:
     """Convenience wrapper combining :func:`u_to_wishart_matrix` and conversion."""
 
     Y = u_to_wishart_matrix(u)
@@ -160,7 +177,10 @@ def wishart_u_to_psd(
     )
 
 
-def _get_coherence(psd: np.ndarray) -> np.ndarray:
+@runtime_typecheck
+def _get_coherence(
+    psd: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
+) -> Float[np.ndarray, "..."]:
     N, p, _ = psd.shape
     coh = np.zeros((N, p, p))
     for i in range(p):

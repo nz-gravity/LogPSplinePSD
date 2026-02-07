@@ -2,7 +2,16 @@
 
 import warnings
 from dataclasses import asdict
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+)
 
 import arviz as az
 import jax
@@ -17,9 +26,14 @@ from ..logger import logger
 
 warnings.filterwarnings("ignore", module="arviz")
 
+if TYPE_CHECKING:
+    from ..psplines.multivar_psplines import MultivariateLogPSplines
+    from ..psplines.psplines import LogPSplines
+    from ..samplers.base_sampler import SamplerConfig
+
 
 def results_to_arviz(
-    samples: Dict[str, jnp.ndarray],
+    samples: Mapping[str, Any],
     sample_stats: Dict[str, Any],
     config: "SamplerConfig",
     data: Union[Periodogram, MultivarFFT],
@@ -31,12 +45,22 @@ def results_to_arviz(
     if isinstance(data, Periodogram):
         logger.debug("results_to_arviz: detected Periodogram")
         idata = _create_univar_inference_data(
-            samples, sample_stats, config, data, model, attributes
+            dict(samples),
+            sample_stats,
+            config,
+            data,
+            cast("LogPSplines", model),
+            attributes,
         )
     elif isinstance(data, MultivarFFT):
         logger.debug("results_to_arviz: detected MultivarFFT")
         idata = _create_multivar_inference_data(
-            samples, sample_stats, config, data, model, attributes
+            dict(samples),
+            sample_stats,
+            config,
+            data,
+            cast("MultivariateLogPSplines", model),
+            attributes,
         )
     else:
         raise ValueError(f"Unsupported data type: {type(data)}")
@@ -644,7 +668,7 @@ def _pack_spline_model_multivar(spline_model) -> Dataset:
         "n_theta": spline_model.n_theta,
     }
 
-    coords = {}
+    coords: Dict[str, np.ndarray] = {}
 
     for i, diag_model in enumerate(spline_model.diagonal_models):
         _pack_model_component(diag_model, f"diag_{i}", data, coords)

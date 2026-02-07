@@ -7,7 +7,7 @@ from arviz.utils import _var_names, get_coords
 def plot_ess_evolution(
     idata, n_points=50, ess_threshold=400, ax=None, color="tab:blue"
 ):
-    coords = {}
+    coords: dict[str, object] = {}
     data = get_coords(convert_to_dataset(idata, group="posterior"), coords)
     var_names = _var_names(None, data, None)
     n_draws = data.sizes["draw"]

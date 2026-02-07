@@ -154,6 +154,7 @@ class MultivariateLogPSplines:
         diagonal_models = []
         for i in range(p):
             if use_wishart:
+                assert Y is not None
                 empirical_diag_power = jnp.real(Y[:, i, i]) / Nb
             else:
                 empirical_diag_power = (
@@ -206,6 +207,7 @@ class MultivariateLogPSplines:
             for i in range(1, p):
                 for j in range(i):
                     if use_wishart:
+                        assert Y is not None
                         csd_ij = jnp.abs(Y[:, i, j]) / Nb
                     else:
                         csd_ij = (
@@ -364,6 +366,8 @@ class MultivariateLogPSplines:
                     T = np.eye(p, dtype=np.complex64)
 
                     if n_theta > 0:
+                        assert theta_re_chunk is not None
+                        assert theta_im_chunk is not None
                         theta_complex = (
                             theta_re_chunk[s, local_f]
                             + 1j * theta_im_chunk[s, local_f]

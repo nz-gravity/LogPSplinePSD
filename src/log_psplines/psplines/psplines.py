@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 
 import jax
 import matplotlib.pyplot as plt
@@ -182,7 +182,7 @@ class LogPSplines:
     basis: jnp.ndarray
     penalty_matrix: jnp.ndarray
     knots: np.ndarray
-    weights: jnp.ndarray = None
+    weights: Optional[jnp.ndarray] = None
     parametric_model: Union[jnp.ndarray, None] = None
 
     def __post_init__(self):
@@ -220,8 +220,8 @@ class LogPSplines:
         n_knots: int,
         degree: int,
         diffMatrixOrder: int = 3,
-        parametric_model: jnp.ndarray = None,
-        knot_kwargs: dict = {},
+        parametric_model: jnp.ndarray | None = None,
+        knot_kwargs: Optional[dict] = None,
     ):
         """
         Construct LogPSplines model from periodogram data.
@@ -268,10 +268,18 @@ class LogPSplines:
         ...     knot_kwargs={'placement': 'adaptive'}
         ... )
         """
+        if knot_kwargs is None:
+            knot_kwargs = {}
+
+        parametric_np = (
+            None
+            if parametric_model is None
+            else np.asarray(parametric_model, dtype=np.float64)
+        )
         knots = init_knots(
             n_knots,
             periodogram,
-            parametric_model,
+            parametric_np,
             **knot_kwargs,
         )
         # compute degree based on the number of knots
@@ -325,7 +333,7 @@ class LogPSplines:
         return self.n_knots + self.degree - 1
 
     def __call__(
-        self, weights: jnp.ndarray = None, use_parametric_model=True
+        self, weights: jnp.ndarray | None = None, use_parametric_model=True
     ) -> jnp.ndarray:
         """
         Evaluate the log power spectral density.
@@ -355,12 +363,14 @@ class LogPSplines:
         """
         if weights is None:
             weights = self.weights
+        if weights is None:
+            raise ValueError("weights must be provided or initialized.")
         ln_para = self.log_parametric_model
         if not use_parametric_model:
             ln_para = jnp.zeros_like(ln_para)
         return build_spline(self.basis, weights, ln_para)
 
-    def plot_basis(self, outdir: str = None):
+    def plot_basis(self, outdir: str | None = None):
         """
         Visualize B-spline basis functions and penalty matrix structure.
 
@@ -380,8 +390,8 @@ class LogPSplines:
         >>> model.plot_basis(outdir="./diagnostics")  # Save to file
         """
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        plot_basis(self.basis, axes=axes[:2])
-        plot_penalty(self.penalty_matrix, ax=axes[2])
+        plot_basis(np.asarray(self.basis), axes=axes[:2])
+        plot_penalty(np.asarray(self.penalty_matrix), ax=axes[2])
         plt.tight_layout()
         if outdir is not None:
             fig.savefig(f"{outdir}/basis_plot.png", bbox_inches="tight")

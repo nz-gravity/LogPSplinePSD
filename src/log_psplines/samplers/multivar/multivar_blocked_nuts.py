@@ -28,7 +28,7 @@ assembled into global arrays ``log_delta_sq`` with shape (draw, freq, p) and
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple, cast
 
 import arviz as az
 import jax
@@ -346,10 +346,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         total_runtime = 0.0
 
         vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
-
         vi_setup = prepare_block_vi(
             self,
-            rng_key=self.rng_key,
+            rng_key=cast(jax.Array, self.rng_key),
             block_model=_blocked_channel_model,
         )
         self._vi_diagnostics = vi_setup.diagnostics
@@ -401,7 +400,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 channel_index,
                 self.config.max_tree_depth,
             )
-            kernel_kwargs = dict(
+            kernel_kwargs: dict[str, Any] = dict(
                 target_accept_prob=float(target_accept_prob),
                 max_tree_depth=int(max_tree_depth),
                 dense_mass=bool(self.config.dense_mass),
@@ -515,6 +514,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 theta_re_total = theta_re_total.at[:, :, :, theta_slice].set(
                     theta_re_block
                 )
+                assert theta_im_total is not None
                 theta_im_total = theta_im_total.at[:, :, :, theta_slice].set(
                     theta_im_block
                 )
@@ -553,7 +553,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         return self.to_arviz(combined_samples, combined_stats)
 
     def _get_lnz(
-        self, samples: Dict[str, jnp.ndarray], sample_stats: Dict[str, Any]
+        self, samples: Dict[str, Any], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
         """LnZ is currently not computed for the multivariate samplers."""
         return super()._get_lnz(samples, sample_stats)

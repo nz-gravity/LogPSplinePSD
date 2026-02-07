@@ -1,5 +1,5 @@
 import warnings
-from typing import Tuple
+from typing import TYPE_CHECKING, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -14,11 +14,14 @@ from .knots_locator import init_knots
 
 __all__ = ["init_weights", "init_basis_and_penalty", "init_knots"]
 
+if TYPE_CHECKING:
+    from .psplines import LogPSplines
+
 
 def init_weights(
     log_pdgrm: jnp.ndarray,
     log_psplines: "LogPSplines",
-    init_weights: jnp.ndarray = None,
+    init_weights: jnp.ndarray | None = None,
     num_steps: int = 5000,
 ) -> jnp.ndarray:
     """
@@ -48,7 +51,7 @@ def init_weights(
     opt_state = optimizer.init(init_weights)
 
     @jax.jit
-    def compute_loss(weights: jnp.ndarray) -> float:
+    def compute_loss(weights: jnp.ndarray) -> jnp.ndarray:
         """Compute MSE loss between log periodogram and log model"""
         log_model = log_psplines(weights) + log_psplines.log_parametric_model
         return jnp.mean((log_pdgrm - log_model) ** 2)
@@ -102,7 +105,9 @@ def init_basis_and_penalty(
         (basis_matrix, penalty_matrix) as JAX arrays
     """
     order = degree + 1
-    basis = BSplineBasis(domain_range=[0, 1], order=order, knots=knots)
+    basis = BSplineBasis(
+        domain_range=[0, 1], order=order, knots=np.asarray(knots).tolist()
+    )
     if grid_points is None:
         grid_points = np.linspace(0, 1, n_grid_points)
     else:
@@ -117,7 +122,7 @@ def init_basis_and_penalty(
     # Compute basis matrix and keep it explicitly 2-D (n_grid, n_basis)
     basis_eval = basis.to_basis().to_grid(grid_points).data_matrix
     basis_eval = np.asarray(basis_eval, dtype=np.float64)
-    basis_matrix = np.squeeze(basis_eval, axis=-1).T
+    basis_matrix_np = np.squeeze(basis_eval, axis=-1).T
 
     # Normalize basis matrix elements for numerical stability
     # knots_with_boundary = np.concatenate(
@@ -130,7 +135,7 @@ def init_basis_and_penalty(
     # norm_factor[norm_factor == 0] = np.inf  # Prevent division by zero
     # basis_matrix = basis_matrix / norm_factor
 
-    basis_matrix = jnp.array(basis_matrix)
+    basis_matrix = jnp.asarray(basis_matrix_np)
 
     # Compute penalty matrix using L2 regularization
     regularization = L2Regularization(
@@ -140,4 +145,4 @@ def init_basis_and_penalty(
     penalty_matrix = penalty_matrix / np.max(penalty_matrix)
     penalty_matrix = penalty_matrix + epsilon * np.eye(penalty_matrix.shape[1])
 
-    return basis_matrix, jnp.array(penalty_matrix)
+    return basis_matrix, jnp.asarray(penalty_matrix)

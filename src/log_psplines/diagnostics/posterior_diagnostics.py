@@ -181,14 +181,19 @@ def _select_weight_vars(
     candidate_vars = [
         var
         for var in posterior.data_vars
-        if "weight" in var.lower() or "spline" in var.lower()
+        if "weight" in str(var).lower() or "spline" in str(var).lower()
     ]
     if not candidate_vars:
         return []
 
     max_vars = min(10, len(candidate_vars))
     rng = np.random.default_rng()
-    return list(rng.choice(candidate_vars, size=max_vars, replace=False))
+    selected = rng.choice(
+        np.asarray(candidate_vars, dtype=object),
+        size=max_vars,
+        replace=False,
+    )
+    return [str(v) for v in selected]
 
 
 def _collect_functional_idata(
@@ -268,7 +273,9 @@ def plot_subset_traces_and_ranks(
         Generated trace and rank plot figures.
     """
 
-    posterior = idata.posterior
+    posterior = getattr(idata, "posterior", None)
+    if posterior is None:
+        return []
     weight_vars = _select_weight_vars(posterior, weight_subset)
 
     hyper_vars = [

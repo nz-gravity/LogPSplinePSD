@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isqrt
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
+from ._jaxtypes import Bool, Float, Int
+from ._typecheck import runtime_typecheck
 from .datatypes.multivar import MultivarFFT
 from .datatypes.multivar_utils import (
     sum_wishart_outer_products,
@@ -113,8 +115,10 @@ class CoarseGrainSpec:
 
 
 def _select_band(
-    freqs: np.ndarray, f_min: Optional[float], f_max: Optional[float]
-) -> tuple[np.ndarray, np.ndarray]:
+    freqs: Float[np.ndarray, "n_full"],
+    f_min: Optional[float],
+    f_max: Optional[float],
+) -> tuple[Bool[np.ndarray, "n_full"], Float[np.ndarray, "n_sel"]]:
     """Return (selection_mask, freqs_sel) for the analysis band [f_min, f_max].
 
     The requested bounds are clamped to the available frequency grid.
@@ -169,11 +173,12 @@ def _resolve_equal_bin_params(
         return int(Nc), int(Nh)
 
     # Nc provided
-    Nc = _as_int("Nc", Nc)
-    if Nc <= 0 or Nl % Nc != 0:
-        raise ValueError(f"Nc={Nc} must be a positive divisor of Nl={Nl}.")
-    Nh = Nl // Nc
-    return int(Nc), int(Nh)
+    assert Nc is not None
+    Nc_int = _as_int("Nc", Nc)
+    if Nc_int <= 0 or Nl % Nc_int != 0:
+        raise ValueError(f"Nc={Nc_int} must be a positive divisor of Nl={Nl}.")
+    Nh_int = Nl // Nc_int
+    return int(Nc_int), int(Nh_int)
 
 
 def _sum_bins_equal(x: np.ndarray, *, Nh: int) -> np.ndarray:
@@ -188,8 +193,9 @@ def _sum_bins_equal(x: np.ndarray, *, Nh: int) -> np.ndarray:
     return x.reshape(Nc, Nh, *x.shape[1:]).sum(axis=1)
 
 
+@runtime_typecheck
 def compute_binning_structure(
-    freqs: np.ndarray,
+    freqs: Float[np.ndarray, "n_full"],
     *,
     Nc: Optional[int] = None,
     Nh: Optional[int] = None,
@@ -212,17 +218,19 @@ def compute_binning_structure(
 
     Nc, Nh = _resolve_equal_bin_params(Nl=Nl, Nc=Nc, Nh=Nh)
 
-    J_start = (np.arange(Nc, dtype=np.int64) * Nh).astype(np.int32)
+    J_start: Int[np.ndarray, "nc"] = (
+        np.arange(Nc, dtype=np.int64) * Nh
+    ).astype(np.int32)
 
     if (Nh % 2) == 0:
         logger.warning(
             f"Nl={Nl} and Nc={Nc} imply even Nh={Nh}. "
             "Midpoint is not unique; using lower-middle Fourier frequency.",
         )
-        J_mid = J_start + (Nh // 2) - 1  # lower-middle
+        J_mid: Int[np.ndarray, "nc"] = J_start + (Nh // 2) - 1
     else:
-        J_mid = J_start + (Nh // 2)  # exact middle <-- IDEAL (when Nh is odd)
-    f_coarse = freqs_sel[J_mid].astype(np.float64)
+        J_mid = J_start + (Nh // 2)
+    f_coarse: Float[np.ndarray, "nc"] = freqs_sel[J_mid].astype(np.float64)
 
     return CoarseGrainSpec(
         f_coarse=f_coarse,
@@ -234,11 +242,12 @@ def compute_binning_structure(
     )
 
 
+@runtime_typecheck
 def apply_coarse_graining_univar(
-    power: np.ndarray,
+    power: Float[np.ndarray, "nl"] | Int[np.ndarray, "nl"],
     spec: CoarseGrainSpec,
-    freqs: Optional[np.ndarray] = None,
-) -> np.ndarray:
+    freqs: Optional[Float[np.ndarray, "nl"]] = None,
+) -> Float[np.ndarray, "nc"]:
     """Apply coarse graining to a univariate array defined on the retained grid.
 
     Parameters
@@ -268,12 +277,13 @@ def apply_coarse_graining_univar(
         if freqs.ndim != 1 or freqs.size != Nl:
             raise ValueError("freqs must match retained grid size")
 
-    out = _sum_bins_equal(power, Nh=int(spec.Nh)).astype(
-        np.float64, copy=False
-    )
+    out: Float[np.ndarray, "nc"] = _sum_bins_equal(
+        power, Nh=int(spec.Nh)
+    ).astype(np.float64, copy=False)
     return out
 
 
+@runtime_typecheck
 def apply_coarse_grain_multivar_fft(
     fft: MultivarFFT, spec: CoarseGrainSpec
 ) -> MultivarFFT:
@@ -299,12 +309,16 @@ def apply_coarse_grain_multivar_fft(
         raise ValueError("Coarse-graining spec has no bins.")
 
     # y sums via shared helper
-    y_re_bins = _sum_bins_equal(y_re_sel, Nh=Nh).astype(np.float64, copy=False)
-    y_im_bins = _sum_bins_equal(y_im_sel, Nh=Nh).astype(np.float64, copy=False)
+    y_re_bins: Float[np.ndarray, "nc p"] = _sum_bins_equal(
+        y_re_sel, Nh=Nh
+    ).astype(np.float64, copy=False)
+    y_im_bins: Float[np.ndarray, "nc p"] = _sum_bins_equal(
+        y_im_sel, Nh=Nh
+    ).astype(np.float64, copy=False)
 
     # u still needs per-bin eigendecomposition
     p = int(fft.p)
-    u_bins = np.zeros((Nc, p, p), dtype=np.complex128)
+    u_bins: np.ndarray = np.zeros((Nc, p, p), dtype=np.complex128)
 
     for b in range(Nc):
         s = b * Nh

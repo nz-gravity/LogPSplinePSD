@@ -9,10 +9,10 @@ realizes the theoretical approximations stated in the repository.
 Frequency bins
 --------------
 
-The retained fine-frequency grid \(\{f_1,\dots,f_{Nl}\}\subset[f_{\min},f_{\max}]\)
-is coarse-grained by dividing it into consecutive, disjoint subsets \(J_h\). Each
-\(J_h\) contains an **odd** number \(Nh\) of Fourier frequencies, and \(\bar f_h\)
-denotes the *midpoint Fourier frequency* of \(J_h\) (the middle member on the
+The retained fine-frequency grid :math:`\{f_1,\dots,f_{N_\ell}\}\subset[f_{\min},f_{\max}]`
+is coarse-grained by dividing it into consecutive, disjoint subsets :math:`J_h`. Each
+:math:`J_h` contains an **odd** number :math:`N_h` of Fourier frequencies, and :math:`\bar f_h`
+denotes the *midpoint Fourier frequency* of :math:`J_h` (the middle member on the
 discrete Fourier grid, not an average).
 
 The binning logic
@@ -29,7 +29,7 @@ The spec stores
 
 - the masks that select the retained frequencies,
 - indices to group points into contiguous bins,
-- the member count \(Nh\) per bin, and
+- the member count :math:`N_h` per bin, and
 - bin widths (diagnostics only).
 
 Aggregating FFT data
@@ -38,36 +38,38 @@ Aggregating FFT data
 :func:`log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft` takes the
 :class:`log_psplines.datatypes.multivar.MultivarFFT` and :class:`CoarseGrainSpec`
 and builds the coarse representation used during sampling. The frequencies are
-grouped by bin across the **entire** retained band. Within each \(J_h\), the
-individual Wishart components \(\Y(f)=\U(f)\U(f)^H\) are **summed** to form
-\(\bar \Y_h = \sum_{f\in J_h}\Y(f)\), and the sum is re-diagonalized to obtain a
-single \(\U_h\) per bin. The function :func:`log_psplines.spectrum_utils.sum_wishart_outer_products`
+grouped by bin across the **entire** retained band. Within each :math:`J_h`, the
+individual Wishart matrices :math:`\mathbf{Y}(f)=\mathbf{U}(f)\mathbf{U}(f)^H` are **summed** to form
+:math:`\bar{\mathbf{Y}}_h = \sum_{f\in J_h}\mathbf{Y}(f)`, and the sum is re-diagonalized to obtain a
+single :math:`\bar{\mathbf{U}}_h` per bin. The function :func:`log_psplines.spectrum_utils.sum_wishart_outer_products`
 implements the matrix sum, and :func:`numpy.linalg.eigh` recovers the eigenvectors
-and eigenvalues that encode \(\bar \Y_h\).
+and eigenvalues that encode :math:`\bar{\mathbf{Y}}_h`.
 
 The returned :class:`log_psplines.datatypes.multivar.MultivarFFT` now has
 `len(spec.f_coarse)` frequencies. `apply_coarse_grain_multivar_fft` also returns a
-`weights` array giving the member count \(Nh\) for each coarse bin (constant for
-equal bins), and stores it on the FFT as ``freq_bin_counts``.
+scalar ``Nh`` giving the member count :math:`N_h` for each coarse bin (constant for
+equal bins), and stores it on the FFT as ``Nh``.
 
 Likelihood scaling
 ------------------
 
-The weights scale **only** the log-determinant term so that each bin behaves like
-a Wishart observation with \(N_b Nh\) degrees of freedom:
+The scalar :math:`N_h` scales **only** the log-determinant term so that each bin behaves like
+a Wishart observation with :math:`N_b N_h` degrees of freedom:
 
 .. math::
 
-    \log \mathcal{L} \propto - \sum_{h=1}^{Nc} N_b Nh \log |\S(\bar f_h)|
-    - \sum_N_b \u^{(h)*}_N_b \S(\bar f_h)^{-1} \u^{(h)}_N_b.
+    \log \mathcal{L}
+    \;\propto\;
+    - \sum_{h=1}^{N_c} N_b N_h \log \left|\mathbf{S}(\bar f_h)\right|
+    - \sum_{h=1}^{N_c} \frac{1}{T}\,\mathrm{tr}\!\left[\mathbf{S}(\bar f_h)^{-1}\,\bar{\mathbf{Y}}_h\right].
 
-When coarse graining is enabled, the multivariate sampler reads the per-bin
-counts from ``fft_data.freq_bin_counts``. The NumPyro model
+When coarse graining is enabled, the multivariate sampler reads the scalar
+``Nh`` from ``fft_data.Nh``. The NumPyro model
 :func:`log_psplines.samplers.multivar.multivar_blocked_nuts.multivariate_psplines_model`
-multiplies `log_delta_sq` by these counts, ensuring the total log-det term
-matches the aggregated \(N_b Nh\) DOF. The trace term uses the **summed**
-statistic \(\bar \Y_h\) directly, so no additional \(Nh\) factors appear.
-Coarse graining therefore increases information linearly in \(Nh\).
+multiplies the summed `log_delta_sq` term by ``Nh``, ensuring the total log-det term
+matches the aggregated :math:`N_b N_h` DOF. The trace term uses the **summed**
+statistic :math:`\bar{\mathbf{Y}}_h` directly, so no additional :math:`N_h` factors appear.
+Coarse graining therefore increases information linearly in :math:`N_h`.
 
 No log-binning, hybrid schemes, or “preserve low frequencies” modes are
 implemented.

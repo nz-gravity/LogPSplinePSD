@@ -386,7 +386,7 @@ document.write(`
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-weights-vs-bin-counts">Coarse graining: weights vs bin counts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-bin-counts">Coarse graining: bin counts</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
 </ul>
@@ -432,19 +432,13 @@ PSD conversions therefore divide by <code class="docutils literal notranslate"><
 convention across diagnostics/plotting.</p></li>
 </ul>
 </section>
-<section id="coarse-graining-weights-vs-bin-counts">
-<h2>Coarse graining: weights vs bin counts<a class="headerlink" href="#coarse-graining-weights-vs-bin-counts" title="Link to this heading">#</a></h2>
-<p>When coarse graining multivariate data, two frequency-weight-like objects exist:</p>
-<ul class="simple">
-<li><p><cite>freq_bin_counts</cite>: the raw member count <span class="math notranslate nohighlight">\(Nh\)</span> per coarse bin, stored on
-<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code>.</p></li>
-<li><p><cite>freq_weights</cite>: the weights actually used to scale the log-determinant term in
-the NumPyro likelihood.</p></li>
-</ul>
-<p>By default, <cite>run_mcmc</cite> passes <cite>freq_weights = Nh</cite>. This matches the coarse-bin
-approximation where each bin has effective DOF <span class="math notranslate nohighlight">\(N_b Nh\)</span>.</p>
-<p>If users choose to normalise or temper <cite>freq_weights</cite> for sampler geometry, the
-raw <cite>freq_bin_counts</cite> remain available so PSD conversion does not drift.</p>
+<section id="coarse-graining-bin-counts">
+<h2>Coarse graining: bin counts<a class="headerlink" href="#coarse-graining-bin-counts" title="Link to this heading">#</a></h2>
+<p>When coarse graining multivariate data, the per-bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> are
+stored on <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code> as
+<code class="docutils literal notranslate"><span class="pre">freq_bin_counts</span></code>. These counts are used directly to scale the log-determinant
+term in the NumPyro likelihood, so each bin has effective DOF <span class="math notranslate nohighlight">\(N_b Nh\)</span>.
+There is no separate per-bin weighting at the likelihood level.</p>
 <p>See:</p>
 <ul class="simple">
 <li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code></p></li>
@@ -556,7 +550,7 @@ convention.</p>
   <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-weights-vs-bin-counts">Coarse graining: weights vs bin counts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-bin-counts">Coarse graining: bin counts</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
 </ul>

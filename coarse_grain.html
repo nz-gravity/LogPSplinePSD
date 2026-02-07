@@ -443,7 +443,8 @@ implements the matrix sum, and <code class="xref py py-func docutils literal not
 and eigenvalues that encode (bar Y_h).</p>
 <p>The returned <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code> now has
 <cite>len(spec.f_coarse)</cite> frequencies. <cite>apply_coarse_grain_multivar_fft</cite> also returns a
-<cite>weights</cite> array giving the member count (Nh) for each coarse bin.</p>
+<cite>weights</cite> array giving the member count (Nh) for each coarse bin (constant for
+equal bins), and stores it on the FFT as <code class="docutils literal notranslate"><span class="pre">freq_bin_counts</span></code>.</p>
 </section>
 <section id="likelihood-scaling">
 <h2>Likelihood scaling<a class="headerlink" href="#likelihood-scaling" title="Link to this heading">#</a></h2>
@@ -452,11 +453,10 @@ a Wishart observation with (N_b Nh) degrees of freedom:</p>
 <div class="math notranslate nohighlight">
 \[\log \mathcal{L} \propto - \sum_{h=1}^{Nc} N_b Nh \log |\S(\bar f_h)|
 - \sum_N_b \u^{(h)*}_N_b \S(\bar f_h)^{-1} \u^{(h)}_N_b.\]</div>
-<p>When coarse graining is enabled, <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code>
-accepts the <cite>weights</cite> vector (usually via <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.config.CoarseGrainConfig</span></code>)
-and stores it as <cite>freq_weights</cite>. The NumPyro model
+<p>When coarse graining is enabled, the multivariate sampler reads the per-bin
+counts from <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code>. The NumPyro model
 <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.multivariate_psplines_model()</span></code>
-multiplies <cite>log_delta_sq</cite> by <cite>freq_weights</cite>, ensuring the total log-det term
+multiplies <cite>log_delta_sq</cite> by these counts, ensuring the total log-det term
 matches the aggregated (N_b Nh) DOF. The trace term uses the <strong>summed</strong>
 statistic (bar Y_h) directly, so no additional (Nh) factors appear.
 Coarse graining therefore increases information linearly in (Nh).</p>

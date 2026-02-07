@@ -522,8 +522,8 @@ vector of replicate components for channel <span class="math notranslate nohighl
 <ul class="simple">
 <li><p><span class="math notranslate nohighlight">\(N_b\)</span> is the number of averaged blocks (<code class="docutils literal notranslate"><span class="pre">fft_data.Nb</span></code>).</p></li>
 <li><p><span class="math notranslate nohighlight">\(T\)</span> is the per-block observation duration (<code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code>).</p></li>
-<li><p><span class="math notranslate nohighlight">\(w_k\)</span> are optional frequency weights (<code class="docutils literal notranslate"><span class="pre">freq_weights</span></code>). They are used
-to scale the log-determinant term when coarse graining is enabled.</p></li>
+<li><p><span class="math notranslate nohighlight">\(w_k\)</span> are per-bin member counts (<code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code>). They are
+used to scale the log-determinant term when coarse graining is enabled.</p></li>
 <li><p>The quadratic term uses the <em>summed sufficient statistics</em> directly, so it
 does not multiply by <span class="math notranslate nohighlight">\(w_k\)</span> again.</p></li>
 </ul>
@@ -540,9 +540,9 @@ does not multiply by <span class="math notranslate nohighlight">\(w_k\)</span> a
 <div class="math notranslate nohighlight">
 \[\bar Y_h = \sum_{f\in J_h} Y(f)\]</div>
 <p>and recomputes <span class="math notranslate nohighlight">\(\bar U_h\)</span> so that <span class="math notranslate nohighlight">\(\bar Y_h = \bar U_h\bar U_h^H\)</span>.</p>
-<p>The returned <cite>weights</cite> vector equals the bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> and
-should be passed as <code class="docutils literal notranslate"><span class="pre">freq_weights</span></code>. With this choice, each bin behaves like a
-Wishart statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(N_b Nh\)</span>.</p>
+<p>The returned <cite>weights</cite> vector equals the bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> and is
+stored as <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code>. With this choice, each bin behaves like
+a Wishart statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(N_b Nh\)</span>.</p>
 <section id="exact-coarse-grained-likelihood-form-from-overleaf">
 <h3>Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-coarse-grained-likelihood-form-from-overleaf" title="Link to this heading">#</a></h3>
 <p>The coarse-grained approximation is written as (verbatim LaTeX):</p>
@@ -561,7 +561,7 @@ Wishart statistic with effective degrees of freedom <span class="math notranslat
 <li><p><span class="math notranslate nohighlight">\(\log \delta_j(f_k)^2\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">log_delta_sq_{j}</span></code></p></li>
 <li><p><span class="math notranslate nohighlight">\(\theta_{jl}(f_k)\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">theta_re_{j}</span></code>, <code class="docutils literal notranslate"><span class="pre">theta_im_{j}</span></code></p></li>
 <li><p>coarse-bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> → <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code> (stored)</p></li>
-<li><p>likelihood weights <span class="math notranslate nohighlight">\(w_k\)</span> → <code class="docutils literal notranslate"><span class="pre">config.freq_weights</span></code> / <code class="docutils literal notranslate"><span class="pre">self.freq_weights</span></code></p></li>
+<li><p>likelihood weights <span class="math notranslate nohighlight">\(w_k\)</span> → <code class="docutils literal notranslate"><span class="pre">fft_data.freq_bin_counts</span></code> / <code class="docutils literal notranslate"><span class="pre">self.freq_weights</span></code></p></li>
 </ul>
 </section>
 <section id="psd-reconstruction">

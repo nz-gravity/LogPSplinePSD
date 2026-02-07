@@ -389,6 +389,7 @@ document.write(`
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-documentation">Building Documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-tests">Running Tests</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typechecking-jaxtyping-beartype">Typechecking (Jaxtyping + Beartype)</a></li>
 </ul>
             </nav>
         </div>
@@ -440,7 +441,26 @@ document.write(`
 </section>
 <section id="running-tests">
 <h2>Running Tests<a class="headerlink" href="#running-tests" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pytest<span class="w"> </span>tests/
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/
+</pre></div>
+</div>
+</section>
+<section id="typechecking-jaxtyping-beartype">
+<h2>Typechecking (Jaxtyping + Beartype)<a class="headerlink" href="#typechecking-jaxtyping-beartype" title="Link to this heading">#</a></h2>
+<p>Install dev extras so <code class="docutils literal notranslate"><span class="pre">jaxtyping</span></code> and <code class="docutils literal notranslate"><span class="pre">beartype</span></code> are available:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;.[dev,typecheck]&#39;</span>
+</pre></div>
+</div>
+<p>Run static type checking across the package:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>mypy<span class="w"> </span>--config-file<span class="w"> </span>pyproject.toml<span class="w"> </span>src/log_psplines
+</pre></div>
+</div>
+<p>The mypy configuration in <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> includes scoped overrides for a
+small set of external libraries without stubs. The package source under
+<code class="docutils literal notranslate"><span class="pre">src/log_psplines</span></code> is checked end-to-end without per-module suppressions.</p>
+<p>Runtime checks are enabled by default when dependencies are installed. You can
+disable runtime enforcement with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">LOG_PSPLINES_RUNTIME_TYPECHECK</span><span class="o">=</span><span class="m">0</span><span class="w"> </span>.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/test_runtime_typecheck.py
 </pre></div>
 </div>
 </section>
@@ -516,6 +536,7 @@ document.write(`
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-documentation">Building Documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-tests">Running Tests</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typechecking-jaxtyping-beartype">Typechecking (Jaxtyping + Beartype)</a></li>
 </ul>
   </nav></div>
 

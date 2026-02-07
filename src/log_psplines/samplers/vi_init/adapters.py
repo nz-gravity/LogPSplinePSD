@@ -95,7 +95,7 @@ def compute_vi_artifacts_univar(
         if sampler.config.true_psd is not None:
             true_psd = np.asarray(jax.device_get(sampler.config.true_psd))
 
-        diagnostics = {
+        diagnostics: Dict[str, Any] = {
             "weights": weights_np,
             "psd": vi_psd,
             "true_psd": true_psd,
@@ -287,7 +287,7 @@ def compute_vi_artifacts_multivar(
 
             samples_tree = vi_result.samples or {}
             if samples_tree:
-                log_delta_draws = []
+                log_delta_draws: List[jnp.ndarray] = []
                 n_draws = None
                 for channel_index in range(sampler.p):
                     weights_name = f"weights_delta_{channel_index}"
@@ -425,7 +425,7 @@ def compute_vi_artifacts_multivar(
             true_psd = np.asarray(jax.device_get(sampler.config.true_psd))
             true_psd = _rescale_psd(true_psd)
 
-        diagnostics = {
+        diagnostics: Dict[str, Any] = {
             "psd_matrix": vi_psd_np,
             "true_psd": true_psd,
         }
@@ -870,6 +870,7 @@ def prepare_block_vi(
                     theta_im_block = np.zeros((sampler.N, theta_count))
 
                 theta_slice = slice(theta_start, theta_start + theta_count)
+                assert vi_theta_im_mean is not None
                 vi_theta_re_mean[:, theta_slice] = theta_re_block
                 vi_theta_im_mean[:, theta_slice] = theta_im_block
 

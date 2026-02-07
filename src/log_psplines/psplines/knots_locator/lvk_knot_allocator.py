@@ -23,7 +23,7 @@ class LvkKnotAllocator:
         degree=3,
         min_zero_knots: int = 2,
         min_peak_knots: int = 10,
-        knots_plotfn: str = None,
+        knots_plotfn: str | None = None,
     ):
         self.freqs = np.asarray(freqs)
         self.psd = np.asarray(psd)
@@ -60,7 +60,7 @@ class LvkKnotAllocator:
 
     # --- core analysis ---
     def _identify_lines(self) -> None:
-        freq_resolution = np.median(np.diff(self.freqs))
+        freq_resolution = float(np.median(np.diff(self.freqs)))
         window_bins = max(
             1,
             int(np.round(self.window_width_hz / max(freq_resolution, 1e-12))),
@@ -91,6 +91,8 @@ class LvkKnotAllocator:
         )
 
     def _extract_peaks(self) -> np.ndarray:
+        if self.running_median is None or self.threshold is None:
+            raise RuntimeError("Line-identification state is not initialized.")
         power_ratio = self.psd / (self.running_median + np.finfo(float).eps)
         threshold = self.threshold
         freq_mask = (self.freqs >= self.fmin) & (self.freqs <= self.fmax)
@@ -130,6 +132,8 @@ class LvkKnotAllocator:
         return [(int(s), int(e)) for s, e in zip(starts, ends) if s <= e]
 
     def _process_peaks(self) -> None:
+        if self.running_median is None or self.threshold is None:
+            raise RuntimeError("Line-identification state is not initialized.")
         power_ratio = self.psd / (self.running_median + np.finfo(float).eps)
         log_pr = np.log(np.clip(power_ratio, a_min=1e-12, a_max=None))
         band_mask = (self.freqs >= self.fmin) & (self.freqs <= self.fmax)
@@ -180,8 +184,10 @@ class LvkKnotAllocator:
             # Only endpoints, snap to closest grid values
             left = float(self.freqs[0])
             right = float(self.freqs[-1])
-            knots_hz = [left, right]
-            norm = (np.array(knots_hz) - self.fmin) / (self.fmax - self.fmin)
+            knots_hz_empty = [left, right]
+            norm = (np.array(knots_hz_empty) - self.fmin) / (
+                self.fmax - self.fmin
+            )
             self.knots_locations = np.sort(norm)
             return self.knots_locations
 
@@ -248,6 +254,7 @@ class LvkKnotAllocator:
 
                 width_bins = e - s + 1
                 if width_bins > 1:
+                    assert self.log_power_ratio is not None
                     local_lpr = self.log_power_ratio[s : e + 1]
                     local_peak = self.smoothed_peaks[s : e + 1]
                     region_freqs = self.freqs[s : e + 1]
@@ -309,15 +316,16 @@ class LvkKnotAllocator:
         # Add boundary knots if not already included
         knots_hz.append(snap_to_grid(float(self.fmin)))
         knots_hz.append(snap_to_grid(float(self.fmax)))
-        knots_hz = np.array(knots_hz, dtype=float)
+        knots_hz_arr = np.array(knots_hz, dtype=float)
         # Remove knots outside the grid and duplicates
-        knots_hz = np.unique(
-            knots_hz[
-                (knots_hz >= self.freqs[0]) & (knots_hz <= self.freqs[-1])
+        knots_hz_arr = np.unique(
+            knots_hz_arr[
+                (knots_hz_arr >= self.freqs[0])
+                & (knots_hz_arr <= self.freqs[-1])
             ]
         )
-        norm = (knots_hz - self.fmin) / (self.fmax - self.fmin)
-        self.knots_locations = np.sort(norm)
+        norm_arr = (knots_hz_arr - self.fmin) / (self.fmax - self.fmin)
+        self.knots_locations = np.sort(norm_arr)
         return self.knots_locations
 
     # --- plotting ---
@@ -432,6 +440,12 @@ class LvkKnotAllocator:
         ax1.set_xlim(self.fmin, self.fmax)
         ax1.set_xscale(xscale)
 
+        if (
+            self.running_median is None
+            or self.threshold is None
+            or self.is_line_bin is None
+        ):
+            raise RuntimeError("Line-identification state is not initialized.")
         power_ratio = self.psd / (self.running_median + np.finfo(float).eps)
         log_power_ratio = np.log(power_ratio)
         log_threshold = np.log(self.threshold)

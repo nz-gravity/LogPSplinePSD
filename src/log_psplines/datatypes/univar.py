@@ -22,7 +22,9 @@ class Timeseries:
         return float(1 / (self.t[1] - self.t[0]))
 
     def to_periodogram(
-        self, fmin: float = None, fmax: float = None
+        self,
+        fmin: Optional[float] = None,
+        fmax: Optional[float] = None,
     ) -> "Periodogram":
         """Compute the one-sided periodogram of the timeseries.
 

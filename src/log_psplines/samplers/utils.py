@@ -1,6 +1,6 @@
 """Shared utilities for sampler implementations."""
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 import jax
 import jax.numpy as jnp
@@ -9,8 +9,11 @@ import numpyro
 import numpyro.distributions as dist
 from numpyro.infer.util import log_density
 
+from .._jaxtypes import Float
+from .._typecheck import runtime_typecheck
 
-def build_log_density_fn(model, model_kwargs: Dict[str, Any]):
+
+def build_log_density_fn(model, model_kwargs: dict[str, Any]):
     """Return a JIT-compiled callable that evaluates the NumPyro log posterior.
 
     Parameters
@@ -28,16 +31,17 @@ def build_log_density_fn(model, model_kwargs: Dict[str, Any]):
 
     model_kwargs = jax.tree_util.tree_map(jnp.asarray, model_kwargs)
 
-    def _logpost(params: Dict[str, jnp.ndarray]) -> jnp.ndarray:
+    def _logpost(params: dict[str, jnp.ndarray]) -> jnp.ndarray:
         log_prob, _ = log_density(model, (), model_kwargs, params)
         return log_prob
 
     return jax.jit(_logpost)
 
 
+@runtime_typecheck
 def evaluate_log_density_batch(
-    logpost_fn, params_batch: Dict[str, jnp.ndarray]
-):
+    logpost_fn, params_batch: dict[str, jax.Array]
+) -> np.ndarray:
     """Evaluate a batched set of parameters with a compiled log posterior."""
     vmapped = jax.vmap(logpost_fn)
     return np.asarray(jax.device_get(vmapped(params_batch)), dtype=np.float64)
@@ -47,13 +51,13 @@ def sample_pspline_block(
     delta_name: str,
     phi_name: str,
     weights_name: str,
-    penalty_matrix: jnp.ndarray,
+    penalty_matrix: Float[jax.Array, "k k"],
     alpha_phi: float,
     beta_phi: float,
     alpha_delta: float,
     beta_delta: float,
     factor_name: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Draw hierarchical Gamma-Normal P-spline weights and record log priors."""
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
     delta = numpyro.sample(delta_name, delta_dist)
@@ -102,6 +106,7 @@ def sample_pspline_block(
     }
 
 
+@runtime_typecheck
 def pspline_hyperparameter_initials(
     alpha_phi: float,
     beta_phi: float,
@@ -109,7 +114,7 @@ def pspline_hyperparameter_initials(
     beta_delta: float,
     *,
     divide_phi_by_delta: bool = False,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Return default initial values for delta and phi hyperparameters."""
 
     delta_init = jnp.asarray(alpha_delta / beta_delta)

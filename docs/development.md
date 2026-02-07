@@ -28,8 +28,11 @@ This page contains notes for developers contributing to LogPSplinePSD.
 To build the documentation locally:
 
 ```bash
+source .venv/bin/activate
 cd docs
-jupyter-book build .
+# The docs in this repo are RST/Sphinx-based and require Jupyter Book 1.x.
+# Ensure you have installed the dev extras (or at least `jupyter-book<2.0`).
+../.venv/bin/jupyter-book build .
 ```
 
 The built HTML documentation will be in `docs/_build/html/`.

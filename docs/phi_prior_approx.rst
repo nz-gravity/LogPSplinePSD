@@ -91,7 +91,7 @@ Where to look in the code
    Source: `src/log_psplines/samplers/utils.py#sample_pspline_block <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/utils.py#L46-L103>`_
 - Usage:
 
-  - :mod:`log_psplines.samplers.multivar.multivar_blocked_nuts`
+  - :mod:`log_psplines.samplers.univar.nuts`
   - :mod:`log_psplines.samplers.multivar.multivar_blocked_nuts`
 
 If you want the docs to reflect the implementation, you can interpret the

@@ -1,2 +1,2 @@
 build:
-    jupyter-book build .
+	jupyter-book build .

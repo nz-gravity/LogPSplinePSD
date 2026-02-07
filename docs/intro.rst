@@ -40,33 +40,37 @@ Methodology
 The approach follows the P-spline framework for spectral density estimation described by Maturana-Russel & Meyer (2021) [`MaturanaRussel2021`_].
 
 1. **Basis construction**
-   Define order-r B-spline basis functions \\(B_k(\\omega)\\), \\(k=1,\\dots,K+r\\), on a grid of interior knots in the log-frequency domain.
+   Define order-:math:`r` B-spline basis functions :math:`B_k(\omega)`, :math:`k=1,\dots,K+r`,
+   on a grid of interior knots in the log-frequency domain.
 
 2. **Penalized prior**
-   Apply a discrete \\(D\\)th-order difference penalty to the spline coefficients \\(\\{\\beta_k\\}\\), which induces smoothness in the estimated log-PSD.
+   Apply a discrete :math:`D`th-order difference penalty to the spline coefficients
+   :math:`\{\beta_k\}`, which induces smoothness in the estimated log-PSD.
 
 3. **Knot placement (optional)**
    For spectra with sharp features, knot locations can be set based on quantiles of the raw periodogram values to allocate flexibility where needed.
 
 4. **Model and likelihood**
-The log-PSD is modeled as:
+   The log-PSD is modeled as:
 
   .. math::
 
-     \log f(\lambda_l) = \sum_k \beta_k \, B_k(\log \lambda_l)
+     \log f(\lambda_\ell) = \sum_k \beta_k \, B_k(\log \lambda_\ell)
 
 
-Whittle’s approximation for the periodogram \\(I_n(\\lambda_l)\\) yields the log-likelihood:
+   Whittle’s approximation for the periodogram :math:`I_n(\lambda_\ell)` yields the log-likelihood:
 
 .. math::
 
-     \log L(\beta) \propto -\sum_{l=1}^{N_b} \left[ \log f(\lambda_l) + \frac{I_n(\lambda_l)}{f(\lambda_l)} \right]
+     \log L(\beta) \propto -\sum_{\ell=1}^{N_\ell} \left[ \log f(\lambda_\ell) + \frac{I_n(\lambda_\ell)}{f(\lambda_\ell)} \right]
 
 
 
 5. **Inference**
-We use NumPyro’s NUTS sampler to jointly sample the spline coefficients.
-When ``init_from_vi`` is enabled (default), the stochastic VI warm-start runs before NUTS and immediately saves convergence plots and PSD previews to ``<outdir>/diagnostics`` so you can inspect them before launching the expensive sampler.
+   We use NumPyro’s NUTS sampler to jointly sample the spline coefficients.
+   When ``init_from_vi`` is enabled (default), the stochastic VI warm-start runs before NUTS and
+   saves convergence plots and PSD previews to ``<outdir>/diagnostics`` so you can inspect them
+   before launching the expensive sampler.
 
 
 

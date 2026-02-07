@@ -151,19 +151,19 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
     # )
     # fig.savefig(os.path.join(outdir, "coarse_vs_original.png"), dpi=150)
 
-    # 2) Frequency weights used in the likelihood scaling
-    # fig_w, ax_w = plot_coarse_grain_weights(spec=spec, weights=weights)
+    # 2) Coarse-bin Nh used in the likelihood scaling
+    # fig_w, ax_w = plot_coarse_grain_weights(spec=spec, Nh=spec.Nh)
     # fig_w.savefig(os.path.join(outdir, "coarse_weights.png"), dpi=150)
 
     # 3) Build a P-spline on the coarse grid and plot with knots
-    power_coarse, weights_like = apply_coarse_graining_univar(
+    power_coarse, Nh = apply_coarse_graining_univar(
         pdgrm_full.power[spec.selection_mask], spec, freqs[spec.selection_mask]
     )
     pdgrm_coarse = Periodogram(
         freqs=spec.f_coarse,
         power=power_coarse,
         scaling_factor=pdgrm_full.scaling_factor,
-        weights=weights_like,
+        Nh=Nh,
     )
     n_knots = 10 if test_mode != "fast" else 6
     model = LogPSplines.from_periodogram(

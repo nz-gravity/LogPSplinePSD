@@ -278,7 +278,7 @@ def _coarse_grain_processed_data(
         selection_mask = spec.selection_mask
         power_selected = np.asarray(processed_data.power[selection_mask])
         freqs_selected = processed_data.freqs[selection_mask]
-        power_coarse, weights = apply_coarse_graining_univar(
+        power_coarse, _ = apply_coarse_graining_univar(
             power_selected, spec, freqs_selected
         )
 
@@ -286,7 +286,7 @@ def _coarse_grain_processed_data(
             spec.f_coarse,
             power_coarse,
             scaling_factor=processed_data.scaling_factor,
-            weights=weights,
+            Nh=int(spec.Nh),
         )
 
         logger.info(f"Coarse-grained periodogram: {spec}")
@@ -692,8 +692,8 @@ def _normalize_run_config(
         )
     if "freq_weights" in kwargs:
         raise ValueError(
-            "freq_weights has been removed. Use periodogram.weights or "
-            "coarse-grain bin counts (Nh) instead."
+            "freq_weights has been removed. Use scalar Nh via "
+            "periodogram.Nh/coarse-grain configuration instead."
         )
 
     model_cfg = ModelConfig(

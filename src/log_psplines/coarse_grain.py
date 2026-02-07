@@ -22,6 +22,12 @@ __all__ = [
 ]
 
 
+def _as_int(name: str, value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise TypeError(f"{name} must be an integer")
+    return int(value)
+
+
 @dataclass(slots=True)
 class CoarseGrainConfig:
     """Configuration for frequency-domain coarse graining with equal-sized bins.
@@ -45,11 +51,11 @@ class CoarseGrainConfig:
         if (self.Nc is None) == (self.Nh is None):
             raise ValueError("Exactly one of Nc or Nh must be set.")
         if self.Nc is not None:
-            self.Nc = int(self.Nc)
+            self.Nc = _as_int("Nc", self.Nc)
             if self.Nc <= 0:
                 raise ValueError("Nc must be positive when provided.")
         if self.Nh is not None:
-            self.Nh = int(self.Nh)
+            self.Nh = _as_int("Nh", self.Nh)
             if self.Nh <= 0:
                 raise ValueError("Nh must be positive when provided.")
             if self.Nh % 2 == 0:
@@ -141,7 +147,7 @@ def _resolve_equal_bin_params(
         raise ValueError("Exactly one of Nc or Nh must be provided.")
 
     if Nh is not None:
-        Nh = int(Nh)
+        Nh = _as_int("Nh", Nh)
         if Nh <= 0 or (Nh % 2) == 0:
             raise ValueError("Nh must be positive and odd.")
         if Nl % Nh != 0:
@@ -153,7 +159,7 @@ def _resolve_equal_bin_params(
         return int(Nc), int(Nh)
 
     # Nc provided
-    Nc = int(Nc)
+    Nc = _as_int("Nc", Nc)
     if Nc <= 0 or Nl % Nc != 0:
         raise ValueError(f"Nc={Nc} must be a positive divisor of Nl={Nl}.")
     Nh = Nl // Nc
@@ -221,7 +227,7 @@ def apply_coarse_graining_univar(
     power: np.ndarray,
     spec: CoarseGrainSpec,
     freqs: Optional[np.ndarray] = None,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, int]:
     """Apply coarse graining to a univariate array defined on the retained grid.
 
     Parameters
@@ -237,8 +243,8 @@ def apply_coarse_graining_univar(
     -------
     power_coarse : ndarray, shape (Nc,)
         Coarse-binned sums.
-    weights : ndarray, shape (Nc,)
-        Per-bin weights (all equal to Nh for equal-sized bins).
+    Nh : int
+        Coarse-bin membership (constant for equal-sized bins).
     """
     power = np.asarray(power)
     if power.ndim != 1:
@@ -256,13 +262,12 @@ def apply_coarse_graining_univar(
     out = _sum_bins_equal(power, Nh=int(spec.Nh)).astype(
         np.float64, copy=False
     )
-    weights = np.full((int(spec.Nc),), float(spec.Nh), dtype=np.float64)
-    return out, weights
+    return out, int(spec.Nh)
 
 
 def apply_coarse_grain_multivar_fft(
     fft: MultivarFFT, spec: CoarseGrainSpec
-) -> Tuple[MultivarFFT, float]:
+) -> Tuple[MultivarFFT, int]:
     """Coarse-grain a MultivarFFT using equal-sized bins."""
     selection = np.asarray(spec.selection_mask, dtype=bool)
     if selection.ndim != 1:
@@ -312,7 +317,7 @@ def apply_coarse_grain_multivar_fft(
         Nb=int(fft.Nb),
         duration=float(getattr(fft, "duration", 1.0) or 1.0),
         scaling_factor=float(fft.scaling_factor or 1.0),
-        weights=float(Nh),
+        Nh=Nh,
     )
 
     f_coarse = np.asarray(spec.f_coarse, dtype=np.float64)
@@ -332,7 +337,7 @@ def apply_coarse_grain_multivar_fft(
         raw_psd=psd_coarse.astype(np.complex128),
         raw_freq=f_coarse,
         channel_stds=fft.channel_stds,
-        Nh=float(Nh),
+        Nh=Nh,
     )
 
-    return fft_coarse, float(Nh)
+    return fft_coarse, Nh

@@ -155,9 +155,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         f_min=coarse_cfg.f_min,
         f_max=coarse_cfg.f_max,
     )
-    fft_manual_coarse, _ = apply_coarse_grain_multivar_fft(
-        fft_full, spec_manual
-    )
+    fft_manual_coarse = apply_coarse_grain_multivar_fft(fft_full, spec_manual)
     periodogram_obs = idata_coarse.observed_data["periodogram"].values
     manual_psd_physical = to_physical(fft_manual_coarse.raw_psd)
 

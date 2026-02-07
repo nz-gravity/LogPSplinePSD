@@ -12,8 +12,8 @@ from xarray import DataArray, Dataset
 
 from log_psplines.datatypes import MultivarFFT, Periodogram
 
+from ..datatypes.multivar_utils import wishart_u_to_psd
 from ..logger import logger
-from ..spectrum_utils import wishart_u_to_psd
 
 warnings.filterwarnings("ignore", module="arviz")
 

@@ -50,7 +50,10 @@ def test_multivar_rescale_matches_empirical():
     standardized = timeseries.standardise_for_psd()
     assert standardized.scaling_factor > 5.0
     fft_data = standardized.to_wishart_stats(Nb=Nb)
-    processed_data, _, _ = _coarse_grain_processed_data(
+    (
+        processed_data,
+        _,
+    ) = _coarse_grain_processed_data(
         fft_data, coarse_cfg, scaled_true_psd=None
     )
     assert processed_data.raw_psd is not None

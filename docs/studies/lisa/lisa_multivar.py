@@ -15,11 +15,11 @@ from log_psplines.coarse_grain import (
 )
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.datatypes.multivar import EmpiricalPSD
+from log_psplines.datatypes.multivar_utils import interp_matrix
 from log_psplines.diagnostics import psd_compare
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting.psd_matrix import plot_psd_matrix
-from log_psplines.spectrum_utils import interp_matrix, resolve_psd_plot_units
 
 logger.info(f"JAX devices: {jax.devices()}")
 

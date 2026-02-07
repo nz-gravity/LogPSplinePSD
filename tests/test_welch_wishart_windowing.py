@@ -61,10 +61,10 @@ def _coarse_log_rms(
     spec,
 ) -> float:
     selection = np.asarray(spec.selection_mask, dtype=bool)
-    psd_coarse, _ = apply_coarse_graining_univar(
+    psd_coarse = apply_coarse_graining_univar(
         psd_fine[selection], spec, freq_fine[selection]
     )
-    wishart_coarse, _ = apply_coarse_grain_multivar_fft(wishart_fft, spec)
+    wishart_coarse = apply_coarse_grain_multivar_fft(wishart_fft, spec)
     psd_wishart_coarse = np.real(wishart_coarse.raw_psd[:, 0, 0])
     return _log_rms_difference(psd_coarse, psd_wishart_coarse)
 
@@ -73,7 +73,7 @@ def _coarse_apply(
     psd_fine: np.ndarray, freq_fine: np.ndarray, spec
 ) -> tuple[np.ndarray, np.ndarray]:
     selection = np.asarray(spec.selection_mask, dtype=bool)
-    psd_coarse, _ = apply_coarse_graining_univar(
+    psd_coarse = apply_coarse_graining_univar(
         psd_fine[selection], spec, freq_fine[selection]
     )
     return np.asarray(spec.f_coarse, dtype=float), psd_coarse
@@ -82,7 +82,7 @@ def _coarse_apply(
 def _coarse_psd_wishart(
     wishart_fft: MultivarFFT, spec
 ) -> tuple[np.ndarray, np.ndarray]:
-    wishart_coarse, _ = apply_coarse_grain_multivar_fft(wishart_fft, spec)
+    wishart_coarse = apply_coarse_grain_multivar_fft(wishart_fft, spec)
     return wishart_coarse.freq, np.real(wishart_coarse.raw_psd[:, 0, 0])
 
 

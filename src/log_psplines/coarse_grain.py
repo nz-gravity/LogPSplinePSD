@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isqrt
 from typing import Optional, Tuple
 
 import numpy as np
 
 from .datatypes.multivar import MultivarFFT
-from .logger import logger
-from .spectrum_utils import (
+from .datatypes.multivar_utils import (
     sum_wishart_outer_products,
     u_to_wishart_matrix,
     wishart_matrix_to_psd,
 )
+from .logger import logger
 
 __all__ = [
     "CoarseGrainConfig",
@@ -28,17 +29,28 @@ def _as_int(name: str, value: int) -> int:
     return int(value)
 
 
+def _closest_divisor(n: int, target: int) -> int:
+    """Return the divisor of n closest to target (ties resolved downward)."""
+    divisors: list[int] = []
+    for k in range(1, isqrt(n) + 1):
+        if n % k == 0:
+            divisors.append(k)
+            mate = n // k
+            if mate != k:
+                divisors.append(mate)
+    return min(divisors, key=lambda d: (abs(d - target), d))
+
+
 @dataclass(slots=True)
 class CoarseGrainConfig:
     """Configuration for frequency-domain coarse graining with equal-sized bins.
 
     Exactly one of (Nc, Nh) must be provided:
       - Nc: number of coarse bins
-      - Nh: number of fine-grid frequencies per coarse bin (must be odd)
+      - Nh: number of fine-grid frequencies per coarse bin
 
     The retained frequency count Nl must be divisible by the chosen parameter so
-    that bins are exactly equal-sized across the analysis band. In Nc mode this
-    implies Nh = Nl // Nc must be odd.
+    that bins are exactly equal-sized across the analysis band.
     """
 
     enabled: bool = False
@@ -58,10 +70,6 @@ class CoarseGrainConfig:
             self.Nh = _as_int("Nh", self.Nh)
             if self.Nh <= 0:
                 raise ValueError("Nh must be positive when provided.")
-            if self.Nh % 2 == 0:
-                raise ValueError(
-                    "Nh must be odd to define a midpoint frequency."
-                )
 
     def as_dict(self) -> dict:
         return {
@@ -140,7 +148,7 @@ def _resolve_equal_bin_params(
 ) -> tuple[int, int]:
     """Resolve (Nc, Nh) for equal-sized bins.
 
-    If Nh is provided explicitly, it must be odd.
+    If Nh is provided explicitly, it must be positive.
     If Nc is provided, Nh = Nl // Nc may be even.
     """
     if (Nc is None) == (Nh is None):
@@ -148,12 +156,14 @@ def _resolve_equal_bin_params(
 
     if Nh is not None:
         Nh = _as_int("Nh", Nh)
-        if Nh <= 0 or (Nh % 2) == 0:
-            raise ValueError("Nh must be positive and odd.")
+        if Nh <= 0:
+            raise ValueError("Nh must be positive.")
         if Nl % Nh != 0:
-            suggested_Nh = max(1, (Nl // (Nl // Nh)))
+            suggested_Nh = _closest_divisor(Nl, Nh)
+            suggested_Nc = Nl // suggested_Nh
             raise ValueError(
-                f"Nh={Nh} must divide Nl={Nl}. Suggested Nh={suggested_Nh}."
+                f"Nh={Nh} must divide Nl={Nl}. "
+                f"Closest valid Nh={suggested_Nh} (Nc={suggested_Nc})."
             )
         Nc = Nl // Nh
         return int(Nc), int(Nh)
@@ -190,11 +200,12 @@ def compute_binning_structure(
 
     Provide exactly one of:
       - Nc : number of coarse bins
-      - Nh : number of fine-grid frequencies per bin (odd)
+      - Nh : number of fine-grid frequencies per bin
 
     The retained frequency count Nl must be divisible by the chosen parameter so
     that bins are exactly equal-sized across the analysis band. Representative
     frequencies are midpoint Fourier frequencies (central indices), not averages.
+    For even Nh, the lower-middle Fourier frequency is used.
     """
     selection_mask, freqs_sel = _select_band(freqs, f_min, f_max)
     Nl = int(freqs_sel.size)
@@ -227,7 +238,7 @@ def apply_coarse_graining_univar(
     power: np.ndarray,
     spec: CoarseGrainSpec,
     freqs: Optional[np.ndarray] = None,
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     """Apply coarse graining to a univariate array defined on the retained grid.
 
     Parameters
@@ -243,8 +254,6 @@ def apply_coarse_graining_univar(
     -------
     power_coarse : ndarray, shape (Nc,)
         Coarse-binned sums.
-    Nh : int
-        Coarse-bin membership (constant for equal-sized bins).
     """
     power = np.asarray(power)
     if power.ndim != 1:
@@ -262,12 +271,12 @@ def apply_coarse_graining_univar(
     out = _sum_bins_equal(power, Nh=int(spec.Nh)).astype(
         np.float64, copy=False
     )
-    return out, int(spec.Nh)
+    return out
 
 
 def apply_coarse_grain_multivar_fft(
     fft: MultivarFFT, spec: CoarseGrainSpec
-) -> Tuple[MultivarFFT, int]:
+) -> MultivarFFT:
     """Coarse-grain a MultivarFFT using equal-sized bins."""
     selection = np.asarray(spec.selection_mask, dtype=bool)
     if selection.ndim != 1:
@@ -340,4 +349,4 @@ def apply_coarse_grain_multivar_fft(
         Nh=Nh,
     )
 
-    return fft_coarse, Nh
+    return fft_coarse

@@ -65,6 +65,35 @@ def interp_matrix(
     )
 
 
+def _interp_complex_matrix(
+    freq_src: np.ndarray, freq_tgt: np.ndarray, matrix: np.ndarray
+) -> np.ndarray:
+    """Linearly interpolate a complex-valued matrix along the frequency axis."""
+    freq_src = np.asarray(freq_src, dtype=float)
+    freq_tgt = np.asarray(freq_tgt, dtype=float)
+    flat = matrix.reshape(matrix.shape[0], -1)
+
+    real_interp = np.vstack(
+        [
+            np.interp(freq_tgt, freq_src, flat[:, idx].real)
+            for idx in range(flat.shape[1])
+        ]
+    ).T
+
+    if np.iscomplexobj(matrix):
+        imag_interp = np.vstack(
+            [
+                np.interp(freq_tgt, freq_src, flat[:, idx].imag)
+                for idx in range(flat.shape[1])
+            ]
+        ).T
+        res = real_interp + 1j * imag_interp
+    else:
+        res = real_interp
+
+    return res.reshape((freq_tgt.size,) + matrix.shape[1:])
+
+
 def u_to_wishart_matrix(u: np.ndarray) -> np.ndarray:
     """Convert eigenvector-weighted periodogram components to Wishart matrices."""
 
@@ -131,10 +160,26 @@ def wishart_u_to_psd(
     )
 
 
+def _get_coherence(psd: np.ndarray) -> np.ndarray:
+    N, p, _ = psd.shape
+    coh = np.zeros((N, p, p))
+    for i in range(p):
+        coh[:, i, i] = 1.0
+        for j in range(i + 1, p):
+            denom = np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
+            with np.errstate(divide="ignore", invalid="ignore"):
+                coh_ij = np.abs(psd[:, i, j]) ** 2 / denom
+            coh[:, i, j] = np.where(denom > 0, coh_ij, 0.0)
+            coh[:, j, i] = coh[:, i, j]
+    return coh
+
+
 __all__ = [
     "interp_matrix",
+    "_interp_complex_matrix",
     "sum_wishart_outer_products",
     "u_to_wishart_matrix",
     "wishart_matrix_to_psd",
     "wishart_u_to_psd",
+    "_get_coherence",
 ]

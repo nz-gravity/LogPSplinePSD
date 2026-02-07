@@ -278,7 +278,7 @@ def _coarse_grain_processed_data(
         selection_mask = spec.selection_mask
         power_selected = np.asarray(processed_data.power[selection_mask])
         freqs_selected = processed_data.freqs[selection_mask]
-        power_coarse, _ = apply_coarse_graining_univar(
+        power_coarse = apply_coarse_graining_univar(
             power_selected, spec, freqs_selected
         )
 
@@ -294,7 +294,7 @@ def _coarse_grain_processed_data(
         if scaled_true_psd is not None:
             try:
                 true_selected = np.asarray(scaled_true_psd)[selection_mask]
-                true_coarse, _ = apply_coarse_graining_univar(
+                true_coarse = apply_coarse_graining_univar(
                     true_selected, spec, freqs_selected
                 )
                 scaled_true_psd = true_coarse
@@ -313,9 +313,7 @@ def _coarse_grain_processed_data(
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,
         )
-        processed_data, _ = apply_coarse_grain_multivar_fft(
-            processed_data, spec
-        )
+        processed_data = apply_coarse_grain_multivar_fft(processed_data, spec)
         logger.info(f"Coarse-grained multivariate FFT: {spec}")
         return processed_data, scaled_true_psd
 

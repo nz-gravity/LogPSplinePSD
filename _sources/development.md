@@ -40,5 +40,30 @@ The built HTML documentation will be in `docs/_build/html/`.
 ## Running Tests
 
 ```bash
-pytest tests/
+.venv/bin/python -m pytest tests/
+```
+
+## Typechecking (Jaxtyping + Beartype)
+
+Install dev extras so `jaxtyping` and `beartype` are available:
+
+```bash
+.venv/bin/python -m pip install -e '.[dev,typecheck]'
+```
+
+Run static type checking across the package:
+
+```bash
+.venv/bin/python -m mypy --config-file pyproject.toml src/log_psplines
+```
+
+The mypy configuration in `pyproject.toml` includes scoped overrides for a
+small set of external libraries without stubs. The package source under
+`src/log_psplines` is checked end-to-end without per-module suppressions.
+
+Runtime checks are enabled by default when dependencies are installed. You can
+disable runtime enforcement with:
+
+```bash
+LOG_PSPLINES_RUNTIME_TYPECHECK=0 .venv/bin/python -m pytest tests/test_runtime_typecheck.py
 ```

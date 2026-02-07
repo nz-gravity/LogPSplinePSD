@@ -54,6 +54,7 @@ import numpy as np
 
 from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries
+from log_psplines.datatypes.multivar import _interp_complex_matrix
 from log_psplines.diagnostics._utils import (
     compute_ci_coverage_multivar,
     compute_matrix_riae,
@@ -142,46 +143,6 @@ def _iter_runs(
                                     "alpha_delta": float(alpha_delta),
                                     "init_mode": str(init_mode),
                                 }
-
-
-def _interp_complex_matrix(
-    freq_src: np.ndarray, freq_tgt: np.ndarray, matrix: np.ndarray
-) -> np.ndarray:
-    freq_src = np.asarray(freq_src, dtype=float)
-    freq_tgt = np.asarray(freq_tgt, dtype=float)
-    mat = np.asarray(matrix)
-    flat = mat.reshape(mat.shape[0], -1)
-
-    real_part = np.vstack(
-        [
-            np.interp(
-                freq_tgt,
-                freq_src,
-                flat[:, idx].real,
-                left=flat[0, idx].real,
-                right=flat[-1, idx].real,
-            )
-            for idx in range(flat.shape[1])
-        ]
-    ).T
-
-    if np.iscomplexobj(mat):
-        imag_part = np.vstack(
-            [
-                np.interp(
-                    freq_tgt,
-                    freq_src,
-                    flat[:, idx].imag,
-                    left=flat[0, idx].imag,
-                    right=flat[-1, idx].imag,
-                )
-                for idx in range(flat.shape[1])
-            ]
-        ).T
-        resampled = real_part + 1j * imag_part
-    else:
-        resampled = real_part
-    return resampled.reshape((freq_tgt.size,) + mat.shape[1:])
 
 
 def _eigen_ratio_summaries(

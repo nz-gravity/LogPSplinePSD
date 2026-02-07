@@ -75,8 +75,8 @@ class MultivarFFT:
     raw_psd: Optional[np.ndarray] = None
     raw_freq: Optional[np.ndarray] = None
     # Coarse-grain multiplicity Nh. For equal-sized bins this is constant
-    # across the retained frequency grid. Defaults to 1.0 (no coarse graining).
-    Nh: float = 1.0
+    # across the retained frequency grid. Defaults to 1 (no coarse graining).
+    Nh: int = 1
 
     def __post_init__(self) -> None:
         self.y_re = np.asarray(self.y_re, dtype=np.float64)
@@ -126,9 +126,21 @@ class MultivarFFT:
                     f"raw_freq must have length {self.N}, got {self.raw_freq.shape}"
                 )
 
-        self.Nh = float(self.Nh)
-        if not np.isfinite(self.Nh) or self.Nh <= 0.0:
-            raise ValueError("Nh must be a positive finite float")
+        if isinstance(self.Nb, bool) or not isinstance(
+            self.Nb, (int, np.integer)
+        ):
+            raise TypeError("Nb must be a positive integer")
+        self.Nb = int(self.Nb)
+        if self.Nb <= 0:
+            raise ValueError("Nb must be a positive integer")
+
+        if isinstance(self.Nh, bool) or not isinstance(
+            self.Nh, (int, np.integer)
+        ):
+            raise TypeError("Nh must be a positive integer")
+        self.Nh = int(self.Nh)
+        if self.Nh <= 0:
+            raise ValueError("Nh must be a positive integer")
 
         if self.channel_stds is not None:
             self.channel_stds = np.asarray(self.channel_stds, dtype=np.float64)
@@ -191,6 +203,9 @@ class MultivarFFT:
             Taper applied to each block before the FFT. Defaults to Hann.
             Set to ``None`` to recover the previous rectangular-window behavior.
         """
+        if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):
+            raise TypeError("Nb must be a positive integer.")
+        Nb = int(Nb)
         if Nb < 1:
             raise ValueError("Nb must be positive.")
 
@@ -460,6 +475,9 @@ class MultivariateTimeseries:
         window: Optional[str | tuple] = "hann",
     ) -> "MultivarFFT":
         n = self.y.shape[0]
+        if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):
+            raise TypeError("Nb must be a positive integer.")
+        Nb = int(Nb)
         if Nb <= 0:
             raise ValueError("Nb must be positive.")
         if n % Nb != 0:

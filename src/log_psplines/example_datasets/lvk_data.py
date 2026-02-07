@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import matplotlib.pyplot as plt
 import numpy as np
 from gwosc import datasets as gwosc_datasets
@@ -84,7 +86,9 @@ class LVKData:
             fmax=fmax,
         )
 
-    def plot_psd(self, fname: str = None) -> None:
+    def plot_psd(
+        self, fname: str | None = None
+    ) -> Tuple[plt.Figure, plt.Axes]:
         freq = FrequencySeries(self.psd, frequencies=self.freqs)
         fig, ax = plt.subplots()
         ax.loglog(freq, color="black")

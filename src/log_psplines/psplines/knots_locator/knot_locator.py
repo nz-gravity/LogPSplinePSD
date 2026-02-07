@@ -9,9 +9,9 @@ from .lvk_knot_allocator import LvkKnotAllocator
 def init_knots(
     n_knots: int,
     periodogram: Periodogram,
-    parametric_model: np.ndarray = None,
+    parametric_model: np.ndarray | None = None,
     method: str = "density",
-    knots: np.ndarray = None,
+    knots: np.ndarray | None = None,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -101,7 +101,7 @@ def init_knots(
 def _quantile_based_knots(
     n_knots: int,
     periodogram: Periodogram,
-    parametric_model: np.ndarray = None,
+    parametric_model: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     Implement Patricio's quantile-based knot placement method.

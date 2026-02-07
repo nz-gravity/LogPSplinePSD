@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,7 +12,7 @@ from .base import extract_plotting_data, setup_plot_style
 setup_plot_style()
 
 
-EMPIRICAL_KWGS = dict(
+EMPIRICAL_KWGS: dict[str, Any] = dict(
     color="0.4",
     lw=1.0,
     alpha=0.3,
@@ -20,7 +20,9 @@ EMPIRICAL_KWGS = dict(
     label="Empirical",
     zorder=-5,
 )
-TRUE_KWGS = dict(color="k", lw=1.2, label="Analytical", zorder=-2)
+TRUE_KWGS: dict[str, Any] = dict(
+    color="k", lw=1.2, label="Analytical", zorder=-2
+)
 
 
 def _quantiles_to_ci_dict(
@@ -38,14 +40,16 @@ def _quantiles_to_ci_dict(
         idx = int(np.argmin(np.abs(percentiles - target)))
         return arr[idx]
 
-    ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
+    ci_dict: dict[
+        str, dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]]
+    ] = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
     p = real_q.shape[2]
     for i in range(p):
         for j in range(p):
-            q05_r = _grab(real_q[:, :, i, i], 5.0) if i == j else None
-            q95_r = _grab(real_q[:, :, i, i], 95.0) if i == j else None
             if i == j:
+                q05_r = _grab(real_q[:, :, i, i], 5.0)
                 q50_r = _grab(real_q[:, :, i, i], 50.0)
+                q95_r = _grab(real_q[:, :, i, i], 95.0)
                 ci_dict["psd"][(i, i)] = (q05_r, q50_r, q95_r)
                 continue
 
@@ -144,7 +148,9 @@ def _pack_ci_dict(
     show_csd_magnitude: bool = False,
 ):
     """Compute 5/50/95% bands for diag PSDs and requested cross terms."""
-    ci_dict = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
+    ci_dict: dict[
+        str, dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]]
+    ] = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
     _, _, p, _ = psd_samples.shape
     for i in range(p):
         for j in range(p):
@@ -454,7 +460,8 @@ def _prepare_plot_inputs(
                 spec.psd_scale,
                 base_freq=freq,
             )
-            empirical_psd = _scale_empirical_psd(empirical_psd, scale_emp)
+            if scale_emp is not None:
+                empirical_psd = _scale_empirical_psd(empirical_psd, scale_emp)
         if extra_empirical_psd:
             scaled_extra = []
             for extra in extra_empirical_psd:
@@ -463,7 +470,12 @@ def _prepare_plot_inputs(
                     spec.psd_scale,
                     base_freq=freq,
                 )
-                scaled_extra.append(_scale_empirical_psd(extra, scale_extra))
+                if scale_extra is not None:
+                    scaled_extra.append(
+                        _scale_empirical_psd(extra, scale_extra)
+                    )
+                else:
+                    scaled_extra.append(extra)
             extra_empirical_psd = scaled_extra
 
     return (
@@ -509,11 +521,11 @@ def _plot_empirical_overlays(
         ax.plot(
             empirical_psd.freq,
             series_getter(empirical_psd),
-            **EMPIRICAL_KWGS,
+            **cast(dict[str, Any], EMPIRICAL_KWGS),
         )
 
     for idx, extra_emp in enumerate(extra_empirical_psd):
-        kw = dict(EMPIRICAL_KWGS)
+        kw: dict[str, Any] = dict(EMPIRICAL_KWGS)
         if idx < len(extra_empirical_styles):
             kw.update(extra_empirical_styles[idx] or {})
         if idx < len(extra_empirical_labels):
@@ -932,19 +944,23 @@ def plot_psd_matrix(
 
     fig_provided = spec.fig is not None and spec.ax is not None
     if fig_provided:
-        axes = np.asarray(spec.ax)
-        if axes.shape != (p, p):
+        provided_axes = spec.ax
+        axes_arr = np.asarray(provided_axes)
+        if axes_arr.shape != (p, p):
             raise ValueError(
-                f"Provided axes have shape {axes.shape}, expected ({p}, {p})."
+                f"Provided axes have shape {axes_arr.shape}, expected ({p}, {p})."
             )
-        fig = spec.fig
+        fig_obj = spec.fig
+        assert fig_obj is not None
         created_fig = False
     else:
-        fig, axes = plt.subplots(p, p, figsize=(3.9 * p, 3.9 * p))
+        fig_obj, axes_obj = plt.subplots(p, p, figsize=(3.9 * p, 3.9 * p))
         if p == 1:
-            axes = np.array([[axes]])
+            axes_arr = np.array([[axes_obj]])
+        else:
+            axes_arr = np.asarray(axes_obj)
         created_fig = True
-    axes = np.asarray(axes)
+    axes = np.asarray(axes_arr)
 
     vi_label_added = False
     for i in range(p):
@@ -1056,11 +1072,11 @@ def plot_psd_matrix(
                 axis.set_xlabel("Frequency [Hz]", fontsize=11)
 
     _finalize_psd_matrix_figure(
-        fig=fig,
+        fig=fig_obj,
         axes=axes,
         p=p,
         freq_range=spec.freq_range,
         created_fig=created_fig,
         spec=spec,
     )
-    return fig, axes
+    return fig_obj, axes

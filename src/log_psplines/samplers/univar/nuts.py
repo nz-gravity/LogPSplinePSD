@@ -23,6 +23,7 @@ from ..utils import (
 from ..vi_init import VIInitialisationMixin
 from ..vi_init.adapters import compute_vi_artifacts_univar
 from ..vi_init.defaults import default_init_values_univar
+from ..vi_init.mixin import VIInitialisationArtifacts
 from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
 
 
@@ -78,7 +79,9 @@ def bayesian_model(
 class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
     """NUTS sampler for univariate PSD estimation."""
 
-    def __init__(self, periodogram, spline_model, config: NUTSConfig = None):
+    def __init__(
+        self, periodogram, spline_model, config: NUTSConfig | None = None
+    ):
         if config is None:
             config = NUTSConfig()
         super().__init__(periodogram, spline_model, config)
@@ -243,10 +246,10 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             )
 
         params_batch = self._prepare_logpost_params(sample_dict)
-        sample_stats = {}
+        sample_stats: Dict[str, jnp.ndarray] = {}
         try:
-            sample_stats["lp"] = evaluate_log_density_batch(
-                self._logpost_fn, params_batch
+            sample_stats["lp"] = jnp.asarray(
+                evaluate_log_density_batch(self._logpost_fn, params_batch)
             )
             lp_arr = jnp.asarray(sample_stats.get("lp"))
             n_chains = int(self.config.num_chains)

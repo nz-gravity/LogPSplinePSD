@@ -8,6 +8,8 @@ import arviz as az
 import jax.numpy as jnp
 import numpy as np
 
+from ._jaxtypes import Complex, Float
+from ._typecheck import runtime_typecheck
 from .coarse_grain import (
     CoarseGrainConfig,
     apply_coarse_grain_multivar_fft,
@@ -34,6 +36,13 @@ SamplerName = Literal[
     "nuts",
     "multivar_blocked_nuts",
 ]
+TruePSDInput = Union[
+    None,
+    np.ndarray,
+    Tuple[np.ndarray, np.ndarray],
+    list,
+    dict,
+]
 
 
 @dataclass(frozen=True)
@@ -43,7 +52,7 @@ class ModelConfig:
     diffMatrixOrder: int = 2
     knot_kwargs: dict[str, Any] = field(default_factory=dict)
     parametric_model: Optional[jnp.ndarray] = None
-    true_psd: Optional[jnp.ndarray] = None
+    true_psd: Optional[np.ndarray] = None
     fmin: Optional[float] = None
     fmax: Optional[float] = None
 
@@ -127,13 +136,7 @@ class SamplerFactoryConfig:
 
 
 def _unpack_true_psd(
-    true_psd: Union[
-        None,
-        np.ndarray,
-        Tuple[np.ndarray, np.ndarray],
-        list,
-        dict,
-    ],
+    true_psd: TruePSDInput,
 ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     """Return (freq, psd) pair from accepted true_psd formats."""
     if true_psd is None:
@@ -156,11 +159,12 @@ def _unpack_true_psd(
     return None, np.asarray(true_psd)
 
 
+@runtime_typecheck
 def _interp_psd_array(
-    psd: np.ndarray,
-    freq_src: np.ndarray,
-    freq_tgt: np.ndarray,
-) -> np.ndarray:
+    psd: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],
+    freq_src: Float[np.ndarray, "f_src"],
+    freq_tgt: Float[np.ndarray, "f_tgt"],
+) -> Complex[np.ndarray, "f_tgt ..."] | Float[np.ndarray, "f_tgt ..."]:
     """Interpolate PSD arrays (real or complex) onto target frequencies."""
     if psd.shape[0] != freq_src.size:
         raise ValueError("psd and freq_src must have matching lengths.")
@@ -202,22 +206,18 @@ def _interp_psd_array(
 
 
 def _prepare_true_psd_for_freq(
-    true_psd: Union[
-        None,
-        np.ndarray,
-        Tuple[np.ndarray, np.ndarray],
-        list,
-        dict,
-    ],
-    freq_target: Optional[np.ndarray],
+    true_psd: TruePSDInput,
+    freq_target: Optional[Float[np.ndarray, "f_tgt"]],
 ) -> Optional[np.ndarray]:
     """Resample supplied true PSD onto the target frequency grid."""
-    if true_psd is None or freq_target is None:
-        return true_psd
+    if true_psd is None:
+        return None
 
     freq_src, psd_array = _unpack_true_psd(true_psd)
     if psd_array is None:
         return None
+    if freq_target is None:
+        return np.asarray(psd_array)
 
     psd_array = np.asarray(psd_array)
     freq_target = np.asarray(freq_target)
@@ -371,6 +371,8 @@ def _prepare_processed_data(
             config.model.fmin,
             config.model.fmax,
         )
+        if processed is None:
+            raise ValueError("Processed data unexpectedly None.")
         return processed, raw_multivar_ts, sampler
 
     if not isinstance(data, (Timeseries, MultivariateTimeseries)):
@@ -411,6 +413,8 @@ def _prepare_processed_data(
         config.model.fmin,
         config.model.fmax,
     )
+    if processed is None:
+        raise ValueError("Processed data unexpectedly None.")
     return processed, raw_multivar_ts, sampler
 
 
@@ -647,7 +651,7 @@ def _build_sampler_inputs(
     return SamplerFactoryConfig(
         sampler_type=sampler_type,
         run_config=config,
-        scaling_factor=float(scaling_factor),
+        scaling_factor=float(scaling_factor or 1.0),
         true_psd=scaled_true_psd,
         channel_stds=channel_stds,
         extra_empirical_psd=extra_empirical_psd,
@@ -793,13 +797,22 @@ def run_mcmc(
         data,
         run_config,
     )
-    scaled_true_psd = run_config.model.true_psd
+    scaled_true_psd: Optional[np.ndarray] = (
+        None
+        if run_config.model.true_psd is None
+        else np.asarray(run_config.model.true_psd)
+    )
 
-    processed_data, scaled_true_psd = _coarse_grain_processed_data(
+    processed_after, scaled_true_psd = _coarse_grain_processed_data(
         processed_data,
         _normalize_coarse_grain_config(run_config.coarse_grain_config),
         scaled_true_psd,
     )
+    if processed_after is None:
+        raise ValueError(
+            "Processed data unexpectedly None after coarse graining."
+        )
+    processed_data = processed_after
 
     (
         extra_empirical_psd,

@@ -214,15 +214,28 @@ def welch_spectral_matrix_xyz(
     L: int,
     delta_t: float,
     overlap: float = 0.5,
-) -> Tuple[np.ndarray, ...]:
+) -> Tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
     """Welch PSD/CSD estimator for the XYZ channels (Hann window + overlap)."""
     n = len(x)
     step = int(L * (1 - overlap))
     w = np.hanning(L)
     U = np.mean(w**2)
 
-    Sxx = Syy = Szz = 0.0
-    Sxy = Syz = Szx = 0.0
+    n_freq = L // 2 + 1
+    Sxx = np.zeros(n_freq, dtype=np.float64)
+    Syy = np.zeros(n_freq, dtype=np.float64)
+    Szz = np.zeros(n_freq, dtype=np.float64)
+    Sxy = np.zeros(n_freq, dtype=np.complex128)
+    Syz = np.zeros(n_freq, dtype=np.complex128)
+    Szx = np.zeros(n_freq, dtype=np.complex128)
     count = 0
 
     for start in range(0, n - L + 1, step):

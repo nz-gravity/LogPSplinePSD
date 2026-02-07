@@ -34,6 +34,9 @@ from log_psplines.coarse_grain import (  # noqa: E402
     compute_binning_structure,
 )
 from log_psplines.datatypes import MultivariateTimeseries  # noqa: E402
+from log_psplines.datatypes.multivar import (  # noqa: E402
+    _interp_complex_matrix,
+)
 
 C_LIGHT = 299_792_458.0  # m / s
 L_ARM = 2.5e9  # m
@@ -43,31 +46,6 @@ LASER_FREQ = 2.81e14  # Hz
 def _strain_to_freq_scale(freq: np.ndarray) -> np.ndarray:
     freq = np.asarray(freq, dtype=float)
     return (2.0 * np.pi * freq * LASER_FREQ * L_ARM / C_LIGHT) ** 2
-
-
-def _interp_complex_matrix(
-    freq_src: np.ndarray, matrix: np.ndarray, freq_tgt: np.ndarray
-) -> np.ndarray:
-    """Interpolate a complex matrix along frequency with duplicate-safe handling."""
-    freq_src = np.asarray(freq_src, dtype=float)
-    freq_tgt = np.asarray(freq_tgt, dtype=float)
-    matrix = np.asarray(matrix)
-
-    sort_idx = np.argsort(freq_src)
-    freq_sorted = freq_src[sort_idx]
-    matrix_sorted = matrix[sort_idx]
-    freq_unique, uniq_idx = np.unique(freq_sorted, return_index=True)
-    matrix_unique = matrix_sorted[uniq_idx]
-
-    if freq_unique.shape == freq_tgt.shape and np.allclose(
-        freq_unique, freq_tgt
-    ):
-        return np.asarray(matrix_unique)
-
-    flat = matrix_unique.reshape(matrix_unique.shape[0], -1)
-    real_interp = np.vstack(
-        [
-            np.interp(freq_tgt, freq_unique, flat[:, idx].real)
             for idx in range(flat.shape[1])
         ]
     ).T

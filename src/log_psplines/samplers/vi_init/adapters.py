@@ -116,7 +116,7 @@ def compute_vi_artifacts_univar(
             sampler.basis_matrix,
             sampler.penalty_matrix,
             sampler.log_parametric,
-            sampler.freq_weights,
+            sampler.Nh,
             sampler.config.alpha_phi,
             sampler.config.beta_phi,
             sampler.config.alpha_delta,
@@ -462,8 +462,7 @@ def compute_vi_artifacts_multivar(
             sampler.Nb,
             sampler.all_bases,
             sampler.all_penalties,
-            sampler.freq_weights,
-            sampler.freq_bin_counts,
+            sampler.Nh,
             sampler.config.alpha_phi,
             sampler.config.beta_phi,
             sampler.config.alpha_delta,
@@ -768,8 +767,7 @@ def prepare_block_vi(
                 sampler.config.beta_delta,
                 sampler.duration,
                 sampler.Nb,
-                sampler.freq_weights,
-                sampler.freq_bin_counts,
+                sampler.Nh,
             )
 
             vi_result, losses_arr = _run_single_block_vi(

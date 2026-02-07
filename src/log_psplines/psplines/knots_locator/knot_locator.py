@@ -131,14 +131,6 @@ def _quantile_based_knots(
 
     # Step 3: Absolute values and normalize to create PMF
     z = np.abs(y)
-    weights = getattr(periodogram, "weights", None)
-    if weights is None:
-        weights = np.ones_like(z)
-    else:
-        weights = np.asarray(weights, dtype=float)
-        if weights.shape != z.shape:
-            weights = np.ones_like(z)
-    z = z * weights
     total = np.sum(z)
     if total <= 0:
         z = np.ones_like(z) / z.size

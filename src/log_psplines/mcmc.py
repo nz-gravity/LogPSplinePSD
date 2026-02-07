@@ -120,7 +120,6 @@ class SamplerFactoryConfig:
     run_config: RunMCMCConfig
     scaling_factor: float
     true_psd: Optional[np.ndarray]
-    freq_weights: Optional[np.ndarray]
     channel_stds: Optional[np.ndarray]
     extra_empirical_psd: list[EmpiricalPSD] | None = None
     extra_empirical_labels: list[str] | None = None
@@ -262,13 +261,10 @@ def _coarse_grain_processed_data(
 ) -> Tuple[
     Optional[Union[Periodogram, MultivarFFT]],
     Optional[np.ndarray],
-    Optional[np.ndarray],
 ]:
     """Apply coarse graining to the already-processed data if configured."""
     if processed_data is None or not cg_config.enabled:
-        return processed_data, None, scaled_true_psd
-
-    freq_weights = None
+        return processed_data, scaled_true_psd
 
     if isinstance(processed_data, Periodogram):
         spec = compute_binning_structure(
@@ -282,7 +278,7 @@ def _coarse_grain_processed_data(
         selection_mask = spec.selection_mask
         power_selected = np.asarray(processed_data.power[selection_mask])
         freqs_selected = processed_data.freqs[selection_mask]
-        power_coarse, weights = apply_coarse_graining_univar(
+        power_coarse, _ = apply_coarse_graining_univar(
             power_selected, spec, freqs_selected
         )
 
@@ -290,9 +286,8 @@ def _coarse_grain_processed_data(
             spec.f_coarse,
             power_coarse,
             scaling_factor=processed_data.scaling_factor,
-            weights=weights,
+            Nh=int(spec.Nh),
         )
-        freq_weights = weights.astype(np.float32)
 
         logger.info(f"Coarse-grained periodogram: {spec}")
 
@@ -308,7 +303,7 @@ def _coarse_grain_processed_data(
                     "Could not coarse-grain provided true_psd; leaving unchanged."
                 )
 
-        return processed_data, freq_weights, scaled_true_psd
+        return processed_data, scaled_true_psd
 
     if isinstance(processed_data, MultivarFFT):
         spec = compute_binning_structure(
@@ -318,14 +313,13 @@ def _coarse_grain_processed_data(
             f_min=cg_config.f_min,
             f_max=cg_config.f_max,
         )
-        processed_data, weights = apply_coarse_grain_multivar_fft(
+        processed_data, _ = apply_coarse_grain_multivar_fft(
             processed_data, spec
         )
-        freq_weights = weights.astype(np.float32)
         logger.info(f"Coarse-grained multivariate FFT: {spec}")
-        return processed_data, freq_weights, scaled_true_psd
+        return processed_data, scaled_true_psd
 
-    return processed_data, freq_weights, scaled_true_psd
+    return processed_data, scaled_true_psd
 
 
 def _truncate_frequency_range(
@@ -638,7 +632,6 @@ def _build_sampler_inputs(
     config: RunMCMCConfig,
     sampler_type: SamplerName,
     scaled_true_psd: Optional[np.ndarray],
-    freq_weights: Optional[np.ndarray],
     extra_empirical_psd: list[EmpiricalPSD] | None,
     extra_empirical_labels: list[str] | None,
     extra_empirical_styles: list[dict] | None,
@@ -658,7 +651,6 @@ def _build_sampler_inputs(
         run_config=config,
         scaling_factor=float(scaling_factor),
         true_psd=scaled_true_psd,
-        freq_weights=freq_weights,
         channel_stds=channel_stds,
         extra_empirical_psd=extra_empirical_psd,
         extra_empirical_labels=extra_empirical_labels,
@@ -697,6 +689,11 @@ def _normalize_run_config(
         raise ValueError(
             "Metropolis-Hastings options are no longer supported. "
             "Use NUTS options like target_accept_prob/max_tree_depth instead."
+        )
+    if "freq_weights" in kwargs:
+        raise ValueError(
+            "freq_weights has been removed. Use scalar Nh via "
+            "periodogram.Nh/coarse-grain configuration instead."
         )
 
     model_cfg = ModelConfig(
@@ -800,12 +797,10 @@ def run_mcmc(
     )
     scaled_true_psd = run_config.model.true_psd
 
-    processed_data, freq_weights, scaled_true_psd = (
-        _coarse_grain_processed_data(
-            processed_data,
-            _normalize_coarse_grain_config(run_config.coarse_grain_config),
-            scaled_true_psd,
-        )
+    processed_data, scaled_true_psd = _coarse_grain_processed_data(
+        processed_data,
+        _normalize_coarse_grain_config(run_config.coarse_grain_config),
+        scaled_true_psd,
     )
 
     (
@@ -823,7 +818,6 @@ def run_mcmc(
         run_config,
         sampler_type,
         scaled_true_psd,
-        freq_weights,
         extra_empirical_psd,
         extra_empirical_labels,
         extra_empirical_styles,
@@ -863,7 +857,6 @@ def _build_common_sampler_kwargs(
         "scaling_factor": config.scaling_factor,
         "channel_stds": config.channel_stds,
         "true_psd": config.true_psd,
-        "freq_weights": config.freq_weights,
         "vi_psd_max_draws": run.vi.vi_psd_max_draws,
         "only_vi": run.vi.only_vi,
         "extra_empirical_psd": config.extra_empirical_psd,

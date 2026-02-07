@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Tuple
-
 import numpy as np
+
+
+def _as_positive_int(name: str, value: int) -> int:
+    """Validate positive integer inputs used in spectral scaling."""
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise TypeError(f"{name} must be a positive integer")
+    value_int = int(value)
+    if value_int < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return value_int
 
 
 def interp_matrix(
@@ -57,25 +65,6 @@ def interp_matrix(
     )
 
 
-def compute_effective_Nb(
-    Nb: int, weights: Optional[np.ndarray] = None
-) -> np.ndarray:
-    """Return per-frequency degrees of freedom for Wishart statistics."""
-
-    Nb_val = int(Nb)
-    if Nb_val < 1:
-        raise ValueError("Nb must be a positive integer")
-
-    if weights is None:
-        return np.asarray(Nb_val, dtype=np.float64)
-
-    weights_arr = np.asarray(weights, dtype=np.float64)
-    if np.any(weights_arr <= 0):
-        raise ValueError("weights must be positive")
-
-    return weights_arr * float(Nb_val)
-
-
 def u_to_wishart_matrix(u: np.ndarray) -> np.ndarray:
     """Convert eigenvector-weighted periodogram components to Wishart matrices."""
 
@@ -102,7 +91,7 @@ def wishart_matrix_to_psd(
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
-    weights: Optional[np.ndarray] = None,
+    Nh: int = 1,
 ) -> np.ndarray:
     """Convert Wishart matrices into one-sided PSD matrices."""
 
@@ -114,17 +103,10 @@ def wishart_matrix_to_psd(
     if duration_f <= 0.0:
         raise ValueError("duration must be positive")
 
-    eff_Nb = compute_effective_Nb(Nb, weights)
-    eff_Nb = np.asarray(eff_Nb, dtype=np.float64)
-    if eff_Nb.ndim == 0:
-        eff_Nb = np.broadcast_to(eff_Nb, (Y.shape[0],))
+    Nb_val = _as_positive_int("Nb", Nb)
+    Nh_val = _as_positive_int("Nh", Nh)
 
-    if eff_Nb.shape[0] != Y.shape[0]:
-        raise ValueError(
-            "Effective degrees of freedom must match the frequency dimension"
-        )
-
-    psd = Y / (eff_Nb[:, None, None] * duration_f)
+    psd = Y / (float(Nb_val * Nh_val) * duration_f)
     psd *= float(scaling_factor)
     return psd
 
@@ -135,7 +117,7 @@ def wishart_u_to_psd(
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
-    weights: Optional[np.ndarray] = None,
+    Nh: int = 1,
 ) -> np.ndarray:
     """Convenience wrapper combining :func:`u_to_wishart_matrix` and conversion."""
 
@@ -145,13 +127,12 @@ def wishart_u_to_psd(
         Nb,
         duration=duration,
         scaling_factor=scaling_factor,
-        weights=weights,
+        Nh=Nh,
     )
 
 
 __all__ = [
     "interp_matrix",
-    "compute_effective_Nb",
     "sum_wishart_outer_products",
     "u_to_wishart_matrix",
     "wishart_matrix_to_psd",

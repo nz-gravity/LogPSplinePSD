@@ -47,7 +47,8 @@ and eigenvalues that encode \(\bar \Y_h\).
 
 The returned :class:`log_psplines.datatypes.multivar.MultivarFFT` now has
 `len(spec.f_coarse)` frequencies. `apply_coarse_grain_multivar_fft` also returns a
-`weights` array giving the member count \(Nh\) for each coarse bin.
+`weights` array giving the member count \(Nh\) for each coarse bin (constant for
+equal bins), and stores it on the FFT as ``freq_bin_counts``.
 
 Likelihood scaling
 ------------------
@@ -60,11 +61,10 @@ a Wishart observation with \(N_b Nh\) degrees of freedom:
     \log \mathcal{L} \propto - \sum_{h=1}^{Nc} N_b Nh \log |\S(\bar f_h)|
     - \sum_N_b \u^{(h)*}_N_b \S(\bar f_h)^{-1} \u^{(h)}_N_b.
 
-When coarse graining is enabled, :class:`log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler`
-accepts the `weights` vector (usually via :class:`log_psplines.coarse_grain.config.CoarseGrainConfig`)
-and stores it as `freq_weights`. The NumPyro model
+When coarse graining is enabled, the multivariate sampler reads the per-bin
+counts from ``fft_data.freq_bin_counts``. The NumPyro model
 :func:`log_psplines.samplers.multivar.multivar_blocked_nuts.multivariate_psplines_model`
-multiplies `log_delta_sq` by `freq_weights`, ensuring the total log-det term
+multiplies `log_delta_sq` by these counts, ensuring the total log-det term
 matches the aggregated \(N_b Nh\) DOF. The trace term uses the **summed**
 statistic \(\bar \Y_h\) directly, so no additional \(Nh\) factors appear.
 Coarse graining therefore increases information linearly in \(Nh\).

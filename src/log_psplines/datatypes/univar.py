@@ -102,18 +102,19 @@ class Periodogram:
     power: np.ndarray
     filtered: bool = False
     scaling_factor: float = 1.0  # New: scaling factor for rescaling PSD
-    weights: Optional[np.ndarray] = None
+    Nh: int = 1
 
     def __post_init__(self):
         # assert no nans
         if np.isnan(self.freqs).any() or np.isnan(self.power).any():
             raise ValueError("Frequency or power contains NaN values.")
-        if self.weights is None:
-            self.weights = np.ones_like(self.power, dtype=float)
-        else:
-            self.weights = np.asarray(self.weights, dtype=float)
-            if self.weights.shape != self.power.shape:
-                raise ValueError("weights must match power shape")
+        if isinstance(self.Nh, bool) or not isinstance(
+            self.Nh, (int, np.integer)
+        ):
+            raise TypeError("Nh must be a positive integer")
+        self.Nh = int(self.Nh)
+        if self.Nh <= 0:
+            raise ValueError("Nh must be a positive integer")
 
     @property
     def n(self):
@@ -132,7 +133,7 @@ class Periodogram:
             self.power[mask],
             filtered=True,
             scaling_factor=self.scaling_factor,
-            weights=self.weights[mask],
+            Nh=self.Nh,
         )
 
     def to_timeseries(self) -> "Timeseries":
@@ -146,7 +147,7 @@ class Periodogram:
             self.freqs,
             self.power * other,
             scaling_factor=self.scaling_factor,
-            weights=self.weights,
+            Nh=self.Nh,
         )
 
     def __truediv__(self, other):
@@ -154,7 +155,7 @@ class Periodogram:
             self.freqs,
             self.power / other,
             scaling_factor=self.scaling_factor,
-            weights=self.weights,
+            Nh=self.Nh,
         )
 
     def __repr__(self):
@@ -168,7 +169,7 @@ class Periodogram:
             self.power[mask],
             filtered=True,
             scaling_factor=self.scaling_factor,
-            weights=self.weights[mask],
+            Nh=self.Nh,
         )
 
     @property

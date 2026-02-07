@@ -78,7 +78,7 @@ def simulation_study(
     K: int = 15,
     SEED: int = 42,
     *,
-    coarse_Nh: int | None = 5,
+    coarse_Nh: int | None = 4,
     coarse_f_min: float | None = None,
     coarse_f_max: float | None = None,
 ):
@@ -103,8 +103,6 @@ def simulation_study(
         coarse_Nh = int(coarse_Nh)
         if coarse_Nh <= 0:
             raise ValueError("coarse_Nh must be positive.")
-        if coarse_Nh % 2 == 0:
-            raise ValueError("coarse_Nh must be odd.")
         coarse_grain_config = dict(
             enabled=True,
             Nc=None,
@@ -153,10 +151,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
-        "--coarse-n-freqs-per-bin",
+        "--coarse-Nh",
         type=int,
-        default=5,
-        help="If set, enable coarse graining with this odd bin size (set to 0 to disable).",
+        default=4,
+        help="If set, enable coarse graining with this bin size (set to 0 to disable).",
     )
 
     args = parser.parse_args()

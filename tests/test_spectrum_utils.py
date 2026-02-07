@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from log_psplines.spectrum_utils import (
+from log_psplines.datatypes.multivar_utils import (
     sum_wishart_outer_products,
     u_to_wishart_matrix,
     wishart_matrix_to_psd,

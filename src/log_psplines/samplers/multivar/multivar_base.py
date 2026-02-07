@@ -21,6 +21,10 @@ from ...datatypes.multivar import (
     _get_coherence,
     _interp_complex_matrix,
 )
+from ...datatypes.multivar_utils import (
+    u_to_wishart_matrix,
+    wishart_matrix_to_psd,
+)
 from ...logger import logger
 from ...plotting import (
     generate_vi_diagnostics_summary,
@@ -28,7 +32,6 @@ from ...plotting import (
     save_vi_diagnostics_multivariate,
 )
 from ...psplines.multivar_psplines import MultivariateLogPSplines
-from ...spectrum_utils import u_to_wishart_matrix, wishart_matrix_to_psd
 from ..base_sampler import BaseSampler, SamplerConfig
 
 

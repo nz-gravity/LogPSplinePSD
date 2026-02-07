@@ -156,14 +156,14 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
     # fig_w.savefig(os.path.join(outdir, "coarse_weights.png"), dpi=150)
 
     # 3) Build a P-spline on the coarse grid and plot with knots
-    power_coarse, Nh = apply_coarse_graining_univar(
+    power_coarse = apply_coarse_graining_univar(
         pdgrm_full.power[spec.selection_mask], spec, freqs[spec.selection_mask]
     )
     pdgrm_coarse = Periodogram(
         freqs=spec.f_coarse,
         power=power_coarse,
         scaling_factor=pdgrm_full.scaling_factor,
-        Nh=Nh,
+        Nh=spec.Nh,
     )
     n_knots = 10 if test_mode != "fast" else 6
     model = LogPSplines.from_periodogram(
@@ -226,7 +226,7 @@ def test_plot_multivariate_fitted_data_blocks(
     # Returns a MultivarFFT on coarse grid and the frequency weights
     # fft_coarse.raw_psd holds the aggregated PSD matrix we fit
     # (n_freq_coarse, p, p)
-    fft_coarse, weights = apply_coarse_grain_multivar_fft(fft_full, spec)
+    fft_coarse = apply_coarse_grain_multivar_fft(fft_full, spec)
 
     # Prepare empirical PSD wrapper for plotting overlays (coarse grid)
     psd_matrix = np.asarray(fft_coarse.raw_psd)
@@ -295,15 +295,6 @@ def test_plot_multivariate_fitted_data_blocks(
 
     # Also save frequency weights for reference
     import matplotlib.pyplot as plt
-
-    figw, axw = plt.subplots()
-    axw.semilogx(fft_coarse.freq, weights, "-", color="C2", lw=1.8)
-    axw.set_xlabel("Frequency [Hz]")
-    axw.set_ylabel("Frequency weight")
-    axw.set_title("Coarse-grain weights (multivariate)")
-    figw.tight_layout()
-    figw.savefig(os.path.join(outdir, "coarse_weights_multivar.png"), dpi=150)
-    plt.close(figw)
 
     # Plot block-wise likelihood ingredients (u_j, best-fit theta)
     components_dir = _ensure_dir(os.path.join(outdir, "blocked_components"))

@@ -116,7 +116,7 @@ def main() -> None:
         f_min=COARSE_CFG.f_min,
         f_max=COARSE_CFG.f_max,
     )
-    fft, _ = apply_coarse_grain_multivar_fft(fft, spec)
+    fft = apply_coarse_grain_multivar_fft(fft, spec)
 
     psd_phys = scale_processed_psd(
         fft.raw_psd, fft.scaling_factor, fft.channel_stds

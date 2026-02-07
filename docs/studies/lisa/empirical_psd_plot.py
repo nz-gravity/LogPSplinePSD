@@ -184,7 +184,7 @@ def main() -> None:
             f_min=cfg.f_min,
             f_max=cfg.f_max,
         )
-        fft_used, _ = apply_coarse_grain_multivar_fft(fft, spec)
+        fft_used = apply_coarse_grain_multivar_fft(fft, spec)
         freq = np.asarray(fft_used.freq, dtype=float)
 
     if fft_used.raw_psd is None:

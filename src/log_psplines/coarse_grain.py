@@ -184,6 +184,9 @@ def _resolve_equal_bin_params(
 def _sum_bins_equal(x: np.ndarray, *, Nh: int) -> np.ndarray:
     """Sum consecutive equal-sized bins of length Nh along axis 0.
     out[h, ...] = sum_{k = h*Nh}^{(h+1)*Nh - 1} x[k, ...].
+
+    Eg:
+    x = [x0, x1, x2, x3, x4, x5], Nh=2 -> out = [x0+x1, x2+x3, x4+x5]
     """
     x = np.asarray(x)
     Nl = x.shape[0]

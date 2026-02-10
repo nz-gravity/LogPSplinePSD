@@ -18,9 +18,5 @@ else:
     except Exception:
         Bool = Complex = Float = Int = _AnyJaxtype
 
-    # Keep a runtime fallback if optional dependency import fails.
-    if "Bool" not in globals():
-        Bool = Complex = Float = Int = _AnyJaxtype
-
 
 __all__ = ["Bool", "Complex", "Float", "Int"]

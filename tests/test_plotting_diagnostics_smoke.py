@@ -6,7 +6,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from log_psplines.plotting.diagnostics import (
+from log_psplines.diagnostics.plotting import (
     DiagnosticsConfig,
     _get_channel_indices,
     _plot_acceptance_diagnostics_blockaware,
@@ -65,7 +65,7 @@ def test_plot_log_posterior_smoke():
     before = set(plt.get_fignums())
     _plot_log_posterior(idata, config)
     fig = _latest_figure(before)
-    assert len(fig.axes) == 4
+    assert len(fig.axes) == 1
     plt.close(fig)
 
 
@@ -76,6 +76,29 @@ def test_plot_acceptance_blockaware_smoke():
     _plot_acceptance_diagnostics_blockaware(idata, config)
     fig = _latest_figure(before)
     assert len(fig.axes) == 4
+    plt.close(fig)
+
+
+def test_plot_acceptance_blockaware_handles_nonfinite_and_zero_mean():
+    posterior = {"weights": np.zeros((1, 12, 1))}
+    sample_stats = {
+        "accept_prob": np.full((1, 12), np.nan),
+        "accept_prob_channel_0": np.zeros((1, 12)),
+    }
+    idata = az.from_dict(posterior=posterior, sample_stats=sample_stats)
+    idata.attrs["sampler_type"] = "nuts"
+    idata.attrs["target_accept_rate"] = 0.73
+
+    config = DiagnosticsConfig(figsize=(6, 4))
+    before = set(plt.get_fignums())
+    _plot_acceptance_diagnostics_blockaware(idata, config)
+    fig = _latest_figure(before)
+
+    assert len(fig.axes) == 4
+    summary_text = fig.axes[3].texts[0].get_text()
+    assert "Target: 0.730" in summary_text
+    assert "CV: n/a (mean ~ 0)" in summary_text
+    assert "ch 0: 0.000" in summary_text
     plt.close(fig)
 
 

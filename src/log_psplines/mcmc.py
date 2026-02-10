@@ -22,6 +22,7 @@ from .datatypes.multivar import (
     MultivarFFT,
     MultivariateTimeseries,
 )
+from .datatypes.multivar_utils import _interp_frequency_indexed_array
 from .datatypes.univar import Timeseries
 from .logger import logger
 from .psplines import LogPSplines, MultivariateLogPSplines
@@ -52,7 +53,7 @@ class ModelConfig:
     diffMatrixOrder: int = 2
     knot_kwargs: dict[str, Any] = field(default_factory=dict)
     parametric_model: Optional[jnp.ndarray] = None
-    true_psd: Optional[np.ndarray] = None
+    true_psd: TruePSDInput = None
     fmin: Optional[float] = None
     fmax: Optional[float] = None
 
@@ -166,43 +167,12 @@ def _interp_psd_array(
     freq_tgt: Float[np.ndarray, "f_tgt"],
 ) -> Complex[np.ndarray, "f_tgt ..."] | Float[np.ndarray, "f_tgt ..."]:
     """Interpolate PSD arrays (real or complex) onto target frequencies."""
-    if psd.shape[0] != freq_src.size:
-        raise ValueError("psd and freq_src must have matching lengths.")
-
-    freq_src = np.asarray(freq_src)
-    freq_tgt = np.asarray(freq_tgt)
-    flat = psd.reshape(psd.shape[0], -1)
-    real_part = np.vstack(
-        [
-            np.interp(
-                freq_tgt,
-                freq_src,
-                flat[:, idx].real,
-                left=flat[0, idx].real,
-                right=flat[-1, idx].real,
-            )
-            for idx in range(flat.shape[1])
-        ]
-    ).T
-
-    if np.iscomplexobj(psd):
-        imag_part = np.vstack(
-            [
-                np.interp(
-                    freq_tgt,
-                    freq_src,
-                    flat[:, idx].imag,
-                    left=flat[0, idx].imag,
-                    right=flat[-1, idx].imag,
-                )
-                for idx in range(flat.shape[1])
-            ]
-        ).T
-        resampled = real_part + 1j * imag_part
-    else:
-        resampled = real_part
-
-    return resampled.reshape((freq_tgt.size,) + psd.shape[1:])
+    return _interp_frequency_indexed_array(
+        freq_src,
+        freq_tgt,
+        psd,
+        sort_and_dedup=True,
+    )
 
 
 def _prepare_true_psd_for_freq(
@@ -222,10 +192,9 @@ def _prepare_true_psd_for_freq(
     psd_array = np.asarray(psd_array)
     freq_target = np.asarray(freq_target)
 
-    if psd_array.shape[0] == freq_target.size:
-        return psd_array
-
     if freq_src is None:
+        if psd_array.shape[0] == freq_target.size:
+            return psd_array
         logger.warning(
             "true_psd length {} does not match target frequencies {}; assuming uniform spacing for interpolation.",
             psd_array.shape[0],
@@ -236,12 +205,16 @@ def _prepare_true_psd_for_freq(
         )
     else:
         freq_src = np.asarray(freq_src)
+        if freq_src.ndim != 1:
+            raise ValueError(
+                "true_psd frequency grid must be one-dimensional."
+            )
+        if freq_src.shape[0] != psd_array.shape[0]:
+            raise ValueError(
+                "true_psd frequency and value arrays must have matching lengths."
+            )
 
-    order = np.argsort(freq_src)
-    freq_src_sorted = freq_src[order]
-    psd_sorted = psd_array[order, ...]
-
-    return _interp_psd_array(psd_sorted, freq_src_sorted, freq_target)
+    return _interp_psd_array(psd_array, freq_src, freq_target)
 
 
 def _normalize_coarse_grain_config(
@@ -489,11 +462,14 @@ def _maybe_build_welch_overlay(
 
 
 def _align_true_psd_to_freq(
-    true_psd: Optional[np.ndarray],
+    true_psd: TruePSDInput,
     processed_data: Optional[Union[Periodogram, MultivarFFT]],
 ) -> Optional[np.ndarray]:
-    if true_psd is None or processed_data is None:
-        return true_psd
+    if true_psd is None:
+        return None
+    if processed_data is None:
+        _, psd = _unpack_true_psd(true_psd)
+        return None if psd is None else np.asarray(psd)
 
     if isinstance(processed_data, Periodogram):
         freq_target = np.asarray(processed_data.freqs)
@@ -714,7 +690,7 @@ def _normalize_run_config(
         compute_psis=kwargs.pop("compute_psis", True),
         skip_plot_diagnostics=kwargs.pop("skip_plot_diagnostics", False),
         diagnostics_summary_mode=kwargs.pop(
-            "diagnostics_summary_mode", "light"
+            "diagnostics_summary_mode", "full"
         ),
         diagnostics_summary_position=kwargs.pop(
             "diagnostics_summary_position", "end"
@@ -797,10 +773,9 @@ def run_mcmc(
         data,
         run_config,
     )
-    scaled_true_psd: Optional[np.ndarray] = (
-        None
-        if run_config.model.true_psd is None
-        else np.asarray(run_config.model.true_psd)
+    scaled_true_psd = _align_true_psd_to_freq(
+        run_config.model.true_psd,
+        processed_data,
     )
 
     processed_after, scaled_true_psd = _coarse_grain_processed_data(

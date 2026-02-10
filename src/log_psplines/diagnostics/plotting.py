@@ -7,9 +7,9 @@ import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..diagnostics import run_all_diagnostics
 from ..logger import logger
-from .base import PlotConfig, safe_plot, setup_plot_style
+from ..plotting.base import PlotConfig, safe_plot, setup_plot_style
+from .run_all import run_all_diagnostics
 
 # Setup consistent styling for diagnostics plots
 setup_plot_style()
@@ -22,7 +22,11 @@ class DiagnosticsConfig:
     figsize: tuple = (12, 8)
     dpi: int = 150
     ess_threshold: int = 400
+    ess_per_chain_threshold: int = 100
+    ess_tail_per_chain_threshold: int = 100
     rhat_threshold: float = 1.01
+    ebfmi_threshold: float = 0.3
+    tree_depth_hit_warn_frac: float = 0.1
     fontsize: int = 11
     labelsize: int = 12
     titlesize: int = 12
@@ -34,6 +38,17 @@ class DiagnosticsConfig:
     trace_use_kde: bool = True
     trace_kde_max_points: int = 1200
     trace_max_kde_series_per_group: int = 4
+    trace_max_elements_per_var: int = 500_000
+    trace_max_total_elements: int = 5_000_000
+    # Optional output control.
+    save_acceptance: bool = False
+    save_sampler_diagnostics: bool = False
+    # Rank/pair plot guards for very high-dimensional posteriors.
+    save_rank_plots: bool = False
+    rank_max_vars: int = 6
+    rank_max_dims_per_var: int = 6
+    save_pair_plots: bool = False
+    pair_max_vars: int = 4
 
 
 def _choose_flat_indices(p: int, max_dim: int) -> np.ndarray:
@@ -54,6 +69,66 @@ def _thin_series(series: np.ndarray, max_points: int) -> np.ndarray:
     return series[::step]
 
 
+def _var_priority(name: str) -> tuple[int, str]:
+    if name.startswith("delta"):
+        return (0, name)
+    if name.startswith("phi"):
+        return (1, name)
+    if name.startswith("weights"):
+        return (2, name)
+    return (3, name)
+
+
+def _flat_dim_from_shape(shape: tuple[int, ...]) -> int:
+    if len(shape) <= 2:
+        return 1
+    return int(np.prod(shape[2:]))
+
+
+def _select_rank_plot_vars(
+    idata: az.InferenceData, config: DiagnosticsConfig
+) -> list[str]:
+    posterior = getattr(idata, "posterior", None)
+    if posterior is None:
+        return []
+
+    candidates: list[tuple[tuple[int, str], int, str]] = []
+    for var in posterior.data_vars:
+        var_name = str(var)
+        try:
+            flat_dim = _flat_dim_from_shape(tuple(posterior[var].shape))
+        except Exception:
+            continue
+        if flat_dim <= 0 or flat_dim > config.rank_max_dims_per_var:
+            continue
+        candidates.append((_var_priority(var_name), flat_dim, var_name))
+
+    candidates.sort(key=lambda row: (row[0], row[1], row[2]))
+    return [name for _, _, name in candidates[: config.rank_max_vars]]
+
+
+def _select_pair_plot_vars(
+    idata: az.InferenceData, config: DiagnosticsConfig
+) -> list[str]:
+    posterior = getattr(idata, "posterior", None)
+    if posterior is None:
+        return []
+
+    scalar_vars: list[tuple[tuple[int, str], str]] = []
+    for var in posterior.data_vars:
+        var_name = str(var)
+        try:
+            flat_dim = _flat_dim_from_shape(tuple(posterior[var].shape))
+        except Exception:
+            continue
+        if flat_dim != 1:
+            continue
+        scalar_vars.append((_var_priority(var_name), var_name))
+
+    scalar_vars.sort(key=lambda row: row[0])
+    return [name for _, name in scalar_vars[: config.pair_max_vars]]
+
+
 def plot_trace(
     idata: az.InferenceData,
     compact: bool = True,
@@ -71,6 +146,32 @@ def plot_trace(
     posterior = getattr(idata, "posterior", None)
     if posterior is None:
         raise ValueError("InferenceData is missing posterior samples.")
+
+    total_elements = 0
+    try:
+        total_elements = sum(
+            int(posterior[var].size) for var in posterior.data_vars
+        )
+    except Exception:
+        total_elements = 0
+    if (
+        config.trace_max_total_elements is not None
+        and total_elements > config.trace_max_total_elements
+    ):
+        fig, ax = plt.subplots(1, 1, figsize=(7, 4))
+        ax.text(
+            0.5,
+            0.5,
+            "Trace plot skipped\n"
+            f"Posterior size {total_elements:,} elements\n"
+            f"Exceeds limit {config.trace_max_total_elements:,}",
+            ha="center",
+            va="center",
+        )
+        ax.set_title("Parameter Traces (skipped)")
+        ax.axis("off")
+        plt.tight_layout()
+        return fig
 
     groups = {
         "delta": [
@@ -103,9 +204,20 @@ def plot_trace(
         ax_trace.spines["top"].set_visible(False)
 
         series_list: list[tuple[str, np.ndarray]] = []
+        skipped_for_size = 0
         used_kde = 0
 
         for var in list(var_names)[: config.max_trace_vars_per_group]:
+            try:
+                var_size = int(posterior[var].size)
+            except Exception:
+                continue
+            if (
+                config.trace_max_elements_per_var is not None
+                and var_size > config.trace_max_elements_per_var
+            ):
+                skipped_for_size += 1
+                continue
             try:
                 values = np.asarray(posterior[var].values)
             except Exception:
@@ -136,10 +248,17 @@ def plot_trace(
                 break
 
         if not series_list:
+            if skipped_for_size > 0:
+                msg = (
+                    "Trace data skipped due to size "
+                    f"(>{config.trace_max_elements_per_var:,} elements)"
+                )
+            else:
+                msg = "No trace data available"
             ax_trace.text(
                 0.5,
                 0.5,
-                "No trace data available",
+                msg,
                 ha="center",
                 va="center",
                 transform=ax_trace.transAxes,
@@ -147,7 +266,7 @@ def plot_trace(
             ax_hist.text(
                 0.5,
                 0.5,
-                "No marginal data available",
+                msg,
                 ha="center",
                 va="center",
                 transform=ax_hist.transAxes,
@@ -277,56 +396,150 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime):
         return plot_trace(idata, config=config)
 
     t = time.perf_counter()
+    logger.info("Diagnostics plot: trace_plots.png starting")
     ok = create_trace_plots()
     logger.info(
         f"Diagnostics plot: trace_plots.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
     )
 
-    # 2. Summary dashboard with key convergence metrics
+    # 2. Rank histogram diagnostics (subsampled variable list)
+    t = time.perf_counter()
+    logger.info("Diagnostics plot: rank_plots starting")
+    _create_rank_diagnostics(idata, diag_dir, config)
+    logger.info(
+        f"Diagnostics plots: rank_plots done in {time.perf_counter() - t:.2f}s"
+    )
+
+    # 3. Optional pair diagnostics for low-dimensional scalar variables
+    t = time.perf_counter()
+    logger.info("Diagnostics plot: pair_plots starting")
+    _create_pair_diagnostics(idata, diag_dir, config)
+    logger.info(
+        f"Diagnostics plots: pair_plots done in {time.perf_counter() - t:.2f}s"
+    )
+
+    # 4. Summary dashboard with key convergence metrics
     @safe_plot(f"{diag_dir}/summary_dashboard.png", config.dpi)
     def plot_summary():
         _plot_summary_dashboard(idata, config, p, N, runtime)
 
     t = time.perf_counter()
+    logger.info("Diagnostics plot: summary_dashboard.png starting")
     ok = plot_summary()
     logger.info(
         f"Diagnostics plot: summary_dashboard.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
     )
 
-    # 3. Log posterior diagnostics
+    # 5. Log posterior diagnostics
     @safe_plot(f"{diag_dir}/log_posterior.png", config.dpi)
     def plot_lp():
         _plot_log_posterior(idata, config)
 
     t = time.perf_counter()
+    logger.info("Diagnostics plot: log_posterior.png starting")
     ok = plot_lp()
     logger.info(
         f"Diagnostics plot: log_posterior.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
     )
 
-    # 4. Acceptance rate diagnostics
-    @safe_plot(f"{diag_dir}/acceptance_diagnostics.png", config.dpi)
-    def plot_acceptance():
-        _plot_acceptance_diagnostics_blockaware(idata, config)
+    # 6. Energy diagnostics (E-BFMI + trace)
+    @safe_plot(f"{diag_dir}/energy_diagnostics.png", config.dpi)
+    def plot_energy():
+        _plot_energy_diagnostics(idata, config)
 
     t = time.perf_counter()
-    ok = plot_acceptance()
+    logger.info("Diagnostics plot: energy_diagnostics.png starting")
+    ok = plot_energy()
     logger.info(
-        f"Diagnostics plot: acceptance_diagnostics.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
+        f"Diagnostics plot: energy_diagnostics.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
     )
 
-    # 5. Sampler-specific diagnostics
-    t = time.perf_counter()
-    _create_sampler_diagnostics(idata, diag_dir, config)
+    # 7. Acceptance rate diagnostics
+    if config.save_acceptance:
+
+        @safe_plot(f"{diag_dir}/acceptance_diagnostics.png", config.dpi)
+        def plot_acceptance():
+            _plot_acceptance_diagnostics_blockaware(idata, config)
+
+        t = time.perf_counter()
+        logger.info("Diagnostics plot: acceptance_diagnostics.png starting")
+        ok = plot_acceptance()
+        logger.info(
+            f"Diagnostics plot: acceptance_diagnostics.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
+        )
+    else:
+        logger.info(
+            "Diagnostics plot: acceptance_diagnostics skipped (disabled)."
+        )
+
+    # 8. Sampler-specific diagnostics
+    if config.save_sampler_diagnostics:
+        t = time.perf_counter()
+        logger.info("Diagnostics plots: sampler-specific starting")
+        _create_sampler_diagnostics(idata, diag_dir, config)
+        logger.info(
+            f"Diagnostics plots: sampler-specific done in {time.perf_counter() - t:.2f}s"
+        )
+    else:
+        logger.info("Diagnostics plots: sampler-specific skipped (disabled).")
+
+    # 9. Divergences diagnostics (for NUTS only)
+    logger.info("Diagnostics plots: divergences skipped (disabled).")
+
+
+def _create_rank_diagnostics(idata, diag_dir, config):
+    if not config.save_rank_plots:
+        logger.info("Diagnostics plot: rank_plots skipped (disabled).")
+        return
+
+    rank_vars = _select_rank_plot_vars(idata, config)
+    if not rank_vars:
+        logger.info(
+            "Diagnostics plot: rank_plots skipped (no low-dimensional variables)."
+        )
+        return
+
+    @safe_plot(f"{diag_dir}/rank_plots.png", config.dpi)
+    def _plot_rank():
+        az.plot_rank(idata, var_names=rank_vars)
+
+    ok = _plot_rank()
     logger.info(
-        f"Diagnostics plots: sampler-specific done in {time.perf_counter() - t:.2f}s"
+        "Diagnostics plot: rank_plots.png "
+        + f"{'ok' if ok else 'failed'} for {len(rank_vars)} vars"
     )
 
-    # 6. Divergences diagnostics (for NUTS only)
-    t = time.perf_counter()
-    _create_divergences_diagnostics(idata, diag_dir, config)
+
+def _create_pair_diagnostics(idata, diag_dir, config):
+    if not config.save_pair_plots:
+        logger.info("Diagnostics plot: pair_plots skipped (disabled).")
+        return
+
+    pair_vars = _select_pair_plot_vars(idata, config)
+    if len(pair_vars) < 2:
+        logger.info(
+            "Diagnostics plot: pair_plots skipped (need >=2 scalar variables)."
+        )
+        return
+
+    has_divergences = hasattr(idata, "sample_stats") and any(
+        str(key).startswith("diverging") for key in idata.sample_stats
+    )
+
+    @safe_plot(f"{diag_dir}/pair_plot.png", config.dpi)
+    def _plot_pair():
+        az.plot_pair(
+            idata,
+            var_names=pair_vars,
+            divergences=has_divergences,
+            kind="scatter",
+            marginals=True,
+        )
+
+    ok = _plot_pair()
     logger.info(
-        f"Diagnostics plots: divergences done in {time.perf_counter() - t:.2f}s"
+        "Diagnostics plot: pair_plot.png "
+        + f"{'ok' if ok else 'failed'} for {len(pair_vars)} vars"
     )
 
 
@@ -358,8 +571,8 @@ def _plot_summary_dashboard(idata, config, p, N, runtime):
     # 3. Parameter Summary
     _plot_parameter_summary(param_ax, idata)
 
-    # 4. Convergence Status
-    _plot_convergence_status(status_ax, ess_values, config)
+    # 4. NUTS must-have checks
+    _plot_convergence_status(status_ax, idata, ess_values, config)
 
     plt.tight_layout()
 
@@ -478,38 +691,298 @@ def _plot_parameter_summary(ax, idata):
     ax.axis("off")
 
 
-def _plot_convergence_status(ax, ess_values, config):
-    """Display convergence status based on ESS only."""
+def _as_finite_scalar(value) -> Optional[float]:
     try:
-        status_lines = ["Convergence Status:"]
+        fval = float(value)
+    except Exception:
+        return None
+    return fval if np.isfinite(fval) else None
 
-        if ess_values is not None and len(ess_values) > 0:
-            ess_good = (ess_values >= config.ess_threshold).mean() * 100
-            status_lines.append(
-                f"ESS ≥ {config.ess_threshold}: {ess_good:.0f}%"
-            )
-            status_lines.append("")
-            status_lines.append("Overall Status:")
 
-            if ess_good >= 90:
-                status_lines.append("✓ EXCELLENT")
-                color = "green"
-            elif ess_good >= 75:
-                status_lines.append("✓ ADEQUATE")
-                color = "orange"
-            else:
-                status_lines.append("⚠ NEEDS ATTENTION")
-                color = "red"
+def _compute_ebfmi_from_energy(energy_values: np.ndarray) -> Optional[float]:
+    energy = _finite_1d(energy_values)
+    if energy.size < 2:
+        return None
+    var_energy = float(np.var(energy))
+    if var_energy < 1e-12:
+        return None
+    delta = np.diff(energy)
+    return float(np.mean(delta * delta) / var_energy)
+
+
+def _collect_must_have_metrics(idata, ess_values) -> dict:
+    posterior = getattr(idata, "posterior", None)
+    n_chains = (
+        int(posterior.sizes.get("chain", 1)) if posterior is not None else 1
+    )
+    attrs = getattr(idata, "attrs", {}) or {}
+    if not hasattr(attrs, "get"):
+        attrs = dict(attrs)
+
+    metrics: dict[str, object] = {"n_chains": n_chains}
+
+    ess_bulk_min = _as_finite_scalar(attrs.get("mcmc_ess_bulk_min"))
+    if ess_bulk_min is None and ess_values is not None and len(ess_values) > 0:
+        ess_bulk_min = float(np.min(ess_values))
+    metrics["ess_bulk_min"] = ess_bulk_min
+    metrics["ess_bulk_per_chain"] = (
+        ess_bulk_min / max(1, n_chains) if ess_bulk_min is not None else None
+    )
+
+    ess_tail_min = _as_finite_scalar(attrs.get("mcmc_ess_tail_min"))
+    if ess_tail_min is None:
+        try:
+            ess_tail = attrs.get("ess_tail")
+            if ess_tail is not None:
+                ess_tail_vals = _finite_1d(np.asarray(ess_tail))
+                if ess_tail_vals.size:
+                    ess_tail_min = float(np.min(ess_tail_vals))
+        except Exception:
+            pass
+    metrics["ess_tail_min"] = ess_tail_min
+    metrics["ess_tail_per_chain"] = (
+        ess_tail_min / max(1, n_chains) if ess_tail_min is not None else None
+    )
+
+    rhat_max = _as_finite_scalar(attrs.get("mcmc_rhat_max"))
+    if rhat_max is None:
+        try:
+            rhat_attr = attrs.get("rhat")
+            if rhat_attr is not None:
+                rhat_vals = _finite_1d(np.asarray(rhat_attr))
+                if rhat_vals.size:
+                    rhat_max = float(np.max(rhat_vals))
+        except Exception:
+            pass
+    metrics["rhat_max"] = rhat_max
+
+    divergence_total = None
+    divergence_fraction = None
+    divergence_count = None
+    if hasattr(idata, "sample_stats"):
+        div_values = []
+        for key in idata.sample_stats:
+            if not str(key).startswith("diverging"):
+                continue
+            try:
+                arr = _finite_1d(np.asarray(idata.sample_stats[key].values))
+            except Exception:
+                continue
+            if arr.size:
+                div_values.append(arr)
+        if div_values:
+            div = np.concatenate(div_values)
+            divergence_total = float(np.sum(div))
+            divergence_count = int(div.size)
+            divergence_fraction = float(divergence_total / div.size)
+
+    metrics["divergence_total"] = divergence_total
+    metrics["divergence_fraction"] = divergence_fraction
+    metrics["divergence_count"] = divergence_count
+
+    max_tree_depth = _coerce_int(attrs.get("max_tree_depth"))
+    tree_depth = None
+    if hasattr(idata, "sample_stats") and "tree_depth" in idata.sample_stats:
+        tree_depth = _finite_1d(np.asarray(idata.sample_stats["tree_depth"]))
+    num_steps = None
+    if hasattr(idata, "sample_stats"):
+        if "num_steps" in idata.sample_stats:
+            num_steps = _finite_1d(np.asarray(idata.sample_stats["num_steps"]))
         else:
-            status_lines.append("? UNABLE TO ASSESS")
-            color = "gray"
+            step_parts = []
+            for ch in sorted(
+                _get_channel_indices(idata.sample_stats, "num_steps")
+            ):
+                key = f"num_steps_channel_{ch}"
+                try:
+                    arr = _finite_1d(np.asarray(idata.sample_stats[key]))
+                except Exception:
+                    continue
+                if arr.size:
+                    step_parts.append(arr)
+            if step_parts:
+                num_steps = np.concatenate(step_parts)
+    max_stats = _max_tree_depth_stats(num_steps, tree_depth, max_tree_depth)
+    if max_stats:
+        metrics["tree_hit_frac"] = float(max_stats["frac"])
+        metrics["tree_message"] = _format_max_tree_depth_message(max_stats)
+
+    ebfmi = _as_finite_scalar(attrs.get("energy_ebfmi_overall"))
+    if ebfmi is None:
+        try:
+            candidates = [
+                _as_finite_scalar(val)
+                for key, val in attrs.items()
+                if str(key).startswith("energy_ebfmi")
+                and str(key).endswith("_overall")
+            ]
+            finite = [v for v in candidates if v is not None]
+            if finite:
+                ebfmi = float(min(finite))
+        except Exception:
+            pass
+    if ebfmi is None and hasattr(idata, "sample_stats"):
+        energy_values = []
+        if "energy" in idata.sample_stats:
+            energy_values.append(np.asarray(idata.sample_stats["energy"]))
+        else:
+            for key in idata.sample_stats:
+                if str(key).startswith("energy_channel_"):
+                    energy_values.append(np.asarray(idata.sample_stats[key]))
+        if energy_values:
+            ebfmi = _compute_ebfmi_from_energy(np.concatenate(energy_values))
+    metrics["ebfmi"] = ebfmi
+
+    return metrics
+
+
+def _plot_convergence_status(ax, idata, ess_values, config):
+    """Display NUTS must-have checks with pass/warn/fail statuses."""
+    try:
+        metrics = _collect_must_have_metrics(idata, ess_values)
+        n_chains = int(metrics.get("n_chains", 1) or 1)
+
+        lines = ["NUTS Must-Have Checks:", ""]
+        fail_count = 0
+        warn_count = 0
+
+        def _append_check(label: str, state: str, detail: str) -> None:
+            nonlocal fail_count, warn_count
+            if state == "FAIL":
+                fail_count += 1
+            elif state == "WARN":
+                warn_count += 1
+            lines.append(f"{state:<5} {label:<12} {detail}")
+
+        div_frac = metrics.get("divergence_fraction")
+        div_total = metrics.get("divergence_total")
+        div_n = metrics.get("divergence_count")
+        if div_frac is None:
+            _append_check("Divergences", "N/A", "Unavailable")
+        elif float(div_frac) == 0.0:
+            _append_check("Divergences", "PASS", "0 divergent transitions")
+        else:
+            detail = (
+                f"{int(div_total)}/{int(div_n)} ({100.0 * float(div_frac):.2f}%)"
+                if div_total is not None and div_n is not None
+                else f"{100.0 * float(div_frac):.2f}%"
+            )
+            _append_check("Divergences", "FAIL", detail)
+
+        tree_hit = metrics.get("tree_hit_frac")
+        if tree_hit is None:
+            _append_check("Tree depth", "N/A", "Unavailable")
+        else:
+            message = str(metrics.get("tree_message", ""))
+            if float(tree_hit) == 0.0:
+                _append_check("Tree depth", "PASS", message)
+            elif float(tree_hit) <= config.tree_depth_hit_warn_frac:
+                _append_check("Tree depth", "WARN", message)
+            else:
+                _append_check("Tree depth", "FAIL", message)
+
+        ebfmi = metrics.get("ebfmi")
+        if ebfmi is None:
+            _append_check("E-BFMI", "N/A", "Unavailable")
+        elif float(ebfmi) >= config.ebfmi_threshold:
+            _append_check("E-BFMI", "PASS", f"{float(ebfmi):.3f}")
+        elif float(ebfmi) >= 0.2:
+            _append_check(
+                "E-BFMI",
+                "WARN",
+                f"{float(ebfmi):.3f} (target>{config.ebfmi_threshold:.1f})",
+            )
+        else:
+            _append_check(
+                "E-BFMI",
+                "FAIL",
+                f"{float(ebfmi):.3f} (target>{config.ebfmi_threshold:.1f})",
+            )
+
+        rhat_max = metrics.get("rhat_max")
+        if rhat_max is None:
+            _append_check("R-hat", "N/A", "Unavailable")
+        elif float(rhat_max) <= config.rhat_threshold:
+            _append_check("R-hat", "PASS", f"max={float(rhat_max):.3f}")
+        elif float(rhat_max) <= 1.05:
+            _append_check("R-hat", "WARN", f"max={float(rhat_max):.3f}")
+        else:
+            _append_check("R-hat", "FAIL", f"max={float(rhat_max):.3f}")
+
+        bulk_per_chain = metrics.get("ess_bulk_per_chain")
+        if bulk_per_chain is None:
+            _append_check("Bulk ESS", "N/A", "Unavailable")
+        elif float(bulk_per_chain) >= config.ess_per_chain_threshold:
+            _append_check(
+                "Bulk ESS",
+                "PASS",
+                f"min/ch={float(bulk_per_chain):.1f} ({n_chains} chains)",
+            )
+        elif float(bulk_per_chain) >= 0.5 * config.ess_per_chain_threshold:
+            _append_check(
+                "Bulk ESS",
+                "WARN",
+                f"min/ch={float(bulk_per_chain):.1f} ({n_chains} chains)",
+            )
+        else:
+            _append_check(
+                "Bulk ESS",
+                "FAIL",
+                f"min/ch={float(bulk_per_chain):.1f} ({n_chains} chains)",
+            )
+
+        tail_per_chain = metrics.get("ess_tail_per_chain")
+        if tail_per_chain is None:
+            _append_check("Tail ESS", "N/A", "Unavailable")
+        elif float(tail_per_chain) >= config.ess_tail_per_chain_threshold:
+            _append_check(
+                "Tail ESS",
+                "PASS",
+                f"min/ch={float(tail_per_chain):.1f} ({n_chains} chains)",
+            )
+        elif (
+            float(tail_per_chain) >= 0.5 * config.ess_tail_per_chain_threshold
+        ):
+            _append_check(
+                "Tail ESS",
+                "WARN",
+                f"min/ch={float(tail_per_chain):.1f} ({n_chains} chains)",
+            )
+        else:
+            _append_check(
+                "Tail ESS",
+                "FAIL",
+                f"min/ch={float(tail_per_chain):.1f} ({n_chains} chains)",
+            )
+
+        lines.append("")
+        lines.append(
+            "Visual checks: trace_plots.png, rank_plots.png"
+            if config.save_rank_plots
+            else "Visual checks: trace_plots.png (rank plots disabled)"
+        )
+        if config.save_pair_plots:
+            lines.append(
+                "Pair checks: pair_plot.png (low-dim scalar vars only)"
+            )
+
+        lines.append("")
+        if fail_count > 0:
+            lines.append(f"Overall: NEEDS ATTENTION ({fail_count} fail)")
+            color = "red"
+        elif warn_count > 0:
+            lines.append(f"Overall: WATCH ({warn_count} warning)")
+            color = "orange"
+        else:
+            lines.append("Overall: PASS")
+            color = "green"
 
         ax.text(
             0.05,
             0.95,
-            "\n".join(status_lines),
+            "\n".join(lines),
             transform=ax.transAxes,
-            fontsize=11,
+            fontsize=9.5,
             verticalalignment="top",
             fontfamily="monospace",
             color=color,
@@ -517,27 +990,46 @@ def _plot_convergence_status(ax, ess_values, config):
     except Exception:
         ax.text(0.5, 0.5, "Status unavailable", ha="center", va="center")
 
-    ax.set_title("Convergence Status")
+    ax.set_title("Convergence Checklist")
     ax.axis("off")
 
 
 def _plot_log_posterior(idata, config):
-    """Log posterior diagnostics."""
-    fig, axes = plt.subplots(2, 2, figsize=config.figsize)
+    """Log posterior trace diagnostics."""
 
-    # Check for lp first, then log_likelihood
-    if "lp" in idata.sample_stats:
-        lp_values = idata.sample_stats["lp"].values.flatten()
-        var_name = "lp"
-        title_prefix = "Log Posterior"
+    def _as_chain_draw(values: np.ndarray) -> np.ndarray:
+        arr = np.asarray(values)
+        if arr.ndim == 1:
+            return arr[None, :]
+        if arr.ndim == 2:
+            return arr
+        chain, draw = arr.shape[0], arr.shape[1]
+        arr = arr.reshape(chain, draw, -1)
+        return np.sum(arr, axis=-1)
+
+    series: list[tuple[str, np.ndarray]] = []
+    block_keys = sorted(
+        [
+            key
+            for key in idata.sample_stats
+            if str(key).startswith("log_likelihood_block_")
+        ]
+    )
+    if block_keys:
+        for key in block_keys:
+            label = str(key).replace("log_likelihood_block_", "Block ")
+            series.append(
+                (f"Log Likelihood ({label})", idata.sample_stats[key].values)
+            )
+    elif "lp" in idata.sample_stats:
+        series.append(("Log Posterior", idata.sample_stats["lp"].values))
     elif "log_likelihood" in idata.sample_stats:
-        lp_values = idata.sample_stats["log_likelihood"].values.flatten()
-        var_name = "log_likelihood"
-        title_prefix = "Log Likelihood"
+        series.append(
+            ("Log Likelihood", idata.sample_stats["log_likelihood"].values)
+        )
     else:
-        # Create a fallback layout when no posterior data available
-        fig, axes = plt.subplots(1, 1, figsize=config.figsize)
-        axes.text(
+        fig, ax = plt.subplots(1, 1, figsize=config.figsize)
+        ax.text(
             0.5,
             0.5,
             "No log posterior\nor log likelihood\navailable",
@@ -545,108 +1037,153 @@ def _plot_log_posterior(idata, config):
             va="center",
             fontsize=14,
         )
-        axes.set_title("Log Posterior Diagnostics")
-        axes.axis("off")
+        ax.set_title("Log Posterior Trace")
+        ax.axis("off")
         plt.tight_layout()
         return
 
-    # Trace plot with running mean overlaid
-    axes[0, 0].plot(
-        lp_values, alpha=0.7, linewidth=1, color="blue", label="Trace"
+    n_rows = len(series)
+    height = max(config.figsize[1], 2.5 * n_rows)
+    fig, axes = plt.subplots(
+        n_rows, 1, figsize=(config.figsize[0], height), sharex=True
     )
+    axes = np.atleast_1d(axes)
 
-    # Add running mean on the same plot
-    window_size = max(10, len(lp_values) // 100)
-    if len(lp_values) > window_size:
-        running_mean = np.convolve(
-            lp_values, np.ones(window_size) / window_size, mode="valid"
-        )
-        axes[0, 0].plot(
-            range(window_size // 2, window_size // 2 + len(running_mean)),
-            running_mean,
-            alpha=0.9,
-            linewidth=3,
-            color="red",
-            label=f"Running mean (w={window_size})",
-        )
+    for idx, (title_prefix, values) in enumerate(series):
+        ax = axes[idx]
+        values = _as_chain_draw(values)
+        if values.shape[1] > config.max_trace_draws:
+            step = int(np.ceil(values.shape[1] / config.max_trace_draws))
+            values = values[:, ::step]
 
-    axes[0, 0].set_xlabel("Iteration")
-    axes[0, 0].set_ylabel(title_prefix)
-    axes[0, 0].set_title(f"{title_prefix} Trace with Running Mean")
-    axes[0, 0].legend(loc="best", fontsize="small")
-    axes[0, 0].grid(True, alpha=0.3)
+        for chain_idx in range(values.shape[0]):
+            ax.plot(
+                values[chain_idx],
+                alpha=0.6,
+                linewidth=1,
+                label=f"chain {chain_idx}" if values.shape[0] > 1 else None,
+            )
 
-    # Distribution
-    axes[0, 1].hist(
-        lp_values, bins=50, alpha=0.7, density=True, edgecolor="black"
-    )
-    axes[0, 1].axvline(
-        np.mean(lp_values),
-        color="red",
-        linestyle="--",
-        linewidth=2,
-        label=f"Mean: {np.mean(lp_values):.1f}",
-    )
-    axes[0, 1].set_xlabel(title_prefix)
-    axes[0, 1].set_ylabel("Density")
-    axes[0, 1].set_title(f"{title_prefix} Distribution")
-    axes[0, 1].legend(loc="best", fontsize="small")
-    axes[0, 1].grid(True, alpha=0.3)
+        ax.set_ylabel(title_prefix)
+        ax.set_title(f"{title_prefix} Trace")
+        if values.shape[0] > 1 or idx == 0:
+            ax.legend(loc="best", fontsize="small")
+        ax.grid(True, alpha=0.3)
 
-    # Step-to-step changes
-    lp_diff = np.diff(lp_values)
-    axes[1, 0].plot(lp_diff, alpha=0.5, linewidth=1)
-    axes[1, 0].axhline(0, color="red", linestyle="--", alpha=0.7)
-    axes[1, 0].axhline(
-        np.mean(lp_diff),
-        color="blue",
-        linestyle="--",
-        alpha=0.7,
-        label=f"Mean change: {np.mean(lp_diff):.1f}",
-    )
-    axes[1, 0].set_xlabel("Iteration")
-    axes[1, 0].set_ylabel(f"{title_prefix} Difference")
-    axes[1, 0].set_title("Step-to-Step Changes")
-    axes[1, 0].legend(loc="best", fontsize="small")
-    axes[1, 0].grid(True, alpha=0.3)
-
-    # Summary statistics
-    stats_lines = [
-        f"Mean: {np.mean(lp_values):.2f}",
-        f"Std: {np.std(lp_values):.2f}",
-        f"Min: {np.min(lp_values):.2f}",
-        f"Max: {np.max(lp_values):.2f}",
-        f"Range: {np.max(lp_values) - np.min(lp_values):.2f}",
-        "",
-        "Stability:",
-        f"Final variation: {np.std(lp_values[-len(lp_values)//4:]):.2f}",
-    ]
-
-    axes[1, 1].text(
-        0.05,
-        0.95,
-        "\n".join(stats_lines),
-        transform=axes[1, 1].transAxes,
-        fontsize=10,
-        verticalalignment="top",
-        fontfamily="monospace",
-        bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
-    )
-    axes[1, 1].set_title("Posterior Statistics")
-    axes[1, 1].axis("off")
+    axes[-1].set_xlabel("Iteration")
+    plt.tight_layout()
 
     plt.tight_layout()
 
 
-def _plot_acceptance_diagnostics(idata, config):
-    """Acceptance rate diagnostics."""
+def _finite_1d(values) -> np.ndarray:
+    arr = np.asarray(values).reshape(-1)
+    if arr.size == 0:
+        return arr
+    return arr[np.isfinite(arr)]
+
+
+def _resolve_target_accept(idata, default: float = 0.8) -> float:
+    attrs = getattr(idata, "attrs", {}) or {}
+    if not hasattr(attrs, "get"):
+        attrs = dict(attrs)
+    candidates = (
+        attrs.get("target_accept_prob", None),
+        attrs.get("target_accept_rate", None),
+        default,
+    )
+    for candidate in candidates:
+        try:
+            value = float(candidate)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(value):
+            return value
+    return default
+
+
+def _rolling_std(series: np.ndarray, window: int = 20) -> np.ndarray:
+    return np.array(
+        [
+            np.std(series[max(0, i - window) : i + 1])
+            for i in range(series.size)
+        ]
+    )
+
+
+def _extract_acceptance_series(
+    idata, *, include_channels: bool
+) -> tuple[np.ndarray, np.ndarray, dict[int, np.ndarray], str, float, str]:
     accept_key = None
     if "accept_prob" in idata.sample_stats:
         accept_key = "accept_prob"
     elif "acceptance_rate" in idata.sample_stats:
         accept_key = "acceptance_rate"
 
-    if accept_key is None:
+    accept_rates = (
+        _finite_1d(idata.sample_stats[accept_key].values)
+        if accept_key is not None
+        else np.array([])
+    )
+    trace_label = "overall" if accept_key is not None else "per-channel"
+
+    channel_series: dict[int, np.ndarray] = {}
+    channel_raw: dict[int, np.ndarray] = {}
+    if include_channels:
+        for key in idata.sample_stats:
+            if isinstance(key, str) and key.startswith("accept_prob_channel_"):
+                try:
+                    ch = int(key.rsplit("_", 1)[-1])
+                except (TypeError, ValueError):
+                    continue
+                raw = np.asarray(idata.sample_stats[key].values)
+                series = _finite_1d(raw)
+                if series.size:
+                    channel_series[ch] = series
+                    channel_raw[ch] = raw
+
+    accept_hist = accept_rates
+    if accept_rates.size == 0 and channel_series:
+        accept_hist = np.concatenate(
+            [channel_series[ch] for ch in sorted(channel_series)]
+        )
+        shapes = {arr.shape for arr in channel_raw.values()}
+        if len(shapes) == 1:
+            stacked = np.stack(
+                [channel_raw[ch] for ch in sorted(channel_raw)], axis=0
+            )
+            mean_by_draw = np.mean(stacked, axis=0)
+            accept_rates = _finite_1d(mean_by_draw)
+            trace_label = "mean"
+
+    attrs = getattr(idata, "attrs", {}) or {}
+    if not hasattr(attrs, "get"):
+        attrs = dict(attrs)
+    sampler_type_attr = str(attrs.get("sampler_type", "unknown")).lower()
+    sampler_type = "NUTS" if "nuts" in sampler_type_attr else "Sampler"
+    target_rate = _resolve_target_accept(idata)
+    return (
+        accept_rates,
+        accept_hist,
+        channel_series,
+        sampler_type,
+        target_rate,
+        trace_label,
+    )
+
+
+def _plot_acceptance_diagnostics_common(
+    idata, config, *, include_channels: bool
+) -> None:
+    (
+        accept_rates,
+        accept_hist,
+        channel_series,
+        sampler_type,
+        target_rate,
+        trace_label,
+    ) = _extract_acceptance_series(idata, include_channels=include_channels)
+    if accept_rates.size == 0 and accept_hist.size == 0 and not channel_series:
         fig, ax = plt.subplots(figsize=config.figsize)
         ax.text(
             0.5,
@@ -660,23 +1197,11 @@ def _plot_acceptance_diagnostics(idata, config):
 
     fig, axes = plt.subplots(2, 2, figsize=config.figsize)
 
-    accept_rates = idata.sample_stats[accept_key].values.flatten()
-    sampler_type_attr = (
-        idata.attrs.get("sampler_type", "unknown").lower()
-        if hasattr(idata, "attrs")
-        else "unknown"
-    )
-    sampler_type = "NUTS" if "nuts" in sampler_type_attr else "Sampler"
-    target_rate = idata.attrs.get("target_accept_prob", 0.8)
-
-    # NUTS acceptance-rate guidance
     good_range = (0.7, 0.9)
     low_range = (0.0, 0.6)
     high_range = (0.9, 1.0)
     concerning_range = (0.6, 0.7)
 
-    # Trace plot with color zones
-    # Add background zones
     axes[0, 0].axhspan(
         good_range[0],
         good_range[1],
@@ -703,79 +1228,94 @@ def _plot_acceptance_diagnostics(idata, config):
             label="Concerning",
         )
 
-    # Main trace plot
-    axes[0, 0].plot(
-        accept_rates, alpha=0.8, linewidth=1, color="blue", label="Trace"
-    )
+    if accept_rates.size:
+        axes[0, 0].plot(
+            accept_rates,
+            alpha=0.8,
+            linewidth=1,
+            color="blue",
+            label=trace_label,
+        )
+
+    if include_channels:
+        for ch in sorted(channel_series):
+            axes[0, 0].plot(
+                channel_series[ch], alpha=0.6, linewidth=1, label=f"ch {ch}"
+            )
+
     axes[0, 0].axhline(
         target_rate,
         color="red",
         linestyle="--",
         linewidth=2,
-        label=f"Target ({target_rate})",
+        label=f"Target ({target_rate:.3g})",
     )
 
-    # Add running average on the same plot
-    window_size = max(10, len(accept_rates) // 50)
-    if len(accept_rates) > window_size:
-        running_mean = np.convolve(
-            accept_rates, np.ones(window_size) / window_size, mode="valid"
-        )
-        axes[0, 0].plot(
-            range(window_size // 2, window_size // 2 + len(running_mean)),
-            running_mean,
-            alpha=0.9,
-            linewidth=3,
-            color="purple",
-            label=f"Running mean (w={window_size})",
-        )
+    if accept_rates.size:
+        window_size = max(10, int(accept_rates.size // 50))
+        if accept_rates.size > window_size:
+            running_mean = np.convolve(
+                accept_rates,
+                np.ones(window_size) / window_size,
+                mode="valid",
+            )
+            axes[0, 0].plot(
+                range(
+                    window_size // 2,
+                    window_size // 2 + len(running_mean),
+                ),
+                running_mean,
+                alpha=0.9,
+                linewidth=3,
+                color="purple",
+                label=f"Running mean (w={window_size})",
+            )
 
     axes[0, 0].set_xlabel("Iteration")
     axes[0, 0].set_ylabel("Acceptance Rate")
     axes[0, 0].set_title(f"{sampler_type} Acceptance Rate Trace")
     axes[0, 0].legend(loc="best", fontsize="small")
     axes[0, 0].grid(True, alpha=0.3)
-
-    # Add interpretation text
-    interpretation = f"{sampler_type} aims for {target_rate:.2f}."
-    interpretation += " Green: efficient sampling."
     axes[0, 0].text(
         0.02,
         0.02,
-        interpretation,
+        f"{sampler_type} aims for {target_rate:.2f}. Green: efficient sampling.",
         transform=axes[0, 0].transAxes,
         fontsize=9,
         bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.7),
     )
 
-    # Distribution
-    axes[0, 1].hist(
-        accept_rates, bins=30, alpha=0.7, density=True, edgecolor="black"
-    )
+    if accept_hist.size:
+        axes[0, 1].hist(
+            accept_hist,
+            bins=30,
+            alpha=0.7,
+            density=True,
+            edgecolor="black",
+        )
+    else:
+        axes[0, 1].text(
+            0.5,
+            0.5,
+            "No finite acceptance data",
+            ha="center",
+            va="center",
+        )
     axes[0, 1].axvline(
         target_rate,
         color="red",
         linestyle="--",
         linewidth=2,
-        label=f"Target ({target_rate})",
+        label=f"Target ({target_rate:.3g})",
     )
     axes[0, 1].set_xlabel("Acceptance Rate")
     axes[0, 1].set_ylabel("Density")
     axes[0, 1].set_title("Acceptance Rate Distribution")
-    axes[0, 1].legend()
+    axes[0, 1].legend(loc="best", fontsize="small")
     axes[0, 1].grid(True, alpha=0.3)
 
-    # Since running means are already overlaid on the main plot, use the bottom row for additional info
-
-    # Additional acceptance analysis - evolution over time
-    if len(accept_rates) > 10:
-        # Show moving standard deviation or coefficient of variation
-        window_std = np.array(
-            [
-                np.std(accept_rates[max(0, i - 20) : i + 1])
-                for i in range(len(accept_rates))
-            ]
-        )
+    if accept_rates.size > 10:
+        window_std = _rolling_std(accept_rates, window=20)
         axes[1, 0].plot(window_std, alpha=0.7, color="green")
         axes[1, 0].set_xlabel("Iteration")
         axes[1, 0].set_ylabel("Rolling Std")
@@ -791,19 +1331,38 @@ def _plot_acceptance_diagnostics(idata, config):
         )
         axes[1, 0].set_title("Acceptance Stability")
 
-    # Summary statistics (expanded)
     stats_text = [
         f"Sampler: {sampler_type}",
         f"Target: {target_rate:.3f}",
-        f"Mean: {np.mean(accept_rates):.3f}",
-        f"Std: {np.std(accept_rates):.3f}",
-        f"CV: {np.std(accept_rates)/np.mean(accept_rates):.3f}",
-        f"Min: {np.min(accept_rates):.3f}",
-        f"Max: {np.max(accept_rates):.3f}",
-        "",
-        "Stability:",
-        f"Final std: {np.std(accept_rates[-len(accept_rates)//4:]):.3f}",
     ]
+    stats_series = accept_rates if accept_rates.size else accept_hist
+    if stats_series.size:
+        mean = float(np.mean(stats_series))
+        std = float(np.std(stats_series))
+        tail_size = max(1, stats_series.size // 4)
+        cv = std / mean if abs(mean) > 1e-12 else np.nan
+        if accept_rates.size == 0:
+            stats_text.append(f"Trace: {trace_label} (no global accept_prob)")
+        stats_text.extend(
+            [
+                f"Mean: {mean:.3f}",
+                f"Std: {std:.3f}",
+                (f"CV: {cv:.3f}" if np.isfinite(cv) else "CV: n/a (mean ~ 0)"),
+                f"Min: {np.min(stats_series):.3f}",
+                f"Max: {np.max(stats_series):.3f}",
+                "",
+                "Stability:",
+                f"Final std: {np.std(stats_series[-tail_size:]):.3f}",
+            ]
+        )
+    else:
+        stats_text.append("No finite acceptance samples")
+
+    if include_channels and channel_series:
+        stats_text.append("")
+        stats_text.append("Per-channel means:")
+        for ch in sorted(channel_series):
+            stats_text.append(f"  ch {ch}: {np.mean(channel_series[ch]):.3f}")
 
     axes[1, 1].text(
         0.05,
@@ -820,172 +1379,110 @@ def _plot_acceptance_diagnostics(idata, config):
     plt.tight_layout()
 
 
+def _plot_acceptance_diagnostics(idata, config):
+    """Acceptance rate diagnostics for non-blocked sampler outputs."""
+    _plot_acceptance_diagnostics_common(idata, config, include_channels=False)
+
+
 def _plot_acceptance_diagnostics_blockaware(idata, config):
-    """Acceptance diagnostics that also handle per‑channel series from blocked NUTS.
+    """Acceptance diagnostics supporting blocked NUTS channel fields."""
+    _plot_acceptance_diagnostics_common(idata, config, include_channels=True)
 
-    If keys like ``accept_prob_channel_0`` are found in ``idata.sample_stats``,
-    they are overlaid on the overall trace and included in the summary.
-    """
-    # Detect overall series
-    accept_key = None
-    if "accept_prob" in idata.sample_stats:
-        accept_key = "accept_prob"
-    elif "acceptance_rate" in idata.sample_stats:
-        accept_key = "acceptance_rate"
 
-    # Collect per-channel series
-    channel_series = {}
-    for key in idata.sample_stats:
-        if isinstance(key, str) and key.startswith("accept_prob_channel_"):
-            try:
-                ch = int(key.rsplit("_", 1)[-1])
-                channel_series[ch] = idata.sample_stats[key].values.flatten()
-            except Exception:
-                pass
-
-    if accept_key is None and not channel_series:
+def _plot_energy_diagnostics(idata, config):
+    """Energy trace diagnostics with E-BFMI summary."""
+    if not hasattr(idata, "sample_stats"):
         fig, ax = plt.subplots(figsize=config.figsize)
         ax.text(
             0.5,
             0.5,
-            "Acceptance rate data unavailable",
+            "No sample_stats available",
             ha="center",
             va="center",
         )
-        ax.set_title("Acceptance Rate Diagnostics")
+        ax.set_title("Energy Diagnostics")
         return
 
-    fig, axes = plt.subplots(2, 2, figsize=config.figsize)
-
-    # Overall or concatenated series
-    if accept_key is not None:
-        accept_rates = idata.sample_stats[accept_key].values.flatten()
+    energy_series: list[tuple[str, np.ndarray]] = []
+    if "energy" in idata.sample_stats:
+        energy = np.asarray(idata.sample_stats["energy"].values)
+        energy_series.append(("overall", energy))
     else:
-        accept_rates = np.concatenate(list(channel_series.values()))
+        for key in idata.sample_stats:
+            if isinstance(key, str) and key.startswith("energy_channel_"):
+                label = key.replace("energy_channel_", "ch ")
+                energy_series.append(
+                    (label, np.asarray(idata.sample_stats[key].values))
+                )
 
-    sampler_type_attr = idata.attrs.get("sampler_type", "").lower()
-    sampler_type = "NUTS" if "nuts" in sampler_type_attr else "Sampler"
-    target_rate = idata.attrs.get("target_accept_prob", 0.8)
-
-    # Ranges (NUTS guidance)
-    good_range = (0.7, 0.9)
-    low_range = (0.0, 0.6)
-    high_range = (0.9, 1.0)
-    concerning_range = (0.6, 0.7)
-
-    # Background zones
-    axes[0, 0].axhspan(good_range[0], good_range[1], alpha=0.1, color="green")
-    axes[0, 0].axhspan(low_range[0], low_range[1], alpha=0.1, color="red")
-    axes[0, 0].axhspan(high_range[0], high_range[1], alpha=0.1, color="orange")
-    if concerning_range[1] > concerning_range[0]:
-        axes[0, 0].axhspan(
-            concerning_range[0], concerning_range[1], alpha=0.1, color="yellow"
-        )
-
-    # Plot traces: overall + per-channel overlays
-    if accept_key is not None:
-        axes[0, 0].plot(
-            accept_rates, alpha=0.8, linewidth=1, color="blue", label="overall"
-        )
-    for ch in sorted(channel_series):
-        axes[0, 0].plot(
-            channel_series[ch], alpha=0.6, linewidth=1, label=f"ch {ch}"
-        )
-    axes[0, 0].axhline(
-        target_rate,
-        color="red",
-        linestyle="--",
-        linewidth=2,
-        label=f"Target ({target_rate})",
-    )
-
-    # Running mean for overall
-    window_size = max(10, len(accept_rates) // 50)
-    if len(accept_rates) > window_size:
-        running_mean = np.convolve(
-            accept_rates, np.ones(window_size) / window_size, mode="valid"
-        )
-        axes[0, 0].plot(
-            range(window_size // 2, window_size // 2 + len(running_mean)),
-            running_mean,
-            alpha=0.9,
-            linewidth=3,
-            color="purple",
-            label=f"Running mean (w={window_size})",
-        )
-
-    axes[0, 0].set_xlabel("Iteration")
-    axes[0, 0].set_ylabel("Acceptance Rate")
-    axes[0, 0].set_title(f"{sampler_type} Acceptance Rate Trace")
-    axes[0, 0].legend(loc="best", fontsize="small")
-    axes[0, 0].grid(True, alpha=0.3)
-
-    # Histogram and summary
-    axes[0, 1].hist(
-        accept_rates, bins=30, alpha=0.7, density=True, edgecolor="black"
-    )
-    axes[0, 1].axvline(
-        target_rate,
-        color="red",
-        linestyle="--",
-        linewidth=2,
-        label=f"Target ({target_rate})",
-    )
-    axes[0, 1].set_xlabel("Acceptance Rate")
-    axes[0, 1].set_ylabel("Density")
-    axes[0, 1].set_title("Acceptance Rate Distribution")
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-
-    if len(accept_rates) > 10:
-        window_std = np.array(
-            [
-                np.std(accept_rates[max(0, i - 20) : i + 1])
-                for i in range(len(accept_rates))
-            ]
-        )
-        axes[1, 0].plot(window_std, alpha=0.7, color="green")
-        axes[1, 0].set_xlabel("Iteration")
-        axes[1, 0].set_ylabel("Rolling Std")
-        axes[1, 0].set_title("Rolling Standard Deviation")
-        axes[1, 0].grid(True, alpha=0.3)
-    else:
-        axes[1, 0].text(
+    if not energy_series:
+        fig, ax = plt.subplots(figsize=config.figsize)
+        ax.text(
             0.5,
             0.5,
-            "Acceptance variability\nanalysis unavailable",
+            "Energy data unavailable",
             ha="center",
             va="center",
         )
-        axes[1, 0].set_title("Acceptance Stability")
+        ax.set_title("Energy Diagnostics")
+        return
 
-    # Summary text
-    stats_text = [
-        f"Sampler: {sampler_type}",
-        f"Target: {target_rate:.3f}",
-        f"Mean: {np.mean(accept_rates):.3f}",
-        f"Std: {np.std(accept_rates):.3f}",
-        f"CV: {np.std(accept_rates)/np.mean(accept_rates):.3f}",
-        f"Min: {np.min(accept_rates):.3f}",
-        f"Max: {np.max(accept_rates):.3f}",
-    ]
-    if channel_series:
-        stats_text.append("")
-        stats_text.append("Per-channel means:")
-        for ch in sorted(channel_series):
-            stats_text.append(f"  ch {ch}: {np.mean(channel_series[ch]):.3f}")
+    ebfmi_lines = ["E-BFMI Summary:"]
 
-    axes[1, 1].text(
+    if len(energy_series) == 1:
+        fig, axes = plt.subplots(1, 2, figsize=config.figsize)
+        trace_axes = [axes[0]]
+        summary_ax = axes[1]
+        trace_titles = ["Energy Trace"]
+    else:
+        n_rows = len(energy_series)
+        fig_height = max(config.figsize[1], 2.5 * n_rows)
+        fig, axes = plt.subplots(
+            n_rows,
+            2,
+            figsize=(config.figsize[0], fig_height),
+            gridspec_kw={"width_ratios": [3, 1]},
+        )
+        trace_axes = [axes[idx, 0] for idx in range(n_rows)]
+        summary_ax = axes[0, 1]
+        for idx in range(1, n_rows):
+            axes[idx, 1].axis("off")
+        trace_titles = [
+            f"Energy Trace ({label})" for label, _ in energy_series
+        ]
+
+    for idx, (label, energy) in enumerate(energy_series):
+        energy_flat = np.asarray(energy).reshape(-1)
+        energy_flat = energy_flat[np.isfinite(energy_flat)]
+        if energy_flat.size == 0:
+            continue
+        energy_flat = _thin_series(energy_flat, config.max_trace_draws)
+        trace_ax = trace_axes[idx]
+        trace_ax.plot(energy_flat, alpha=0.7, linewidth=1.0, color="C0")
+        trace_ax.set_xlabel("Iteration")
+        trace_ax.set_ylabel("Energy")
+        trace_ax.set_title(trace_titles[idx])
+        trace_ax.grid(True, alpha=0.3)
+
+        ebfmi_val = _compute_ebfmi_from_energy(energy_flat)
+        if ebfmi_val is not None and np.isfinite(ebfmi_val):
+            ebfmi_lines.append(f"  {label}: {ebfmi_val:.3f}")
+
+    if len(ebfmi_lines) == 1:
+        ebfmi_lines.append("  unavailable")
+
+    summary_ax.text(
         0.05,
         0.95,
-        "\n".join(stats_text),
-        transform=axes[1, 1].transAxes,
-        fontsize=9,
-        va="top",
-        family="monospace",
+        "\n".join(ebfmi_lines),
+        transform=summary_ax.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        fontfamily="monospace",
+        bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
     )
-    axes[1, 1].set_title("Acceptance Analysis")
-    axes[1, 1].axis("off")
+    summary_ax.set_title("E-BFMI")
+    summary_ax.axis("off")
 
     plt.tight_layout()
 
@@ -1028,10 +1525,14 @@ def _max_tree_depth_stats(
         )
         if max_depth is None:
             return None
-        frac = float(np.mean(tree_depth >= max_depth))
+        hits = int(np.sum(tree_depth >= max_depth))
+        total = int(tree_depth.size)
+        frac = float(hits / total) if total > 0 else 0.0
         max_steps = int(2**max_depth - 1) if max_depth is not None else None
         return {
             "frac": frac,
+            "hits": hits,
+            "total": total,
             "max_depth": max_depth,
             "max_steps": max_steps,
             "source": "tree_depth",
@@ -1058,9 +1559,13 @@ def _max_tree_depth_stats(
             if max_steps_from_steps > 0
             else None
         )
-    frac = float(np.mean(steps >= max_steps_from_steps))
+    hits = int(np.sum(steps >= max_steps_from_steps))
+    total = int(steps.size)
+    frac = float(hits / total) if total > 0 else 0.0
     return {
         "frac": frac,
+        "hits": hits,
+        "total": total,
         "max_steps": max_steps_from_steps,
         "max_depth": max_depth_from_steps,
         "source": "num_steps",
@@ -1069,13 +1574,20 @@ def _max_tree_depth_stats(
 
 def _format_max_tree_depth_message(stats: dict) -> str:
     pct = stats["frac"] * 100
+    hits = stats.get("hits")
+    total = stats.get("total")
+    count_msg = (
+        f"{hits}/{total} ({pct:.1f}%)"
+        if hits is not None and total is not None
+        else f"{pct:.1f}%"
+    )
     max_steps = stats.get("max_steps")
     max_depth = stats.get("max_depth")
     if max_steps is not None:
-        return f"Max tree depth hits: {pct:.1f}% (max steps {max_steps})"
+        return f"Max tree depth hits: {count_msg} (max steps {max_steps})"
     if max_depth is not None:
-        return f"Max tree depth hits: {pct:.1f}% (max depth {max_depth})"
-    return f"Max tree depth hits: {pct:.1f}%"
+        return f"Max tree depth hits: {count_msg} (max depth {max_depth})"
+    return f"Max tree depth hits: {count_msg}"
 
 
 def _plot_nuts_diagnostics_blockaware(idata, config):
@@ -1472,325 +1984,6 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
             plot_nuts_block()
 
 
-def _plot_nuts_diagnostics(idata, config):
-    """NUTS diagnostics with enhanced information."""
-    # Determine available data to decide layout
-    has_energy = "energy" in idata.sample_stats
-    has_potential = "potential_energy" in idata.sample_stats
-    has_steps = "num_steps" in idata.sample_stats
-    has_accept = "accept_prob" in idata.sample_stats
-    has_divergences = "diverging" in idata.sample_stats
-    has_tree_depth = "tree_depth" in idata.sample_stats
-    has_energy_error = "energy_error" in idata.sample_stats
-    attrs = getattr(idata, "attrs", {}) or {}
-    if not hasattr(attrs, "get"):
-        attrs = dict(attrs)
-    max_tree_depth = _coerce_int(attrs.get("max_tree_depth"))
-
-    # Create a 2x2 layout, potentially combining energy and potential on same plot
-    fig, axes = plt.subplots(2, 2, figsize=config.figsize)
-
-    # Top-left: Energy diagnostics (combine Hamiltonian and Potential if both available)
-    energy_ax = axes[0, 0]
-
-    if has_energy and has_potential:
-        # Both available - plot them together on one plot
-        energy = idata.sample_stats.energy.values.flatten()
-        potential = idata.sample_stats.potential_energy.values.flatten()
-
-        # Plot both energies on same axis
-        energy_ax.plot(
-            energy, alpha=0.7, linewidth=1, color="blue", label="Hamiltonian"
-        )
-        energy_ax.plot(
-            potential,
-            alpha=0.7,
-            linewidth=1,
-            color="orange",
-            label="Potential",
-        )
-
-        # Add difference (which relates to kinetic energy)
-        energy_diff = energy - potential
-        # Create second y-axis for difference
-        ax2 = energy_ax.twinx()
-        ax2.plot(
-            energy_diff,
-            alpha=0.5,
-            linewidth=1,
-            color="red",
-            label="H - Potential (Kinetic)",
-            linestyle="--",
-        )
-        ax2.set_ylabel("Energy Difference", color="red")
-        ax2.tick_params(axis="y", labelcolor="red")
-
-        energy_ax.set_xlabel("Iteration")
-        energy_ax.set_ylabel("Energy", color="blue")
-        energy_ax.tick_params(axis="y", labelcolor="blue")
-        energy_ax.set_title("Hamiltonian & Potential Energy")
-        energy_ax.legend(loc="best", fontsize="small")
-        energy_ax.grid(True, alpha=0.3)
-
-        # Add statistics
-        energy_ax.text(
-            0.02,
-            0.98,
-            f"H: μ={np.mean(energy):.1f}, σ={np.std(energy):.1f}\nP: μ={np.mean(potential):.1f}, σ={np.std(potential):.1f}",
-            transform=energy_ax.transAxes,
-            fontsize=8,
-            bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
-            verticalalignment="top",
-        )
-
-    elif has_energy:
-        # Only Hamiltonian energy
-        energy = idata.sample_stats.energy.values.flatten()
-        energy_ax.plot(energy, alpha=0.7, linewidth=1, color="blue")
-        energy_ax.set_xlabel("Iteration")
-        energy_ax.set_ylabel("Hamiltonian Energy")
-        energy_ax.set_title("Hamiltonian Energy Trace")
-        energy_ax.grid(True, alpha=0.3)
-
-    elif has_potential:
-        # Only potential energy
-        potential = idata.sample_stats.potential_energy.values.flatten()
-        energy_ax.plot(potential, alpha=0.7, linewidth=1, color="orange")
-        energy_ax.set_xlabel("Iteration")
-        energy_ax.set_ylabel("Potential Energy")
-        energy_ax.set_title("Potential Energy Trace")
-        energy_ax.grid(True, alpha=0.3)
-
-    else:
-        energy_ax.text(
-            0.5,
-            0.5,
-            "Energy data\nunavailable",
-            ha="center",
-            va="center",
-            transform=energy_ax.transAxes,
-        )
-        energy_ax.set_title("Energy Diagnostics")
-
-    # Top-right: Sampling efficiency diagnostics
-    if has_steps:
-        steps_ax = axes[0, 1]
-        num_steps = idata.sample_stats.num_steps.values.flatten()
-
-        # Show histogram with color zones for step efficiency
-        n, bins, edges = steps_ax.hist(
-            num_steps, bins=20, alpha=0.7, edgecolor="black"
-        )
-
-        # Add shaded regions for different efficiency levels
-        # Green: efficient (tree depth ≤5, ~32 steps)
-        # Yellow: moderate (tree depth 6-8, ~64-256 steps)
-        # Red: inefficient (tree depth >8, >256 steps)
-        steps_ax.axvspan(
-            0, 64, alpha=0.1, color="green", label="Efficient (≤64)"
-        )
-        steps_ax.axvspan(
-            64, 256, alpha=0.1, color="yellow", label="Moderate (65-256)"
-        )
-        steps_ax.axvspan(
-            256,
-            np.max(num_steps),
-            alpha=0.1,
-            color="red",
-            label="Inefficient (>256)",
-        )
-
-        # Add reference lines for different tree depths
-        for depth in [5, 7, 10]:  # Common tree depths
-            max_steps = 2**depth
-            steps_ax.axvline(
-                x=max_steps,
-                color="gray",
-                linestyle=":",
-                alpha=0.7,
-                linewidth=1,
-                label=f"2^{depth} ({max_steps})",
-            )
-        tree_depth = (
-            idata.sample_stats.tree_depth.values.flatten()
-            if has_tree_depth
-            else None
-        )
-        max_stats = _max_tree_depth_stats(
-            num_steps, tree_depth, max_tree_depth
-        )
-        if max_stats and max_stats.get("max_steps") is not None:
-            steps_ax.axvline(
-                x=max_stats["max_steps"],
-                color="red",
-                linestyle="--",
-                linewidth=1.5,
-                label="max tree depth",
-            )
-
-        steps_ax.set_xlabel("Leapfrog Steps")
-        steps_ax.set_ylabel("Trajectories")
-        steps_ax.set_title("Leapfrog Steps Distribution")
-        steps_ax.legend(loc="best", fontsize="small")
-        steps_ax.grid(True, alpha=0.3)
-
-        # Add efficiency statistics
-        pct_inefficient = (num_steps > 256).mean() * 100
-        pct_moderate = ((num_steps > 64) & (num_steps <= 256)).mean() * 100
-        pct_efficient = (num_steps <= 64).mean() * 100
-        extra = ""
-        if max_stats:
-            extra = f"\n{_format_max_tree_depth_message(max_stats)}"
-        steps_ax.text(
-            0.02,
-            0.98,
-            f"Efficient: {pct_efficient:.1f}%\nModerate: {pct_moderate:.1f}%\nInefficient: {pct_inefficient:.1f}%\nMean steps: {np.mean(num_steps):.1f}{extra}",
-            transform=steps_ax.transAxes,
-            fontsize=7,
-            bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
-            verticalalignment="top",
-        )
-
-    else:
-        axes[0, 1].text(
-            0.5, 0.5, "Steps data\nunavailable", ha="center", va="center"
-        )
-        axes[0, 1].set_title("Sampling Steps")
-
-    # Bottom-left: Acceptance and NS divergence diagnostics
-    accept_ax = axes[1, 0]
-
-    if has_accept:
-        accept_prob = idata.sample_stats.accept_prob.values.flatten()
-
-        # Plot acceptance probability with guidance zones
-        accept_ax.fill_between(
-            range(len(accept_prob)),
-            0.7,
-            0.9,
-            alpha=0.1,
-            color="green",
-            label="Good (0.7-0.9)",
-        )
-        accept_ax.fill_between(
-            range(len(accept_prob)),
-            0,
-            0.6,
-            alpha=0.1,
-            color="red",
-            label="Too low",
-        )
-        accept_ax.fill_between(
-            range(len(accept_prob)),
-            0.9,
-            1.0,
-            alpha=0.1,
-            color="orange",
-            label="Too high",
-        )
-
-        accept_ax.plot(
-            accept_prob,
-            alpha=0.8,
-            linewidth=1,
-            color="blue",
-            label="Acceptance prob",
-        )
-        accept_ax.axhline(
-            0.8,
-            color="red",
-            linestyle="--",
-            linewidth=2,
-            label="NUTS target (0.8)",
-        )
-        accept_ax.set_xlabel("Iteration")
-        accept_ax.set_ylabel("Acceptance Probability")
-        accept_ax.set_title("NUTS Acceptance Diagnostic")
-        accept_ax.legend(loc="best", fontsize="small")
-        accept_ax.set_ylim(0, 1)
-        accept_ax.grid(True, alpha=0.3)
-
-    else:
-        accept_ax.text(
-            0.5, 0.5, "Acceptance data\nunavailable", ha="center", va="center"
-        )
-        accept_ax.set_title("Acceptance Diagnostic")
-
-    # Bottom-right: Summary statistics and additional diagnostics
-    summary_ax = axes[1, 1]
-
-    # Collect available statistics
-    stats_lines = []
-
-    if has_energy:
-        energy = idata.sample_stats.energy.values.flatten()
-        stats_lines.append(
-            f"Energy: μ={np.mean(energy):.1f}, σ={np.std(energy):.1f}"
-        )
-
-    if has_potential:
-        potential = idata.sample_stats.potential_energy.values.flatten()
-        stats_lines.append(
-            f"Potential: μ={np.mean(potential):.1f}, σ={np.std(potential):.1f}"
-        )
-
-    if has_steps:
-        num_steps = idata.sample_stats.num_steps.values.flatten()
-        stats_lines.append(
-            f"Steps: μ={np.mean(num_steps):.1f}, max={np.max(num_steps):.0f}"
-        )
-        stats_lines.append("")
-
-    if has_tree_depth:
-        tree_depth = idata.sample_stats.tree_depth.values.flatten()
-        stats_lines.append(f"Tree depth: μ={np.mean(tree_depth):.1f}")
-        max_stats = _max_tree_depth_stats(None, tree_depth, max_tree_depth)
-        if max_stats:
-            stats_lines.append(_format_max_tree_depth_message(max_stats))
-
-    if has_divergences:
-        divergences = idata.sample_stats.diverging.values.flatten()
-        n_divergences = np.sum(divergences)
-        pct_divergent = n_divergences / len(divergences) * 100
-        stats_lines.append(
-            f"Divergent: {n_divergences}/{len(divergences)} ({pct_divergent:.2f}%)"
-        )
-
-    if has_energy_error:
-        energy_error = idata.sample_stats.energy_error.values.flatten()
-        stats_lines.append(
-            f"Energy error: |μ|={np.mean(np.abs(energy_error)):.3f}"
-        )
-
-    if not stats_lines:
-        summary_ax.text(
-            0.5,
-            0.5,
-            "No diagnostics\ndata available",
-            ha="center",
-            va="center",
-            transform=summary_ax.transAxes,
-        )
-        summary_ax.set_title("NUTS Statistics")
-        summary_ax.axis("off")
-    else:
-        summary_text = "\n".join(["NUTS Diagnostics:"] + [""] + stats_lines)
-        summary_ax.text(
-            0.05,
-            0.95,
-            summary_text,
-            transform=summary_ax.transAxes,
-            fontsize=10,
-            verticalalignment="top",
-            fontfamily="monospace",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.9),
-        )
-        summary_ax.set_title("NUTS Summary Statistics")
-        summary_ax.axis("off")
-
-    plt.tight_layout()
-
-
 def _create_divergences_diagnostics(idata, diag_dir, config):
     """Create divergences diagnostics for NUTS samplers."""
     # Check if divergences data exists
@@ -1811,27 +2004,19 @@ def _create_divergences_diagnostics(idata, diag_dir, config):
 
 def _plot_divergences(idata, config):
     """Plot divergences diagnostics."""
-    # Collect all divergence data
     divergences_data: dict[str | int, np.ndarray] = {}
 
-    # Check for main divergences (single chain NUTS)
     if "diverging" in idata.sample_stats:
         divergences_data["main"] = (
             idata.sample_stats.diverging.values.flatten()
         )
 
-    # Check for channel-specific divergences (blocked NUTS)
-    channel_divergences: dict[int, np.ndarray] = {}
     for key in idata.sample_stats:
         if key.startswith("diverging_channel_"):
             channel_idx = key.replace("diverging_channel_", "")
-            channel_divergences[int(channel_idx)] = idata.sample_stats[
+            divergences_data[int(channel_idx)] = idata.sample_stats[
                 key
             ].values.flatten()
-
-    if channel_divergences:
-        for ch, values in channel_divergences.items():
-            divergences_data[ch] = values
 
     if not divergences_data:
         fig, ax = plt.subplots(figsize=config.figsize)
@@ -1841,117 +2026,48 @@ def _plot_divergences(idata, config):
         ax.set_title("Divergences Diagnostics")
         return
 
-    # Create subplot layout
-    n_plots = len(divergences_data)
-    if n_plots == 1:
-        fig, axes = plt.subplots(1, 2, figsize=config.figsize)
-        trace_ax, summary_ax = axes
-    else:
-        # Multiple plots - arrange in grid
-        cols = 2
-        rows = (n_plots + 1) // cols  # Ceiling division
-        fig, axes = plt.subplots(rows, cols, figsize=config.figsize)
-        if rows == 1:
-            axes = axes.reshape(1, -1)
-        axes = axes.flatten()
+    fig, axes = plt.subplots(1, 2, figsize=config.figsize)
+    trace_ax, summary_ax = axes
 
-        # Last plot goes in summary_ax if odd number
-        if n_plots % 2 == 1:
-            trace_axes = axes[:-1]
-            summary_ax = axes[-1]
-        else:
-            trace_axes = axes
-            summary_ax = None
-
-    # Plot divergences traces
     total_divergences = 0
     total_iterations = 0
 
-    plot_idx = 0
     for label, div_values in divergences_data.items():
-        if label == "main":
-            title = "NUTS Divergences"
-            ax = trace_axes[plot_idx] if n_plots > 1 else axes[0]
-        else:
-            title = f"Channel {label} Divergences"
-            ax = trace_axes[plot_idx] if n_plots > 1 else axes[0]
-            plot_idx += 1
-
-        # Plot divergence indicators (where divergences occur)
-        div_indices = np.where(div_values)[0]
-        ax.scatter(
-            div_indices,
-            np.ones_like(div_indices),
-            color="red",
-            marker="x",
-            s=50,
-            linewidth=2,
-            label="Divergent",
-            alpha=0.8,
+        div = np.asarray(div_values).reshape(-1)
+        div = div[np.isfinite(div)]
+        if div.size == 0:
+            continue
+        cumulative = np.cumsum(div.astype(int))
+        label_str = "overall" if label == "main" else f"ch {label}"
+        trace_ax.plot(
+            np.arange(cumulative.size),
+            cumulative,
+            linewidth=1.4,
+            alpha=0.9,
+            label=label_str,
         )
+        total_divergences += int(np.sum(div))
+        total_iterations += int(div.size)
 
-        # Add background shading for divergent regions
-        if len(div_indices) > 0:
-            for idx in div_indices:
-                ax.axvspan(idx - 0.5, idx + 0.5, alpha=0.2, color="red")
+    trace_ax.set_xlabel("Iteration")
+    trace_ax.set_ylabel("Cumulative Divergences")
+    trace_ax.set_title("NUTS Divergences (Cumulative)")
+    trace_ax.grid(True, alpha=0.3)
+    trace_ax.legend(loc="best", fontsize="small")
 
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel("Divergence Indicator")
-        ax.set_title(title)
-        ax.set_yticks([0, 1])
-        ax.set_yticklabels(["No", "Yes"])
-        ax.grid(True, alpha=0.3)
+    summary_ax.text(
+        0.05,
+        0.95,
+        _get_divergences_summary(divergences_data),
+        transform=summary_ax.transAxes,
+        fontsize=12,
+        verticalalignment="top",
+        fontfamily="monospace",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.9),
+    )
+    summary_ax.set_title("Divergences Summary")
+    summary_ax.axis("off")
 
-        # Add statistics
-        n_divergent = np.sum(div_values)
-        pct_divergent = n_divergent / len(div_values) * 100
-        stats_text = f"{n_divergent}/{len(div_values)} ({pct_divergent:.2f}%)"
-        ax.text(
-            0.02,
-            0.98,
-            stats_text,
-            transform=ax.transAxes,
-            fontsize=10,
-            bbox=dict(boxstyle="round", facecolor="lightcoral", alpha=0.8),
-            verticalalignment="top",
-        )
-
-        total_divergences += n_divergent
-        total_iterations += len(div_values)
-
-        # Legend only if there are divergences
-        if n_divergent > 0:
-            ax.legend(loc="upper right", fontsize="small")
-
-    # Summary plot
-    if summary_ax is not None and n_plots > 1:
-        summary_ax.text(
-            0.05,
-            0.95,
-            _get_divergences_summary(divergences_data),
-            transform=summary_ax.transAxes,
-            fontsize=12,
-            verticalalignment="top",
-            fontfamily="monospace",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.9),
-        )
-        summary_ax.set_title("Divergences Summary")
-        summary_ax.axis("off")
-    elif n_plots == 1:
-        axes[1].text(
-            0.05,
-            0.95,
-            _get_divergences_summary(divergences_data),
-            transform=axes[1].transAxes,
-            fontsize=12,
-            verticalalignment="top",
-            fontfamily="monospace",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.9),
-        )
-        axes[1].set_title("Divergences Summary")
-        axes[1].axis("off")
-
-    # Overall title
     overall_pct = (
         total_divergences / total_iterations * 100
         if total_iterations > 0
@@ -2104,6 +2220,8 @@ def generate_diagnostics_summary(
 
     ess_min = None
     ess_med = None
+    ess_tail_min = None
+    ess_tail_med = None
     try:
         ess_attr = attrs.get("ess")
         if ess_attr is not None:
@@ -2112,6 +2230,16 @@ def generate_diagnostics_summary(
             if ess_vals.size:
                 ess_min = float(np.min(ess_vals))
                 ess_med = float(np.median(ess_vals))
+    except Exception:
+        pass
+    try:
+        ess_tail_attr = attrs.get("ess_tail")
+        if ess_tail_attr is not None:
+            ess_tail_vals = np.asarray(ess_tail_attr).reshape(-1)
+            ess_tail_vals = ess_tail_vals[np.isfinite(ess_tail_vals)]
+            if ess_tail_vals.size:
+                ess_tail_min = float(np.min(ess_tail_vals))
+                ess_tail_med = float(np.median(ess_tail_vals))
     except Exception:
         pass
 
@@ -2131,11 +2259,13 @@ def generate_diagnostics_summary(
     if mode == "full":
         ess_min = mcmc_diag.get("ess_bulk_min", ess_min)
         ess_med = mcmc_diag.get("ess_bulk_median", ess_med)
+        ess_tail_min = mcmc_diag.get("ess_tail_min", ess_tail_min)
+        ess_tail_med = mcmc_diag.get("ess_tail_median", ess_tail_med)
         rhat_max = mcmc_diag.get("rhat_max", rhat_max)
         rhat_mean = mcmc_diag.get("rhat_mean", rhat_mean)
 
         # Fallback to ArviZ scans when explicitly requested.
-        if ess_min is None or rhat_max is None:
+        if ess_min is None or ess_tail_min is None or rhat_max is None:
             try:
                 ess = az.ess(idata, method="bulk")
                 ess_vals = np.concatenate(
@@ -2145,6 +2275,21 @@ def generate_diagnostics_summary(
                 if ess_vals.size:
                     ess_min = float(np.min(ess_vals))
                     ess_med = float(np.median(ess_vals))
+            except Exception:
+                pass
+
+            try:
+                ess_tail = az.ess(idata, method="tail")
+                ess_tail_vals = np.concatenate(
+                    [
+                        np.asarray(ess_tail[v]).reshape(-1)
+                        for v in ess_tail.data_vars
+                    ]
+                )
+                ess_tail_vals = ess_tail_vals[np.isfinite(ess_tail_vals)]
+                if ess_tail_vals.size:
+                    ess_tail_min = float(np.min(ess_tail_vals))
+                    ess_tail_med = float(np.median(ess_tail_vals))
             except Exception:
                 pass
 
@@ -2162,6 +2307,8 @@ def generate_diagnostics_summary(
 
     cached_ess_min = _as_float(attrs.get("mcmc_ess_bulk_min"))
     cached_ess_med = _as_float(attrs.get("mcmc_ess_bulk_median"))
+    cached_ess_tail_min = _as_float(attrs.get("mcmc_ess_tail_min"))
+    cached_ess_tail_med = _as_float(attrs.get("mcmc_ess_tail_median"))
     cached_rhat_max = _as_float(attrs.get("mcmc_rhat_max"))
     cached_rhat_mean = _as_float(attrs.get("mcmc_rhat_mean"))
 
@@ -2169,6 +2316,10 @@ def generate_diagnostics_summary(
         ess_min = cached_ess_min
     if cached_ess_med is not None:
         ess_med = cached_ess_med
+    if cached_ess_tail_min is not None:
+        ess_tail_min = cached_ess_tail_min
+    if cached_ess_tail_med is not None:
+        ess_tail_med = cached_ess_tail_med
     if cached_rhat_max is not None:
         rhat_max = cached_rhat_max
     if cached_rhat_mean is not None:
@@ -2178,6 +2329,15 @@ def generate_diagnostics_summary(
         summary.append(
             f"\nESS bulk: min={ess_min:.0f}"
             + (f", median={ess_med:.0f}" if ess_med is not None else "")
+        )
+    if ess_tail_min is not None:
+        summary.append(
+            f"ESS tail: min={ess_tail_min:.0f}"
+            + (
+                f", median={ess_tail_med:.0f}"
+                if ess_tail_med is not None
+                else ""
+            )
         )
     if rhat_max is not None:
         summary.append(
@@ -2224,8 +2384,11 @@ def generate_diagnostics_summary(
         if div is not None:
             div = div[np.isfinite(div)]
             if div.size:
+                div_count = int(np.sum(div))
+                div_total = int(div.size)
+                div_pct = float(np.mean(div) * 100.0)
                 summary.append(
-                    f"Divergence fraction: {np.mean(div) * 100:.2f}%"
+                    f"Divergences: {div_count}/{div_total} ({div_pct:.2f}%)"
                 )
     except Exception:
         pass
@@ -2254,6 +2417,16 @@ def generate_diagnostics_summary(
         ]
         if ebfmi_candidates:
             ebfmi = float(np.min(ebfmi_candidates))
+    if ebfmi is None and hasattr(idata, "sample_stats"):
+        energy_values = []
+        if "energy" in idata.sample_stats:
+            energy_values.append(np.asarray(idata.sample_stats["energy"]))
+        else:
+            for key in idata.sample_stats:
+                if str(key).startswith("energy_channel_"):
+                    energy_values.append(np.asarray(idata.sample_stats[key]))
+        if energy_values:
+            ebfmi = _compute_ebfmi_from_energy(np.concatenate(energy_values))
     if ebfmi is not None:
         summary.append(f"E-BFMI: {ebfmi:.3f}")
 
@@ -2409,6 +2582,8 @@ def generate_diagnostics_summary(
             summary.append("  Status: UNKNOWN (missing ESS/Rhat)")
         else:
             ess_ok = ess_min >= 400
+            if ess_tail_min is not None:
+                ess_ok = ess_ok and ess_tail_min >= 400
             rhat_ok = rhat_max <= 1.01
             if ess_ok and rhat_ok:
                 summary.append("  Status: EXCELLENT ✓")
@@ -2418,6 +2593,37 @@ def generate_diagnostics_summary(
                 summary.append("  Status: NEEDS ATTENTION ⚠")
     else:
         summary.append("  Status: UNKNOWN (insufficient diagnostics)")
+
+    # Practical NUTS guidance (kept short; ASCII-only for portability).
+    sampler_lower = str(sampler_type).lower()
+    if "nuts" in sampler_lower:
+        summary.append("\nNUTS Energy / E-BFMI Notes:")
+        summary.append(
+            "  H(q,p)=U(q)+K(p); U(q) is -log posterior (up to a constant)."
+        )
+        summary.append(
+            "  Energy mixing: if transition energy changes are much narrower than"
+        )
+        summary.append(
+            "  marginal energy, exploration is poor even without divergences."
+        )
+        summary.append("  E-BFMI thresholds (rule of thumb):")
+        summary.append("    >=0.3 ok; 0.2-0.3 borderline; <0.2 problematic.")
+        summary.append("  Prioritize checks in this order:")
+        summary.append(
+            "    divergences -> max tree depth hits -> E-BFMI/energy -> Rhat/ESS"
+        )
+        summary.append("    -> trace/rank -> pair plots for problem blocks.")
+        summary.append("  If E-BFMI is low, fixes usually target geometry:")
+        summary.append(
+            "    reparameterize (non-centered, log-scales), whiten weights,"
+        )
+        summary.append(
+            "    rescale inputs/priors to O(1), or use more informative priors."
+        )
+        summary.append(
+            "  Higher target_accept or max_tree_depth are secondary tweaks."
+        )
 
     summary_text = "\n".join(summary)
 

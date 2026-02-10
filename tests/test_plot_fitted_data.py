@@ -293,9 +293,6 @@ def test_plot_multivariate_fitted_data_blocks(
         save=True,
     )
 
-    # Also save frequency weights for reference
-    import matplotlib.pyplot as plt
-
     # Plot block-wise likelihood ingredients (u_j, best-fit theta)
     components_dir = _ensure_dir(os.path.join(outdir, "blocked_components"))
     u_complex = np.asarray(fft_coarse.u_re) + 1j * np.asarray(fft_coarse.u_im)
@@ -320,7 +317,6 @@ def test_plot_multivariate_fitted_data_blocks(
         "psd_matrix_empirical.png",
         "psd_matrix_empirical_full.png",
         "psd_matrix_abs_csd.png",
-        "coarse_weights_multivar.png",
     ]
     for tag in ("coarse", "full"):
         expected_files.extend(

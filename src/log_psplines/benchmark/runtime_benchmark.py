@@ -1,10 +1,9 @@
 import glob
 import json
 import os
-from typing import List, Literal, cast
+from typing import Literal
 
 import jax
-import matplotlib.pyplot as plt
 import numpy as np
 from tqdm.auto import tqdm
 
@@ -49,7 +48,7 @@ class RuntimeBenchmark:
 
     def _run_data_size_analysis(
         self,
-        sampler: Literal["nuts", "multivar_blocked_nuts"] = "nuts",
+        sampler: Literal["nuts"] = "nuts",
         min_n: float = 128.0,
         max_n: float = 1024.0,
         num_points: int = 10,
@@ -62,7 +61,10 @@ class RuntimeBenchmark:
             knot_kwargs={"frac_uniform": 1.0},
         )
 
-        assert min_n < max_n, f"min_n {min_n} must be less than max_n {max_n}"
+        if min_n >= max_n:
+            raise ValueError(
+                f"min_n ({min_n}) must be strictly less than max_n ({max_n})."
+            )
         _ns = np.geomspace(min_n, max_n, num=num_points, dtype=int)
         durations = _ns / AR_DEFAULTS["fs"]  # Convert to durations in seconds
         runtimes = []
@@ -125,7 +127,7 @@ class RuntimeBenchmark:
 
     def _run_knots_analysis(
         self,
-        sampler: Literal["nuts", "multivar_blocked_nuts"] = "nuts",
+        sampler: Literal["nuts"] = "nuts",
         min_knots: int = 5,
         max_knots: int = 30,
         num_points: int = 10,
@@ -195,7 +197,7 @@ class RuntimeBenchmark:
         max_n: float = 1024.0,
         min_knots: int = 5,
         max_knots: int = 30,
-        sampler: str = "all",
+        sampler: Literal["nuts", "all"] = "all",
     ):
         """Run analyses for the NUTS sampler."""
 
@@ -204,25 +206,18 @@ class RuntimeBenchmark:
                 f"Invalid sampler: {sampler}. Choose from 'nuts' or 'all'."
             )
 
-        samplers = []
-        if sampler == "all":
-            samplers = ["nuts"]
-        elif isinstance(sampler, str):
-            samplers = [sampler]
+        samplers = ["nuts"] if sampler == "all" else [sampler]
 
         for sampler in samplers:
-            sampler_lit = cast(
-                Literal["nuts", "multivar_blocked_nuts"], sampler
-            )
             self._run_data_size_analysis(
-                sampler=sampler_lit,
+                sampler=sampler,
                 min_n=min_n,
                 max_n=max_n,
                 num_points=n_points,
                 reps=n_reps,
             )
             self._run_knots_analysis(
-                sampler=sampler_lit,
+                sampler=sampler,
                 min_knots=min_knots,
                 max_knots=max_knots,
                 num_points=n_points,

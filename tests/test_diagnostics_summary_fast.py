@@ -27,7 +27,7 @@ def _make_min_idata() -> az.InferenceData:
 def test_generate_diagnostics_summary_light_skips_expensive(
     monkeypatch, tmp_path
 ):
-    import log_psplines.plotting.diagnostics as diag_mod
+    import log_psplines.diagnostics.plotting as diag_mod
 
     idata = _make_min_idata()
 
@@ -47,7 +47,7 @@ def test_generate_diagnostics_summary_light_skips_expensive(
 
 
 def test_generate_diagnostics_summary_off_writes_nothing(tmp_path):
-    import log_psplines.plotting.diagnostics as diag_mod
+    import log_psplines.diagnostics.plotting as diag_mod
 
     idata = _make_min_idata()
     text = diag_mod.generate_diagnostics_summary(
@@ -58,7 +58,7 @@ def test_generate_diagnostics_summary_off_writes_nothing(tmp_path):
 
 
 def test_generate_diagnostics_summary_full_uses_run_all(monkeypatch, tmp_path):
-    import log_psplines.plotting.diagnostics as diag_mod
+    import log_psplines.diagnostics.plotting as diag_mod
 
     idata = _make_min_idata()
     calls = {"n": 0}
@@ -99,12 +99,14 @@ def test_generate_diagnostics_summary_full_uses_run_all(monkeypatch, tmp_path):
 def test_generate_diagnostics_summary_full_uses_cached_attrs(
     monkeypatch, tmp_path
 ):
-    import log_psplines.plotting.diagnostics as diag_mod
+    import log_psplines.diagnostics.plotting as diag_mod
 
     idata = _make_min_idata()
     idata.attrs["full_diagnostics_computed"] = 1
     idata.attrs["mcmc_ess_bulk_min"] = 123.0
     idata.attrs["mcmc_ess_bulk_median"] = 456.0
+    idata.attrs["mcmc_ess_tail_min"] = 222.0
+    idata.attrs["mcmc_ess_tail_median"] = 333.0
     idata.attrs["mcmc_rhat_max"] = 1.02
     idata.attrs["mcmc_rhat_mean"] = 1.01
     idata.attrs["mcmc_psis_khat_max"] = 0.55
@@ -120,6 +122,7 @@ def test_generate_diagnostics_summary_full_uses_cached_attrs(
         idata, str(tmp_path), mode="full"
     )
     assert "ESS bulk: min=123" in text
+    assert "ESS tail: min=222" in text
     assert "PSIS k-hat" in text
     assert "E-BFMI" in text
     assert (tmp_path / "diagnostics_summary.txt").exists()

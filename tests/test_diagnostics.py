@@ -1,9 +1,18 @@
 import arviz as az
+import matplotlib
 import numpy as np
 from xarray import DataArray, Dataset
 
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+
 from log_psplines.diagnostics import psd_compare, run_all_diagnostics
 from log_psplines.diagnostics._utils import compute_riae
+from log_psplines.diagnostics.plotting import (
+    DiagnosticsConfig,
+    _plot_energy_diagnostics,
+)
 
 
 def _build_idata_with_psd(truth: np.ndarray, q50_scale: float = 1.1):
@@ -71,8 +80,6 @@ def test_run_all_orchestrates_modules():
         "mcmc",
         "psd_compare",
         "psd_bands",
-        "time_domain",
-        "whitening",
         "vi",
     }
     assert expected_modules.issubset(set(result.keys()))
@@ -82,7 +89,7 @@ def test_run_all_orchestrates_modules():
         assert all(isinstance(v, float) for v in module_metrics.values())
 
 
-def test_run_all_includes_energy_channel_metrics():
+def test_run_all_ignores_energy_channel_metrics():
     rng = np.random.default_rng(123)
     truth = np.linspace(1.0, 2.0, 5)
     idata, _, _ = _build_idata_with_psd(truth, q50_scale=1.0)
@@ -96,16 +103,10 @@ def test_run_all_includes_energy_channel_metrics():
         signals=rng.normal(size=100),
     )
 
-    assert "energy" in result
-    energy_metrics = result["energy"]
-    assert any(
-        key.startswith("ebfmi_energy_channel_0") for key in energy_metrics
-    )
-    assert all(isinstance(v, float) for v in energy_metrics.values())
+    assert "energy" not in result
 
 
 def test_energy_histogram_falls_back_when_range_is_too_small(tmp_path):
-    from log_psplines.diagnostics.energy import plot_ebfmi_diagnostics
 
     energy = np.stack(
         (
@@ -114,9 +115,16 @@ def test_energy_histogram_falls_back_when_range_is_too_small(tmp_path):
         ),
         axis=0,
     )
-    metrics = plot_ebfmi_diagnostics(
-        idata=None, outdir=tmp_path, energy=energy
+    idata = az.from_dict(
+        posterior={"x": np.zeros((2, 100))},
+        sample_stats={"energy": energy},
     )
-
-    assert metrics is not None
-    assert (tmp_path / "ebfmi_diagnostics.png").exists()
+    config = DiagnosticsConfig(figsize=(6, 4))
+    before = set(plt.get_fignums())
+    _plot_energy_diagnostics(idata, config)
+    after = set(plt.get_fignums())
+    new_figs = after - before
+    assert new_figs
+    fig = plt.figure(max(new_figs))
+    assert len(fig.axes) >= 1
+    plt.close(fig)

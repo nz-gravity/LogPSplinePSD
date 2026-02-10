@@ -18,6 +18,62 @@ def _as_positive_int(name: str, value: int) -> int:
     return value_int
 
 
+def _interp_frequency_indexed_array(
+    freq_src: np.ndarray,
+    freq_tgt: np.ndarray,
+    values: np.ndarray,
+    *,
+    sort_and_dedup: bool = True,
+    force_complex_output: bool = False,
+) -> np.ndarray:
+    """Interpolate values indexed by frequency along axis 0."""
+    freq_src = np.asarray(freq_src, dtype=float)
+    freq_tgt = np.asarray(freq_tgt, dtype=float)
+    values = np.asarray(values)
+
+    if freq_src.ndim != 1:
+        raise ValueError("freq_src must be a 1-D array")
+    if freq_tgt.ndim != 1:
+        raise ValueError("freq_tgt must be a 1-D array")
+    if values.ndim < 1:
+        raise ValueError("values must be at least 1-D")
+    if values.shape[0] != freq_src.size:
+        raise ValueError("values and freq_src must have matching lengths")
+    if freq_src.size == 0:
+        raise ValueError("freq_src must be non-empty")
+
+    if sort_and_dedup:
+        sort_idx = np.argsort(freq_src)
+        freq_src = freq_src[sort_idx]
+        values = values[sort_idx]
+        freq_src, uniq_idx = np.unique(freq_src, return_index=True)
+        values = values[uniq_idx]
+
+    if freq_src.shape == freq_tgt.shape and np.allclose(freq_src, freq_tgt):
+        return np.asarray(values)
+
+    flat = values.reshape(values.shape[0], -1)
+    real_interp = np.vstack(
+        [
+            np.interp(freq_tgt, freq_src, flat[:, i].real)
+            for i in range(flat.shape[1])
+        ]
+    ).T
+
+    if np.iscomplexobj(values) or force_complex_output:
+        imag_interp = np.vstack(
+            [
+                np.interp(freq_tgt, freq_src, flat[:, i].imag)
+                for i in range(flat.shape[1])
+            ]
+        ).T
+        res = real_interp + 1j * imag_interp
+    else:
+        res = real_interp
+
+    return res.reshape((freq_tgt.size,) + values.shape[1:])
+
+
 @runtime_typecheck
 def interp_matrix(
     freq_src: Float[np.ndarray, "f_src"],
@@ -36,38 +92,12 @@ def interp_matrix(
         Target frequency grid.
     """
 
-    freq_src = np.asarray(freq_src, dtype=float)
-    freq_tgt = np.asarray(freq_tgt, dtype=float)
-    mat = np.asarray(mat)
-
-    # Guard against non-strictly-increasing grids (some generators copy
-    # the first positive frequency into the zero bin).
-    sort_idx = np.argsort(freq_src)
-    freq_sorted = freq_src[sort_idx]
-    mat_sorted = mat[sort_idx]
-    freq_unique, uniq_idx = np.unique(freq_sorted, return_index=True)
-    mat_unique = mat_sorted[uniq_idx]
-
-    if freq_unique.shape == freq_tgt.shape and np.allclose(
-        freq_unique, freq_tgt
-    ):
-        return np.asarray(mat_unique)
-
-    flat = mat_unique.reshape(mat_unique.shape[0], -1)
-    real_interp = np.vstack(
-        [
-            np.interp(freq_tgt, freq_unique, flat[:, i].real)
-            for i in range(flat.shape[1])
-        ]
-    ).T
-    imag_interp = np.vstack(
-        [
-            np.interp(freq_tgt, freq_unique, flat[:, i].imag)
-            for i in range(flat.shape[1])
-        ]
-    ).T
-    return (real_interp + 1j * imag_interp).reshape(
-        (freq_tgt.size,) + mat_unique.shape[1:]
+    return _interp_frequency_indexed_array(
+        freq_src,
+        freq_tgt,
+        mat,
+        sort_and_dedup=True,
+        force_complex_output=True,
     )
 
 
@@ -78,36 +108,25 @@ def _interp_complex_matrix(
     matrix: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],
 ) -> Complex[np.ndarray, "f_tgt ..."]:
     """Linearly interpolate a complex-valued matrix along the frequency axis."""
-    freq_src = np.asarray(freq_src, dtype=float)
-    freq_tgt = np.asarray(freq_tgt, dtype=float)
-    flat = matrix.reshape(matrix.shape[0], -1)
-
-    real_interp = np.vstack(
-        [
-            np.interp(freq_tgt, freq_src, flat[:, idx].real)
-            for idx in range(flat.shape[1])
-        ]
-    ).T
-
-    if np.iscomplexobj(matrix):
-        imag_interp = np.vstack(
-            [
-                np.interp(freq_tgt, freq_src, flat[:, idx].imag)
-                for idx in range(flat.shape[1])
-            ]
-        ).T
-        res = real_interp + 1j * imag_interp
-    else:
-        res = real_interp
-
-    return res.reshape((freq_tgt.size,) + matrix.shape[1:])
+    return _interp_frequency_indexed_array(
+        freq_src,
+        freq_tgt,
+        matrix,
+        sort_and_dedup=True,
+        force_complex_output=True,
+    )
 
 
 @runtime_typecheck
 def u_to_wishart_matrix(
     u: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
 ) -> Complex[np.ndarray, "..."]:
-    """Convert eigenvector-weighted periodogram components to Wishart matrices."""
+    """Convert eigenvector-weighted periodogram components to Wishart matrices.
+
+    Eg:
+    u = [[u11, u12], [u21, u22], [u31, u32]]
+    -> Y = [[sum_k u1k*conj(u1k), sum_k u1k*conj(u2k)], [sum_k u2k*conj(u1k), sum_k u2k*conj(u2k)]]
+    """
 
     u = np.asarray(u, dtype=np.complex128)
     if u.ndim != 3:
@@ -120,7 +139,15 @@ def u_to_wishart_matrix(
 def sum_wishart_outer_products(
     u_stack: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
 ) -> Complex[np.ndarray, "..."]:
-    """Sum Wishart contributions across a stack of ``U`` matrices."""
+    """Sum Wishart contributions across a stack of ``U`` matrices.
+
+    This is equivalent to summing the outer products of the rows of each U matrix:
+    out[i, j] = sum_{r} sum_{k} u_stack[r, i, k] * conj(u_stack[r, j, k])
+
+    Eg:
+    [[U1], [U2], [U3]] -> U1^H @ U1 + U2^H @ U2 + U3^H @ U3
+
+    """
 
     u_stack = np.asarray(u_stack, dtype=np.complex128)
     if u_stack.ndim != 3:
@@ -138,7 +165,12 @@ def wishart_matrix_to_psd(
     scaling_factor: float = 1.0,
     Nh: int = 1,
 ) -> Complex[np.ndarray, "..."]:
-    """Convert Wishart matrices into one-sided PSD matrices."""
+    """Convert Wishart matrices into one-sided PSD matrices.
+
+    Eg:
+    Y = U^H @ U, Nb=10, Nh=2, duration=1.0 -> psd = Y / (10 * 2 * 1.0)
+
+    """
 
     Y = np.asarray(Y, dtype=np.complex128)
     if Y.ndim != 3:
@@ -181,15 +213,28 @@ def wishart_u_to_psd(
 def _get_coherence(
     psd: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
 ) -> Float[np.ndarray, "..."]:
-    N, p, _ = psd.shape
-    coh = np.zeros((N, p, p))
+    """Compute coherence matrices from PSD estimates.
+
+    Cxy = |Pxy|^2 / (Pxx * Pyy) with diagonal elements set to 1.0 and clipped to [0, 1].
+
+    """
+    psd = np.asarray(psd)
+    if psd.ndim != 3:
+        raise ValueError("psd must have shape (N, p, p)")
+    N, p, q = psd.shape
+    if p != q:
+        raise ValueError("psd must have square channel dimensions")
+
+    coh = np.zeros((N, p, p), dtype=np.float64)
     for i in range(p):
         coh[:, i, i] = 1.0
         for j in range(i + 1, p):
             denom = np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
             with np.errstate(divide="ignore", invalid="ignore"):
-                coh_ij = np.abs(psd[:, i, j]) ** 2 / denom
-            coh[:, i, j] = np.where(denom > 0, coh_ij, 0.0)
+                coh_ij = np.where(
+                    denom > 0, (np.abs(psd[:, i, j]) ** 2) / denom, 0.0
+                )
+            coh[:, i, j] = np.clip(coh_ij.real, a_min=0.0, a_max=1.0)
             coh[:, j, i] = coh[:, i, j]
     return coh
 

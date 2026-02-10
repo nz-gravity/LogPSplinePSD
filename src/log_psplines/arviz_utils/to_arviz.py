@@ -185,10 +185,40 @@ def _prepare_attributes_and_dims(
 
     # Add ESS calculation (best-effort; keep small set for speed)
     try:
-        ess_vars = list(samples.keys())
+
+        def _select_weight_indices(size: int, max_points: int) -> np.ndarray:
+            if size <= 0 or max_points <= 0:
+                return np.array([], dtype=int)
+            if size <= max_points:
+                return np.arange(size, dtype=int)
+            idx = np.unique(
+                np.linspace(
+                    0, size - 1, num=max_points, dtype=int, endpoint=True
+                )
+            )
+            return idx
+
+        ess_samples: Dict[str, Any] = {}
+        for name, arr in samples.items():
+            if str(name).startswith("weights"):
+                if getattr(arr, "ndim", 0) >= 3:
+                    size = int(arr.shape[-1])
+                    idx = _select_weight_indices(size, 6)
+                    if idx.size == 0:
+                        continue
+                    ess_samples[name] = arr[..., idx]
+                else:
+                    ess_samples[name] = arr
+                continue
+            ess_samples[name] = arr
+
+        if not ess_samples:
+            ess_samples = dict(samples)
+
+        ess_vars = list(ess_samples.keys())
         if len(ess_vars) > 10:
             ess_vars = ess_vars[:10]
-        summary = az.summary(samples, var_names=ess_vars, round_to=2)
+        summary = az.summary(ess_samples, var_names=ess_vars, round_to=2)
         ess_vals = summary["ess_bulk"].values
         attributes.update(dict(ess=ess_vals))
 

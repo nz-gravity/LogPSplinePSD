@@ -475,6 +475,7 @@ class BaseSampler(ABC):
             plot_diagnostics(
                 idata_out,
                 self.config.outdir,
+                model=self.model,
                 summary_mode=getattr(
                     self.config, "diagnostics_summary_mode", "full"
                 ),

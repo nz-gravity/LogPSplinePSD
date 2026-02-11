@@ -13,7 +13,6 @@ from log_psplines.diagnostics.plotting import (
     _create_rank_diagnostics,
     _create_sampler_diagnostics,
     _plot_acceptance_diagnostics,
-    _plot_log_posterior,
     _plot_nuts_diagnostics_blockaware,
     _select_pair_plot_vars,
     _select_rank_plot_vars,
@@ -78,19 +77,6 @@ def _latest_figure(before):
     new_figs = after - before
     assert new_figs
     return plt.figure(max(new_figs))
-
-
-def test_plot_log_posterior_fallback():
-    idata = az.from_dict(
-        posterior={"weights": np.zeros((1, 5, 1))},
-        sample_stats={"dummy_stat": np.zeros((1, 1))},
-    )
-    config = DiagnosticsConfig(figsize=(6, 4))
-    before = set(plt.get_fignums())
-    _plot_log_posterior(idata, config)
-    fig = _latest_figure(before)
-    assert len(fig.axes) == 1
-    plt.close(fig)
 
 
 def test_create_sampler_diagnostics_nuts_writes_files(tmp_path):

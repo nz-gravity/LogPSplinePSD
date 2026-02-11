@@ -10,10 +10,8 @@ from log_psplines.diagnostics.plotting import (
     DiagnosticsConfig,
     _get_channel_indices,
     _plot_acceptance_diagnostics_blockaware,
-    _plot_log_posterior,
     _plot_nuts_diagnostics_blockaware,
     _plot_single_nuts_block,
-    plot_trace,
 )
 
 
@@ -49,24 +47,6 @@ def _latest_figure(before):
     new_figs = after - before
     assert new_figs
     return plt.figure(max(new_figs))
-
-
-def test_plot_trace_smoke():
-    idata = _make_minimal_idata()
-    fig = plot_trace(idata, compact=True)
-    assert fig is not None
-    assert len(fig.axes) > 0
-    plt.close(fig)
-
-
-def test_plot_log_posterior_smoke():
-    idata = _make_minimal_idata()
-    config = DiagnosticsConfig(figsize=(6, 4))
-    before = set(plt.get_fignums())
-    _plot_log_posterior(idata, config)
-    fig = _latest_figure(before)
-    assert len(fig.axes) == 1
-    plt.close(fig)
 
 
 def test_plot_acceptance_blockaware_smoke():

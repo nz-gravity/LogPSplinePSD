@@ -8,11 +8,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ..logger import logger
-from ..plotting.base import PlotConfig, safe_plot, setup_plot_style
+from ..plotting.base import safe_plot, setup_plot_style
+from .derived_weights import (
+    HDI_PROB,
+    REP_WEIGHT_ESS_K,
+    REP_WEIGHT_EVEN_K,
+    REP_WEIGHT_VAR_K,
+    build_plot_dataset,
+    compute_weight_summaries,
+    find_weight_vars,
+    select_rep_indices,
+)
 from .run_all import run_all_diagnostics
 
 # Setup consistent styling for diagnostics plots
 setup_plot_style()
+
+SAVE_ESS_RHAT_PROFILES = True
 
 
 @dataclass
@@ -27,46 +39,13 @@ class DiagnosticsConfig:
     rhat_threshold: float = 1.01
     ebfmi_threshold: float = 0.3
     tree_depth_hit_warn_frac: float = 0.1
-    fontsize: int = 11
-    labelsize: int = 12
-    titlesize: int = 12
-    # Trace plot performance guards (important for multivariate runs)
-    max_trace_vars_per_group: int = 8
-    max_trace_dims_per_var: int = 4
-    max_trace_series_per_group: int = 12
-    max_trace_draws: int = 2000
-    trace_use_kde: bool = True
-    trace_kde_max_points: int = 1200
-    trace_max_kde_series_per_group: int = 4
-    trace_max_elements_per_var: int = 500_000
-    trace_max_total_elements: int = 5_000_000
-    # Optional output control.
     save_acceptance: bool = False
-    save_sampler_diagnostics: bool = False
     # Rank/pair plot guards for very high-dimensional posteriors.
     save_rank_plots: bool = False
     rank_max_vars: int = 6
     rank_max_dims_per_var: int = 6
     save_pair_plots: bool = False
     pair_max_vars: int = 4
-
-
-def _choose_flat_indices(p: int, max_dim: int) -> np.ndarray:
-    if p <= 0 or max_dim <= 0:
-        return np.array([], dtype=int)
-    if p <= max_dim:
-        return np.arange(p, dtype=int)
-    return np.unique(
-        np.linspace(0, p - 1, num=max_dim, dtype=int, endpoint=True)
-    )
-
-
-def _thin_series(series: np.ndarray, max_points: int) -> np.ndarray:
-    series = np.asarray(series)
-    if max_points is None or max_points <= 0 or series.size <= max_points:
-        return series
-    step = int(np.ceil(series.size / max_points))
-    return series[::step]
 
 
 def _var_priority(name: str) -> tuple[int, str]:
@@ -129,205 +108,174 @@ def _select_pair_plot_vars(
     return [name for _, name in scalar_vars[: config.pair_max_vars]]
 
 
-def plot_trace(
-    idata: az.InferenceData,
-    compact: bool = True,
-    config: Optional[DiagnosticsConfig] = None,
-) -> plt.Figure:
-    """Lightweight trace/hist diagnostics for key parameter groups.
-
-    Multivariate models can produce very high-dimensional parameter vectors.
-    This function intentionally subsamples variables, dimensions, and draws to
-    keep diagnostics fast and avoid generating enormous figures.
-    """
-    _ = compact  # Backwards-compatibility with older call sites.
-    if config is None:
-        config = DiagnosticsConfig()
+def _build_arviz_plot_data(idata):
     posterior = getattr(idata, "posterior", None)
     if posterior is None:
-        raise ValueError("InferenceData is missing posterior samples.")
+        return None, {}, []
 
-    total_elements = 0
-    try:
-        total_elements = sum(
-            int(posterior[var].size) for var in posterior.data_vars
-        )
-    except Exception:
-        total_elements = 0
-    if (
-        config.trace_max_total_elements is not None
-        and total_elements > config.trace_max_total_elements
-    ):
-        fig, ax = plt.subplots(1, 1, figsize=(7, 4))
-        ax.text(
-            0.5,
-            0.5,
-            "Trace plot skipped\n"
-            f"Posterior size {total_elements:,} elements\n"
-            f"Exceeds limit {config.trace_max_total_elements:,}",
-            ha="center",
-            va="center",
-        )
-        ax.set_title("Parameter Traces (skipped)")
-        ax.axis("off")
-        plt.tight_layout()
-        return fig
+    derived_scalar, derived_vector = compute_weight_summaries(
+        idata, hdi_prob=HDI_PROB
+    )
 
-    groups = {
-        "delta": [
-            v for v in posterior.data_vars if str(v).startswith("delta")
-        ],
-        "phi": [v for v in posterior.data_vars if str(v).startswith("phi")],
-        "weights": [
-            v for v in posterior.data_vars if str(v).startswith("weights")
-        ],
-    }
-
-    fig, axes = plt.subplots(3, 2, figsize=(7, 9))
-
-    for row, (group_name, var_names) in enumerate(groups.items()):
-        ax_trace = axes[row, 0]
-        ax_hist = axes[row, 1]
-
-        ax_trace.set_title(
-            f"{group_name.capitalize()} parameters", fontsize=12
-        )
-        ax_trace.set_ylabel(group_name, fontsize=9)
-        ax_trace.set_xlabel("MCMC step", fontsize=9)
-        ax_hist.set_title("Marginal", fontsize=12)
-        ax_hist.set_xlabel(group_name, fontsize=9)
-        ax_hist.set_yticks([])
-        ax_hist.spines["left"].set_visible(False)
-        ax_hist.spines["right"].set_visible(False)
-        ax_hist.spines["top"].set_visible(False)
-        ax_trace.spines["right"].set_visible(False)
-        ax_trace.spines["top"].set_visible(False)
-
-        series_list: list[tuple[str, np.ndarray]] = []
-        skipped_for_size = 0
-        used_kde = 0
-
-        for var in list(var_names)[: config.max_trace_vars_per_group]:
-            try:
-                var_size = int(posterior[var].size)
-            except Exception:
-                continue
-            if (
-                config.trace_max_elements_per_var is not None
-                and var_size > config.trace_max_elements_per_var
-            ):
-                skipped_for_size += 1
-                continue
-            try:
-                values = np.asarray(posterior[var].values)
-            except Exception:
-                continue
-
-            if values.ndim < 2:
-                continue
-
-            # (chain, draw, ...) -> (chain, draw, flat_dim)
-            values = values.reshape((values.shape[0], values.shape[1], -1))
-            idxs = _choose_flat_indices(
-                int(values.shape[2]), config.max_trace_dims_per_var
+    rep_indices: dict[str, np.ndarray] = {}
+    weight_vars = find_weight_vars(posterior)
+    for name in weight_vars:
+        try:
+            rep_indices[name] = select_rep_indices(
+                posterior[name],
+                ess_k=REP_WEIGHT_ESS_K,
+                var_k=REP_WEIGHT_VAR_K,
+                even_k=REP_WEIGHT_EVEN_K,
             )
-            if idxs.size == 0:
-                continue
+        except Exception:
+            rep_indices[name] = np.array([], dtype=int)
 
-            for flat_idx in idxs:
-                if len(series_list) >= config.max_trace_series_per_group:
-                    break
-                s = np.asarray(values[0, :, int(flat_idx)])
-                s = s[np.isfinite(s)]
-                if s.size == 0:
-                    continue
-                s = _thin_series(s, config.max_trace_draws)
-                series_list.append((f"{var}[{int(flat_idx)}]", s))
+    plot_ds = build_plot_dataset(idata, derived_scalar, rep_indices)
+    if not plot_ds.data_vars:
+        return None, derived_vector, weight_vars
 
-            if len(series_list) >= config.max_trace_series_per_group:
-                break
+    idata_plot = az.InferenceData(posterior=plot_ds)
+    if hasattr(idata, "sample_stats"):
+        try:
+            idata_plot.add_groups(sample_stats=idata.sample_stats)
+        except Exception:
+            pass
+    return idata_plot, derived_vector, weight_vars
 
-        if not series_list:
-            if skipped_for_size > 0:
-                msg = (
-                    "Trace data skipped due to size "
-                    f"(>{config.trace_max_elements_per_var:,} elements)"
-                )
-            else:
-                msg = "No trace data available"
-            ax_trace.text(
-                0.5,
-                0.5,
-                msg,
-                ha="center",
-                va="center",
-                transform=ax_trace.transAxes,
+
+def _plot_weight_hdi_widths(
+    vector_summaries: dict[str, np.ndarray],
+    diag_dir: str,
+    config: DiagnosticsConfig,
+) -> None:
+    if not vector_summaries:
+        return
+    for name, values in vector_summaries.items():
+        try:
+            arr = np.asarray(values)
+        except Exception:
+            logger.warning(
+                f"Diagnostics plot: {name} skipped (could not convert)."
             )
-            ax_hist.text(
-                0.5,
-                0.5,
-                msg,
-                ha="center",
-                va="center",
-                transform=ax_hist.transAxes,
+            continue
+        arr = np.asarray(arr).squeeze()
+        if arr.size == 0:
+            continue
+        if arr.ndim != 1:
+            logger.warning(
+                f"Diagnostics plot: {name} skipped (unexpected ndim={arr.ndim})."
             )
             continue
 
-        if group_name in ("phi", "delta"):
-            all_positive = all(np.all(s > 0) for _, s in series_list)
-            if all_positive:
-                ax_trace.set_yscale("log")
-                ax_hist.set_xscale("log")
+        @safe_plot(f"{diag_dir}/{name}.png", config.dpi)
+        def _plot():
+            fig, ax = plt.subplots(1, 1, figsize=(7, 4))
+            ax.plot(arr, color="C0", linewidth=1.5)
+            ax.set_title(name.replace("__", " "))
+            ax.set_xlabel("Basis index")
+            ax.set_ylabel("HDI width")
+            ax.grid(True, alpha=0.3)
+            plt.tight_layout()
+            return fig
 
-        for idx, (label, s) in enumerate(series_list):
-            color = f"C{idx % 10}"
-            ax_trace.plot(
-                s, color=color, alpha=0.8, linewidth=1.0, label=label
+        _plot()
+
+
+def _sanitize_filename(name: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name)
+
+
+def _create_ess_rhat_profiles(
+    idata: az.InferenceData,
+    diag_dir: str,
+    config: DiagnosticsConfig,
+    weight_vars: list[str],
+) -> None:
+    posterior = getattr(idata, "posterior", None)
+    if posterior is None or not weight_vars:
+        logger.info(
+            "Diagnostics plot: ess_rhat_profiles skipped (no weights)."
+        )
+        return
+
+    for name in weight_vars:
+        if name not in posterior.data_vars:
+            continue
+        var = posterior[name]
+        dims = [d for d in var.dims if d not in ("chain", "draw")]
+        if not dims:
+            continue
+        basis_dim = dims[-1]
+        try:
+            ess = az.ess(var, method="bulk")
+            rhat = az.rhat(var)
+            ess_vals = np.asarray(ess)
+            rhat_vals = np.asarray(rhat)
+        except Exception:
+            continue
+
+        if ess_vals.size == 0 or rhat_vals.size == 0:
+            continue
+
+        fname = _sanitize_filename(f"ess_rhat_profile_{name}.png")
+
+        @safe_plot(f"{diag_dir}/{fname}", config.dpi)
+        def _plot():
+            fig, axes = plt.subplots(2, 1, figsize=(7, 6), sharex=True)
+            axes[0].plot(ess_vals, color="C0", linewidth=1.5)
+            axes[0].axhline(
+                config.ess_threshold, color="red", linestyle="--", linewidth=1
             )
+            axes[0].set_ylabel("ESS (bulk)")
+            axes[0].set_title(f"{name}: ESS/R-hat profile")
+            axes[0].grid(True, alpha=0.3)
 
-            if (
-                group_name in ("phi", "delta")
-                and ax_hist.get_xscale() == "log"
-            ):
-                lo = float(np.min(s))
-                hi = float(np.max(s))
-                if lo > 0 and hi > lo:
-                    bins: int | np.ndarray = np.logspace(
-                        np.log10(lo), np.log10(hi), 30
-                    )
-                else:
-                    bins = 30
-            else:
-                bins = 30
-            ax_hist.hist(s, bins=bins, density=True, color=color, alpha=0.25)
+            axes[1].plot(rhat_vals, color="C1", linewidth=1.5)
+            axes[1].axhline(
+                config.rhat_threshold, color="red", linestyle="--", linewidth=1
+            )
+            axes[1].set_xlabel("Basis index")
+            axes[1].set_ylabel("R-hat")
+            axes[1].grid(True, alpha=0.3)
+            plt.tight_layout()
+            return fig
 
-            if (
-                config.trace_use_kde
-                and used_kde < config.trace_max_kde_series_per_group
-                and s.size <= config.trace_kde_max_points
-            ):
-                try:
-                    if (
-                        group_name in ("phi", "delta")
-                        and ax_hist.get_xscale() == "log"
-                    ):
-                        log_s = np.log(s)
-                        log_grid, log_pdf = az.kde(log_s)
-                        grid = np.exp(log_grid)
-                        pdf = log_pdf / grid
-                    else:
-                        grid, pdf = az.kde(s)
-                    ax_hist.plot(grid, pdf, color=color, linewidth=1.2)
-                    used_kde += 1
-                except Exception:
-                    pass
+        _plot()
 
-        if len(series_list) <= 6:
-            ax_trace.legend(loc="best", fontsize="x-small")
 
-    plt.suptitle("Parameter Traces (subsampled)", fontsize=14)
-    plt.tight_layout()
-    return fig
+def _is_multivar(idata: az.InferenceData) -> bool:
+    attrs = getattr(idata, "attrs", {}) or {}
+    if str(attrs.get("data_type", "")).lower().startswith("multi"):
+        return True
+    psd = getattr(idata, "posterior_psd", None)
+    return psd is not None and "psd_matrix_real" in psd
+
+
+def _get_freqs(idata: az.InferenceData, model=None) -> np.ndarray:
+    psd = getattr(idata, "posterior_psd", None)
+    if psd is not None:
+        if "psd" in psd and "freq" in psd["psd"].coords:
+            return np.asarray(psd["psd"].coords["freq"])
+        if (
+            "psd_matrix_real" in psd
+            and "freq" in psd["psd_matrix_real"].coords
+        ):
+            return np.asarray(psd["psd_matrix_real"].coords["freq"])
+    if model is not None and hasattr(model, "basis"):
+        try:
+            return np.arange(np.asarray(model.basis).shape[0])
+        except Exception:
+            pass
+    return np.array([])
+
+
+def _posterior_draw_count(idata: az.InferenceData) -> int:
+    posterior = getattr(idata, "posterior", None)
+    if posterior is None:
+        return 0
+    chains = int(posterior.sizes.get("chain", 0) or 0)
+    draws = int(posterior.sizes.get("draw", 0) or 0)
+    return int(chains * draws)
 
 
 def plot_diagnostics(
@@ -337,6 +285,7 @@ def plot_diagnostics(
     N: Optional[int] = None,
     runtime: Optional[float] = None,
     config: Optional[DiagnosticsConfig] = None,
+    model=None,
     *,
     summary_mode: Literal["off", "light", "full"] = "light",
     summary_position: Literal["start", "end"] = "end",
@@ -368,7 +317,7 @@ def plot_diagnostics(
 
     t_plots = time.perf_counter()
     logger.info("Diagnostics step: plots")
-    _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime)
+    _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model)
     logger.info(
         f"Diagnostics step: plots done in {time.perf_counter() - t_plots:.2f}s"
     )
@@ -386,14 +335,30 @@ def plot_diagnostics(
     )
 
 
-def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime):
+def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
     """Create only the essential diagnostic plots."""
     logger.debug("Generating diagnostic plots...")
 
-    # 1. ArviZ trace plots
+    idata_plot, vector_summaries, weight_vars = _build_arviz_plot_data(idata)
+
+    # 1. ArviZ trace plots (lightweight subset)
     @safe_plot(f"{diag_dir}/trace_plots.png", config.dpi)
     def create_trace_plots():
-        return plot_trace(idata, config=config)
+        if idata_plot is None:
+            fig, ax = plt.subplots(1, 1, figsize=(7, 4))
+            ax.text(
+                0.5,
+                0.5,
+                "Trace plot skipped\n(no suitable variables)",
+                ha="center",
+                va="center",
+            )
+            ax.set_title("Parameter Traces (skipped)")
+            ax.axis("off")
+            plt.tight_layout()
+            return fig
+        az.plot_trace(idata_plot)
+        return plt.gcf()
 
     t = time.perf_counter()
     logger.info("Diagnostics plot: trace_plots.png starting")
@@ -405,7 +370,7 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime):
     # 2. Rank histogram diagnostics (subsampled variable list)
     t = time.perf_counter()
     logger.info("Diagnostics plot: rank_plots starting")
-    _create_rank_diagnostics(idata, diag_dir, config)
+    _create_rank_diagnostics(idata_plot, diag_dir, config)
     logger.info(
         f"Diagnostics plots: rank_plots done in {time.perf_counter() - t:.2f}s"
     )
@@ -413,10 +378,26 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime):
     # 3. Optional pair diagnostics for low-dimensional scalar variables
     t = time.perf_counter()
     logger.info("Diagnostics plot: pair_plots starting")
-    _create_pair_diagnostics(idata, diag_dir, config)
+    _create_pair_diagnostics(idata_plot, diag_dir, config)
     logger.info(
         f"Diagnostics plots: pair_plots done in {time.perf_counter() - t:.2f}s"
     )
+
+    if SAVE_ESS_RHAT_PROFILES:
+        t = time.perf_counter()
+        logger.info("Diagnostics plot: ess_rhat_profiles starting")
+        _create_ess_rhat_profiles(idata, diag_dir, config, weight_vars)
+        logger.info(
+            f"Diagnostics plots: ess_rhat_profiles done in {time.perf_counter() - t:.2f}s"
+        )
+
+    if vector_summaries:
+        t = time.perf_counter()
+        logger.info("Diagnostics plot: weight_hdi_widths starting")
+        _plot_weight_hdi_widths(vector_summaries, diag_dir, config)
+        logger.info(
+            f"Diagnostics plots: weight_hdi_widths done in {time.perf_counter() - t:.2f}s"
+        )
 
     # 4. Summary dashboard with key convergence metrics
     @safe_plot(f"{diag_dir}/summary_dashboard.png", config.dpi)
@@ -430,31 +411,7 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime):
         f"Diagnostics plot: summary_dashboard.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
     )
 
-    # 5. Log posterior diagnostics
-    @safe_plot(f"{diag_dir}/log_posterior.png", config.dpi)
-    def plot_lp():
-        _plot_log_posterior(idata, config)
-
-    t = time.perf_counter()
-    logger.info("Diagnostics plot: log_posterior.png starting")
-    ok = plot_lp()
-    logger.info(
-        f"Diagnostics plot: log_posterior.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
-    )
-
-    # 6. Energy diagnostics (E-BFMI + trace)
-    @safe_plot(f"{diag_dir}/energy_diagnostics.png", config.dpi)
-    def plot_energy():
-        _plot_energy_diagnostics(idata, config)
-
-    t = time.perf_counter()
-    logger.info("Diagnostics plot: energy_diagnostics.png starting")
-    ok = plot_energy()
-    logger.info(
-        f"Diagnostics plot: energy_diagnostics.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
-    )
-
-    # 7. Acceptance rate diagnostics
+    # 5. Acceptance rate diagnostics
     if config.save_acceptance:
 
         @safe_plot(f"{diag_dir}/acceptance_diagnostics.png", config.dpi)
@@ -472,24 +429,24 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime):
             "Diagnostics plot: acceptance_diagnostics skipped (disabled)."
         )
 
-    # 8. Sampler-specific diagnostics
-    if config.save_sampler_diagnostics:
-        t = time.perf_counter()
-        logger.info("Diagnostics plots: sampler-specific starting")
-        _create_sampler_diagnostics(idata, diag_dir, config)
-        logger.info(
-            f"Diagnostics plots: sampler-specific done in {time.perf_counter() - t:.2f}s"
-        )
-    else:
-        logger.info("Diagnostics plots: sampler-specific skipped (disabled).")
+    # 6. Sampler-specific diagnostics
+    t = time.perf_counter()
+    logger.info("Diagnostics plots: sampler-specific starting")
+    _create_sampler_diagnostics(idata, diag_dir, config)
+    logger.info(
+        f"Diagnostics plots: sampler-specific done in {time.perf_counter() - t:.2f}s"
+    )
 
-    # 9. Divergences diagnostics (for NUTS only)
+    # 7. Divergences diagnostics (for NUTS only)
     logger.info("Diagnostics plots: divergences skipped (disabled).")
 
 
 def _create_rank_diagnostics(idata, diag_dir, config):
     if not config.save_rank_plots:
         logger.info("Diagnostics plot: rank_plots skipped (disabled).")
+        return
+    if idata is None:
+        logger.info("Diagnostics plot: rank_plots skipped (no data).")
         return
 
     rank_vars = _select_rank_plot_vars(idata, config)
@@ -513,6 +470,9 @@ def _create_rank_diagnostics(idata, diag_dir, config):
 def _create_pair_diagnostics(idata, diag_dir, config):
     if not config.save_pair_plots:
         logger.info("Diagnostics plot: pair_plots skipped (disabled).")
+        return
+    if idata is None:
+        logger.info("Diagnostics plot: pair_plots skipped (no data).")
         return
 
     pair_vars = _select_pair_plot_vars(idata, config)
@@ -994,88 +954,6 @@ def _plot_convergence_status(ax, idata, ess_values, config):
     ax.axis("off")
 
 
-def _plot_log_posterior(idata, config):
-    """Log posterior trace diagnostics."""
-
-    def _as_chain_draw(values: np.ndarray) -> np.ndarray:
-        arr = np.asarray(values)
-        if arr.ndim == 1:
-            return arr[None, :]
-        if arr.ndim == 2:
-            return arr
-        chain, draw = arr.shape[0], arr.shape[1]
-        arr = arr.reshape(chain, draw, -1)
-        return np.sum(arr, axis=-1)
-
-    series: list[tuple[str, np.ndarray]] = []
-    block_keys = sorted(
-        [
-            key
-            for key in idata.sample_stats
-            if str(key).startswith("log_likelihood_block_")
-        ]
-    )
-    if block_keys:
-        for key in block_keys:
-            label = str(key).replace("log_likelihood_block_", "Block ")
-            series.append(
-                (f"Log Likelihood ({label})", idata.sample_stats[key].values)
-            )
-    elif "lp" in idata.sample_stats:
-        series.append(("Log Posterior", idata.sample_stats["lp"].values))
-    elif "log_likelihood" in idata.sample_stats:
-        series.append(
-            ("Log Likelihood", idata.sample_stats["log_likelihood"].values)
-        )
-    else:
-        fig, ax = plt.subplots(1, 1, figsize=config.figsize)
-        ax.text(
-            0.5,
-            0.5,
-            "No log posterior\nor log likelihood\navailable",
-            ha="center",
-            va="center",
-            fontsize=14,
-        )
-        ax.set_title("Log Posterior Trace")
-        ax.axis("off")
-        plt.tight_layout()
-        return
-
-    n_rows = len(series)
-    height = max(config.figsize[1], 2.5 * n_rows)
-    fig, axes = plt.subplots(
-        n_rows, 1, figsize=(config.figsize[0], height), sharex=True
-    )
-    axes = np.atleast_1d(axes)
-
-    for idx, (title_prefix, values) in enumerate(series):
-        ax = axes[idx]
-        values = _as_chain_draw(values)
-        if values.shape[1] > config.max_trace_draws:
-            step = int(np.ceil(values.shape[1] / config.max_trace_draws))
-            values = values[:, ::step]
-
-        for chain_idx in range(values.shape[0]):
-            ax.plot(
-                values[chain_idx],
-                alpha=0.6,
-                linewidth=1,
-                label=f"chain {chain_idx}" if values.shape[0] > 1 else None,
-            )
-
-        ax.set_ylabel(title_prefix)
-        ax.set_title(f"{title_prefix} Trace")
-        if values.shape[0] > 1 or idx == 0:
-            ax.legend(loc="best", fontsize="small")
-        ax.grid(True, alpha=0.3)
-
-    axes[-1].set_xlabel("Iteration")
-    plt.tight_layout()
-
-    plt.tight_layout()
-
-
 def _finite_1d(values) -> np.ndarray:
     arr = np.asarray(values).reshape(-1)
     if arr.size == 0:
@@ -1389,104 +1267,6 @@ def _plot_acceptance_diagnostics_blockaware(idata, config):
     _plot_acceptance_diagnostics_common(idata, config, include_channels=True)
 
 
-def _plot_energy_diagnostics(idata, config):
-    """Energy trace diagnostics with E-BFMI summary."""
-    if not hasattr(idata, "sample_stats"):
-        fig, ax = plt.subplots(figsize=config.figsize)
-        ax.text(
-            0.5,
-            0.5,
-            "No sample_stats available",
-            ha="center",
-            va="center",
-        )
-        ax.set_title("Energy Diagnostics")
-        return
-
-    energy_series: list[tuple[str, np.ndarray]] = []
-    if "energy" in idata.sample_stats:
-        energy = np.asarray(idata.sample_stats["energy"].values)
-        energy_series.append(("overall", energy))
-    else:
-        for key in idata.sample_stats:
-            if isinstance(key, str) and key.startswith("energy_channel_"):
-                label = key.replace("energy_channel_", "ch ")
-                energy_series.append(
-                    (label, np.asarray(idata.sample_stats[key].values))
-                )
-
-    if not energy_series:
-        fig, ax = plt.subplots(figsize=config.figsize)
-        ax.text(
-            0.5,
-            0.5,
-            "Energy data unavailable",
-            ha="center",
-            va="center",
-        )
-        ax.set_title("Energy Diagnostics")
-        return
-
-    ebfmi_lines = ["E-BFMI Summary:"]
-
-    if len(energy_series) == 1:
-        fig, axes = plt.subplots(1, 2, figsize=config.figsize)
-        trace_axes = [axes[0]]
-        summary_ax = axes[1]
-        trace_titles = ["Energy Trace"]
-    else:
-        n_rows = len(energy_series)
-        fig_height = max(config.figsize[1], 2.5 * n_rows)
-        fig, axes = plt.subplots(
-            n_rows,
-            2,
-            figsize=(config.figsize[0], fig_height),
-            gridspec_kw={"width_ratios": [3, 1]},
-        )
-        trace_axes = [axes[idx, 0] for idx in range(n_rows)]
-        summary_ax = axes[0, 1]
-        for idx in range(1, n_rows):
-            axes[idx, 1].axis("off")
-        trace_titles = [
-            f"Energy Trace ({label})" for label, _ in energy_series
-        ]
-
-    for idx, (label, energy) in enumerate(energy_series):
-        energy_flat = np.asarray(energy).reshape(-1)
-        energy_flat = energy_flat[np.isfinite(energy_flat)]
-        if energy_flat.size == 0:
-            continue
-        energy_flat = _thin_series(energy_flat, config.max_trace_draws)
-        trace_ax = trace_axes[idx]
-        trace_ax.plot(energy_flat, alpha=0.7, linewidth=1.0, color="C0")
-        trace_ax.set_xlabel("Iteration")
-        trace_ax.set_ylabel("Energy")
-        trace_ax.set_title(trace_titles[idx])
-        trace_ax.grid(True, alpha=0.3)
-
-        ebfmi_val = _compute_ebfmi_from_energy(energy_flat)
-        if ebfmi_val is not None and np.isfinite(ebfmi_val):
-            ebfmi_lines.append(f"  {label}: {ebfmi_val:.3f}")
-
-    if len(ebfmi_lines) == 1:
-        ebfmi_lines.append("  unavailable")
-
-    summary_ax.text(
-        0.05,
-        0.95,
-        "\n".join(ebfmi_lines),
-        transform=summary_ax.transAxes,
-        fontsize=10,
-        verticalalignment="top",
-        fontfamily="monospace",
-        bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
-    )
-    summary_ax.set_title("E-BFMI")
-    summary_ax.axis("off")
-
-    plt.tight_layout()
-
-
 def _get_channel_indices(sample_stats, base_key: str) -> set:
     """Return set of channel indices for the given ``base_key`` prefix."""
 
@@ -1593,12 +1373,10 @@ def _format_max_tree_depth_message(stats: dict) -> str:
 def _plot_nuts_diagnostics_blockaware(idata, config):
     """NUTS diagnostics supporting per‑channel (blocked) diagnostics fields.
 
-    Overlays per‑channel series when keys like ``energy_channel_{j}`` or
+    Overlays per‑channel series when keys like ``step_size_channel_{j}`` or
     ``num_steps_channel_{j}`` are present.
     """
     # Presence of overall arrays
-    has_energy = "energy" in idata.sample_stats
-    has_potential = "potential_energy" in idata.sample_stats
     has_steps = "num_steps" in idata.sample_stats
     has_accept = "accept_prob" in idata.sample_stats
     has_step_size = "step_size" in idata.sample_stats
@@ -1627,44 +1405,33 @@ def _plot_nuts_diagnostics_blockaware(idata, config):
                     pass
         return out
 
-    energy_ch = _collect("energy")
-    potential_ch = _collect("potential_energy")
     steps_ch = _collect("num_steps")
     accept_ch = _collect("accept_prob")
     step_size_ch = _collect("step_size")
 
     fig, axes = plt.subplots(2, 2, figsize=config.figsize)
 
-    # Energy / potential
+    # Step size trace
     ax = axes[0, 0]
     plotted = False
-    if has_energy:
+    if has_step_size:
         ax.plot(
-            idata.sample_stats.energy.values.flatten(),
+            idata.sample_stats.step_size.values.flatten(),
             alpha=0.7,
             lw=1,
-            label="H",
+            label="overall",
         )
         plotted = True
-    if has_potential:
-        ax.plot(
-            idata.sample_stats.potential_energy.values.flatten(),
-            alpha=0.7,
-            lw=1,
-            label="P",
-        )
-        plotted = True
-    for ch in sorted(energy_ch):
-        ax.plot(energy_ch[ch], alpha=0.5, lw=1, label=f"H ch {ch}")
-        plotted = True
-    for ch in sorted(potential_ch):
-        ax.plot(potential_ch[ch], alpha=0.5, lw=1, label=f"P ch {ch}")
+    for ch in sorted(step_size_ch):
+        ax.plot(step_size_ch[ch], alpha=0.6, lw=1, label=f"ch {ch}")
         plotted = True
     if not plotted:
-        ax.text(0.5, 0.5, "Energy data\nunavailable", ha="center", va="center")
-    ax.set_title("Energy Diagnostics")
+        ax.text(
+            0.5, 0.5, "Step size data\nunavailable", ha="center", va="center"
+        )
+    ax.set_title("Step Size Trace")
     ax.set_xlabel("Iteration")
-    ax.set_ylabel("Energy")
+    ax.set_ylabel("step_size")
     ax.grid(True, alpha=0.3)
     if plotted:
         ax.legend(loc="best", fontsize="small")
@@ -1804,8 +1571,6 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
             else None
         )
 
-    energy = _get("energy")
-    potential = _get("potential_energy")
     num_steps = _get("num_steps")
     step_size = _get("step_size")
     accept_prob = _get("accept_prob")
@@ -1816,22 +1581,19 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
 
     fig, axes = plt.subplots(2, 2, figsize=config.figsize)
 
-    # Energy traces
+    # Step size trace
     ax = axes[0, 0]
-    plotted = False
-    if energy is not None:
-        ax.plot(energy, alpha=0.7, lw=1, label="H")
-        plotted = True
-    if potential is not None:
-        ax.plot(potential, alpha=0.7, lw=1, label="P")
-        plotted = True
-    if not plotted:
-        ax.text(0.5, 0.5, "Energy data\nunavailable", ha="center", va="center")
-    ax.set_title(f"Channel {channel_idx} Energy")
+    if step_size is not None:
+        ax.plot(step_size, alpha=0.7, lw=1, label="step_size")
+    else:
+        ax.text(
+            0.5, 0.5, "Step size data\nunavailable", ha="center", va="center"
+        )
+    ax.set_title(f"Channel {channel_idx} Step Size")
     ax.set_xlabel("Iteration")
-    ax.set_ylabel("Energy")
+    ax.set_ylabel("step_size")
     ax.grid(True, alpha=0.3)
-    if plotted:
+    if step_size is not None:
         ax.legend(loc="best", fontsize="small")
 
     # Acceptance trace
@@ -1887,14 +1649,6 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
     # Summary stats
     ax = axes[1, 1]
     stats_lines = [f"Channel {channel_idx} summary:"]
-    if energy is not None:
-        stats_lines.append(
-            f"  H μ={np.mean(energy):.2f}, σ={np.std(energy):.2f}"
-        )
-    if potential is not None:
-        stats_lines.append(
-            f"  P μ={np.mean(potential):.2f}, σ={np.std(potential):.2f}"
-        )
     if num_steps is not None:
         stats_lines.append(
             f"  steps μ={np.mean(num_steps):.1f}, max={np.max(num_steps):.0f}"
@@ -1928,6 +1682,9 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
 def _create_sampler_diagnostics(idata, diag_dir, config):
     """Create sampler-specific diagnostics."""
 
+    if idata is None or not hasattr(idata, "sample_stats"):
+        return
+
     # Better sampler detection - check sampler type first
     sampler_type = (
         idata.attrs["sampler_type"].lower()
@@ -1937,11 +1694,11 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
 
     # Check for NUTS-specific fields
     nuts_specific_fields = [
-        "energy",
         "num_steps",
         "tree_depth",
         "diverging",
-        "energy_error",
+        "step_size",
+        "accept_prob",
     ]
 
     has_nuts = (
@@ -1960,10 +1717,6 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
         # Per‑channel NUTS diagnostics for blocked samplers
         channel_indices = _get_channel_indices(
             idata.sample_stats, "accept_prob"
-        )
-        channel_indices |= _get_channel_indices(idata.sample_stats, "energy")
-        channel_indices |= _get_channel_indices(
-            idata.sample_stats, "potential_energy"
         )
         channel_indices |= _get_channel_indices(
             idata.sample_stats, "num_steps"

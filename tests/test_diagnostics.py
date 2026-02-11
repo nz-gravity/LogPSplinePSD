@@ -9,10 +9,11 @@ import matplotlib.pyplot as plt
 
 from log_psplines.diagnostics import psd_compare, run_all_diagnostics
 from log_psplines.diagnostics._utils import compute_riae
-from log_psplines.diagnostics.plotting import (
-    DiagnosticsConfig,
-    _plot_energy_diagnostics,
+from log_psplines.diagnostics.derived_weights import (
+    HDI_PROB,
+    compute_weight_summaries,
 )
+from log_psplines.diagnostics.plotting import DiagnosticsConfig
 
 
 def _build_idata_with_psd(truth: np.ndarray, q50_scale: float = 1.1):
@@ -106,25 +107,32 @@ def test_run_all_ignores_energy_channel_metrics():
     assert "energy" not in result
 
 
-def test_energy_histogram_falls_back_when_range_is_too_small(tmp_path):
+def test_derived_weight_summaries_penalty():
+    weights = np.array([[[1.0, -2.0, 3.0], [0.5, -1.5, 2.0]]])
+    idata = az.from_dict(posterior={"weights": weights})
+    penalty = np.diag([1.0, 2.0, 3.0])
+    spline_model = Dataset(
+        {
+            "penalty_matrix": DataArray(
+                penalty,
+                dims=["weights_dim_row", "weights_dim_col"],
+            )
+        }
+    )
+    idata.add_groups(spline_model=spline_model)
 
-    energy = np.stack(
-        (
-            1e16 + np.linspace(0.0, 10.0, 100),
-            1e16 + np.linspace(2.0, 12.0, 100),
-        ),
-        axis=0,
+    scalar, vector = compute_weight_summaries(idata, hdi_prob=HDI_PROB)
+    assert "w_rms__weights" in scalar
+    assert "w_maxabs__weights" in scalar
+    assert "penalty__weights" in scalar
+    assert "w_hdi_width__weights" in vector
+
+    w = weights.reshape((weights.shape[0], weights.shape[1], -1))
+    expected_rms = np.sqrt(np.mean(w * w, axis=-1))
+    expected_penalty = np.einsum("...i,ij,...j->...", w, penalty, w)
+    np.testing.assert_allclose(
+        scalar["w_rms__weights"].values, expected_rms, rtol=1e-6
     )
-    idata = az.from_dict(
-        posterior={"x": np.zeros((2, 100))},
-        sample_stats={"energy": energy},
+    np.testing.assert_allclose(
+        scalar["penalty__weights"].values, expected_penalty, rtol=1e-6
     )
-    config = DiagnosticsConfig(figsize=(6, 4))
-    before = set(plt.get_fignums())
-    _plot_energy_diagnostics(idata, config)
-    after = set(plt.get_fignums())
-    new_figs = after - before
-    assert new_figs
-    fig = plt.figure(max(new_figs))
-    assert len(fig.axes) >= 1
-    plt.close(fig)

@@ -2,20 +2,29 @@ import matplotlib.pyplot as plt
 
 from log_psplines.arviz_utils.from_arviz import get_spline_model
 from log_psplines.example_datasets import ARData
-from log_psplines.mcmc import run_mcmc
+from log_psplines.mcmc import (
+    DiagnosticsConfig,
+    ModelConfig,
+    RunMCMCConfig,
+    VIConfig,
+    run_mcmc,
+)
 from log_psplines.plotting import plot_pdgrm
 
 ar4 = ARData(order=4, duration=2.0, fs=512.0, sigma=1.0, seed=42)
-kawrgs = dict(
-    data=ar4.ts,
-    n_knots=15,
+model_cfg = ModelConfig(n_knots=15, knot_kwargs={"method": "uniform"})
+diagnostics_cfg = DiagnosticsConfig(outdir="out/nuts_out")
+vi_cfg = VIConfig(init_from_vi=True)
+run_cfg = RunMCMCConfig(
+    sampler="nuts",
     n_samples=2500,
     n_warmup=1000,
     rng_key=0,
-    knot_kwargs=dict(method="uniform"),
-    init_from_vi=True,
+    model=model_cfg,
+    diagnostics=diagnostics_cfg,
+    vi=vi_cfg,
 )
-inference_nuts = run_mcmc(**kawrgs, sampler="nuts", outdir="out/nuts_out")
+inference_nuts = run_mcmc(ar4.ts, config=run_cfg)
 
 fig, ax = plt.subplots(1, 1, figsize=(4, 3))
 ax.plot(

@@ -1,13 +1,6 @@
 import numpy as np
-import pytest
-
 from log_psplines.datatypes.univar import Periodogram
-from log_psplines.mcmc import (
-    RunMCMCConfig,
-    _maybe_build_welch_overlay,
-    _normalize_run_config,
-    run_mcmc,
-)
+from log_psplines.mcmc import RunMCMCConfig, _maybe_build_welch_overlay, run_mcmc
 
 
 class _DummySampler:
@@ -17,32 +10,6 @@ class _DummySampler:
             "n_warmup": n_warmup,
             "only_vi": only_vi,
         }
-
-
-def test_normalize_run_config_from_legacy_kwargs():
-    cfg = _normalize_run_config(
-        None,
-        {
-            "sampler": "nuts",
-            "n_samples": 12,
-            "n_warmup": 6,
-            "n_knots": 7,
-            "degree": 4,
-            "outdir": "tmp",
-        },
-    )
-    assert isinstance(cfg, RunMCMCConfig)
-    assert cfg.n_samples == 12
-    assert cfg.n_warmup == 6
-    assert cfg.model.n_knots == 7
-    assert cfg.model.degree == 4
-    assert cfg.diagnostics.outdir == "tmp"
-
-
-def test_normalize_run_config_rejects_mixed_inputs():
-    cfg = RunMCMCConfig()
-    with pytest.raises(ValueError):
-        _normalize_run_config(cfg, {"n_samples": 10})
 
 
 def test_run_mcmc_config_path_uses_factory(monkeypatch):

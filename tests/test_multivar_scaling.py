@@ -8,7 +8,14 @@ from log_psplines.example_datasets.varma_data import (
     VARMAData,
     _calculate_true_varma_psd,
 )
-from log_psplines.mcmc import _coarse_grain_processed_data, run_mcmc
+from log_psplines.mcmc import (
+    DiagnosticsConfig,
+    ModelConfig,
+    RunMCMCConfig,
+    VIConfig,
+    _coarse_grain_processed_data,
+    run_mcmc,
+)
 from log_psplines.samplers.multivar.multivar_base import MultivarBaseSampler
 
 
@@ -105,20 +112,30 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
         Nc=8,
     )
 
-    idata = run_mcmc(
-        data=timeseries,
+    model_cfg = ModelConfig(n_knots=5)
+    diagnostics_cfg = DiagnosticsConfig(
+        outdir=f"{outdir}/multivar_scaling",
+        verbose=False,
+    )
+    vi_cfg = VIConfig(
+        vi_steps=80,
+        vi_posterior_draws=24,
+        vi_progress_bar=False,
+    )
+    run_cfg = RunMCMCConfig(
         sampler="multivar_blocked_nuts",
-        n_knots=5,
         n_samples=12,
         n_warmup=12,
         Nb=Nb,
         coarse_grain_config=coarse_cfg,
-        vi_steps=80,
-        vi_posterior_draws=24,
-        vi_progress_bar=False,
         rng_key=0,
-        verbose=False,
-        outdir=f"{outdir}/multivar_scaling",
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+    )
+    idata = run_mcmc(
+        data=timeseries,
+        config=run_cfg,
     )
 
     freq_grid = np.asarray(idata.posterior_psd["freq"].values)

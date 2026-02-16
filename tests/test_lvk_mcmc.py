@@ -7,7 +7,7 @@ from gwpy.timeseries import TimeSeries
 
 from log_psplines.datatypes import Periodogram
 from log_psplines.example_datasets.lvk_data import LVKData
-from log_psplines.mcmc import run_mcmc
+from log_psplines.mcmc import DiagnosticsConfig, ModelConfig, RunMCMCConfig, run_mcmc
 from log_psplines.psplines.knots_locator import init_knots
 
 
@@ -77,21 +77,25 @@ def test_lvk_mcmc(outdir, test_mode):
     )
     assert lvk_knots is not None
 
-    kwgs = dict(
-        n_samples=30,
-        n_warmup=30,
-        n_knots=12,
-        outdir=out,
-        rng_key=42,
-        knot_kwargs=dict(
-            method="uniform",
-        ),
-    )
-
+    n_samples = 30
+    n_warmup = 30
+    n_knots = 12
     if test_mode == "fast":
-        kwgs.update(
-            n_samples=4,
-            n_warmup=4,
-            n_knots=4,
-        )
-    run_mcmc(pdgrm, **kwgs, sampler="nuts")
+        n_samples = 4
+        n_warmup = 4
+        n_knots = 4
+
+    model_cfg = ModelConfig(
+        n_knots=n_knots,
+        knot_kwargs={"method": "uniform"},
+    )
+    diagnostics_cfg = DiagnosticsConfig(outdir=out)
+    run_cfg = RunMCMCConfig(
+        sampler="nuts",
+        n_samples=n_samples,
+        n_warmup=n_warmup,
+        rng_key=42,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+    )
+    run_mcmc(pdgrm, config=run_cfg)

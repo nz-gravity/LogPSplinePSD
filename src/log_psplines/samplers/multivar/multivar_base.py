@@ -28,7 +28,11 @@ from ...datatypes.multivar_utils import (
 )
 from ...diagnostics.plotting import generate_vi_diagnostics_summary
 from ...logger import logger
-from ...plotting import plot_psd_matrix, save_vi_diagnostics_multivariate
+from ...plotting import (
+    PSDMatrixPlotSpec,
+    plot_psd_matrix,
+    save_vi_diagnostics_multivariate,
+)
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -150,7 +154,7 @@ class MultivarBaseSampler(BaseSampler):
 
             t0 = time.perf_counter()
             logger.info("save_plots(multivar): plotting PSD matrix")
-            plot_psd_matrix(
+            spec = PSDMatrixPlotSpec(
                 idata=idata,
                 freq=np.array(self.freq),
                 empirical_psd=empirical_psd,
@@ -161,6 +165,7 @@ class MultivarBaseSampler(BaseSampler):
                 overlay_vi=overlay_vi,
                 outdir=self.config.outdir,
             )
+            plot_psd_matrix(spec)
             logger.info(
                 f"save_plots(multivar): PSD matrix plot done in {time.perf_counter() - t0:.2f}s"
             )

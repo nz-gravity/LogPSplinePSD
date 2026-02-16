@@ -39,13 +39,6 @@ def test_plot_psd_matrix_accepts_spec_object():
     fig.clf()
 
 
-def test_plot_psd_matrix_accepts_legacy_kwargs():
-    freq, ci = _build_ci()
-    fig, axes = plot_psd_matrix(ci_dict=ci, freq=freq, save=False, close=False)
-    assert axes.shape == (2, 2)
-    fig.clf()
-
-
 def test_plot_psd_matrix_overlays_extra_empirical_labels():
     freq, ci = _build_ci()
     psd_emp = np.ones((freq.size, 2, 2), dtype=np.complex128)
@@ -55,7 +48,7 @@ def test_plot_psd_matrix_overlays_extra_empirical_labels():
         coherence=_get_coherence(psd_emp),
         channels=np.arange(2),
     )
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci,
         freq=freq,
         empirical_psd=empirical,
@@ -65,6 +58,7 @@ def test_plot_psd_matrix_overlays_extra_empirical_labels():
         save=False,
         close=False,
     )
+    fig, axes = plot_psd_matrix(spec)
     labels = [line.get_label() for line in axes[0, 0].lines]
     assert "Welch" in labels
     fig.clf()
@@ -89,13 +83,14 @@ def test_plot_psd_matrix_validates_axes_shape():
     fig, ax = plt.subplots(1, 2)
 
     with pytest.raises(ValueError):
-        plot_psd_matrix(
+        spec = PSDMatrixPlotSpec(
             ci_dict=ci,
             freq=freq,
             fig=fig,
             ax=ax,
             save=False,
         )
+        plot_psd_matrix(spec)
 
     plt.close(fig)
 
@@ -109,7 +104,7 @@ def test_plot_psd_matrix_scales_and_limits(outdir):
     freq_range = (0.2, 0.9)
 
     # Test with coherence
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict,
         freq=freq,
         freq_range=freq_range,
@@ -118,6 +113,7 @@ def test_plot_psd_matrix_scales_and_limits(outdir):
         filename="with_coh.png",
         save=True,
     )
+    fig, axes = plot_psd_matrix(spec)
 
     diag_ax = axes[0, 0]
     coh_ax = axes[1, 0]
@@ -135,7 +131,7 @@ def test_plot_psd_matrix_scales_and_limits(outdir):
     ci_dict_reim = _pack_ci_dict(
         psd_samples=np.ones((2, 1000, 3, 3), dtype=float), show_coherence=False
     )
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict_reim,
         freq=freq,
         freq_range=freq_range,
@@ -144,6 +140,7 @@ def test_plot_psd_matrix_scales_and_limits(outdir):
         filename="without_coh.png",
         save=True,
     )
+    fig, axes = plot_psd_matrix(spec)
 
     diag_ax = axes[0, 0]
     re_ax = axes[1, 0]
@@ -178,7 +175,7 @@ def test_plot_psd_matrix_extra_empirical_zorder():
         channels=np.arange(2),
     )
 
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci,
         freq=freq,
         empirical_psd=empirical,
@@ -188,6 +185,7 @@ def test_plot_psd_matrix_extra_empirical_zorder():
         save=False,
         close=False,
     )
+    fig, axes = plot_psd_matrix(spec)
 
     z_by_label = {
         line.get_label(): line.get_zorder() for line in axes[0, 0].lines
@@ -236,7 +234,7 @@ def test_plot_psd_matrix_with_varma_coherence(outdir):
         show_csd_magnitude=True,
     )
 
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict_coh,
         freq=freq,
         true_psd=true_psd,
@@ -245,6 +243,7 @@ def test_plot_psd_matrix_with_varma_coherence(outdir):
         filename="varma_coherence.png",
         save=True,
     )
+    fig, axes = plot_psd_matrix(spec)
 
     coh_ax = axes[2, 1]  # coherence panel for channels (3,2)
     median_line = next(
@@ -267,7 +266,7 @@ def test_plot_psd_matrix_with_varma_coherence(outdir):
     plt.close(fig)
 
     # Test other display modes
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict_reim,
         freq=freq,
         true_psd=true_psd,
@@ -276,9 +275,10 @@ def test_plot_psd_matrix_with_varma_coherence(outdir):
         filename="varma_base.png",
         save=True,
     )
+    fig, axes = plot_psd_matrix(spec)
     plt.close(fig)
 
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict_mag,
         freq=freq,
         true_psd=true_psd,
@@ -288,6 +288,7 @@ def test_plot_psd_matrix_with_varma_coherence(outdir):
         filename="varma_csd_abs.png",
         save=True,
     )
+    fig, axes = plot_psd_matrix(spec)
     plt.close(fig)
 
 
@@ -313,7 +314,7 @@ def test_plot_psd_matrix_with_lisa(outdir):
         show_csd_magnitude=True,
     )
 
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict_coh,
         freq=freq,
         true_psd=true_psd,
@@ -323,6 +324,7 @@ def test_plot_psd_matrix_with_lisa(outdir):
         save=True,
         xscale="log",
     )
+    fig, axes = plot_psd_matrix(spec)
 
     coh_ax = axes[2, 1]  # coherence panel for channels (Z,Y)
     median_line = next(
@@ -344,7 +346,7 @@ def test_plot_psd_matrix_with_lisa(outdir):
 
     plt.close(fig)
 
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict_reim,
         freq=freq,
         true_psd=true_psd,
@@ -354,10 +356,11 @@ def test_plot_psd_matrix_with_lisa(outdir):
         save=True,
         xscale="log",
     )
+    fig, axes = plot_psd_matrix(spec)
     assert axes[0, 1].axison
     plt.close(fig)
 
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict_mag,
         freq=freq,
         true_psd=true_psd,
@@ -368,5 +371,6 @@ def test_plot_psd_matrix_with_lisa(outdir):
         save=True,
         xscale="log",
     )
+    fig, axes = plot_psd_matrix(spec)
     assert axes[2, 1].axison
     plt.close(fig)

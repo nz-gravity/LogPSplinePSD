@@ -636,131 +636,20 @@ def _build_sampler_inputs(
     )
 
 
-def _normalize_run_config(
-    config: RunMCMCConfig | SamplerName | None,
-    legacy_kwargs: dict[str, Any],
-) -> RunMCMCConfig:
-    if isinstance(config, str):
-        legacy_kwargs = dict(legacy_kwargs)
-        legacy_kwargs.setdefault("sampler", config)
-        config = None
-
-    if config is not None:
-        if legacy_kwargs:
-            raise ValueError(
-                "Pass either a RunMCMCConfig or keyword options, not both."
-            )
-        return config
-
-    kwargs = dict(legacy_kwargs)
-
-    if kwargs.get("sampler") == "mh":
-        raise ValueError(
-            "The Metropolis-Hastings sampler has been removed. Use sampler='nuts'."
-        )
-    if "mh" in kwargs:
-        raise ValueError(
-            "Metropolis-Hastings configuration is no longer supported. "
-            "Use NUTS configuration options instead."
-        )
-    if "target_accept_rate" in kwargs or "adaptation_window" in kwargs:
-        raise ValueError(
-            "Metropolis-Hastings options are no longer supported. "
-            "Use NUTS options like target_accept_prob/max_tree_depth instead."
-        )
-    if "freq_weights" in kwargs:
-        raise ValueError(
-            "freq_weights has been removed. Use scalar Nh via "
-            "periodogram.Nh/coarse-grain configuration instead."
-        )
-
-    model_cfg = ModelConfig(
-        n_knots=kwargs.pop("n_knots", 10),
-        degree=kwargs.pop("degree", 3),
-        diffMatrixOrder=kwargs.pop("diffMatrixOrder", 2),
-        knot_kwargs=kwargs.pop("knot_kwargs", {}),
-        parametric_model=kwargs.pop("parametric_model", None),
-        true_psd=kwargs.pop("true_psd", None),
-        fmin=kwargs.pop("fmin", None),
-        fmax=kwargs.pop("fmax", None),
-    )
-    diagnostics_cfg = DiagnosticsConfig(
-        verbose=kwargs.pop("verbose", True),
-        outdir=kwargs.pop("outdir", None),
-        compute_psis=kwargs.pop("compute_psis", True),
-        skip_plot_diagnostics=kwargs.pop("skip_plot_diagnostics", False),
-        diagnostics_summary_mode=kwargs.pop(
-            "diagnostics_summary_mode", "full"
-        ),
-        diagnostics_summary_position=kwargs.pop(
-            "diagnostics_summary_position", "end"
-        ),
-        save_preprocessing_plots=kwargs.pop("save_preprocessing_plots", False),
-        preprocessing_plot_path=kwargs.pop("preprocessing_plot_path", None),
-        preprocessing_warn_threshold=kwargs.pop(
-            "preprocessing_warn_threshold", 0.8
-        ),
-        preprocessing_warn_frac=kwargs.pop("preprocessing_warn_frac", 0.25),
-        preprocessing_min_lambda1_quantile=kwargs.pop(
-            "preprocessing_min_lambda1_quantile", 0.0
-        ),
-        compute_lnz=kwargs.pop("compute_lnz", False),
-    )
-    vi_cfg = VIConfig(
-        only_vi=kwargs.pop("only_vi", False),
-        init_from_vi=kwargs.pop("init_from_vi", True),
-        vi_steps=kwargs.pop("vi_steps", 1500),
-        vi_lr=kwargs.pop("vi_lr", 1e-2),
-        vi_guide=kwargs.pop("vi_guide", None),
-        vi_posterior_draws=kwargs.pop("vi_posterior_draws", 256),
-        vi_progress_bar=kwargs.pop("vi_progress_bar", None),
-        vi_psd_max_draws=kwargs.pop("vi_psd_max_draws", 64),
-    )
-    nuts_cfg = NUTSConfigOverride(
-        target_accept_prob=kwargs.pop("target_accept_prob", 0.8),
-        target_accept_prob_by_channel=kwargs.pop(
-            "target_accept_prob_by_channel", None
-        ),
-        max_tree_depth=kwargs.pop("max_tree_depth", 10),
-        max_tree_depth_by_channel=kwargs.pop(
-            "max_tree_depth_by_channel", None
-        ),
-        dense_mass=kwargs.pop("dense_mass", True),
-        alpha_phi_theta=kwargs.pop("alpha_phi_theta", None),
-        beta_phi_theta=kwargs.pop("beta_phi_theta", None),
-    )
-    return RunMCMCConfig(
-        sampler=kwargs.pop("sampler", "nuts"),
-        n_samples=kwargs.pop("n_samples", 1000),
-        n_warmup=kwargs.pop("n_warmup", 500),
-        num_chains=kwargs.pop("num_chains", 1),
-        chain_method=kwargs.pop("chain_method", None),
-        alpha_phi=kwargs.pop("alpha_phi", 1.0),
-        beta_phi=kwargs.pop("beta_phi", 1.0),
-        alpha_delta=kwargs.pop("alpha_delta", 1e-4),
-        beta_delta=kwargs.pop("beta_delta", 1e-4),
-        rng_key=kwargs.pop("rng_key", 42),
-        coarse_grain_config=kwargs.pop("coarse_grain_config", None),
-        Nb=kwargs.pop("Nb", 1),
-        plot_welch_overlay=kwargs.pop("plot_welch_overlay", None),
-        welch_nperseg=kwargs.pop("welch_nperseg", None),
-        welch_noverlap=kwargs.pop("welch_noverlap", None),
-        welch_window=kwargs.pop("welch_window", "hann"),
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
-        nuts=nuts_cfg,
-        extra_kwargs=kwargs,
-    )
+def _normalize_run_config(config: RunMCMCConfig | None) -> RunMCMCConfig:
+    if config is None:
+        return RunMCMCConfig()
+    if not isinstance(config, RunMCMCConfig):
+        raise TypeError("config must be a RunMCMCConfig instance or None.")
+    return config
 
 
 def run_mcmc(
     data: Union[Timeseries, MultivariateTimeseries, Periodogram, MultivarFFT],
-    config: RunMCMCConfig | SamplerName | None = None,
-    **legacy_kwargs,
+    config: RunMCMCConfig | None = None,
 ) -> az.InferenceData:
     """Unified MCMC entrypoint for univariate and multivariate PSD estimation."""
-    run_config = _normalize_run_config(config, legacy_kwargs)
+    run_config = _normalize_run_config(config)
 
     if run_config.vi.only_vi:
         vi_capable = {"nuts", "multivar_blocked_nuts"}

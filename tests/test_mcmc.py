@@ -24,7 +24,11 @@ from log_psplines.mcmc import (
     VIConfig,
     run_mcmc,
 )
-from log_psplines.plotting import PSDMatrixPlotSpec, plot_pdgrm, plot_psd_matrix
+from log_psplines.plotting import (
+    PSDMatrixPlotSpec,
+    plot_pdgrm,
+    plot_psd_matrix,
+)
 
 
 @pytest.mark.slow

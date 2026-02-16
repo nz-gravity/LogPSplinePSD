@@ -1,6 +1,11 @@
 import numpy as np
+
 from log_psplines.datatypes.univar import Periodogram
-from log_psplines.mcmc import RunMCMCConfig, _maybe_build_welch_overlay, run_mcmc
+from log_psplines.mcmc import (
+    RunMCMCConfig,
+    _maybe_build_welch_overlay,
+    run_mcmc,
+)
 
 
 class _DummySampler:

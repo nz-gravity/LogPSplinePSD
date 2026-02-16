@@ -324,9 +324,7 @@ def _select_posterior_subset(idata):
     if not subset:
         return None, {}
     return (
-        posterior.__class__(
-            subset, coords=posterior.coords, attrs=posterior.attrs
-        ),
+        posterior.__class__(subset, attrs=posterior.attrs),
         weight_meta,
     )
 

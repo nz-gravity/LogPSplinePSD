@@ -12,6 +12,8 @@ from numpyro.infer.util import log_density
 
 from ..logger import logger
 
+MIN_PSIS_DRAWS = 200
+
 
 def _interpret_khat(khat_max: float) -> Tuple[str, str]:
     """Map PSIS k-hat to a compact status label and message."""
@@ -54,6 +56,7 @@ def _compute_psis_moment_checks(
 
     weight_var_ratios: list[np.ndarray] = []
     weight_bias_abs: list[np.ndarray] = []
+    weight_bias_abs_raw: list[np.ndarray] = []
     hyper_entries: list[Dict[str, Any]] = []
 
     for name, array in samples.items():
@@ -63,7 +66,8 @@ def _compute_psis_moment_checks(
         flat = arr.reshape(n_draws, -1)
         vi_mean = flat.mean(axis=0)
         psis_mean = w @ flat
-        bias = (psis_mean - vi_mean) / (np.abs(vi_mean) + bias_eps)
+        bias_raw = psis_mean - vi_mean
+        bias = bias_raw / (np.abs(vi_mean) + bias_eps)
 
         vi_var = flat.var(axis=0)
         centered = flat - psis_mean
@@ -73,6 +77,7 @@ def _compute_psis_moment_checks(
         if "weights" in name:
             weight_var_ratios.append(var_ratio)
             weight_bias_abs.append(np.abs(bias))
+            weight_bias_abs_raw.append(np.abs(bias_raw))
             continue
 
         if name.startswith(("phi", "delta")):
@@ -87,6 +92,7 @@ def _compute_psis_moment_checks(
                         vi_mean=float(vi_mean.flat[idx]),
                         psis_mean=float(psis_mean.flat[idx]),
                         bias_pct=float(bias.flat[idx] * 100.0),
+                        bias_abs=float(bias_raw.flat[idx]),
                         vi_std=float(vi_std.flat[idx]),
                         psis_std=float(psis_std.flat[idx]),
                         var_ratio=float(var_ratio.flat[idx]),
@@ -100,6 +106,11 @@ def _compute_psis_moment_checks(
         bias_abs = (
             np.concatenate(weight_bias_abs) if weight_bias_abs else vr * 0
         )
+        bias_abs_raw = (
+            np.concatenate(weight_bias_abs_raw)
+            if weight_bias_abs_raw
+            else vr * 0
+        )
         weight_stats = {
             "var_ratio_min": float(np.nanmin(vr)),
             "var_ratio_median": float(np.nanmedian(vr)),
@@ -107,6 +118,8 @@ def _compute_psis_moment_checks(
             "frac_outside": float(np.mean((vr < var_low) | (vr > var_high))),
             "bias_median_abs": float(np.nanmedian(bias_abs)),
             "bias_max_abs": float(np.nanmax(bias_abs)),
+            "bias_abs_median": float(np.nanmedian(bias_abs_raw)),
+            "bias_abs_max": float(np.nanmax(bias_abs_raw)),
             "n_weights": int(vr.size),
         }
 
@@ -180,7 +193,7 @@ def _compute_correlation_diagnostics(
     samples: Dict[str, jnp.ndarray],
     reference_corr: Optional[Dict[str, np.ndarray]] = None,
 ) -> Dict[str, Any]:
-    """Compute non-visual correlation diagnostics for VI samples."""
+    """Compute guide-structure correlation diagnostics for VI samples."""
 
     def _build_matrix(names_prefix: Tuple[str, ...]):
         cols = []
@@ -273,6 +286,12 @@ def _compute_psis_khat(
             n_draws = int(latent_arr.shape[0]) if latent_arr.ndim > 0 else 0
         n_draws = min(n_draws, int(latent_arr.shape[0]))
         if n_draws <= 0:
+            return None
+        if n_draws < MIN_PSIS_DRAWS:
+            logger.warning(
+                f"Skipping PSIS k-hat: n_draws={int(n_draws)} < {MIN_PSIS_DRAWS}. "
+                "Increase vi_posterior_draws for a stable estimate."
+            )
             return None
 
         sample_tree = {k: v[:n_draws] for k, v in sample_tree.items()}

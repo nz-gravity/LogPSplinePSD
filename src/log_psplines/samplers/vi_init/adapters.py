@@ -649,7 +649,7 @@ def prepare_block_vi(
     draws = int(getattr(sampler.config, "vi_posterior_draws", 0) or 0)
     logger.info(
         "Running VI initialisation per block "
-        f"(p={sampler.p}, guide={guide_cfg}, steps={steps}, posterior_draws={draws})..."
+        f"(p={sampler.p}, guide={guide_cfg}, steps={steps}, Lr={sampler.config.vi_lr}, posterior_draws={draws})..."
     )
     p = sampler.p
     init_strategies: List[Optional[Callable[[Any], Any]]] = [None] * p
@@ -681,6 +681,10 @@ def prepare_block_vi(
     vi_theta_re_mean: Optional[np.ndarray] = None
     vi_theta_im_mean: Optional[np.ndarray] = None
     psis_khat_values: List[float] = []
+    psis_hyper_entries: List[Dict[str, Any]] = []
+    psis_weight_blocks: List[Dict[str, Any]] = []
+    psis_corr_summary: Dict[str, Any] = {}
+    psis_thresholds: Optional[Dict[str, float]] = None
 
     buffers = _prepare_vi_buffers(sampler)
     posterior_draws = buffers["posterior_draws"]
@@ -815,6 +819,25 @@ def prepare_block_vi(
             )
             if psis_diag is not None:
                 psis_khat_values.append(psis_diag["psis_khat_max"])
+                moment_summary = psis_diag.get("psis_moment_summary") or {}
+                if moment_summary and psis_thresholds is None:
+                    psis_thresholds = moment_summary.get("thresholds")
+                hyper_entries = moment_summary.get("hyperparameters") or []
+                for entry in hyper_entries:
+                    new_entry = dict(entry)
+                    name = new_entry.get("param", "param")
+                    new_entry["param"] = f"block_{channel_index}:{name}"
+                    psis_hyper_entries.append(new_entry)
+                weight_stats = moment_summary.get("weights")
+                if weight_stats:
+                    psis_weight_blocks.append(
+                        {"block": channel_index, **weight_stats}
+                    )
+                corr_summary = psis_diag.get("psis_correlation_summary") or {}
+                for label, stats in corr_summary.items():
+                    if not stats:
+                        continue
+                    psis_corr_summary[f"{label}_block_{channel_index}"] = stats
 
             weights_delta_name = f"weights_delta_{channel_index}"
             weights_delta = vi_result.means.get(weights_delta_name)
@@ -1128,6 +1151,85 @@ def prepare_block_vi(
                 "VI PSIS diagnostic (blocked) indicates poor posterior fit. "
                 "Consider adjusting the guide or VI settings."
             )
+
+    if psis_hyper_entries or psis_weight_blocks or psis_corr_summary:
+        diagnostics = diagnostics or {}
+        moment_summary: Dict[str, Any] = {}
+        if psis_hyper_entries:
+            moment_summary["hyperparameters"] = psis_hyper_entries
+        if psis_weight_blocks:
+            moment_summary["weights_by_block"] = psis_weight_blocks
+            vr_median = [
+                entry.get("var_ratio_median", np.nan)
+                for entry in psis_weight_blocks
+            ]
+            bias_median = [
+                entry.get("bias_median_abs", np.nan)
+                for entry in psis_weight_blocks
+            ]
+            bias_abs_median = [
+                entry.get("bias_abs_median", np.nan)
+                for entry in psis_weight_blocks
+            ]
+            moment_summary["weights"] = {
+                "var_ratio_min": float(
+                    np.nanmin(
+                        [
+                            entry.get("var_ratio_min", np.nan)
+                            for entry in psis_weight_blocks
+                        ]
+                    )
+                ),
+                "var_ratio_median": float(np.nanmedian(vr_median)),
+                "var_ratio_max": float(
+                    np.nanmax(
+                        [
+                            entry.get("var_ratio_max", np.nan)
+                            for entry in psis_weight_blocks
+                        ]
+                    )
+                ),
+                "frac_outside": float(
+                    np.nanmax(
+                        [
+                            entry.get("frac_outside", np.nan)
+                            for entry in psis_weight_blocks
+                        ]
+                    )
+                ),
+                "bias_median_abs": float(np.nanmedian(bias_median)),
+                "bias_max_abs": float(
+                    np.nanmax(
+                        [
+                            entry.get("bias_max_abs", np.nan)
+                            for entry in psis_weight_blocks
+                        ]
+                    )
+                ),
+                "bias_abs_median": float(np.nanmedian(bias_abs_median)),
+                "bias_abs_max": float(
+                    np.nanmax(
+                        [
+                            entry.get("bias_abs_max", np.nan)
+                            for entry in psis_weight_blocks
+                        ]
+                    )
+                ),
+                "n_weights": int(
+                    np.sum(
+                        [
+                            entry.get("n_weights", 0)
+                            for entry in psis_weight_blocks
+                        ]
+                    )
+                ),
+            }
+        if psis_thresholds:
+            moment_summary["thresholds"] = psis_thresholds
+        if moment_summary:
+            diagnostics["psis_moment_summary"] = moment_summary
+        if psis_corr_summary:
+            diagnostics["psis_correlation_summary"] = psis_corr_summary
 
     return BlockVIArtifacts(
         init_strategies=init_strategies,

@@ -1,9 +1,19 @@
 import arviz as az
+import matplotlib
 import numpy as np
 from xarray import DataArray, Dataset
 
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+
 from log_psplines.diagnostics import psd_compare, run_all_diagnostics
 from log_psplines.diagnostics._utils import compute_riae
+from log_psplines.diagnostics.derived_weights import (
+    HDI_PROB,
+    compute_weight_summaries,
+)
+from log_psplines.diagnostics.plotting import DiagnosticsConfig
 
 
 def _build_idata_with_psd(truth: np.ndarray, q50_scale: float = 1.1):
@@ -71,8 +81,6 @@ def test_run_all_orchestrates_modules():
         "mcmc",
         "psd_compare",
         "psd_bands",
-        "time_domain",
-        "whitening",
         "vi",
     }
     assert expected_modules.issubset(set(result.keys()))
@@ -82,7 +90,7 @@ def test_run_all_orchestrates_modules():
         assert all(isinstance(v, float) for v in module_metrics.values())
 
 
-def test_run_all_includes_energy_channel_metrics():
+def test_run_all_ignores_energy_channel_metrics():
     rng = np.random.default_rng(123)
     truth = np.linspace(1.0, 2.0, 5)
     idata, _, _ = _build_idata_with_psd(truth, q50_scale=1.0)
@@ -96,27 +104,35 @@ def test_run_all_includes_energy_channel_metrics():
         signals=rng.normal(size=100),
     )
 
-    assert "energy" in result
-    energy_metrics = result["energy"]
-    assert any(
-        key.startswith("ebfmi_energy_channel_0") for key in energy_metrics
+    assert "energy" not in result
+
+
+def test_derived_weight_summaries_penalty():
+    weights = np.array([[[1.0, -2.0, 3.0], [0.5, -1.5, 2.0]]])
+    idata = az.from_dict(posterior={"weights": weights})
+    penalty = np.diag([1.0, 2.0, 3.0])
+    spline_model = Dataset(
+        {
+            "penalty_matrix": DataArray(
+                penalty,
+                dims=["weights_dim_row", "weights_dim_col"],
+            )
+        }
     )
-    assert all(isinstance(v, float) for v in energy_metrics.values())
+    idata.add_groups(spline_model=spline_model)
 
+    scalar, vector = compute_weight_summaries(idata, hdi_prob=HDI_PROB)
+    assert "w_rms__weights" in scalar
+    assert "w_maxabs__weights" in scalar
+    assert "penalty__weights" in scalar
+    assert "w_hdi_width__weights" in vector
 
-def test_energy_histogram_falls_back_when_range_is_too_small(tmp_path):
-    from log_psplines.diagnostics.energy import plot_ebfmi_diagnostics
-
-    energy = np.stack(
-        (
-            1e16 + np.linspace(0.0, 10.0, 100),
-            1e16 + np.linspace(2.0, 12.0, 100),
-        ),
-        axis=0,
+    w = weights.reshape((weights.shape[0], weights.shape[1], -1))
+    expected_rms = np.sqrt(np.mean(w * w, axis=-1))
+    expected_penalty = np.einsum("...i,ij,...j->...", w, penalty, w)
+    np.testing.assert_allclose(
+        scalar["w_rms__weights"].values, expected_rms, rtol=1e-6
     )
-    metrics = plot_ebfmi_diagnostics(
-        idata=None, outdir=tmp_path, energy=energy
+    np.testing.assert_allclose(
+        scalar["penalty__weights"].values, expected_penalty, rtol=1e-6
     )
-
-    assert metrics is not None
-    assert (tmp_path / "ebfmi_diagnostics.png").exists()

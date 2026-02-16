@@ -4,6 +4,7 @@ Base class for multivariate PSD samplers.
 
 import os
 import tempfile
+import time
 import traceback
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -25,12 +26,9 @@ from ...datatypes.multivar_utils import (
     u_to_wishart_matrix,
     wishart_matrix_to_psd,
 )
+from ...diagnostics.plotting import generate_vi_diagnostics_summary
 from ...logger import logger
-from ...plotting import (
-    generate_vi_diagnostics_summary,
-    plot_psd_matrix,
-    save_vi_diagnostics_multivariate,
-)
+from ...plotting import plot_psd_matrix, save_vi_diagnostics_multivariate
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -123,8 +121,13 @@ class MultivarBaseSampler(BaseSampler):
     def _save_plots(self, idata: az.InferenceData) -> None:
         """Save multivariate-specific plots."""
         try:
+            t0 = time.perf_counter()
+            logger.info("save_plots(multivar): computing empirical PSD")
             # Create empirical PSD matrix for comparison
             empirical_psd = self._compute_empirical_psd()
+            logger.info(
+                f"save_plots(multivar): empirical PSD computed in {time.perf_counter() - t0:.2f}s"
+            )
 
             # Extract true PSD if available
             true_psd = None
@@ -145,6 +148,8 @@ class MultivarBaseSampler(BaseSampler):
                 self.config, "extra_empirical_styles", None
             )
 
+            t0 = time.perf_counter()
+            logger.info("save_plots(multivar): plotting PSD matrix")
             plot_psd_matrix(
                 idata=idata,
                 freq=np.array(self.freq),
@@ -156,9 +161,17 @@ class MultivarBaseSampler(BaseSampler):
                 overlay_vi=overlay_vi,
                 outdir=self.config.outdir,
             )
+            logger.info(
+                f"save_plots(multivar): PSD matrix plot done in {time.perf_counter() - t0:.2f}s"
+            )
 
+            t0 = time.perf_counter()
+            logger.info("save_plots(multivar): saving VI diagnostics")
             self._save_vi_diagnostics(
                 empirical_psd=empirical_psd, log_summary=False
+            )
+            logger.info(
+                f"save_plots(multivar): VI diagnostics done in {time.perf_counter() - t0:.2f}s"
             )
         except Exception as e:
             if self.config.verbose:

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from typing import Callable, Dict
 
-from . import energy, mcmc, psd_bands, psd_compare, time_domain, vi, whitening
+from ..logger import logger
+from . import mcmc, psd_bands, psd_compare, vi
 
 
 def run_all_diagnostics(
@@ -33,7 +35,6 @@ def run_all_diagnostics(
         tuple[str, Callable[..., Dict[str, float]], Callable[[], bool]]
     ] = [
         ("mcmc", mcmc._run, lambda: idata is not None),
-        ("energy", energy._run, lambda: idata is not None),
         (
             "psd_compare",
             psd_compare._run,
@@ -44,8 +45,6 @@ def run_all_diagnostics(
             psd_bands._run,
             _has_psd,
         ),
-        ("time_domain", time_domain._run, lambda: signals is not None),
-        ("whitening", whitening._run, lambda: signals is not None),
         ("vi", vi._run, lambda: idata_vi is not None),
     ]
 
@@ -53,7 +52,12 @@ def run_all_diagnostics(
     for name, fn, predicate in rules:
         if not predicate():
             continue
+        t0 = time.perf_counter()
+        logger.info(f"Full diagnostics: {name} starting")
         metrics = fn(**context)
+        logger.info(
+            f"Full diagnostics: {name} done in {time.perf_counter() - t0:.2f}s"
+        )
         if metrics:
             results[name] = metrics
 

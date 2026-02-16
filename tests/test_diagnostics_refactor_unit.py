@@ -1,14 +1,11 @@
 import numpy as np
 
 from log_psplines.diagnostics import (
-    energy,
     mcmc,
     psd_bands,
     psd_compare,
     run_all,
-    time_domain,
     vi,
-    whitening,
 )
 from log_psplines.diagnostics.mcmc import _metric_from_attr_or_compute
 
@@ -41,11 +38,8 @@ def test_run_all_registry_dispatches_private_entries(monkeypatch):
         return _fn
 
     monkeypatch.setattr(run_all.mcmc, "_run", _mk("mcmc"))
-    monkeypatch.setattr(run_all.energy, "_run", _mk("energy"))
     monkeypatch.setattr(run_all.psd_compare, "_run", _mk("psd_compare"))
     monkeypatch.setattr(run_all.psd_bands, "_run", _mk("psd_bands"))
-    monkeypatch.setattr(run_all.time_domain, "_run", _mk("time_domain"))
-    monkeypatch.setattr(run_all.whitening, "_run", _mk("whitening"))
     monkeypatch.setattr(run_all.vi, "_run", _mk("vi"))
 
     idata = _DummyIData(attrs={})
@@ -60,29 +54,20 @@ def test_run_all_registry_dispatches_private_entries(monkeypatch):
 
     assert set(calls) == {
         "mcmc",
-        "energy",
         "psd_compare",
         "psd_bands",
-        "time_domain",
-        "whitening",
         "vi",
     }
     assert set(res.keys()) == {
         "mcmc",
-        "energy",
         "psd_compare",
         "psd_bands",
-        "time_domain",
-        "whitening",
         "vi",
     }
 
 
 def test_internal_run_entrypoints_are_private_only():
     assert not hasattr(mcmc, "run")
-    assert not hasattr(energy, "run")
     assert not hasattr(psd_compare, "run")
     assert not hasattr(psd_bands, "run")
-    assert not hasattr(time_domain, "run")
-    assert not hasattr(whitening, "run")
     assert not hasattr(vi, "run")

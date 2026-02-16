@@ -138,47 +138,43 @@ def _build_arviz_plot_data(idata):
     if hasattr(idata, "sample_stats"):
         try:
             idata_plot.add_groups(sample_stats=idata.sample_stats)
+            _ensure_diverging_sample_stats(idata_plot)
         except Exception:
             pass
     return idata_plot, derived_vector, weight_vars
 
 
-def _plot_weight_hdi_widths(
-    vector_summaries: dict[str, np.ndarray],
-    diag_dir: str,
-    config: DiagnosticsConfig,
-) -> None:
-    if not vector_summaries:
+def _ensure_diverging_sample_stats(idata: az.InferenceData) -> None:
+    if not hasattr(idata, "sample_stats"):
         return
-    for name, values in vector_summaries.items():
+    sample_stats = idata.sample_stats
+    if "diverging" in sample_stats.data_vars:
+        return
+    channel_keys = [
+        key
+        for key in sample_stats.data_vars
+        if str(key).startswith("diverging_channel_")
+    ]
+    if not channel_keys:
+        return
+    arrays = []
+    for key in channel_keys:
         try:
-            arr = np.asarray(values)
+            arrays.append(np.asarray(sample_stats[key]))
         except Exception:
-            logger.warning(
-                f"Diagnostics plot: {name} skipped (could not convert)."
-            )
             continue
-        arr = np.asarray(arr).squeeze()
-        if arr.size == 0:
-            continue
-        if arr.ndim != 1:
-            logger.warning(
-                f"Diagnostics plot: {name} skipped (unexpected ndim={arr.ndim})."
-            )
-            continue
-
-        @safe_plot(f"{diag_dir}/{name}.png", config.dpi)
-        def _plot():
-            fig, ax = plt.subplots(1, 1, figsize=(7, 4))
-            ax.plot(arr, color="C0", linewidth=1.5)
-            ax.set_title(name.replace("__", " "))
-            ax.set_xlabel("Basis index")
-            ax.set_ylabel("HDI width")
-            ax.grid(True, alpha=0.3)
-            plt.tight_layout()
-            return fig
-
-        _plot()
+    if not arrays:
+        return
+    try:
+        stacked = np.stack(arrays, axis=0)
+        combined = np.any(stacked > 0, axis=0).astype(int)
+    except Exception:
+        combined = (np.asarray(arrays[0]) > 0).astype(int)
+    ref = sample_stats[channel_keys[0]]
+    try:
+        sample_stats["diverging"] = (ref.dims, combined)
+    except Exception:
+        sample_stats["diverging"] = combined
 
 
 def _sanitize_filename(name: str) -> str:
@@ -357,8 +353,62 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
             ax.axis("off")
             plt.tight_layout()
             return fig
-        az.plot_trace(idata_plot)
-        return plt.gcf()
+
+        has_divergences = False
+        if hasattr(idata_plot, "sample_stats"):
+            sample_stats_vars = list(idata_plot.sample_stats.data_vars)
+            has_divergences = "diverging" in sample_stats_vars
+
+        # Calculate number of variables to scale figure size
+        num_vars = len(idata_plot.posterior.data_vars)
+        figsize_height = max(4, num_vars * 1.5)
+        figsize = (14, figsize_height)
+
+        # Create trace plot with improved layout
+        # Use idata_plot which has the filtered posterior + sample_stats
+        axes = az.plot_trace(
+            idata_plot,
+            combined=False,
+            compact=False,
+            figsize=figsize,
+            divergences=has_divergences,
+        )
+
+        fig = axes.ravel()[0].figure if hasattr(axes, "ravel") else plt.gcf()
+
+        # Add Rhat values to subplot titles
+        try:
+            posterior = idata_plot.posterior
+            for var_name in idata_plot.posterior.data_vars:
+                var_data = posterior[var_name]
+                rhat = az.rhat(var_data)
+
+                # Extract values from xarray object
+                if hasattr(rhat, "values"):
+                    rhat_array = np.asarray(rhat.values)
+                else:
+                    rhat_array = np.asarray(rhat)
+
+                # Handle both scalar and array R-hats
+                if rhat_array.ndim == 0:
+                    rhat_val = float(rhat_array)
+                else:
+                    rhat_val = float(rhat_array.mean())
+
+                # Find axes for this variable and update title
+                for ax in fig.axes:
+                    title = ax.get_title()
+                    # Match by variable name in the title
+                    if any(part == var_name for part in title.split()):
+                        if "R-hat" not in title:
+                            new_title = f"{title}\nR-hat: {rhat_val:.4f}"
+                            ax.set_title(new_title, fontsize=10)
+                            break
+        except Exception as e:
+            logger.debug(f"Could not add Rhat values to trace plot: {e}")
+
+        fig.tight_layout()
+        return fig
 
     t = time.perf_counter()
     logger.info("Diagnostics plot: trace_plots.png starting")
@@ -389,14 +439,6 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
         _create_ess_rhat_profiles(idata, diag_dir, config, weight_vars)
         logger.info(
             f"Diagnostics plots: ess_rhat_profiles done in {time.perf_counter() - t:.2f}s"
-        )
-
-    if vector_summaries:
-        t = time.perf_counter()
-        logger.info("Diagnostics plot: weight_hdi_widths starting")
-        _plot_weight_hdi_widths(vector_summaries, diag_dir, config)
-        logger.info(
-            f"Diagnostics plots: weight_hdi_widths done in {time.perf_counter() - t:.2f}s"
         )
 
     # 4. Summary dashboard with key convergence metrics
@@ -437,8 +479,7 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
         f"Diagnostics plots: sampler-specific done in {time.perf_counter() - t:.2f}s"
     )
 
-    # 7. Divergences diagnostics (for NUTS only)
-    logger.info("Diagnostics plots: divergences skipped (disabled).")
+    # 7. Divergences diagnostics now included in summary dashboard.
 
 
 def _create_rank_diagnostics(idata, diag_dir, config):
@@ -505,20 +546,24 @@ def _create_pair_diagnostics(idata, diag_dir, config):
 
 def _plot_summary_dashboard(idata, config, p, N, runtime):
 
-    # Create 2x2 layout
+    # Create 2x3 layout (adds divergences overview)
     fig, axes = plt.subplots(
-        2, 2, figsize=(config.figsize[0] * 0.8, config.figsize[1])
+        2, 3, figsize=(config.figsize[0] * 1.3, config.figsize[1])
     )
     ess_ax = axes[0, 0]
     meta_ax = axes[0, 1]
+    div_trace_ax = axes[0, 2]
     param_ax = axes[1, 0]
     status_ax = axes[1, 1]
+    div_summary_ax = axes[1, 2]
 
     # Get ESS values once
     ess_values = None
     try:
         ess = idata.attrs.get("ess")
-        ess_values = ess[~np.isnan(ess)]
+        ess_arr = np.asarray(ess) if ess is not None else None
+        if ess_arr is not None:
+            ess_values = ess_arr[np.isfinite(ess_arr)]
     except Exception:
         pass
 
@@ -533,6 +578,9 @@ def _plot_summary_dashboard(idata, config, p, N, runtime):
 
     # 4. NUTS must-have checks
     _plot_convergence_status(status_ax, idata, ess_values, config)
+
+    # 5. Divergences overview (if available)
+    _plot_divergences_panels(idata, div_trace_ax, div_summary_ax, config)
 
     plt.tight_layout()
 
@@ -670,6 +718,73 @@ def _compute_ebfmi_from_energy(energy_values: np.ndarray) -> Optional[float]:
     return float(np.mean(delta * delta) / var_energy)
 
 
+def _compute_ebfmi_per_chain(energy_values: np.ndarray) -> list[float]:
+    energy = np.asarray(energy_values)
+    if energy.ndim == 0:
+        return []
+    if energy.ndim == 1:
+        ebfmi = _compute_ebfmi_from_energy(energy)
+        return [ebfmi] if ebfmi is not None else []
+    ebfmi_vals: list[float] = []
+    for chain_idx in range(int(energy.shape[0])):
+        chain_energy = np.asarray(energy[chain_idx]).reshape(-1)
+        ebfmi = _compute_ebfmi_from_energy(chain_energy)
+        if ebfmi is not None:
+            ebfmi_vals.append(ebfmi)
+    return ebfmi_vals
+
+
+def _compute_ebfmi_metrics(
+    idata, attrs: dict
+) -> tuple[Optional[float], dict[int, dict[str, float]]]:
+    ebfmi = _as_finite_scalar(attrs.get("energy_ebfmi_overall"))
+    if ebfmi is None:
+        try:
+            candidates = [
+                _as_finite_scalar(val)
+                for key, val in attrs.items()
+                if str(key).startswith("energy_ebfmi")
+                and str(key).endswith("_overall")
+            ]
+            finite = [v for v in candidates if v is not None]
+            if finite:
+                ebfmi = float(min(finite))
+        except Exception:
+            pass
+
+    ebfmi_by_channel: dict[int, dict[str, float]] = {}
+    if hasattr(idata, "sample_stats"):
+        if "energy" in idata.sample_stats:
+            ebfmi_vals = _compute_ebfmi_per_chain(
+                np.asarray(idata.sample_stats["energy"])
+            )
+            if ebfmi_vals and ebfmi is None:
+                ebfmi = float(np.min(ebfmi_vals))
+        else:
+            for key in idata.sample_stats:
+                if not str(key).startswith("energy_channel_"):
+                    continue
+                channel_str = str(key).replace("energy_channel_", "")
+                try:
+                    channel_idx = int(channel_str)
+                except ValueError:
+                    continue
+                ebfmi_vals = _compute_ebfmi_per_chain(
+                    np.asarray(idata.sample_stats[key])
+                )
+                if ebfmi_vals:
+                    ebfmi_by_channel[channel_idx] = {
+                        "min": float(np.min(ebfmi_vals)),
+                        "median": float(np.median(ebfmi_vals)),
+                    }
+            if ebfmi is None and ebfmi_by_channel:
+                ebfmi = float(
+                    min(info["min"] for info in ebfmi_by_channel.values())
+                )
+
+    return ebfmi, ebfmi_by_channel
+
+
 def _collect_must_have_metrics(idata, ess_values) -> dict:
     posterior = getattr(idata, "posterior", None)
     n_chains = (
@@ -767,31 +882,10 @@ def _collect_must_have_metrics(idata, ess_values) -> dict:
         metrics["tree_hit_frac"] = float(max_stats["frac"])
         metrics["tree_message"] = _format_max_tree_depth_message(max_stats)
 
-    ebfmi = _as_finite_scalar(attrs.get("energy_ebfmi_overall"))
-    if ebfmi is None:
-        try:
-            candidates = [
-                _as_finite_scalar(val)
-                for key, val in attrs.items()
-                if str(key).startswith("energy_ebfmi")
-                and str(key).endswith("_overall")
-            ]
-            finite = [v for v in candidates if v is not None]
-            if finite:
-                ebfmi = float(min(finite))
-        except Exception:
-            pass
-    if ebfmi is None and hasattr(idata, "sample_stats"):
-        energy_values = []
-        if "energy" in idata.sample_stats:
-            energy_values.append(np.asarray(idata.sample_stats["energy"]))
-        else:
-            for key in idata.sample_stats:
-                if str(key).startswith("energy_channel_"):
-                    energy_values.append(np.asarray(idata.sample_stats[key]))
-        if energy_values:
-            ebfmi = _compute_ebfmi_from_energy(np.concatenate(energy_values))
+    ebfmi, ebfmi_by_channel = _compute_ebfmi_metrics(idata, attrs)
     metrics["ebfmi"] = ebfmi
+    if ebfmi_by_channel:
+        metrics["ebfmi_by_channel"] = ebfmi_by_channel
 
     return metrics
 
@@ -1757,19 +1851,7 @@ def _create_divergences_diagnostics(idata, diag_dir, config):
 
 def _plot_divergences(idata, config):
     """Plot divergences diagnostics."""
-    divergences_data: dict[str | int, np.ndarray] = {}
-
-    if "diverging" in idata.sample_stats:
-        divergences_data["main"] = (
-            idata.sample_stats.diverging.values.flatten()
-        )
-
-    for key in idata.sample_stats:
-        if key.startswith("diverging_channel_"):
-            channel_idx = key.replace("diverging_channel_", "")
-            divergences_data[int(channel_idx)] = idata.sample_stats[
-                key
-            ].values.flatten()
+    divergences_data = _collect_divergences_data(idata)
 
     if not divergences_data:
         fig, ax = plt.subplots(figsize=config.figsize)
@@ -1829,6 +1911,79 @@ def _plot_divergences(idata, config):
     fig.suptitle(f"Overall Divergences: {overall_pct:.2f}%")
 
     plt.tight_layout()
+
+
+def _collect_divergences_data(idata) -> dict[str | int, np.ndarray]:
+    if not hasattr(idata, "sample_stats"):
+        return {}
+    divergences_data: dict[str | int, np.ndarray] = {}
+    sample_stats = idata.sample_stats
+    if "diverging" in sample_stats:
+        divergences_data["main"] = sample_stats.diverging.values.flatten()
+
+    for key in sample_stats:
+        if str(key).startswith("diverging_channel_"):
+            channel_idx = str(key).replace("diverging_channel_", "")
+            try:
+                idx = int(channel_idx)
+            except ValueError:
+                continue
+            divergences_data[idx] = sample_stats[key].values.flatten()
+    return divergences_data
+
+
+def _plot_divergences_panels(idata, trace_ax, summary_ax, config) -> None:
+    divergences_data = _collect_divergences_data(idata)
+    if not divergences_data:
+        trace_ax.text(
+            0.5,
+            0.5,
+            "No divergence data available",
+            ha="center",
+            va="center",
+        )
+        trace_ax.set_title("Divergences")
+        trace_ax.axis("off")
+        summary_ax.axis("off")
+        return
+
+    total_divergences = 0
+    total_iterations = 0
+    for label, div_values in divergences_data.items():
+        div = np.asarray(div_values).reshape(-1)
+        div = div[np.isfinite(div)]
+        if div.size == 0:
+            continue
+        cumulative = np.cumsum(div.astype(int))
+        label_str = "overall" if label == "main" else f"ch {label}"
+        trace_ax.plot(
+            np.arange(cumulative.size),
+            cumulative,
+            linewidth=1.2,
+            alpha=0.9,
+            label=label_str,
+        )
+        total_divergences += int(np.sum(div))
+        total_iterations += int(div.size)
+
+    trace_ax.set_xlabel("Iteration")
+    trace_ax.set_ylabel("Cumulative")
+    trace_ax.set_title("Divergences (cumulative)")
+    trace_ax.grid(True, alpha=0.3)
+    trace_ax.legend(loc="best", fontsize="small")
+
+    summary_ax.text(
+        0.05,
+        0.95,
+        _get_divergences_summary(divergences_data),
+        transform=summary_ax.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        fontfamily="monospace",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.9),
+    )
+    summary_ax.set_title("Divergences Summary")
+    summary_ax.axis("off")
 
 
 def _get_divergences_summary(
@@ -1947,6 +2102,7 @@ def generate_diagnostics_summary(
     n_params = len(list(idata.posterior.data_vars))
     sampler_type = attrs.get("sampler_type", "Unknown")
     max_tree_depth = _coerce_int(attrs.get("max_tree_depth"))
+    has_sample_stats = hasattr(idata, "sample_stats")
 
     summary.append(f"Sampler: {sampler_type}")
     summary.append(
@@ -2079,11 +2235,22 @@ def generate_diagnostics_summary(
         rhat_mean = cached_rhat_mean
 
     if ess_min is not None:
+        bulk_status = (
+            "✓ excellent"
+            if ess_min >= 1000
+            else "✓ good" if ess_min >= 400 else "⚠ low"
+        )
         summary.append(
             f"\nESS bulk: min={ess_min:.0f}"
             + (f", median={ess_med:.0f}" if ess_med is not None else "")
+            + f" {bulk_status}"
         )
     if ess_tail_min is not None:
+        tail_status = (
+            "✓ excellent"
+            if ess_tail_min >= 1000
+            else "✓ good" if ess_tail_min >= 400 else "⚠ low"
+        )
         summary.append(
             f"ESS tail: min={ess_tail_min:.0f}"
             + (
@@ -2091,60 +2258,79 @@ def generate_diagnostics_summary(
                 if ess_tail_med is not None
                 else ""
             )
+            + f" {tail_status}"
         )
     if rhat_max is not None:
+        rhat_status = (
+            "✓ excellent"
+            if rhat_max <= 1.01
+            else "⚠ high" if rhat_max <= 1.1 else "⚠ problematic"
+        )
         summary.append(
             f"Rhat: max={rhat_max:.3f}"
             + (f", mean={rhat_mean:.3f}" if rhat_mean is not None else "")
+            + f" {rhat_status}"
         )
 
     # Acceptance rate / divergences (cheap: read directly from sample_stats).
-    try:
-        acc = None
-        if "accept_prob" in idata.sample_stats:
-            acc = float(np.mean(np.asarray(idata.sample_stats["accept_prob"])))
-        elif "acceptance_rate" in idata.sample_stats:
-            acc = float(
-                np.mean(np.asarray(idata.sample_stats["acceptance_rate"]))
-            )
-        else:
-            ch_vals = []
-            for key in idata.sample_stats:
-                if str(key).startswith("accept_prob_channel_"):
-                    ch_vals.append(
-                        float(np.mean(np.asarray(idata.sample_stats[key])))
-                    )
-            if ch_vals:
-                acc = float(np.mean(ch_vals))
-        if acc is not None and np.isfinite(acc):
-            summary.append(f"Acceptance rate: {acc:.3f}")
-    except Exception:
-        pass
-
-    try:
-        div = None
-        if "diverging" in idata.sample_stats:
-            div = np.asarray(idata.sample_stats["diverging"]).reshape(-1)
-        else:
-            div_list = []
-            for key in idata.sample_stats:
-                if str(key).startswith("diverging_channel_"):
-                    div_list.append(
-                        np.asarray(idata.sample_stats[key]).reshape(-1)
-                    )
-            if div_list:
-                div = np.concatenate(div_list)
-        if div is not None:
-            div = div[np.isfinite(div)]
-            if div.size:
-                div_count = int(np.sum(div))
-                div_total = int(div.size)
-                div_pct = float(np.mean(div) * 100.0)
-                summary.append(
-                    f"Divergences: {div_count}/{div_total} ({div_pct:.2f}%)"
+    if has_sample_stats:
+        try:
+            acc = None
+            if "accept_prob" in idata.sample_stats:
+                acc = float(
+                    np.mean(np.asarray(idata.sample_stats["accept_prob"]))
                 )
-    except Exception:
-        pass
+            elif "acceptance_rate" in idata.sample_stats:
+                acc = float(
+                    np.mean(np.asarray(idata.sample_stats["acceptance_rate"]))
+                )
+            else:
+                ch_vals = []
+                for key in idata.sample_stats:
+                    if str(key).startswith("accept_prob_channel_"):
+                        ch_vals.append(
+                            float(np.mean(np.asarray(idata.sample_stats[key])))
+                        )
+                if ch_vals:
+                    acc = float(np.mean(ch_vals))
+            if acc is not None and np.isfinite(acc):
+                summary.append(f"Acceptance rate: {acc:.3f}")
+        except Exception:
+            pass
+
+        try:
+            div = None
+            if "diverging" in idata.sample_stats:
+                div = np.asarray(idata.sample_stats["diverging"]).reshape(-1)
+            else:
+                div_list = []
+                for key in idata.sample_stats:
+                    if str(key).startswith("diverging_channel_"):
+                        div_list.append(
+                            np.asarray(idata.sample_stats[key]).reshape(-1)
+                        )
+                if div_list:
+                    div = np.concatenate(div_list)
+            if div is not None:
+                div = div[np.isfinite(div)]
+                if div.size:
+                    div_count = int(np.sum(div))
+                    div_total = int(div.size)
+                    div_pct = float(np.mean(div) * 100.0)
+                    status = (
+                        "✓ ok"
+                        if div_pct < 1
+                        else (
+                            "⚠ check geometry"
+                            if div_pct < 5
+                            else "⚠ problematic"
+                        )
+                    )
+                    summary.append(
+                        f"Divergences: {div_count}/{div_total} ({div_pct:.2f}%) {status}"
+                    )
+        except Exception:
+            pass
 
     # PSIS is expensive (az.loo); only include when full diagnostics were run.
     khat = None
@@ -2158,119 +2344,127 @@ def generate_diagnostics_summary(
             except Exception:
                 pass
 
-    ebfmi = _as_float(attrs.get("energy_ebfmi_overall"))
-    if ebfmi is None:
-        ebfmi_candidates: list[float] = [
-            float(v)
-            for key, val in attrs.items()
-            if str(key).startswith("energy_ebfmi")
-            and str(key).endswith("_overall")
-            for v in [_as_float(val)]
-            if v is not None
-        ]
-        if ebfmi_candidates:
-            ebfmi = float(np.min(ebfmi_candidates))
-    if ebfmi is None and hasattr(idata, "sample_stats"):
-        energy_values = []
-        if "energy" in idata.sample_stats:
-            energy_values.append(np.asarray(idata.sample_stats["energy"]))
-        else:
-            for key in idata.sample_stats:
-                if str(key).startswith("energy_channel_"):
-                    energy_values.append(np.asarray(idata.sample_stats[key]))
-        if energy_values:
-            ebfmi = _compute_ebfmi_from_energy(np.concatenate(energy_values))
+    ebfmi, ebfmi_by_channel = _compute_ebfmi_metrics(idata, attrs)
     if ebfmi is not None:
-        summary.append(f"E-BFMI: {ebfmi:.3f}")
-
-    tree_depth = (
-        idata.sample_stats.tree_depth.values.flatten()
-        if "tree_depth" in idata.sample_stats
-        else None
-    )
-    num_steps = None
-    steps_by_channel = {}
-    if "num_steps" in idata.sample_stats:
-        num_steps = idata.sample_stats.num_steps.values.flatten()
-    else:
-        channel_indices = _get_channel_indices(idata.sample_stats, "num_steps")
-        for ch in sorted(channel_indices):
-            steps_by_channel[ch] = idata.sample_stats[
-                f"num_steps_channel_{ch}"
-            ].values.flatten()
-        if steps_by_channel:
-            num_steps = np.concatenate(list(steps_by_channel.values()))
-    max_stats = _max_tree_depth_stats(num_steps, tree_depth, max_tree_depth)
-    if max_stats:
-        pct = max_stats["frac"] * 100
-        summary.append(_format_max_tree_depth_message(max_stats))
-        if steps_by_channel:
-            for ch in sorted(steps_by_channel):
-                ch_stats = _max_tree_depth_stats(
-                    steps_by_channel[ch], None, max_tree_depth
+        status = (
+            "✓ ok"
+            if ebfmi >= 0.3
+            else "⚠ borderline" if ebfmi >= 0.2 else "⚠ problematic"
+        )
+        summary.append(f"E-BFMI: {ebfmi:.3f} {status}")
+    if ebfmi_by_channel:
+        for ch in sorted(ebfmi_by_channel):
+            info = ebfmi_by_channel[ch]
+            ch_status = (
+                "✓ ok"
+                if info["median"] >= 0.3
+                else (
+                    "⚠ borderline"
+                    if info["median"] >= 0.2
+                    else "⚠ problematic"
                 )
-                if ch_stats:
-                    summary.append(
-                        f"  Channel {ch}: {_format_max_tree_depth_message(ch_stats)}"
+            )
+            summary.append(
+                f"  Channel {ch}: min={info['min']:.3f}, median={info['median']:.3f} {ch_status}"
+            )
+
+    if has_sample_stats:
+        tree_depth = (
+            idata.sample_stats.tree_depth.values.flatten()
+            if "tree_depth" in idata.sample_stats
+            else None
+        )
+        num_steps = None
+        steps_by_channel = {}
+        if "num_steps" in idata.sample_stats:
+            num_steps = idata.sample_stats.num_steps.values.flatten()
+        else:
+            channel_indices = _get_channel_indices(
+                idata.sample_stats, "num_steps"
+            )
+            for ch in sorted(channel_indices):
+                steps_by_channel[ch] = idata.sample_stats[
+                    f"num_steps_channel_{ch}"
+                ].values.flatten()
+            if steps_by_channel:
+                num_steps = np.concatenate(list(steps_by_channel.values()))
+        max_stats = _max_tree_depth_stats(
+            num_steps, tree_depth, max_tree_depth
+        )
+        if max_stats:
+            pct = max_stats["frac"] * 100
+            summary.append(_format_max_tree_depth_message(max_stats))
+            if steps_by_channel:
+                for ch in sorted(steps_by_channel):
+                    ch_stats = _max_tree_depth_stats(
+                        steps_by_channel[ch], None, max_tree_depth
                     )
-        if pct >= 50:
-            summary.append(
-                "  ⚠ Max tree depth hit rate is very high; consider reparameterization or increasing max_tree_depth."
-            )
-            logger.warning(
-                f"Max tree depth hit rate is {pct:.1f}% (very high)."
-            )
-        elif pct >= 10:
-            summary.append(
-                "  ⚠ Max tree depth hit rate is elevated; geometry may be challenging."
-            )
-            logger.warning(
-                f"Max tree depth hit rate is {pct:.1f}% (elevated)."
-            )
-
-    step_size = None
-    step_size_by_channel = {}
-    if "step_size" in idata.sample_stats:
-        step_size = idata.sample_stats.step_size.values.flatten()
-    else:
-        channel_indices = _get_channel_indices(idata.sample_stats, "step_size")
-        for ch in sorted(channel_indices):
-            step_size_by_channel[ch] = idata.sample_stats[
-                f"step_size_channel_{ch}"
-            ].values.flatten()
-        if step_size_by_channel:
-            step_size = np.concatenate(list(step_size_by_channel.values()))
-
-    if step_size is not None and step_size.size:
-        step_size = step_size[np.isfinite(step_size)]
-        if step_size.size:
-            summary.append(
-                f"Step size: median={np.median(step_size):.3g}, min={np.min(step_size):.3g}"
-            )
-        if step_size_by_channel:
-            for ch in sorted(step_size_by_channel):
-                ss = step_size_by_channel[ch]
-                ss = ss[np.isfinite(ss)]
-                if ss.size:
-                    summary.append(
-                        f"  Channel {ch}: median={np.median(ss):.3g}, min={np.min(ss):.3g}"
-                    )
-
-    diverging_by_channel = {}
-    if "diverging" not in idata.sample_stats:
-        channel_indices = _get_channel_indices(idata.sample_stats, "diverging")
-        for ch in sorted(channel_indices):
-            diverging_by_channel[ch] = idata.sample_stats[
-                f"diverging_channel_{ch}"
-            ].values.flatten()
-    if diverging_by_channel:
-        for ch in sorted(diverging_by_channel):
-            div = np.asarray(diverging_by_channel[ch], dtype=float)
-            div = div[np.isfinite(div)]
-            if div.size:
+                    if ch_stats:
+                        summary.append(
+                            f"  Channel {ch}: {_format_max_tree_depth_message(ch_stats)}"
+                        )
+            if pct >= 50:
                 summary.append(
-                    f"  Channel {ch}: divergences={np.mean(div)*100:.2f}%"
+                    "  ⚠ Max tree depth hit rate is very high; consider reparameterization or increasing max_tree_depth."
                 )
+                logger.warning(
+                    f"Max tree depth hit rate is {pct:.1f}% (very high)."
+                )
+            elif pct >= 10:
+                summary.append(
+                    "  ⚠ Max tree depth hit rate is elevated; geometry may be challenging."
+                )
+                logger.warning(
+                    f"Max tree depth hit rate is {pct:.1f}% (elevated)."
+                )
+
+        step_size = None
+        step_size_by_channel = {}
+        if "step_size" in idata.sample_stats:
+            step_size = idata.sample_stats.step_size.values.flatten()
+        else:
+            channel_indices = _get_channel_indices(
+                idata.sample_stats, "step_size"
+            )
+            for ch in sorted(channel_indices):
+                step_size_by_channel[ch] = idata.sample_stats[
+                    f"step_size_channel_{ch}"
+                ].values.flatten()
+            if step_size_by_channel:
+                step_size = np.concatenate(list(step_size_by_channel.values()))
+
+        if step_size is not None and step_size.size:
+            step_size = step_size[np.isfinite(step_size)]
+            if step_size.size:
+                summary.append(
+                    f"Step size: median={np.median(step_size):.3g}, min={np.min(step_size):.3g}"
+                )
+            if step_size_by_channel:
+                for ch in sorted(step_size_by_channel):
+                    ss = step_size_by_channel[ch]
+                    ss = ss[np.isfinite(ss)]
+                    if ss.size:
+                        summary.append(
+                            f"  Channel {ch}: median={np.median(ss):.3g}, min={np.min(ss):.3g}"
+                        )
+
+        diverging_by_channel = {}
+        if "diverging" not in idata.sample_stats:
+            channel_indices = _get_channel_indices(
+                idata.sample_stats, "diverging"
+            )
+            for ch in sorted(channel_indices):
+                diverging_by_channel[ch] = idata.sample_stats[
+                    f"diverging_channel_{ch}"
+                ].values.flatten()
+        if diverging_by_channel:
+            for ch in sorted(diverging_by_channel):
+                div = np.asarray(diverging_by_channel[ch], dtype=float)
+                div = div[np.isfinite(div)]
+                if div.size:
+                    summary.append(
+                        f"  Channel {ch}: divergences={np.mean(div)*100:.2f}%"
+                    )
 
     psd_diag: dict[str, object] = (
         dict(diag_results.get("psd_compare", {})) if mode == "full" else {}
@@ -2347,37 +2541,6 @@ def generate_diagnostics_summary(
     else:
         summary.append("  Status: UNKNOWN (insufficient diagnostics)")
 
-    # Practical NUTS guidance (kept short; ASCII-only for portability).
-    sampler_lower = str(sampler_type).lower()
-    if "nuts" in sampler_lower:
-        summary.append("\nNUTS Energy / E-BFMI Notes:")
-        summary.append(
-            "  H(q,p)=U(q)+K(p); U(q) is -log posterior (up to a constant)."
-        )
-        summary.append(
-            "  Energy mixing: if transition energy changes are much narrower than"
-        )
-        summary.append(
-            "  marginal energy, exploration is poor even without divergences."
-        )
-        summary.append("  E-BFMI thresholds (rule of thumb):")
-        summary.append("    >=0.3 ok; 0.2-0.3 borderline; <0.2 problematic.")
-        summary.append("  Prioritize checks in this order:")
-        summary.append(
-            "    divergences -> max tree depth hits -> E-BFMI/energy -> Rhat/ESS"
-        )
-        summary.append("    -> trace/rank -> pair plots for problem blocks.")
-        summary.append("  If E-BFMI is low, fixes usually target geometry:")
-        summary.append(
-            "    reparameterize (non-centered, log-scales), whiten weights,"
-        )
-        summary.append(
-            "    rescale inputs/priors to O(1), or use more informative priors."
-        )
-        summary.append(
-            "  Higher target_accept or max_tree_depth are secondary tweaks."
-        )
-
     summary_text = "\n".join(summary)
 
     if outdir:
@@ -2395,31 +2558,79 @@ def generate_vi_diagnostics_summary(
     if not diagnostics:
         return ""
 
+    max_hyper = 5
+    max_blocks = 3
+    min_bias_pct = 10.0
+    min_var_ratio_dev = 0.2
+
     lines = []
     lines.append("=== VI Diagnostics Summary ===")
     lines.append("")
-
-    guide = diagnostics.get("guide", "vi")
-    lines.append(f"Guide: {guide}")
+    moment_summary = diagnostics.get("psis_moment_summary") or {}
+    weight_stats = moment_summary.get("weights")
+    weight_blocks = moment_summary.get("weights_by_block") or []
+    hyper_params = moment_summary.get("hyperparameters") or []
+    corr_summary = diagnostics.get("psis_correlation_summary") or {}
 
     khat_max = diagnostics.get("psis_khat_max")
+    threshold = diagnostics.get("psis_khat_threshold", 0.7)
     if khat_max is not None and np.isfinite(khat_max):
         status = diagnostics.get("psis_status_message") or diagnostics.get(
             "psis_khat_status", ""
         )
         status_suffix = f" ({status})" if status else ""
         lines.append(f"PSIS k-hat (max): {float(khat_max):.3f}{status_suffix}")
-        threshold = diagnostics.get("psis_khat_threshold", 0.7)
         if khat_max > threshold:
             lines.append(
                 f"PSIS alert: k-hat exceeds {threshold:.1f} -> posterior may be unreliable"
             )
-    moment_summary = diagnostics.get("psis_moment_summary") or {}
-    weight_stats = moment_summary.get("weights")
+
+    # Overall quality indicator
+    quality = "OK"
+    if diagnostics.get("psis_flag_critical"):
+        quality = "❌ NOT TRUSTWORTHY"
+    elif diagnostics.get("psis_flag_warn"):
+        quality = "⚠ USE WITH CAUTION"
+    else:
+        for entry in hyper_params:
+            thresholds = moment_summary.get("thresholds", {})
+            bias_thr = thresholds.get("bias_threshold", 0.05) * 100.0
+            var_low = thresholds.get("var_low", 0.7)
+            var_high = thresholds.get("var_high", 1.3)
+            if (
+                abs(entry.get("bias_pct", 0.0)) > bias_thr
+                or entry.get("var_ratio", 1.0) < var_low
+                or entry.get("var_ratio", 1.0) > var_high
+            ):
+                quality = "⚠ USE WITH CAUTION"
+                break
+
+    guide = diagnostics.get("guide", "vi")
+    weight_dispersion = ""
+    if weight_stats:
+        median_ratio = weight_stats.get("var_ratio_median", np.nan)
+        if np.isfinite(median_ratio):
+            weight_dispersion = (
+                "under-dispersed" if median_ratio < 1.0 else "over-dispersed"
+            )
+        else:
+            weight_dispersion = "unknown dispersion"
+
+    headline_parts = [f"VI Quality: {quality}"]
+    if khat_max is not None and np.isfinite(khat_max):
+        headline_parts.append(
+            "k-hat>0.7" if khat_max > threshold else "k-hat<=0.7"
+        )
+    if weight_dispersion:
+        headline_parts.append(f"Weights {weight_dispersion}")
+    if guide:
+        headline_parts.append(f"Guide={guide}")
+    lines.append(" | ".join(headline_parts))
+
     if weight_stats:
         frac = weight_stats.get("frac_outside")
         lines.append(
-            "Weight var_ratio "
+            "Weights var_ratio "
             + ", ".join(
                 [
                     f"min={weight_stats.get('var_ratio_min', np.nan):.2f}",
@@ -2433,135 +2644,130 @@ def generate_vi_diagnostics_summary(
                 ]
             )
         )
-    hyper_params = moment_summary.get("hyperparameters") or []
-    if hyper_params:
-        lines.append("PSIS moments (hyperparameters):")
-        for entry in hyper_params:
-            status = diagnostics.get("psis_status_message") or ""
-            var_ratio = entry["var_ratio"]
-            bias_pct = entry["bias_pct"]
-            thresholds = moment_summary.get("thresholds", {})
-            bias_thr = thresholds.get("bias_threshold", 0.05) * 100.0
-            var_low = thresholds.get("var_low", 0.7)
-            var_high = thresholds.get("var_high", 1.3)
-            status_label = "OK"
-            if abs(bias_pct) > bias_thr:
-                status_label = f"⚠ bias>{bias_thr:.0f}%"
-            if var_ratio < var_low:
-                status_label = "⚠ under-dispersed"
-            elif var_ratio > var_high:
-                status_label = "⚠ over-dispersed"
+        if (
+            weight_stats.get("bias_abs_median") is not None
+            or weight_stats.get("bias_abs_max") is not None
+        ):
             lines.append(
-                f"  {entry['param']}: "
-                f"μ_vi={entry['vi_mean']:.3g}, μ_psis={entry['psis_mean']:.3g}, "
-                f"bias={entry['bias_pct']:.1f}%, "
-                f"σ_vi={entry['vi_std']:.3g}, σ_psis={entry['psis_std']:.3g}, "
-                f"var_ratio={entry['var_ratio']:.2f} {status_label}"
+                "Weights abs_bias "
+                + ", ".join(
+                    [
+                        f"median={weight_stats.get('bias_abs_median', np.nan):.3g}",
+                        f"max={weight_stats.get('bias_abs_max', np.nan):.3g}",
+                    ]
+                )
             )
-    corr_summary = diagnostics.get("psis_correlation_summary") or {}
-    for label, stats in corr_summary.items():
-        if not stats:
-            continue
-        line = (
-            f"Corr ({label}): max|r|={stats.get('max_abs', np.nan):.3f}, "
-            f"median|r|={stats.get('median_abs', np.nan):.3f}"
-        )
-        if "mean_corr_diff" in stats:
-            line += f", mean|Δ| vs ref={stats['mean_corr_diff']:.3f}"
-        lines.append(line)
 
-    # Overall quality indicator
-    quality = "OK"
-    if diagnostics.get("psis_flag_critical"):
-        quality = "❌ NOT TRUSTWORTHY"
-    elif diagnostics.get("psis_flag_warn"):
-        quality = "⚠ USE WITH CAUTION"
-    else:
-        # Escalate if hyperparameter moments look off
+    worst_blocks = []
+    if weight_blocks:
+        scored_blocks = []
+        for entry in weight_blocks:
+            median = entry.get("var_ratio_median", np.nan)
+            frac = entry.get("frac_outside", 0.0)
+            score = float(frac) + float(abs(median - 1.0))
+            scored_blocks.append((score, entry))
+        scored_blocks.sort(key=lambda x: x[0], reverse=True)
+        worst = scored_blocks[:max_blocks]
+        worst_blocks = [
+            (
+                entry.get("block"),
+                entry.get("var_ratio_median", np.nan),
+                entry.get("frac_outside", np.nan),
+            )
+            for _, entry in worst
+        ]
+    if worst_blocks:
+        parts = [
+            f"{block_id}(med={median:.2f},out={frac*100:.1f}%)"
+            for block_id, median, frac in worst_blocks
+        ]
+        lines.append("Worst blocks (weights): " + ", ".join(parts))
+
+    top_hyper = []
+    if hyper_params:
+        scored = []
         for entry in hyper_params:
-            thresholds = moment_summary.get("thresholds", {})
-            bias_thr = thresholds.get("bias_threshold", 0.05) * 100.0
-            var_low = thresholds.get("var_low", 0.7)
-            var_high = thresholds.get("var_high", 1.3)
-            if (
-                abs(entry["bias_pct"]) > bias_thr
-                or entry["var_ratio"] < var_low
-                or entry["var_ratio"] > var_high
-            ):
-                quality = "⚠ USE WITH CAUTION"
-                break
-    lines.append(f"Overall VI Quality: {quality}")
+            bias_pct = float(entry.get("bias_pct", 0.0))
+            var_ratio = float(entry.get("var_ratio", 1.0))
+            var_dev = abs(var_ratio - 1.0)
+            if abs(bias_pct) < min_bias_pct and var_dev < min_var_ratio_dev:
+                continue
+            score = abs(bias_pct) + 100.0 * var_dev
+            scored.append((score, entry))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top_hyper = [entry for _, entry in scored[:max_hyper]]
+    if top_hyper:
+        lines.append("Top hyperparameters (by severity):")
+        for entry in top_hyper:
+            var_ratio = float(entry.get("var_ratio", 1.0))
+            bias_pct = float(entry.get("bias_pct", 0.0))
+            lines.append(
+                f"  {entry['param']}  "
+                f"var_ratio={var_ratio:.2f}, bias={bias_pct:.1f}%"
+                + (
+                    f", abs={entry['bias_abs']:.3g}"
+                    if entry.get("bias_abs") is not None
+                    else ""
+                )
+            )
+
+    corr_lines = []
+    if corr_summary:
+        by_label = {}
+        for label, stats in corr_summary.items():
+            if not stats:
+                continue
+            base = str(label).split("_block_")[0]
+            try:
+                block_id = int(str(label).split("_block_")[1])
+            except Exception:
+                block_id = None
+            max_abs = stats.get("max_abs", np.nan)
+            current = by_label.get(base)
+            if current is None or max_abs > current["max_abs"]:
+                by_label[base] = {
+                    "max_abs": max_abs,
+                    "block": block_id,
+                }
+        for base, stats in by_label.items():
+            block_suffix = (
+                f" (block {stats['block']})"
+                if stats.get("block") is not None
+                else ""
+            )
+            corr_lines.append(
+                f"{base} max|r|={stats.get('max_abs', np.nan):.3f}{block_suffix}"
+            )
+    if corr_lines:
+        lines.append("Guide-structure corr: " + "; ".join(corr_lines))
+
+    lines.append(
+        "Next: try a richer guide (mvn/lowrank/flow) or increase VI steps/draws."
+    )
+    lines.append(
+        "Legend: var_ratio<1 under-dispersed, >1 over-dispersed. k-hat>0.7 unreliable."
+    )
 
     losses = diagnostics.get("losses")
+    vi_samples = diagnostics.get("vi_samples")
+    elbo_value = None
     if losses is not None:
         loss_arr = np.asarray(losses)
         if loss_arr.size:
             final_elbo = float(loss_arr.reshape(-1)[-1])
             if np.isfinite(final_elbo):
-                lines.append(f"Final ELBO: {final_elbo:.3f}")
-            else:
-                lines.append("Final ELBO: nan")
-
-    vi_samples = diagnostics.get("vi_samples")
+                elbo_value = final_elbo
+    n_draws = None
     if vi_samples:
         first = next(iter(vi_samples.values()))
-        n_draws = np.asarray(first).shape[0]
-        lines.append(f"Posterior draws (VI): {n_draws}")
-
-    psd_shape = None
-    if "psd_matrix" in diagnostics and diagnostics["psd_matrix"] is not None:
-        psd_shape = np.asarray(diagnostics["psd_matrix"]).shape
-    else:
-        real_q = diagnostics.get("psd_quantiles", {}).get("real") or {}
-        q50 = real_q.get("q50")
-        if q50 is not None:
-            psd_shape = np.asarray(q50).shape
-    if psd_shape is not None and len(psd_shape) >= 3:
-        lines.append(
-            f"PSD shape: {psd_shape[0]} freq × {psd_shape[1]} × {psd_shape[2]}"
-        )
-
-    # Accuracy metrics
-    riae_matrix = diagnostics.get("riae_matrix")
-    riae_err = diagnostics.get("riae_matrix_errorbars")
-    if riae_matrix is not None:
-        line = f"RIAE (matrix): {float(riae_matrix):.3f}"
-        if riae_err and len(riae_err) >= 5:
-            line += f" (5-95% [{riae_err[0]:.3f}, {riae_err[4]:.3f}])"
-        lines.append(line)
-
-    per_ch = diagnostics.get("riae_per_channel")
-    if per_ch:
-        formatted = ", ".join(
-            f"{idx}:{val:.3f}" for idx, val in enumerate(per_ch)
-        )
-        lines.append(f"RIAE per channel: {formatted}")
-
-    offdiag = diagnostics.get("riae_offdiag")
-    if offdiag is not None:
-        lines.append(f"RIAE off-diagonal: {float(offdiag):.3f}")
-
-    coh_riae = diagnostics.get("coherence_riae")
-    if coh_riae is not None:
-        lines.append(f"Coherence RIAE: {float(coh_riae):.3f}")
-
-    bands = diagnostics.get("riae_bands")
-    if bands:
-        band_str = "; ".join(
-            f"[{b['start']:.2e},{b['end']:.2e}]:{b['value']:.3f}"
-            for b in bands
-        )
-        lines.append(f"RIAE by frequency bands: {band_str}")
-
-    coverage = diagnostics.get("coverage") or diagnostics.get("ci_coverage")
-    coverage_level = diagnostics.get("coverage_level")
-    if coverage is not None:
-        label = (
-            f"{int(round(coverage_level * 100))}% interval coverage"
-            if coverage_level is not None
-            else "Interval coverage"
-        )
-        lines.append(f"{label}: {float(coverage) * 100:.1f}%")
+        n_draws = int(np.asarray(first).shape[0])
+    if elbo_value is not None or n_draws is not None:
+        parts = []
+        if elbo_value is not None:
+            parts.append(f"ELBO={elbo_value:.3f}")
+        if n_draws is not None:
+            parts.append(f"draws={n_draws}")
+        lines.append(" | ".join(parts))
 
     summary_text = "\n".join(lines)
 

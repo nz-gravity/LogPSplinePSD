@@ -3,6 +3,7 @@ Base class for univariate PSD samplers.
 """
 
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -89,10 +90,20 @@ class UnivarBaseSampler(BaseSampler):
 
     def _save_plots(self, idata: az.InferenceData) -> None:
         """Save univariate-specific plots."""
+        t0 = time.perf_counter()
+        logger.info("save_plots(univar): plotting posterior predictive")
         fig, _ = plot_pdgrm(idata=idata)
         fig.savefig(f"{self.config.outdir}/posterior_predictive.png")
+        logger.info(
+            f"save_plots(univar): posterior predictive done in {time.perf_counter() - t0:.2f}s"
+        )
 
+        t0 = time.perf_counter()
+        logger.info("save_plots(univar): saving VI diagnostics")
         self._save_vi_diagnostics(log_summary=False)
+        logger.info(
+            f"save_plots(univar): VI diagnostics done in {time.perf_counter() - t0:.2f}s"
+        )
 
     def _save_vi_diagnostics(self, *, log_summary: bool = True) -> None:
         """Persist VI diagnostics if available."""
@@ -105,7 +116,9 @@ class UnivarBaseSampler(BaseSampler):
                 diagnostics=vi_diag,
             )
             try:
-                from ...plotting import generate_vi_diagnostics_summary
+                from ...diagnostics.plotting import (
+                    generate_vi_diagnostics_summary,
+                )
 
                 generate_vi_diagnostics_summary(
                     vi_diag,

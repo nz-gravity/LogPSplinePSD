@@ -10,8 +10,14 @@ from log_psplines.coarse_grain import (
     compute_binning_structure,
 )
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
-from log_psplines.plotting import plot_psd_matrix
+from log_psplines.mcmc import (
+    DiagnosticsConfig,
+    ModelConfig,
+    MultivariateTimeseries,
+    RunMCMCConfig,
+    run_mcmc,
+)
+from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 
 
 @pytest.mark.slow
@@ -46,16 +52,19 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
 
     # Full run (baseline)
     full_dir = os.path.join(outdir, "multivar_full")
-    idata_full = run_mcmc(
-        data=ts,
-        sampler="nuts",  # maps to multivar_blocked_nuts
-        n_knots=n_knots,
+    model_cfg = ModelConfig(n_knots=n_knots, true_psd=varma.get_true_psd())
+    diagnostics_cfg = DiagnosticsConfig(outdir=full_dir, verbose=False)
+    run_cfg_full = RunMCMCConfig(
+        sampler="nuts",
         n_samples=n_samples,
         n_warmup=n_warmup,
-        outdir=full_dir,
-        verbose=False,
         Nb=2 if test_mode != "fast" else 1,
-        true_psd=varma.get_true_psd(),
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+    )
+    idata_full = run_mcmc(
+        data=ts,
+        config=run_cfg_full,
     )
 
     # Coarse-grained run
@@ -66,17 +75,19 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         f_max=None,
     )
     coarse_dir = os.path.join(outdir, "multivar_coarse")
-    idata_coarse = run_mcmc(
-        data=ts,
+    diagnostics_cfg = DiagnosticsConfig(outdir=coarse_dir, verbose=False)
+    run_cfg_coarse = RunMCMCConfig(
         sampler="nuts",
-        n_knots=n_knots,
         n_samples=n_samples,
         n_warmup=n_warmup,
-        outdir=coarse_dir,
-        verbose=False,
         Nb=2 if test_mode != "fast" else 1,
         coarse_grain_config=coarse_cfg,
-        true_psd=varma.get_true_psd(),
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+    )
+    idata_coarse = run_mcmc(
+        data=ts,
+        config=run_cfg_coarse,
     )
 
     # Sanity checks on shapes
@@ -120,16 +131,17 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
 
     # Overlay posterior matrices together with the true PSD for quick inspection
     true_psd = varma.get_true_psd()
-    fig, ax = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         idata=idata_full,
         true_psd=true_psd,
         label="Full",
         save=False,
         close=False,
     )
-    plot_psd_matrix(
+    fig, ax = plot_psd_matrix(spec)
+    overlay_spec = PSDMatrixPlotSpec(
         idata=idata_coarse,
-        true_psd=None,  # avoid duplicating the true curve
+        true_psd=None,
         label="Coarse",
         model_color="tab:orange",
         fig=fig,
@@ -137,6 +149,7 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         save=False,
         close=False,
     )
+    plot_psd_matrix(overlay_spec)
     fig.savefig(os.path.join(outdir, "psd_matrix_overlay.png"), dpi=150)
 
     # Diagnostics: empirical PSD stored in the coarse run should match the

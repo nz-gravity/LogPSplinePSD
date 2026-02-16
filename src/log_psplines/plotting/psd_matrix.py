@@ -880,10 +880,7 @@ def _finalize_psd_matrix_figure(
         plt.close(fig)
 
 
-def plot_psd_matrix(
-    spec: PSDMatrixPlotSpec | None = None,
-    **kwargs,
-):
+def plot_psd_matrix(spec: PSDMatrixPlotSpec):
     """
     Publication-ready multivariate PSD matrix plotter with adaptive per-axis y-labels.
 
@@ -894,6 +891,8 @@ def plot_psd_matrix(
 
     Parameters
     ----------
+    spec : PSDMatrixPlotSpec
+        Plot specification containing data inputs and rendering options.
     label : str, optional
         Legend label used for the median PSD curve. Useful when overlaying
         multiple results on the same axes.
@@ -923,7 +922,8 @@ def plot_psd_matrix(
     vi_label : str, optional
         Legend label for the VI median when overlaying.
     """
-    spec = spec or PSDMatrixPlotSpec(**kwargs)
+    if spec is None:
+        raise ValueError("plot_psd_matrix requires a PSDMatrixPlotSpec.")
     (
         ci_dict,
         freq,

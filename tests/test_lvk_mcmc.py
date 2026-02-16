@@ -7,7 +7,12 @@ from gwpy.timeseries import TimeSeries
 
 from log_psplines.datatypes import Periodogram
 from log_psplines.example_datasets.lvk_data import LVKData
-from log_psplines.mcmc import DiagnosticsConfig, ModelConfig, RunMCMCConfig, run_mcmc
+from log_psplines.mcmc import (
+    DiagnosticsConfig,
+    ModelConfig,
+    RunMCMCConfig,
+    run_mcmc,
+)
 from log_psplines.psplines.knots_locator import init_knots
 
 

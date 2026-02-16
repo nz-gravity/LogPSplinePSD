@@ -522,6 +522,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             block_log_likelihood = block_stats.pop(
                 f"log_likelihood_block_{channel_index}"
             )
+            combined_stats[f"log_likelihood_block_{channel_index}"] = (
+                np.asarray(block_log_likelihood)
+            )
 
             log_likelihood_total = (
                 block_log_likelihood

@@ -32,6 +32,24 @@ def _extract_losses(idata_vi) -> Optional[np.ndarray]:
     return arr if arr.size else None
 
 
+def _get_vi_psd_dataset(idata_vi):
+    if idata_vi is None:
+        return None
+    dataset = getattr(idata_vi, "vi_posterior_psd", None)
+    if dataset is not None:
+        return dataset
+    return getattr(idata_vi, "posterior_psd", None)
+
+
+def _get_ref_psd_dataset(idata):
+    if idata is None:
+        return None
+    dataset = getattr(idata, "posterior_psd", None)
+    if dataset is not None:
+        return dataset
+    return _get_psd_dataset(idata, idata)
+
+
 def _psd_variance_from_ds(psd_ds) -> Optional[float]:
     if psd_ds is None:
         return None
@@ -61,8 +79,8 @@ def _psd_variance_from_ds(psd_ds) -> Optional[float]:
 
 
 def _variance_ratio_vs_mcmc(idata_vi, idata) -> Optional[float]:
-    vi_ds = _get_psd_dataset(idata_vi, idata_vi)
-    ref_ds = _get_psd_dataset(idata, idata)
+    vi_ds = _get_vi_psd_dataset(idata_vi)
+    ref_ds = _get_ref_psd_dataset(idata)
     if vi_ds is None or ref_ds is None:
         return None
     vi_var = _psd_variance_from_ds(vi_ds)

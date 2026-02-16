@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
-from functools import wraps
+from functools import lru_cache, wraps
 from typing import Any, Callable, TypeVar, cast
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -13,6 +13,7 @@ def _typecheck_enabled() -> bool:
     return flag not in {"0", "false", "off", "no"}
 
 
+@lru_cache(maxsize=1)
 def _load_checkers() -> (
     tuple[Callable[..., Any] | None, Callable[..., Any] | None]
 ):

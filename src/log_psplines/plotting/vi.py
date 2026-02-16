@@ -51,17 +51,6 @@ def plot_vi_elbo(
 
     # Shift so minimum is slightly above zero for log scale
     shift_value = min_loss - 0.1 * np.abs(min_loss) if min_loss != 0 else -1.0
-    shifted_losses = losses - shift_value
-
-    # Plot main ELBO loss
-    ax.plot(
-        steps,
-        shifted_losses,
-        color=COLORS["model"],
-        lw=2,
-        alpha=0.8,
-        label="Total ELBO",
-    )
 
     # Plot loss components if provided (useful for multivariate VI)
     if loss_components:
@@ -92,32 +81,25 @@ def plot_vi_elbo(
     ax.grid(True, alpha=0.3, linewidth=0.8)
     ax.legend(frameon=False, loc="best")
 
-    # Add final statistics
-    final_loss = losses[-1]
-    loss_range = losses.max() - losses.min()
-    stats_text = (
-        f"Total ELBO:\nFinal: {final_loss:.2f}\nRange: {loss_range:.2f}"
-    )
-
     # Add component statistics if available
     if loss_components:
-        stats_text += "\n\nComponents:"
+        stats_text = "Components:"
         for comp_name, comp_losses in loss_components.items():
             if comp_losses.size > 0:
                 comp_final = comp_losses[-1]
                 comp_range = comp_losses.max() - comp_losses.min()
                 stats_text += f"\n{comp_name}: {comp_final:.2f} (range: {comp_range:.2f})"
 
-    ax.text(
-        0.02,
-        0.98,
-        stats_text,
-        transform=ax.transAxes,
-        fontsize=9,
-        bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
-        verticalalignment="top",
-        fontfamily="monospace",
-    )
+        ax.text(
+            0.02,
+            0.98,
+            stats_text,
+            transform=ax.transAxes,
+            fontsize=9,
+            bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
+            verticalalignment="top",
+            fontfamily="monospace",
+        )
 
     fig.tight_layout()
     fig.savefig(outfile, dpi=150)

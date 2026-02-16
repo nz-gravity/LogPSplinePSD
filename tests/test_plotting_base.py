@@ -50,7 +50,10 @@ _install_skfda_stub()
 
 import log_psplines.arviz_utils as arviz_utils  # noqa: E402
 from log_psplines.plotting import base as plotting_base  # noqa: E402
-from log_psplines.plotting.psd_matrix import plot_psd_matrix  # noqa: E402
+from log_psplines.plotting.psd_matrix import (  # noqa: E402
+    PSDMatrixPlotSpec,
+    plot_psd_matrix,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -143,7 +146,7 @@ def test_plot_psd_matrix_overlays_vi_coherence(tmp_path):
         vi_posterior_psd=vi_ds,
     )
 
-    fig, axes = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         idata=idata,
         outdir=str(tmp_path),
         filename="vi_overlay.png",
@@ -151,6 +154,7 @@ def test_plot_psd_matrix_overlays_vi_coherence(tmp_path):
         overlay_vi=True,
         save=False,
     )
+    fig, axes = plot_psd_matrix(spec)
 
     # Coherence axis (channel 2 vs 1) should include a VI overlay line
     coh_ax = axes[1, 0]

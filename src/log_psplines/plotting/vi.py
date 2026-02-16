@@ -11,7 +11,7 @@ import numpy as np
 from ..datatypes.multivar import EmpiricalPSD
 from .base import COLORS, PlotConfig, safe_plot, setup_plot_style
 from .pdgrm import plot_pdgrm
-from .psd_matrix import plot_psd_matrix
+from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 
 # Setup consistent styling for VI plots
 setup_plot_style()
@@ -207,7 +207,7 @@ def plot_vi_initial_psd_matrix(
     )
 
     # Use the shared plotting function with VI-specific styling
-    plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         outdir=os.path.dirname(outfile),
         filename=os.path.basename(outfile),
         freq=freq,
@@ -219,6 +219,7 @@ def plot_vi_initial_psd_matrix(
         dpi=150,  # Use consistent DPI
         **plot_kwargs,
     )
+    plot_psd_matrix(spec)
 
 
 def _pack_ci_from_quantiles(

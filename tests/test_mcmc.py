@@ -15,8 +15,16 @@ from log_psplines.coarse_grain import (
 from log_psplines.datatypes.univar import Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
-from log_psplines.plotting import plot_pdgrm, plot_psd_matrix
+from log_psplines.mcmc import (
+    DiagnosticsConfig,
+    ModelConfig,
+    MultivariateTimeseries,
+    NUTSConfigOverride,
+    RunMCMCConfig,
+    VIConfig,
+    run_mcmc,
+)
+from log_psplines.plotting import PSDMatrixPlotSpec, plot_pdgrm, plot_psd_matrix
 
 
 @pytest.mark.slow
@@ -63,19 +71,29 @@ def test_multivar_mcmc(outdir, test_mode):
         )
         sampler_outdir = os.path.join(outdir, save_name)
         # Run unified MCMC (multivariate sampler)
-        idata = run_mcmc(
-            data=timeseries,
-            sampler=sampler_name,
-            n_knots=n_knots,  # Small for fast testing
+        model_cfg = ModelConfig(
+            n_knots=n_knots,
             degree=3,
             diffMatrixOrder=2,
-            n_samples=n_samples,
-            n_warmup=n_warmup,
+            true_psd=true_psd,
+        )
+        diagnostics_cfg = DiagnosticsConfig(
             outdir=sampler_outdir,
             verbose=verbose,
-            target_accept_prob=0.8,
-            true_psd=true_psd,
+        )
+        nuts_cfg = NUTSConfigOverride(target_accept_prob=0.8)
+        run_cfg = RunMCMCConfig(
+            sampler=sampler_name,
+            n_samples=n_samples,
+            n_warmup=n_warmup,
             Nb=Nb,
+            model=model_cfg,
+            diagnostics=diagnostics_cfg,
+            nuts=nuts_cfg,
+        )
+        idata = run_mcmc(
+            data=timeseries,
+            config=run_cfg,
         )
 
         # Basic checks
@@ -149,18 +167,19 @@ def test_multivar_mcmc(outdir, test_mode):
         assert os.path.exists(result_fn), "InferenceData file not found!"
         assert os.path.exists(plot_fn), "PSD matrix plot file not found!"
 
-        plot_psd_matrix(
+        spec = PSDMatrixPlotSpec(
             idata=idata,
             outdir=sampler_outdir,
             filename=f"psd_matrix_posterior_check_{sampler_name}.png",
             xscale="linear",
             diag_yscale="log",
         )
+        plot_psd_matrix(spec)
 
     res_multiar_blocked_nuts = az.from_netcdf(
         os.path.join(outdir, "multivar_blocked_nuts", "inference_data.nc")
     )
-    fig, ax = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         idata=res_multiar_blocked_nuts,
         true_psd=true_psd,
         xscale="linear",
@@ -170,6 +189,7 @@ def test_multivar_mcmc(outdir, test_mode):
         close=False,
         empirical_psd=empirical_full,
     )
+    fig, ax = plot_psd_matrix(spec)
     fig.savefig(os.path.join(outdir, "psd_matrix_posterior.png"))
     plt.close(fig)
 
@@ -178,20 +198,30 @@ def test_multivar_mcmc(outdir, test_mode):
 
 def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
     timeseries = synthetic_multivar_timeseries
-    idata = run_mcmc(
-        data=timeseries,
-        sampler="multivar_blocked_nuts",
-        n_knots=3,
-        n_samples=1,
-        n_warmup=1,
-        Nb=1,
+    model_cfg = ModelConfig(n_knots=3)
+    diagnostics_cfg = DiagnosticsConfig(
+        outdir=None,
+        verbose=False,
+        compute_lnz=False,
+    )
+    vi_cfg = VIConfig(
         vi_steps=10,
         vi_posterior_draws=6,
         vi_psd_max_draws=2,
         only_vi=True,
-        compute_lnz=False,
-        verbose=False,
-        outdir=None,
+    )
+    run_cfg = RunMCMCConfig(
+        sampler="multivar_blocked_nuts",
+        n_samples=1,
+        n_warmup=1,
+        Nb=1,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+    )
+    idata = run_mcmc(
+        data=timeseries,
+        config=run_cfg,
     )
 
     assert idata is not None
@@ -211,17 +241,25 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
 
 
 def test_mcmc_unit(synthetic_univar_timeseries):
-    idata = run_mcmc(
-        synthetic_univar_timeseries,
+    model_cfg = ModelConfig(n_knots=3)
+    diagnostics_cfg = DiagnosticsConfig(
+        outdir=None,
+        verbose=False,
+        compute_lnz=False,
+    )
+    vi_cfg = VIConfig(init_from_vi=False)
+    run_cfg = RunMCMCConfig(
         sampler="nuts",
-        n_knots=3,
         n_samples=3,
         n_warmup=3,
-        init_from_vi=False,
-        outdir=None,
         rng_key=0,
-        compute_lnz=False,
-        verbose=False,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+    )
+    idata = run_mcmc(
+        synthetic_univar_timeseries,
+        config=run_cfg,
     )
 
     assert "posterior" in idata.groups()
@@ -269,19 +307,28 @@ def test_mcmc(outdir: str, test_mode: str):
 
     for sampler in sampler_names:
         sampler_out = f"{outdir}/out_{sampler}"
-        idata = run_mcmc(
-            ar_data.ts,
-            sampler=sampler,
+        model_cfg = ModelConfig(
             n_knots=n_knots,
+            true_psd=ar_data.psd_theoretical,
+        )
+        diagnostics_cfg = DiagnosticsConfig(
+            outdir=sampler_out,
+            verbose=(test_mode != "fast"),
+            compute_lnz=compute_lnz,
+        )
+        vi_cfg = VIConfig(init_from_vi=(test_mode != "fast"))
+        run_cfg = RunMCMCConfig(
+            sampler=sampler,
             n_samples=n_samples,
             n_warmup=n_warmup,
-            outdir=sampler_out,
             rng_key=42,
-            compute_lnz=compute_lnz,
-            true_psd=ar_data.psd_theoretical,
-            verbose=(test_mode != "fast"),
-            init_from_vi=(test_mode != "fast"),
-            # coarse_grain=coarse_grain,
+            model=model_cfg,
+            diagnostics=diagnostics_cfg,
+            vi=vi_cfg,
+        )
+        idata = run_mcmc(
+            ar_data.ts,
+            config=run_cfg,
         )
 
         print(
@@ -378,22 +425,32 @@ def test_run_mcmc_coarse_grain_univariate_mcmc():
         cfg=coarse_cfg,
     )
 
-    idata = run_mcmc(
-        data=ts_run,
-        sampler="nuts",
-        n_samples=1,
-        n_warmup=1,
+    model_cfg = ModelConfig(
         n_knots=6,
         degree=3,
         diffMatrixOrder=2,
         fmin=fmin,
         fmax=fmax,
-        coarse_grain_config=coarse_cfg,
+    )
+    diagnostics_cfg = DiagnosticsConfig(verbose=False)
+    vi_cfg = VIConfig(
         only_vi=True,
         vi_steps=20,
         vi_posterior_draws=8,
         vi_psd_max_draws=4,
-        verbose=False,
+    )
+    run_cfg = RunMCMCConfig(
+        sampler="nuts",
+        n_samples=1,
+        n_warmup=1,
+        coarse_grain_config=coarse_cfg,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+    )
+    idata = run_mcmc(
+        data=ts_run,
+        config=run_cfg,
     )
     freq = np.asarray(idata.posterior_psd["freq"].values)
     assert freq.shape[0] == expected_freq.shape[0]
@@ -461,25 +518,35 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
         cfg=coarse_cfg,
     )
 
-    idata = run_mcmc(
-        data=ts_run,
-        sampler="multivar_blocked_nuts",
-        n_samples=1,
-        n_warmup=1,
+    model_cfg = ModelConfig(
         n_knots=5,
         degree=3,
         diffMatrixOrder=2,
-        Nb=Nb,
+        fmin=fmin,
+        fmax=fmax,
+    )
+    diagnostics_cfg = DiagnosticsConfig(verbose=False)
+    vi_cfg = VIConfig(
         only_vi=True,
         vi_steps=20,
         vi_lr=5e-3,
         vi_progress_bar=False,
         vi_posterior_draws=6,
         vi_psd_max_draws=2,
-        fmin=fmin,
-        fmax=fmax,
+    )
+    run_cfg = RunMCMCConfig(
+        sampler="multivar_blocked_nuts",
+        n_samples=1,
+        n_warmup=1,
+        Nb=Nb,
         coarse_grain_config=coarse_cfg,
-        verbose=False,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+    )
+    idata = run_mcmc(
+        data=ts_run,
+        config=run_cfg,
     )
     freq = np.asarray(idata.posterior_psd["freq"].values)
     assert freq.shape[0] == expected_freq.shape[0]
@@ -490,18 +557,26 @@ def test_multivar_blocked_nuts_records_step_size():
     t, y = _synthetic_multivar_series()
     ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
 
-    idata = run_mcmc(
-        data=ts_run,
+    model_cfg = ModelConfig(
+        n_knots=4,
+        degree=3,
+        diffMatrixOrder=2,
+    )
+    diagnostics_cfg = DiagnosticsConfig(verbose=False)
+    vi_cfg = VIConfig(init_from_vi=False)
+    run_cfg = RunMCMCConfig(
         sampler="multivar_blocked_nuts",
         n_samples=1,
         n_warmup=2,
         num_chains=1,
-        n_knots=4,
-        degree=3,
-        diffMatrixOrder=2,
         Nb=1,
-        init_from_vi=False,
-        verbose=False,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+    )
+    idata = run_mcmc(
+        data=ts_run,
+        config=run_cfg,
     )
 
     step_size_keys = [

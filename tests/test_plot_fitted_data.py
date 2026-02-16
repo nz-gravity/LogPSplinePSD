@@ -19,7 +19,11 @@ from log_psplines.datatypes.multivar import (
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.plotting.pdgrm import plot_pdgrm
-from log_psplines.plotting.psd_matrix import _pack_ci_dict, plot_psd_matrix
+from log_psplines.plotting.psd_matrix import (
+    PSDMatrixPlotSpec,
+    _pack_ci_dict,
+    plot_psd_matrix,
+)
 from log_psplines.psplines.psplines import LogPSplines
 
 
@@ -242,7 +246,7 @@ def test_plot_multivariate_fitted_data_blocks(
         psd_samples=psd_matrix[None, ...], show_coherence=True
     )
 
-    fig, ax = plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict,
         freq=np.asarray(fft_coarse.freq),
         empirical_psd=empirical,
@@ -252,6 +256,7 @@ def test_plot_multivariate_fitted_data_blocks(
         show_coherence=True,
         save=True,
     )
+    fig, ax = plot_psd_matrix(spec)
 
     # Full-resolution PSD/CSD matrix for reference
     psd_matrix_full = np.asarray(fft_full.raw_psd)
@@ -264,7 +269,7 @@ def test_plot_multivariate_fitted_data_blocks(
     ci_dict_full = _pack_ci_dict(
         psd_samples=psd_matrix_full[None, ...], show_coherence=True
     )
-    plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict_full,
         freq=np.asarray(fft_full.freq),
         empirical_psd=empirical_full,
@@ -274,6 +279,7 @@ def test_plot_multivariate_fitted_data_blocks(
         show_coherence=True,
         save=True,
     )
+    plot_psd_matrix(spec)
 
     # Plot |CSD_ij| magnitudes for lower triangle
     ci_dict_abs = _pack_ci_dict(
@@ -281,7 +287,7 @@ def test_plot_multivariate_fitted_data_blocks(
         show_coherence=False,
         show_csd_magnitude=True,
     )
-    plot_psd_matrix(
+    spec = PSDMatrixPlotSpec(
         ci_dict=ci_dict_abs,
         freq=np.asarray(fft_full.freq),
         empirical_psd=empirical_full,
@@ -292,6 +298,7 @@ def test_plot_multivariate_fitted_data_blocks(
         show_csd_magnitude=True,
         save=True,
     )
+    plot_psd_matrix(spec)
 
     # Plot block-wise likelihood ingredients (u_j, best-fit theta)
     components_dir = _ensure_dir(os.path.join(outdir, "blocked_components"))

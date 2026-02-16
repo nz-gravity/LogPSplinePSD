@@ -7,7 +7,15 @@ import pytest
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
+from log_psplines.mcmc import (
+    DiagnosticsConfig,
+    ModelConfig,
+    MultivariateTimeseries,
+    NUTSConfigOverride,
+    RunMCMCConfig,
+    VIConfig,
+    run_mcmc,
+)
 
 
 def _mean_divergence(idata):
@@ -26,21 +34,31 @@ def test_univariate_vi_initialisation_smoke(outdir):
     ar_data = ARData(order=2, duration=0.5, fs=64, sigma=0.5, seed=0)
     outdir = f"{outdir}/univar_vi"
 
-    idata = run_mcmc(
-        ar_data.ts,
-        sampler="nuts",
-        n_knots=4,
-        n_samples=2,
-        n_warmup=2,
-        num_chains=1,
+    model_cfg = ModelConfig(n_knots=4)
+    diagnostics_cfg = DiagnosticsConfig(
+        outdir=str(outdir),
+        verbose=False,
+        compute_lnz=False,
+    )
+    vi_cfg = VIConfig(
         vi_steps=20,
         vi_lr=5e-2,
         vi_posterior_draws=12,
         vi_psd_max_draws=4,
         only_vi=True,
-        verbose=False,
-        compute_lnz=False,
-        outdir=str(outdir),
+    )
+    run_cfg = RunMCMCConfig(
+        sampler="nuts",
+        n_samples=2,
+        n_warmup=2,
+        num_chains=1,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+    )
+    idata = run_mcmc(
+        ar_data.ts,
+        config=run_cfg,
     )
 
     assert "posterior" in idata.groups()
@@ -76,24 +94,37 @@ def test_multivariate_vi_initialisation_smoke(outdir):
     timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
     outdir = f"{outdir}/multivar_vi"
 
-    idata = run_mcmc(
-        timeseries,
-        sampler="nuts",
-        n_knots=5,
-        n_samples=2,
-        n_warmup=2,
-        num_chains=1,
+    model_cfg = ModelConfig(n_knots=5)
+    diagnostics_cfg = DiagnosticsConfig(
+        outdir=str(outdir),
+        verbose=False,
+        compute_lnz=False,
+    )
+    vi_cfg = VIConfig(
         vi_steps=20,
         vi_lr=1e-2,
         vi_posterior_draws=12,
         vi_psd_max_draws=4,
         only_vi=True,
+    )
+    nuts_cfg = NUTSConfigOverride(
         target_accept_prob=0.9,
         max_tree_depth=8,
-        verbose=False,
-        compute_lnz=False,
-        outdir=str(outdir),
+    )
+    run_cfg = RunMCMCConfig(
+        sampler="nuts",
+        n_samples=2,
+        n_warmup=2,
+        num_chains=1,
         Nb=2,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+        nuts=nuts_cfg,
+    )
+    idata = run_mcmc(
+        timeseries,
+        config=run_cfg,
     )
 
     assert "posterior" in idata.groups()
@@ -117,23 +148,36 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
     timeseries = MultivariateTimeseries(t=varma.time, y=varma.data)
     outdir = f"{outdir}/multivar_blocked_vi"
 
-    idata = run_mcmc(
-        timeseries,
-        sampler="multivar_blocked_nuts",
-        n_knots=5,
-        n_samples=2,
-        n_warmup=2,
-        num_chains=1,
+    model_cfg = ModelConfig(n_knots=5)
+    diagnostics_cfg = DiagnosticsConfig(
+        outdir=str(outdir),
+        verbose=False,
+        compute_lnz=False,
+    )
+    vi_cfg = VIConfig(
         vi_steps=20,
         vi_lr=1e-2,
         vi_posterior_draws=12,
         vi_psd_max_draws=4,
         only_vi=True,
+    )
+    nuts_cfg = NUTSConfigOverride(
         target_accept_prob=0.9,
         max_tree_depth=8,
-        verbose=False,
-        compute_lnz=False,
-        outdir=str(outdir),
+    )
+    run_cfg = RunMCMCConfig(
+        sampler="multivar_blocked_nuts",
+        n_samples=2,
+        n_warmup=2,
+        num_chains=1,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+        nuts=nuts_cfg,
+    )
+    idata = run_mcmc(
+        timeseries,
+        config=run_cfg,
     )
 
     print(idata)

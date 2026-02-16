@@ -130,7 +130,6 @@ def simulation_study(
         vi_guide=DEFAULT_VI_GUIDE,
         vi_psd_max_draws=DEFAULT_VI_PSD_MAX_DRAWS,
         vi_lr=VI_LR,
-        posterior_psd_max_draws=DEFAULT_POSTERIOR_PSD_MAX_DRAWS,
         Nb=DEFAULT_N_TIME_BLOCKS,
         knot_kwargs=dict(method=knot_method),
         coarse_grain_config=coarse_grain_config,

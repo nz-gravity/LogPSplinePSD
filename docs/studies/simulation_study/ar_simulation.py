@@ -40,9 +40,7 @@ def run_analysis(
         knot_kwargs=dict(method="uniform"),
     )
 
-    inference_nuts = run_mcmc(
-        **kawrgs, sampler="nuts", outdir=f"{outdir}/nuts_out"
-    )
+    inference_nuts = run_mcmc(**kawrgs, outdir=f"{outdir}/nuts_out")
 
     fig, ax = plt.subplots(1, 1, figsize=(4, 3))
     ax.plot(

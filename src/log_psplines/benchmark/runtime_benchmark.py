@@ -82,13 +82,11 @@ class RuntimeBenchmark:
                 sigma=float(AR_DEFAULTS["sigma"]),
                 seed=int(AR_DEFAULTS["seed"]),
             )
-            
 
             runtimes_i = []
             ess_i = []
             for rep in range(reps):
                 run_cfg = RunMCMCConfig(
-                    sampler=sampler,
                     n_samples=self.n_mcmc,
                     n_warmup=self.n_warmup,
                     rng_key=rep,
@@ -155,7 +153,6 @@ class RuntimeBenchmark:
             ess_i = []
             for rep in range(reps):
                 run_cfg = RunMCMCConfig(
-                    sampler=sampler,
                     n_samples=self.n_mcmc,
                     n_warmup=self.n_warmup,
                     rng_key=rep,
@@ -210,14 +207,12 @@ class RuntimeBenchmark:
 
         for sampler in samplers:
             self._run_data_size_analysis(
-                sampler=sampler,
                 min_n=min_n,
                 max_n=max_n,
                 num_points=n_points,
                 reps=n_reps,
             )
             self._run_knots_analysis(
-                sampler=sampler,
                 min_knots=min_knots,
                 max_knots=max_knots,
                 num_points=n_points,

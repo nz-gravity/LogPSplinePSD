@@ -314,7 +314,6 @@ def run_case(
     ts = MultivariateTimeseries(t=varma.time, y=varma.data)
     idata = run_mcmc(
         data=ts,
-        sampler="multivar_blocked_nuts",
         n_knots=cfg.n_knots,
         degree=2,
         diffMatrixOrder=2,

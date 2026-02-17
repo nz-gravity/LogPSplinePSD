@@ -62,7 +62,6 @@ else:
 
     idata = run_mcmc(
         ts,
-        sampler="nuts",
         n_samples=2000,
         n_warmup=2000,
         outdir=out,

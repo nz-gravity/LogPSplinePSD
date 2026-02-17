@@ -16,7 +16,6 @@ model_cfg = ModelConfig(n_knots=15, knot_kwargs={"method": "uniform"})
 diagnostics_cfg = DiagnosticsConfig(outdir="out/nuts_out")
 vi_cfg = VIConfig(init_from_vi=True)
 run_cfg = RunMCMCConfig(
-    sampler="nuts",
     n_samples=2500,
     n_warmup=1000,
     rng_key=0,

@@ -19,12 +19,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.datatypes.multivar import EmpiricalPSD
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting.base import extract_plotting_data
 from log_psplines.plotting.psd_matrix import plot_psd_matrix
+from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
 HERE = Path(__file__).resolve().parent
 BASE_RESULTS_DIR = HERE / "results" / "airquality"
@@ -416,7 +416,6 @@ def estimate_spectral_matrix(
         print("Running blocked multivariate NUTS (log-P-splines)...")
         idata = run_mcmc(
             data=timeseries,
-            sampler="multivar_blocked_nuts",
             n_samples=750,
             n_warmup=750,
             n_knots=15,

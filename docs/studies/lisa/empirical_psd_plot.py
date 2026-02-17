@@ -28,14 +28,14 @@ for path in (SRC_ROOT, PROJECT_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from log_psplines.coarse_grain import (  # noqa: E402
-    CoarseGrainConfig,
-    apply_coarse_grain_multivar_fft,
-    compute_binning_structure,
-)
 from log_psplines.datatypes import MultivariateTimeseries  # noqa: E402
 from log_psplines.datatypes.multivar import (  # noqa: E402
     _interp_complex_matrix,
+)
+from log_psplines.preprocessing.coarse_grain import (  # noqa: E402
+    CoarseGrainConfig,
+    apply_coarse_grain_multivar_fft,
+    compute_binning_structure,
 )
 
 C_LIGHT = 299_792_458.0  # m / s

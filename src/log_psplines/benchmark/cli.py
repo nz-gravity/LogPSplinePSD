@@ -103,7 +103,6 @@ def main(
             max_n=max_n,
             min_knots=min_knots,
             max_knots=max_knots,
-            sampler=sampler,
         )
 
     benchmark.plot()

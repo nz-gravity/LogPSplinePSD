@@ -10,11 +10,11 @@ import numpy as np
 from cycler import cycler
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-from log_psplines.coarse_grain.config import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting.base import extract_plotting_data
 from log_psplines.plotting.psd_matrix import plot_psd_matrix
+from log_psplines.preprocessing.coarse_grain.config import CoarseGrainConfig
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -170,7 +170,6 @@ def _run_multivar_pspline(selected_data, fs):
         )
         idata = run_mcmc(
             data=multivar_ts,
-            sampler="multivar_blocked_nuts",
             n_samples=256,
             n_warmup=256,
             n_knots=10,

@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 
-from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries, Timeseries
 from log_psplines.datatypes.multivar import _interp_complex_matrix
 from log_psplines.example_datasets.varma_data import (
@@ -13,8 +12,11 @@ from log_psplines.mcmc import (
     ModelConfig,
     RunMCMCConfig,
     VIConfig,
-    _coarse_grain_processed_data,
     run_mcmc,
+)
+from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
+from log_psplines.preprocessing.preprocessing import (
+    _coarse_grain_processed_data,
 )
 from log_psplines.samplers.multivar.multivar_base import MultivarBaseSampler
 
@@ -123,7 +125,6 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
         vi_progress_bar=False,
     )
     run_cfg = RunMCMCConfig(
-        sampler="multivar_blocked_nuts",
         n_samples=12,
         n_warmup=12,
         Nb=Nb,

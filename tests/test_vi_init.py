@@ -48,7 +48,6 @@ def test_univariate_vi_initialisation_smoke(outdir):
         only_vi=True,
     )
     run_cfg = RunMCMCConfig(
-        sampler="nuts",
         n_samples=2,
         n_warmup=2,
         num_chains=1,
@@ -112,7 +111,6 @@ def test_multivariate_vi_initialisation_smoke(outdir):
         max_tree_depth=8,
     )
     run_cfg = RunMCMCConfig(
-        sampler="nuts",
         n_samples=2,
         n_warmup=2,
         num_chains=1,
@@ -166,7 +164,6 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
         max_tree_depth=8,
     )
     run_cfg = RunMCMCConfig(
-        sampler="multivar_blocked_nuts",
         n_samples=2,
         n_warmup=2,
         num_chains=1,

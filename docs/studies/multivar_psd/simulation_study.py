@@ -26,7 +26,6 @@ def simulation_study(outdir: str = "out", N=1024, K=7, SEED=42):
     ts = MultivariateTimeseries(t=varma.time, y=varma.data)
     run_mcmc(
         data=ts,
-        sampler="nuts",
         n_knots=K,
         degree=3,
         diffMatrixOrder=2,

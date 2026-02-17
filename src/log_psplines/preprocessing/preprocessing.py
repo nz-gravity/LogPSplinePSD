@@ -7,122 +7,103 @@ from typing import Any, Literal, Optional, Tuple, Union
 import jax.numpy as jnp
 import numpy as np
 
-from ._jaxtypes import Complex, Float
-from ._typecheck import runtime_typecheck
+from .._jaxtypes import Complex, Float
+from .._typecheck import runtime_typecheck
+from ..datatypes import Periodogram
+from ..datatypes.multivar import (
+    EmpiricalPSD,
+    MultivarFFT,
+    MultivariateTimeseries,
+)
+from ..datatypes.multivar_utils import _interp_frequency_indexed_array
+from ..datatypes.univar import Timeseries
+from ..logger import logger
+from ..psplines import LogPSplines, MultivariateLogPSplines
+from ..samplers import (
+    MultivarBlockedNUTSConfig,
+    MultivarBlockedNUTSSampler,
+    NUTSConfig,
+    NUTSSampler,
+)
 from .coarse_grain import (
     CoarseGrainConfig,
     apply_coarse_grain_multivar_fft,
     apply_coarse_graining_univar,
     compute_binning_structure,
 )
-from .datatypes import Periodogram
-from .datatypes.multivar import (
-    EmpiricalPSD,
-    MultivarFFT,
-    MultivariateTimeseries,
-)
-from .datatypes.multivar_utils import _interp_frequency_indexed_array
-from .datatypes.univar import Timeseries
-from .logger import logger
-from .psplines import LogPSplines, MultivariateLogPSplines
-from .samplers import (
-    MultivarBlockedNUTSConfig,
-    MultivarBlockedNUTSSampler,
-    NUTSConfig,
-    NUTSSampler,
+from .configs import (
+    DiagnosticsConfig,
+    ModelConfig,
+    NUTSConfigOverride,
+    RunMCMCConfig,
+    SamplerFactoryConfig,
+    SamplerName,
+    TruePSDInput,
+    VIConfig,
 )
 
-SamplerName = Literal[
-    "nuts",
-    "multivar_blocked_nuts",
-]
-TruePSDInput = Union[
-    None,
-    np.ndarray,
-    Tuple[np.ndarray, np.ndarray],
-    list,
-    dict,
-]
-
 
 @dataclass(frozen=True)
-class ModelConfig:
-    n_knots: int = 10
-    degree: int = 3
-    diffMatrixOrder: int = 2
-    knot_kwargs: dict[str, Any] = field(default_factory=dict)
-    parametric_model: Optional[jnp.ndarray] = None
-    true_psd: TruePSDInput = None
-    fmin: Optional[float] = None
-    fmax: Optional[float] = None
-
-
-@dataclass(frozen=True)
-class DiagnosticsConfig:
-    verbose: bool = True
-    outdir: Optional[str] = None
-    compute_lnz: bool = False
-
-
-@dataclass(frozen=True)
-class VIConfig:
-    only_vi: bool = False
-    init_from_vi: bool = True
-    vi_steps: int = 1500
-    vi_lr: float = 1e-2
-    vi_guide: Optional[str] = None
-    vi_posterior_draws: int = 256
-    vi_progress_bar: Optional[bool] = None
-    vi_psd_max_draws: int = 64
-
-
-@dataclass(frozen=True)
-class NUTSConfigOverride:
-    target_accept_prob: float = 0.8
-    target_accept_prob_by_channel: Optional[list[float]] = None
-    max_tree_depth: int = 10
-    max_tree_depth_by_channel: Optional[list[int]] = None
-    dense_mass: bool = True
-    alpha_phi_theta: Optional[float] = None
-    beta_phi_theta: Optional[float] = None
-
-
-@dataclass(frozen=True)
-class RunMCMCConfig:
-    sampler: SamplerName = "nuts"
-    n_samples: int = 1000
-    n_warmup: int = 500
-    num_chains: int = 1
-    chain_method: Optional[Literal["parallel", "vectorized", "sequential"]] = (
-        None
-    )
-    alpha_phi: float = 1.0
-    beta_phi: float = 1.0
-    alpha_delta: float = 1e-4
-    beta_delta: float = 1e-4
-    rng_key: int = 42
-    coarse_grain_config: Optional[CoarseGrainConfig | dict] = None
-    Nb: int = 1
-    welch_nperseg: int | None = None
-    welch_noverlap: int | None = None
-    welch_window: str = "hann"
-    model: ModelConfig = field(default_factory=ModelConfig)
-    diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
-    vi: VIConfig = field(default_factory=VIConfig)
-    nuts: NUTSConfigOverride = field(default_factory=NUTSConfigOverride)
-    extra_kwargs: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class SamplerFactoryConfig:
+class PreprocessedMCMCInput:
+    processed_data: Union[Periodogram, MultivarFFT]
+    scaled_true_psd: Optional[np.ndarray]
     sampler_type: SamplerName
+    extra_empirical_psd: list[EmpiricalPSD] | None
+    extra_empirical_labels: list[str] | None
+    extra_empirical_styles: list[dict] | None
     run_config: RunMCMCConfig
-    scaling_factor: float
-    true_psd: Optional[np.ndarray]
-    channel_stds: Optional[np.ndarray]
-    extra_empirical_psd: list[EmpiricalPSD] | None = None
-    extra_empirical_labels: list[str] | None = None
-    extra_empirical_styles: list[dict] | None = None
+
+
+def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
+    if kwargs:
+        if config is not None:
+            raise ValueError(
+                "Cannot specify both 'config' and keyword arguments. "
+                "Use either config=RunMCMCConfig(...) or pass kwargs directly."
+            )
+        config = _build_config_from_kwargs(**kwargs)
+
+    # This collects all arguments and config options, applies defaults, and performs validation
+    run_config = _normalize_run_config(config)
+    processed_data, raw_multivar_ts, sampler_type = _prepare_processed_data(
+        data,
+        run_config,
+    )
+    scaled_true_psd = _align_true_psd_to_freq(
+        run_config.model.true_psd,
+        processed_data,
+    )
+
+    processed_after, scaled_true_psd = _coarse_grain_processed_data(
+        processed_data,
+        _normalize_coarse_grain_config(run_config.coarse_grain_config),
+        scaled_true_psd,
+    )
+    if processed_after is None:
+        raise ValueError(
+            "Processed data unexpectedly None after coarse graining."
+        )
+    processed_data = processed_after
+
+    # Plot the periodogram before analsysis
+    (
+        extra_empirical_psd,
+        extra_empirical_labels,
+        extra_empirical_styles,
+    ) = _build_welch_overlay(raw_multivar_ts, processed_data, run_config)
+
+    # Align true PSD to frequencies of processed data (after coarse graining if enabled)
+    scaled_true_psd = _align_true_psd_to_freq(scaled_true_psd, processed_data)
+    _run_preprocessing_checks(processed_data, run_config)
+    return PreprocessedMCMCInput(
+        processed_data=processed_data,
+        scaled_true_psd=scaled_true_psd,
+        sampler_type=sampler_type,
+        extra_empirical_psd=extra_empirical_psd,
+        extra_empirical_labels=extra_empirical_labels,
+        extra_empirical_styles=extra_empirical_styles,
+        run_config=run_config,
+    )
 
 
 def _unpack_true_psd(
@@ -324,17 +305,21 @@ def _prepare_processed_data(
     Optional[MultivariateTimeseries],
     SamplerName,
 ]:
-    sampler = config.sampler
     raw_multivar_ts: Optional[MultivariateTimeseries] = None
 
     standardized_ts = data.standardise_for_psd()
 
+    # Infer sampler type from input data type
     if isinstance(data, Timeseries):
+        # Univariate: use NUTS
+        sampler: SamplerName = "nuts"
         processed = standardized_ts.to_periodogram(
             fmin=config.model.fmin,
             fmax=config.model.fmax,
         )
     else:
+        # Multivariate: prefer multivar_blocked_nuts, fall back to nuts
+        sampler = "multivar_blocked_nuts"
         raw_multivar_ts = data
         processed = standardized_ts.to_wishart_stats(
             Nb=config.Nb,
@@ -346,16 +331,7 @@ def _prepare_processed_data(
         logger.info(
             f"Standardized data: original scale ~{processed.scaling_factor:.2e}"
         )
-
-    if isinstance(processed, MultivarFFT):
-        allowed = {"nuts", "multivar_blocked_nuts"}
-        if sampler not in allowed:
-            if config.diagnostics.verbose:
-                allowed_str = ", ".join(sorted(allowed))
-                logger.warning(
-                    f"Multivariate analysis supports {allowed_str}. Using NUTS instead of {sampler}"
-                )
-            sampler = "nuts"
+        logger.info(f"Inferred sampler type: {sampler}")
 
     processed = _truncate_frequency_range(
         processed,
@@ -461,7 +437,7 @@ def _run_preprocessing_checks(
         return
 
     try:
-        from .diagnostics.preprocessing import (
+        from ..diagnostics.preprocessing import (
             eigenvalue_separation_diagnostics,
             save_eigenvalue_separation_plot,
         )
@@ -608,6 +584,10 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
 
     Accepts legacy-style kwargs and constructs RunMCMCConfig with nested
     ModelConfig, VIConfig, DiagnosticsConfig, and NUTSConfigOverride.
+
+    Note: 'sampler' is automatically inferred from input data type
+    (univariate → 'nuts', multivariate → 'multivar_blocked_nuts').
+    If 'sampler' is provided in kwargs, it will be ignored with a warning.
     """
     # Map of kwarg names to their target config classes and fields
     model_fields = {
@@ -645,7 +625,6 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "compute_lnz",
     }
     run_mcmc_fields = {
-        "sampler",
         "n_samples",
         "n_warmup",
         "num_chains",
@@ -665,6 +644,14 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "posterior_psd_max_draws",
         "compute_coherence_quantiles",
     }
+
+    # Warn if user provided 'sampler' (now inferred automatically)
+    if "sampler" in kwargs:
+        logger.warning(
+            "The 'sampler' parameter is now inferred automatically from input data type "
+            "(univariate → 'nuts', multivariate → 'multivar_blocked_nuts'). "
+            "Your provided value will be ignored."
+        )
 
     # Build config dicts by routing kwargs directly (no pre-renaming)
     model_dict = {k: v for k, v in kwargs.items() if k in model_fields}
@@ -687,7 +674,9 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         | run_mcmc_fields
         | sampler_config_fields
     )
-    extra_kwargs = {k: v for k, v in kwargs.items() if k not in routed}
+    extra_kwargs = {
+        k: v for k, v in kwargs.items() if k not in routed and k != "sampler"
+    }
     # Add sampler-specific fields to extra_kwargs so they reach the sampler config
     extra_kwargs.update(sampler_dict)
 

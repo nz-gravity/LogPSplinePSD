@@ -3,9 +3,9 @@ import warnings
 import numpy as np
 import pytest
 
-import log_psplines.coarse_grain as coarse_grain
 import log_psplines.datatypes.multivar_utils as multivar_utils
 import log_psplines.mcmc as mcmc
+import log_psplines.preprocessing.coarse_grain as coarse_grain
 
 
 def _typecheck_stack_available() -> bool:

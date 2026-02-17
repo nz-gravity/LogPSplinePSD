@@ -378,7 +378,6 @@ def run_or_load_pspline_fit(
     ts = MultivariateTimeseries(t=data.time, y=data.data)
     idata = run_mcmc(
         data=ts,
-        sampler="multivar_blocked_nuts",
         n_knots=20,
         degree=3,
         diffMatrixOrder=2,

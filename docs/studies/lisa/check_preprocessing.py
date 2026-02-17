@@ -14,17 +14,17 @@ for path in (SRC_ROOT, PROJECT_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from log_psplines.coarse_grain import (
-    CoarseGrainConfig,
-    apply_coarse_grain_multivar_fft,
-    compute_binning_structure,
-)
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.example_datasets.lisa_data import (
     LISAData,
     coherence,
     compute_periodograms,
     periodogram_covariance,
+)
+from log_psplines.preprocessing.coarse_grain import (
+    CoarseGrainConfig,
+    apply_coarse_grain_multivar_fft,
+    compute_binning_structure,
 )
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results" / "lisa"

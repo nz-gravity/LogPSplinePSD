@@ -82,7 +82,7 @@ class RuntimeBenchmark:
                 sigma=float(AR_DEFAULTS["sigma"]),
                 seed=int(AR_DEFAULTS["seed"]),
             )
-            pdgrm = ar_data.periodogram
+            
 
             runtimes_i = []
             ess_i = []
@@ -96,14 +96,14 @@ class RuntimeBenchmark:
                     diagnostics=diagnostics_cfg,
                 )
                 idata = run_mcmc(
-                    data=pdgrm,
+                    data=ar_data.ts,
                     config=run_cfg,
                 )
                 runtimes_i.append(idata.attrs["runtime"])
                 ess_i.append(idata.attrs["ess"])
 
             runtimes.append(runtimes_i)
-            ns.append(len(pdgrm.freqs))
+            ns.append(len(ar_data.ts.t))
             ess.append(np.concatenate(ess_i))
 
         # Save results

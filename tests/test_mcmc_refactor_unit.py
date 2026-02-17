@@ -1,9 +1,9 @@
 import numpy as np
 
-from log_psplines.datatypes.univar import Periodogram
+from log_psplines.datatypes.univar import Timeseries
 from log_psplines.mcmc import (
     RunMCMCConfig,
-    _maybe_build_welch_overlay,
+    _build_welch_overlay,
     run_mcmc,
 )
 
@@ -18,9 +18,9 @@ class _DummySampler:
 
 
 def test_run_mcmc_config_path_uses_factory(monkeypatch):
-    freq = np.linspace(0.1, 1.0, 8)
-    power = np.linspace(1.0, 2.0, 8)
-    pdgrm = Periodogram(freqs=freq, power=power)
+    t = np.array([0.0, 1.0, 2.0, 3.0])
+    y = np.array([-1.0, 1.0, -1.0, 1.0])
+    ts = Timeseries(t=t, y=y)
 
     captured = {}
 
@@ -41,7 +41,7 @@ def test_run_mcmc_config_path_uses_factory(monkeypatch):
     )
 
     cfg = RunMCMCConfig(n_samples=5, n_warmup=3)
-    result = run_mcmc(pdgrm, config=cfg)
+    result = run_mcmc(ts, config=cfg)
 
     assert result == {"n_samples": 5, "n_warmup": 3, "only_vi": False}
     assert captured["sampler_type"] == "nuts"
@@ -51,5 +51,5 @@ def test_run_mcmc_config_path_uses_factory(monkeypatch):
 
 def test_welch_overlay_guard_returns_none_without_outdir():
     cfg = RunMCMCConfig()
-    overlays = _maybe_build_welch_overlay(None, None, cfg)
+    overlays = _build_welch_overlay(None, None, cfg)
     assert overlays == (None, None, None)

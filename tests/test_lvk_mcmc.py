@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from gwpy.timeseries import TimeSeries
 
-from log_psplines.datatypes import Periodogram
+from log_psplines.datatypes import Periodogram, Timeseries
 from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.mcmc import (
     DiagnosticsConfig,
@@ -27,12 +27,17 @@ def mock_gwpy_timeseries_from_simulation(
 
 
 def test_lvk_knots_from_periodogram():
+    duration = 1.0
     with patch(
         "gwpy.timeseries.TimeSeries.fetch_open_data",
         side_effect=mock_gwpy_timeseries_from_simulation,
     ):
         lvk_data = LVKData.download_data(
-            detector="L1", gps_start=1126259462, duration=1, fmin=64, fmax=128
+            detector="L1",
+            gps_start=1126259462,
+            duration=duration,
+            fmin=64,
+            fmax=128,
         )
 
     power = lvk_data.psd / np.nanmax(lvk_data.psd)
@@ -52,6 +57,7 @@ def test_lvk_knots_from_periodogram():
 
 @pytest.mark.slow
 def test_lvk_mcmc(outdir, test_mode):
+    duration = 1.0
     out = os.path.join(outdir, "out_lvk_mcmc")
     os.makedirs(out, exist_ok=True)
     with patch(
@@ -59,7 +65,11 @@ def test_lvk_mcmc(outdir, test_mode):
         side_effect=mock_gwpy_timeseries_from_simulation,
     ):
         lvk_data = LVKData.download_data(
-            detector="L1", gps_start=1126259462, duration=1, fmin=64, fmax=128
+            detector="L1",
+            gps_start=1126259462,
+            duration=duration,
+            fmin=64,
+            fmax=128,
         )
     # TODO: mock download TimeSeries.fetch_open_data(detector, gps_start, gps_end)
     lvk_data.plot_psd(fname=os.path.join(out, "lvk_psd_analysis.png"))
@@ -70,6 +80,9 @@ def test_lvk_mcmc(outdir, test_mode):
         power=power,
     )
     pdgrm = pdgrm.cut(64, 128)
+    n = lvk_data.strain.shape[0]
+    t = np.linspace(0.0, duration, n, endpoint=False)
+    ts = Timeseries(t=t, y=lvk_data.strain)
 
     base_knots = 12
     if test_mode == "fast":
@@ -103,4 +116,4 @@ def test_lvk_mcmc(outdir, test_mode):
         model=model_cfg,
         diagnostics=diagnostics_cfg,
     )
-    run_mcmc(pdgrm, config=run_cfg)
+    run_mcmc(ts, config=run_cfg)

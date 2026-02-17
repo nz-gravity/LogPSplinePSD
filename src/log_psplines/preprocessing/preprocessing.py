@@ -93,8 +93,9 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
         _normalize_coarse_grain_config(run_config.coarse_grain_config),
         scaled_true_psd,
     )
-    # _coarse_grain_processed_data preserves the input type
-    assert fft_data_cg is not None
+    # _coarse_grain_processed_data preserves the type of processed_data.
+    # Since fft_data is non-None from _prepare_processed_data, result is non-None.
+    assert fft_data_cg is not None, "Coarse graining should preserve non-None data"
     fft_data = fft_data_cg
     # Compute + plot welch-estimate before analsysis
     (

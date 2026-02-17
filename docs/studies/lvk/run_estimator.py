@@ -16,13 +16,14 @@ from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
 
 FMIN, FMAX = 20, 1024
+DURATION = 4.0
 
 out = os.path.join("out_lvk_mcmc_nuts")
 os.makedirs(out, exist_ok=True)
 lvk_data = LVKData.download_data(
     detector="L1",
     gps_start=1126259462,
-    duration=4,
+    duration=DURATION,
     fmin=FMIN,
     fmax=FMAX,
     threshold=10,
@@ -35,6 +36,9 @@ pdgrm = Periodogram(
     power=power,
 )
 pdgrm = pdgrm.cut(FMIN, FMAX)
+n = lvk_data.strain.shape[0]
+t = np.linspace(0.0, DURATION, n, endpoint=False)
+ts = Timeseries(t=t, y=lvk_data.strain)
 
 idata_fname = os.path.join(out, "inference_data.nc")
 if os.path.exists(idata_fname):
@@ -57,13 +61,15 @@ else:
     fig.savefig(os.path.join(out, f"test_spline_init.png"))
 
     idata = run_mcmc(
-        pdgrm,
+        ts,
         sampler="nuts",
         n_samples=2000,
         n_warmup=2000,
         outdir=out,
         rng_key=42,
         knot_kwargs=dict(knots=lvk_data.knots_locations),
+        fmin=FMIN,
+        fmax=FMAX,
     )
 
     fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6))

@@ -3,7 +3,7 @@ from click.testing import CliRunner
 
 from log_psplines.benchmark.cli import main as benchmark_cli
 
-
+@pytest.mark.skip(reason="Long-running benchmark test")
 @pytest.mark.slow
 def test_default_run(outdir):
     runner = CliRunner()
@@ -39,8 +39,3 @@ def test_default_run(outdir):
     assert "Benchmark complete." in result.output
 
 
-# def test_bench_plot(outdir):
-#     """Run the runtime benchmark with default settings."""
-#     outdir = f"{outdir}/out_benchmark"
-#     benchmark = RuntimeBenchmark(outdir=outdir)
-#     benchmark.plot()

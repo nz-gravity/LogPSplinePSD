@@ -609,15 +609,6 @@ def main() -> None:
         t_full = t_full[:n_used]
 
     raw_series = MultivariateTimeseries(y=y_full, t=t_full)
-    standardized_ts = raw_series.standardise_for_psd()
-
-    # Cache expensive FFT preprocessing: one MultivarFFT per Wishart block count.
-    wishart_cache = {}
-    if uses_blocks:
-        for Nb in sorted(set(time_blocks)):
-            wishart_cache[int(Nb)] = standardized_ts.to_wishart_stats(
-                Nb=int(Nb), fmin=FMIN, fmax=FMAX
-            )
 
     coarse_keys = {str(x).lower().strip() for x in coarse_grid}
     coarse_off_requested = any(
@@ -625,17 +616,31 @@ def main() -> None:
     )
     if coarse_off_requested:
         p = int(raw_series.p)
-        if wishart_cache:
-            for Nb, fft in sorted(wishart_cache.items()):
-                n_total = int(fft.N) * p
-                if n_total > 100_000:
-                    logger.warning(
-                        "coarse=off with Nb={} implies N={} -> N≈{} basis rows; expect very slow NUTS. "
-                        "Consider larger Nb (e.g. 384/768/1024) or --max-n-time.",
-                        int(Nb),
-                        int(fft.N),
-                        int(n_total),
-                    )
+        for Nb in sorted(set(time_blocks)):
+            Lb = int(n_used) // int(Nb)
+            freq = np.fft.rfftfreq(Lb, 1 / fs)[1:]
+            if freq.size == 0:
+                continue
+            if FMIN is not None or FMAX is not None:
+                freq_min = float(freq[0])
+                freq_max = float(freq[-1])
+                fmin_eff = freq_min if FMIN is None else float(FMIN)
+                fmax_eff = freq_max if FMAX is None else float(FMAX)
+                fmin_eff = min(max(fmin_eff, freq_min), freq_max)
+                fmax_eff = min(max(fmax_eff, freq_min), freq_max)
+                if fmax_eff < fmin_eff:
+                    fmax_eff = fmin_eff
+                freq = freq[(freq >= fmin_eff) & (freq <= fmax_eff)]
+            N = int(freq.size)
+            n_total = N * p
+            if n_total > 100_000:
+                logger.warning(
+                    "coarse=off with Nb={} implies N={} -> N≈{} basis rows; expect very slow NUTS. "
+                    "Consider larger Nb (e.g. 384/768/1024) or --max-n-time.",
+                    int(Nb),
+                    int(N),
+                    int(n_total),
+                )
 
     (root_out / "matrix_config.json").write_text(
         json.dumps(
@@ -717,7 +722,7 @@ def main() -> None:
             rows.append(json.loads(diag_path.read_text()))
             continue
 
-        data_for_run = wishart_cache[Nb]
+        data_for_run = raw_series
 
         coarse_cfg = CoarseGrainConfig(
             enabled=bool(cg_on),

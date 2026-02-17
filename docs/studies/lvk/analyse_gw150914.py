@@ -19,7 +19,6 @@ import arviz as az
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
-from gwpy.timeseries import TimeSeries as GwpyTimeSeries
 from scipy.stats import kstest, norm
 
 from log_psplines.arviz_utils import (
@@ -27,13 +26,10 @@ from log_psplines.arviz_utils import (
     get_spline_model,
     get_weights,
 )
-from log_psplines.datatypes import Periodogram
+from log_psplines.datatypes import Timeseries
 from log_psplines.mcmc import run_mcmc
 
 # Configuration constants
-DEFAULT_FFT_LENGTH = 4
-DEFAULT_OVERLAP = 0.5
-DEFAULT_WINDOW = "hann"
 DEFAULT_N_KNOTS = 100
 DEFAULT_SPLINE_DEGREE = 3
 DEFAULT_DIFF_ORDER = 2
@@ -315,20 +311,8 @@ def process_detector_data(
     strain_std = np.std(strain)
     strain_normalized = (strain - np.mean(strain)) / strain_std
 
-    # Create GWpy TimeSeries and compute PSD
-    ts = GwpyTimeSeries(strain_normalized, t0=times[0], dt=times[1] - times[0])
-    avg_pdgrm = ts.psd(
-        fftlength=DEFAULT_FFT_LENGTH,
-        overlap=DEFAULT_OVERLAP,
-        window=DEFAULT_WINDOW,
-        method="welch",
-    )
-
-    # Convert to Periodogram object and apply frequency cuts
-    pdgrm = Periodogram(
-        freqs=avg_pdgrm.frequencies.value, power=avg_pdgrm.value
-    )
-    pdgrm = pdgrm.cut(fmin, fmax)
+    # Build time series for PSD estimation
+    ts = Timeseries(t=times, y=strain_normalized)
 
     # Check for existing inference data
     idata_path = os.path.join(det_output_dir, "inference_data.nc")
@@ -343,12 +327,14 @@ def process_detector_data(
 
         # Run MCMC sampling
         idata = run_mcmc(
-            pdgrm,
+            ts,
             sampler="nuts",
             n_samples=DEFAULT_N_SAMPLES,
             n_warmup=DEFAULT_N_WARMUP,
             outdir=det_output_dir,
             rng_key=42,
+            fmin=fmin,
+            fmax=fmax,
             knot_kwargs=dict(
                 method="lvk",
                 knots_plotfn=os.path.join(det_output_dir, "knots.png"),

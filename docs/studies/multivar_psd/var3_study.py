@@ -76,7 +76,7 @@ VAR_COEFFS = np.array(
 def simulation_study(
     outdir: str = OUT,
     N: int = 5024,
-    K: int = 15,
+    K: int = 10,
     SEED: int = 42,
     *,
     coarse_Nh: int | None = 4,
@@ -135,7 +135,6 @@ def simulation_study(
         coarse_grain_config=coarse_grain_config,
         alpha_delta=DEFAULT_ALPHA_DELTA,
         beta_delta=DEFAULT_BETA_DELTA,
-        compute_psis=False,
         compute_coherence_quantiles=True,
         true_psd=varma.get_true_psd(),
     )

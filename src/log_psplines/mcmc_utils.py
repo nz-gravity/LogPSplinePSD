@@ -103,7 +103,6 @@ class RunMCMCConfig:
     rng_key: int = 42
     coarse_grain_config: Optional[CoarseGrainConfig | dict] = None
     Nb: int = 1
-    plot_welch_overlay: bool | None = None
     welch_nperseg: int | None = None
     welch_noverlap: int | None = None
     welch_window: str = "hann"
@@ -318,7 +317,7 @@ def _truncate_frequency_range(
 
 
 def _prepare_processed_data(
-    data: Union[Timeseries, MultivariateTimeseries, Periodogram, MultivarFFT],
+    data: Union[Timeseries, MultivariateTimeseries],
     config: RunMCMCConfig,
 ) -> tuple[
     Union[Periodogram, MultivarFFT],
@@ -327,19 +326,6 @@ def _prepare_processed_data(
 ]:
     sampler = config.sampler
     raw_multivar_ts: Optional[MultivariateTimeseries] = None
-
-    if isinstance(data, (Periodogram, MultivarFFT)):
-        processed = _truncate_frequency_range(
-            data,
-            config.model.fmin,
-            config.model.fmax,
-        )
-        if processed is None:
-            raise ValueError("Processed data unexpectedly None.")
-        return processed, raw_multivar_ts, sampler
-
-    if not isinstance(data, (Timeseries, MultivariateTimeseries)):
-        raise ValueError(f"Unsupported input data type: {type(data)}")
 
     standardized_ts = data.standardise_for_psd()
 
@@ -381,7 +367,7 @@ def _prepare_processed_data(
     return processed, raw_multivar_ts, sampler
 
 
-def _maybe_build_welch_overlay(
+def _build_welch_overlay(
     raw_multivar_ts: Optional[MultivariateTimeseries],
     processed_data: Optional[Union[Periodogram, MultivarFFT]],
     config: RunMCMCConfig,
@@ -393,16 +379,6 @@ def _maybe_build_welch_overlay(
     if raw_multivar_ts is None:
         return None, None, None
     if not isinstance(processed_data, MultivarFFT):
-        return None, None, None
-    if config.diagnostics.outdir is None:
-        return None, None, None
-
-    want_welch = (
-        config.plot_welch_overlay
-        if config.plot_welch_overlay is not None
-        else True
-    )
-    if not want_welch:
         return None, None, None
 
     try:
@@ -681,7 +657,6 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "beta_delta",
         "coarse_grain_config",
         "Nb",
-        "plot_welch_overlay",
         "welch_nperseg",
         "welch_noverlap",
         "welch_window",

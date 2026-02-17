@@ -137,9 +137,7 @@ def simulation_study(
         beta_delta=DEFAULT_BETA_DELTA,
         compute_psis=False,
         compute_coherence_quantiles=True,
-        skip_plot_diagnostics=False,
         true_psd=varma.get_true_psd(),
-        save_preprocessing_plots=True,
     )
 
 

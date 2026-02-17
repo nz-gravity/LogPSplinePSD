@@ -54,9 +54,6 @@ class SamplerConfig:
     posterior_psd_max_draws: int = 50  # Cap posterior PSD reconstructions
     compute_coherence_quantiles: bool = True  # Compute coherence bands
     compute_psis: bool = True  # Enable PSIS-LOO diagnostics
-    skip_plot_diagnostics: bool = False  # Skip plotting heavy diagnostics
-    diagnostics_summary_mode: Literal["off", "light", "full"] = "full"
-    diagnostics_summary_position: Literal["start", "end"] = "end"
     # Cap ESS/Rhat/PSIS computations (posterior elements) to avoid OOM.
     mcmc_diag_max_elements: int = 250_000
     max_saved_draws: int = 1000  # Cap saved/diagnostic draws per chain
@@ -214,12 +211,8 @@ class BaseSampler(ABC):
         This runs regardless of whether ``outdir`` is set. Any diagnostic plots
         remain gated by the diagnostic modules via ``config.outdir``.
         """
-        summary_mode = getattr(self.config, "diagnostics_summary_mode", "full")
-        if summary_mode != "full":
-            logger.info(
-                "Full diagnostics skipped (diagnostics_summary_mode != 'full')."
-            )
-            return
+        # Always run full diagnostics
+        logger.debug("Running full diagnostics")
 
         attrs = getattr(idata, "attrs", None)
         if attrs is None or not hasattr(attrs, "__setitem__"):
@@ -470,31 +463,27 @@ class BaseSampler(ABC):
             az.to_netcdf(idata_out, f"{self.config.outdir}/inference_data.nc")
             logger.info("save_results: wrote inference_data.nc")
         # Optionally skip heavy MCMC diagnostics plots/summaries.
-        if not getattr(self.config, "skip_plot_diagnostics", False):
-            logger.info("save_results: plotting diagnostics")
-            plot_diagnostics(
-                idata_out,
-                self.config.outdir,
-                model=self.model,
-                summary_mode=getattr(
-                    self.config, "diagnostics_summary_mode", "full"
-                ),
-                summary_position=getattr(
-                    self.config, "diagnostics_summary_position", "end"
-                ),
+        # Always plot diagnostics
+        logger.info("save_results: plotting diagnostics")
+        plot_diagnostics(
+            idata_out,
+            self.config.outdir,
+            model=self.model,
+            summary_mode="full",
+            summary_position="end",
+        )
+        logger.info("save_results: plotting diagnostics done")
+        t0 = time.perf_counter()
+        logger.info("Writing summary_statistics.csv...")
+        if not skip_heavy:
+            az.summary(idata_out).to_csv(
+                f"{self.config.outdir}/summary_statistics.csv"
             )
-            logger.info("save_results: plotting diagnostics done")
-            t0 = time.perf_counter()
-            logger.info("Writing summary_statistics.csv...")
-            if not skip_heavy:
-                az.summary(idata_out).to_csv(
-                    f"{self.config.outdir}/summary_statistics.csv"
-                )
-                logger.info(
-                    f"Wrote summary_statistics.csv in {time.perf_counter() - t0:.2f}s"
-                )
-            else:
-                logger.info("summary_statistics.csv skipped (size guard).")
+            logger.info(
+                f"Wrote summary_statistics.csv in {time.perf_counter() - t0:.2f}s"
+            )
+        else:
+            logger.info("summary_statistics.csv skipped (size guard).")
 
         # Always save the main PSD plots for the given data type.
         try:

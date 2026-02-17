@@ -205,6 +205,12 @@ class RuntimeBenchmark:
 
         # Currently only NUTS sampler is supported
         # When sampler == "all", we still only run NUTS
+        if sampler == "all":
+            logger.warning(
+                "Only NUTS sampler is currently supported. "
+                "Running NUTS analysis despite 'all' being specified."
+            )
+
         self._run_data_size_analysis(
             min_n=min_n,
             max_n=max_n,

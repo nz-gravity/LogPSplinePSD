@@ -141,8 +141,6 @@ def test_windowing_reduces_welch_wishart_gap(outdir):
     spec = compute_binning_structure(
         f_welch,
         Nc=Nc,
-        f_min=f_welch[0],
-        f_max=f_welch[-1],
     )
     coarse_baseline = _coarse_log_rms(psd_welch, f_welch, wishart_rect, spec)
     coarse_rms = {}
@@ -225,8 +223,6 @@ def test_lisa_x_channel_windowing_improves_match(outdir):
     spec = compute_binning_structure(
         f_welch,
         Nc=Nc,
-        f_min=f_welch[0],
-        f_max=f_welch[-1],
     )
     coarse_baseline = _coarse_log_rms(psd_welch, f_welch, wishart_rect, spec)
     coarse_rms = {}

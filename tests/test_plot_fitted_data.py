@@ -142,8 +142,6 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
     spec: CoarseGrainSpec = compute_binning_structure(
         freqs,
         Nc=Nc,
-        f_min=None,
-        f_max=None,
     )
 
     # # 1) Original vs coarse-grained data (what we actually fit)
@@ -224,8 +222,6 @@ def test_plot_multivariate_fitted_data_blocks(
     spec = compute_binning_structure(
         fft_full.freq,
         Nc=Nc,
-        f_min=None,
-        f_max=None,
     )
     # Returns a MultivarFFT on coarse grid and the frequency weights
     # fft_coarse.raw_psd holds the aggregated PSD matrix we fit

@@ -299,13 +299,6 @@ def test_mcmc(outdir: str, test_mode: str):
     )
     print(f"{ar_data.ts}")
 
-    # coarse_grain = CoarseGrainConfig(
-    #     enabled=True,
-    #     f_transition=10**2,
-    #     f_max=ar_data.ts.fs / 2,
-    #     n_log_bins=100,
-    # )
-
     for sampler in sampler_names:
         sampler_out = f"{outdir}/out_{sampler}"
         model_cfg = ModelConfig(
@@ -400,8 +393,6 @@ def _expected_coarse_freq_univar(
         pdgrm.freqs,
         Nc=cfg.Nc,
         Nh=cfg.Nh,
-        f_min=cfg.f_min,
-        f_max=cfg.f_max,
     )
     return np.asarray(spec.f_coarse, dtype=np.float64)
 
@@ -415,8 +406,6 @@ def test_run_mcmc_coarse_grain_univariate_mcmc():
         enabled=True,
         Nc=None,
         Nh=1,
-        f_min=fmin,
-        f_max=fmax,
     )
     expected_freq = _expected_coarse_freq_univar(
         ts_spec,
@@ -490,8 +479,6 @@ def _expected_coarse_freq_multivar(
         fft.freq,
         Nc=cfg.Nc,
         Nh=cfg.Nh,
-        f_min=cfg.f_min,
-        f_max=cfg.f_max,
     )
     return np.asarray(spec.f_coarse, dtype=np.float64)
 
@@ -505,8 +492,6 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
         enabled=True,
         Nc=None,
         Nh=1,
-        f_min=fmin,
-        f_max=fmax,
     )
     Nb = 2
     expected_freq = _expected_coarse_freq_multivar(

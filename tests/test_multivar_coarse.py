@@ -70,8 +70,6 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
         Nc=16 if test_mode != "fast" else 16,
-        f_min=None,
-        f_max=None,
     )
     coarse_dir = os.path.join(outdir, "multivar_coarse")
     diagnostics_cfg = DiagnosticsConfig(outdir=coarse_dir, verbose=False)
@@ -163,8 +161,6 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
         fft_full.freq,
         Nc=coarse_cfg.Nc,
         Nh=coarse_cfg.Nh,
-        f_min=coarse_cfg.f_min,
-        f_max=coarse_cfg.f_max,
     )
     fft_manual_coarse = apply_coarse_grain_multivar_fft(fft_full, spec_manual)
     periodogram_obs = idata_coarse.observed_data["periodogram"].values

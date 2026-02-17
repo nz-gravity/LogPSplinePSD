@@ -231,8 +231,6 @@ FMIN, FMAX = 10**-4, 10**-1
 coarse_cfg = CoarseGrainConfig(
     enabled=True,
     Nc=512,
-    f_min=FMIN,
-    f_max=FMAX,
 )
 
 raw_series = MultivariateTimeseries(y=y_full, t=t_full)

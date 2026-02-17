@@ -486,8 +486,8 @@ def _run(
 
     attrs = getattr(idata, "attrs", {}) or {}
     compute_psis_flag = bool(attrs.get("compute_psis", True))
-    summary_mode = getattr(config, "diagnostics_summary_mode", "full")
-    light_mode = summary_mode != "full"
+    summary_mode = "full"  # Always use full diagnostics mode
+    light_mode = False
     posterior_full = getattr(idata, "posterior", None)
     if posterior_full is not None:
         _log_posterior_summary("base posterior", posterior_full)

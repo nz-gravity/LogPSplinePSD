@@ -153,7 +153,6 @@ def run_study(config: StudyConfig) -> pd.DataFrame:
 
             idata = run_mcmc(
                 timeseries,
-                sampler=config.sampler,
                 n_samples=config.n_samples,
                 n_warmup=config.n_warmup,
                 Nb=Nb,

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from log_psplines.coarse_grain import (
+from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
     compute_binning_structure,
 )

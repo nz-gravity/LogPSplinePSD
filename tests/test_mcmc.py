@@ -8,10 +8,6 @@ import pytest
 from log_psplines.arviz_utils import get_weights
 from log_psplines.arviz_utils.compare_results import compare_results
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
-from log_psplines.coarse_grain import (
-    CoarseGrainConfig,
-    compute_binning_structure,
-)
 from log_psplines.datatypes.univar import Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
@@ -28,6 +24,10 @@ from log_psplines.plotting import (
     PSDMatrixPlotSpec,
     plot_pdgrm,
     plot_psd_matrix,
+)
+from log_psplines.preprocessing.coarse_grain import (
+    CoarseGrainConfig,
+    compute_binning_structure,
 )
 
 
@@ -87,7 +87,6 @@ def test_multivar_mcmc(outdir, test_mode):
         )
         nuts_cfg = NUTSConfigOverride(target_accept_prob=0.8)
         run_cfg = RunMCMCConfig(
-            sampler=sampler_name,
             n_samples=n_samples,
             n_warmup=n_warmup,
             Nb=Nb,
@@ -215,7 +214,6 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
         only_vi=True,
     )
     run_cfg = RunMCMCConfig(
-        sampler="multivar_blocked_nuts",
         n_samples=1,
         n_warmup=1,
         Nb=1,
@@ -253,7 +251,6 @@ def test_mcmc_unit(synthetic_univar_timeseries):
     )
     vi_cfg = VIConfig(init_from_vi=False)
     run_cfg = RunMCMCConfig(
-        sampler="nuts",
         n_samples=3,
         n_warmup=3,
         rng_key=0,
@@ -322,7 +319,6 @@ def test_mcmc(outdir: str, test_mode: str):
         )
         vi_cfg = VIConfig(init_from_vi=(test_mode != "fast"))
         run_cfg = RunMCMCConfig(
-            sampler=sampler,
             n_samples=n_samples,
             n_warmup=n_warmup,
             rng_key=42,
@@ -444,7 +440,6 @@ def test_run_mcmc_coarse_grain_univariate_mcmc():
         vi_psd_max_draws=4,
     )
     run_cfg = RunMCMCConfig(
-        sampler="nuts",
         n_samples=1,
         n_warmup=1,
         coarse_grain_config=coarse_cfg,
@@ -539,7 +534,6 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
         vi_psd_max_draws=2,
     )
     run_cfg = RunMCMCConfig(
-        sampler="multivar_blocked_nuts",
         n_samples=1,
         n_warmup=1,
         Nb=Nb,
@@ -569,7 +563,6 @@ def test_multivar_blocked_nuts_records_step_size():
     diagnostics_cfg = DiagnosticsConfig(verbose=False)
     vi_cfg = VIConfig(init_from_vi=False)
     run_cfg = RunMCMCConfig(
-        sampler="multivar_blocked_nuts",
         n_samples=1,
         n_warmup=2,
         num_chains=1,

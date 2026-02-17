@@ -4,12 +4,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from log_psplines.coarse_grain import (
-    CoarseGrainSpec,
-    apply_coarse_grain_multivar_fft,
-    apply_coarse_graining_univar,
-    compute_binning_structure,
-)
 from log_psplines.datatypes import Periodogram
 from log_psplines.datatypes.multivar import (
     EmpiricalPSD,
@@ -23,6 +17,12 @@ from log_psplines.plotting.psd_matrix import (
     PSDMatrixPlotSpec,
     _pack_ci_dict,
     plot_psd_matrix,
+)
+from log_psplines.preprocessing.coarse_grain import (
+    CoarseGrainSpec,
+    apply_coarse_grain_multivar_fft,
+    apply_coarse_graining_univar,
+    compute_binning_structure,
 )
 from log_psplines.psplines.psplines import LogPSplines
 

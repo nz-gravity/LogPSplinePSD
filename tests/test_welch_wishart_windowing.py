@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 from scipy.signal import welch
 
-from log_psplines.coarse_grain import (
+from log_psplines.datatypes.multivar import MultivarFFT
+from log_psplines.example_datasets.lisa_data import LISAData
+from log_psplines.preprocessing.coarse_grain import (
     apply_coarse_grain_multivar_fft,
     apply_coarse_graining_univar,
     compute_binning_structure,
 )
-from log_psplines.datatypes.multivar import MultivarFFT
-from log_psplines.example_datasets.lisa_data import LISAData
 
 
 def _make_test_signal(n: int, fs: float) -> np.ndarray:

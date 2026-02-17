@@ -114,7 +114,6 @@ def simulation_study(
 
     run_mcmc(
         data=ts,
-        sampler="multivar_blocked_nuts",
         n_knots=K,
         degree=2,
         diffMatrixOrder=2,

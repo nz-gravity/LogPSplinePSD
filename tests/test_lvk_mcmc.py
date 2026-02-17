@@ -109,7 +109,6 @@ def test_lvk_mcmc(outdir, test_mode):
     )
     diagnostics_cfg = DiagnosticsConfig(outdir=out)
     run_cfg = RunMCMCConfig(
-        sampler="nuts",
         n_samples=n_samples,
         n_warmup=n_warmup,
         rng_key=42,

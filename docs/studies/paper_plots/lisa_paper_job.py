@@ -15,9 +15,9 @@ from pathlib import Path
 import jax
 import numpy as np
 
-from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
+from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
 os.environ.setdefault("XLA_FLAGS", "--xla_force_host_platform_device_count=4")
 jax.config.update("jax_enable_x64", True)
@@ -194,7 +194,6 @@ def main() -> None:
     ts = MultivariateTimeseries(t=t, y=y)
     run_mcmc(
         data=ts,
-        sampler="multivar_blocked_nuts",
         n_knots=int(args.knots),
         degree=int(args.degree),
         diffMatrixOrder=int(args.diff_order),

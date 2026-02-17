@@ -6,26 +6,23 @@ import arviz as az
 
 from .datatypes.multivar import MultivariateTimeseries
 from .datatypes.univar import Timeseries
-from .mcmc_utils import (
+from .preprocessing.configs import (
     DiagnosticsConfig,
     ModelConfig,
     NUTSConfigOverride,
     RunMCMCConfig,
+    SamplerFactoryConfig,
     SamplerName,
     TruePSDInput,
     VIConfig,
-    _align_true_psd_to_freq,
-    _build_config_from_kwargs,
+)
+from .preprocessing.preprocessing import (
+    PreprocessedMCMCInput,
     _build_model_from_data,
     _build_sampler_inputs,
-    _coarse_grain_processed_data,
+    _build_welch_overlay,
     _create_sampler,
     _interp_psd_array,
-    _build_welch_overlay,
-    _normalize_coarse_grain_config,
-    _normalize_run_config,
-    _prepare_processed_data,
-    _run_preprocessing_checks,
     _preprocess_data,
 )
 
@@ -54,34 +51,41 @@ def run_mcmc(
     Unified MCMC entrypoint for univariate and multivariate PSD estimation.
     Expects time-domain inputs (Timeseries or MultivariateTimeseries).
 
+    Sampler type is automatically inferred from input data dimensionality:
+    - 1D timeseries (Timeseries) → NUTS sampler
+    - P-D timeseries (MultivariateTimeseries) → Multivariate blocked NUTS sampler
+
     Can be called with either a config object or legacy-style kwargs:
 
     - config-based: run_mcmc(data, config=RunMCMCConfig(...))
     - kwargs-based: run_mcmc(data, n_knots=10, n_samples=1000, ...)
     """
-    preproc_input = _preprocess_data(data, config)
+    preproc_input = _preprocess_data(data, config, **kwargs)
 
     # Build spline basis and compile model
-    model = _build_model_from_data(processed_data, run_config.model)
+    model = _build_model_from_data(
+        preproc_input.processed_data,
+        preproc_input.run_config.model,
+    )
     sampler_inputs = _build_sampler_inputs(
-        processed_data,
-        run_config,
-        sampler_type,
-        scaled_true_psd,
-        extra_empirical_psd,
-        extra_empirical_labels,
-        extra_empirical_styles,
+        preproc_input.processed_data,
+        preproc_input.run_config,
+        preproc_input.sampler_type,
+        preproc_input.scaled_true_psd,
+        preproc_input.extra_empirical_psd,
+        preproc_input.extra_empirical_labels,
+        preproc_input.extra_empirical_styles,
     )
 
     sampler_obj = _create_sampler(
-        data=processed_data,
+        data=preproc_input.processed_data,
         model=model,
         config=sampler_inputs,
     )
 
     # Finally, run MCMC and return results
     return sampler_obj.sample(
-        n_samples=run_config.n_samples,
-        n_warmup=run_config.n_warmup,
-        only_vi=run_config.vi.only_vi,
+        n_samples=preproc_input.run_config.n_samples,
+        n_warmup=preproc_input.run_config.n_warmup,
+        only_vi=preproc_input.run_config.vi.only_vi,
     )

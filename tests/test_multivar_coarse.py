@@ -4,11 +4,6 @@ import warnings
 import numpy as np
 import pytest
 
-from log_psplines.coarse_grain import (
-    CoarseGrainConfig,
-    apply_coarse_grain_multivar_fft,
-    compute_binning_structure,
-)
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.mcmc import (
     DiagnosticsConfig,
@@ -18,6 +13,11 @@ from log_psplines.mcmc import (
     run_mcmc,
 )
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
+from log_psplines.preprocessing.coarse_grain import (
+    CoarseGrainConfig,
+    apply_coarse_grain_multivar_fft,
+    compute_binning_structure,
+)
 
 
 @pytest.mark.slow
@@ -55,7 +55,6 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     model_cfg = ModelConfig(n_knots=n_knots, true_psd=varma.get_true_psd())
     diagnostics_cfg = DiagnosticsConfig(outdir=full_dir, verbose=False)
     run_cfg_full = RunMCMCConfig(
-        sampler="nuts",
         n_samples=n_samples,
         n_warmup=n_warmup,
         Nb=2 if test_mode != "fast" else 1,
@@ -77,7 +76,6 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     coarse_dir = os.path.join(outdir, "multivar_coarse")
     diagnostics_cfg = DiagnosticsConfig(outdir=coarse_dir, verbose=False)
     run_cfg_coarse = RunMCMCConfig(
-        sampler="nuts",
         n_samples=n_samples,
         n_warmup=n_warmup,
         Nb=2 if test_mode != "fast" else 1,

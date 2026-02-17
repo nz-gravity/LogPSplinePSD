@@ -203,8 +203,7 @@ class RuntimeBenchmark:
                 f"Invalid sampler: {sampler}. Choose from 'nuts' or 'all'."
             )
 
-        # Currently only NUTS sampler is supported
-        # When sampler == "all", we still only run NUTS
+        # 'all' defaults to NUTS since other samplers are not yet supported
         if sampler == "all":
             logger.warning(
                 "Only NUTS sampler is currently supported. "

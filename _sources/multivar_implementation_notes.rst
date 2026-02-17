@@ -50,7 +50,7 @@ log-determinant term in the NumPyro likelihood, so each bin has effective DOF
 See:
 
 - :class:`log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler`
-- :func:`log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft`
+- :func:`log_psplines.preprocessing.coarse_grain.multivar.apply_coarse_grain_multivar_fft`
   (`source <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`__)
 
 Blocked vs unified multivariate NUTS

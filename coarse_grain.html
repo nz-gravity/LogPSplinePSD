@@ -413,8 +413,8 @@ is coarse-grained by dividing it into consecutive, disjoint subsets <span class=
 denotes the <em>midpoint Fourier frequency</em> of <span class="math notranslate nohighlight">\(J_h\)</span> (the middle member on the
 discrete Fourier grid, not an average).</p>
 <p>The binning logic
-is implemented by <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.preprocess.compute_binning_structure()</span></code>,
-which returns <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.preprocess.CoarseGrainSpec</span></code>.
+is implemented by <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.preprocess.compute_binning_structure()</span></code>,
+which returns <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.preprocess.CoarseGrainSpec</span></code>.
 Only <strong>linear, full-band</strong> binning is supported. Exactly one construction mode
 must be chosen:</p>
 <ul class="simple">
@@ -432,7 +432,7 @@ the retained frequency count exactly.</p></li>
 </section>
 <section id="aggregating-fft-data">
 <h2>Aggregating FFT data<a class="headerlink" href="#aggregating-fft-data" title="Link to this heading">#</a></h2>
-<p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft()</span></code> takes the
+<p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.multivar.apply_coarse_grain_multivar_fft()</span></code> takes the
 <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code>
 and builds the coarse representation used during sampling. The frequencies are
 grouped by bin across the <strong>entire</strong> retained band. Within each <span class="math notranslate nohighlight">\(J_h\)</span>, the

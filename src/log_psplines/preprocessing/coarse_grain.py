@@ -158,52 +158,50 @@ def _sum_bins_equal(x: np.ndarray, *, Nh: int) -> np.ndarray:
     return x.reshape(Nc, Nh, *x.shape[1:]).sum(axis=1)
 
 
-def _coarse_grain_wishart_u(
-    u_sel: Complex[np.ndarray, "nl p p"],
+def _coarse_grain_wishart_y_to_u(
+    Y_sel: Complex[np.ndarray, "nl p p"],
     *,
     Nc: int,
     Nh: int,
 ) -> Complex[np.ndarray, "nc p p"]:
-    """Coarse-grain Wishart factors by summing Y(f) within each bin.
+    """Coarse-grain Wishart matrices by summing Y(f) within each bin.
 
     For each bin h, compute:
         Y_bar[h] = sum_{f in J_h} Y(f)
     and return U_bar such that:
         Y_bar[h] = U_bar[h] U_bar[h]^H
 
+    Y_sel should be the fine-grid Wishart matrix Y(f_k), not the mean FFT.
     This mirrors the math directly and keeps the compact (p x p) factorization.
     """
     if Nc <= 0:
         raise ValueError("Nc must be positive.")
     if Nh <= 0:
         raise ValueError("Nh must be positive.")
-    if u_sel.ndim != 3:
-        raise ValueError("u_sel must have shape (Nl, p, p)")
-    if u_sel.shape[0] != Nc * Nh:
+    if Y_sel.ndim != 3:
+        raise ValueError("Y_sel must have shape (Nl, p, p)")
+    if Y_sel.shape[0] != Nc * Nh:
         raise ValueError(
-            "u_sel length must equal Nc * Nh on the retained frequency grid"
+            "Y_sel length must equal Nc * Nh on the retained frequency grid"
         )
 
-    p = int(u_sel.shape[1])
+    # Coarse-grain by summing within bins.
+    Y_bar = Y_sel.reshape(Nc, Nh, *Y_sel.shape[1:]).sum(axis=1)
+
+    p = int(Y_sel.shape[1])
     u_bins: np.ndarray = np.zeros((Nc, p, p), dtype=np.complex128)
-
     for b in range(Nc):
-        sl = slice(b * Nh, (b + 1) * Nh)
-
-        # Y_bar = sum_{f in J_h} Y(f)
-        Y_sum = sum_wishart_outer_products(u_sel[sl])
-
         # Eigen-based factorization: Y_bar = V diag(lambda) V^H
         try:
-            eigvals, eigvecs = np.linalg.eigh(Y_sum)
+            lam, v = np.linalg.eigh(Y_bar[b])
         except np.linalg.LinAlgError:
-            Ys = 0.5 * (Y_sum + Y_sum.conj().T)
-            eigvals, eigvecs = np.linalg.eigh(Ys)
+            Ys = 0.5 * (Y_bar[b] + Y_bar[b].conj().T)
+            lam, v = np.linalg.eigh(Ys)
 
         # Clamp small negatives from roundoff to preserve PSD.
-        eigvals = np.clip(eigvals.real, a_min=0.0, a_max=None)
-        sqrt_eig = np.sqrt(eigvals).astype(np.float64)
-        u_bins[b] = eigvecs * sqrt_eig[np.newaxis, :]
+        lam = np.clip(lam.real, a_min=0.0, a_max=None)
+        sqrt_lam = np.sqrt(lam).astype(np.float64)
+        u_bins[b] = v * sqrt_lam[np.newaxis, :]
 
     return u_bins
 
@@ -308,7 +306,17 @@ def apply_coarse_graining_univar(
 def apply_coarse_grain_multivar_fft(
     fft: MultivarFFT, spec: CoarseGrainSpec
 ) -> MultivarFFT:
-    """Coarse-grain a MultivarFFT using equal-sized bins."""
+    """Coarse-grain a MultivarFFT using equal-sized bins.
+
+    Notes
+    -----
+    - y_re/y_im are mean FFTs across blocks (first-order). We sum them across
+      bins only for consistency with the retained grid and plotting; they are
+      not part of the Wishart likelihood.
+    - Y(f_k) is the Wishart matrix built from block FFTs (second-order). We
+      form Y_bar by summing Y(f_k) across bins and then re-factorize to obtain
+      the coarse-grid U factors used by the likelihood.
+    """
     selection = np.asarray(spec.selection_mask, dtype=bool)
     if selection.ndim != 1:
         raise ValueError("CoarseGrainSpec.selection_mask must be 1-D")
@@ -337,9 +345,10 @@ def apply_coarse_grain_multivar_fft(
         y_im_sel, Nh=Nh
     ).astype(np.float64, copy=False)
 
-    # u bins are computed directly from the math:
-    # Y_bar[h] = sum_{f in J_h} Y(f), then factorize Y_bar[h] = U_bar U_bar^H.
-    u_bins = _coarse_grain_wishart_u(u_sel, Nc=Nc, Nh=Nh)
+    # Build Y(f_k) explicitly (used only as an intermediate), then coarse-grain
+    # and factorize: Y_bar[h] = sum_{f in J_h} Y(f), with Y_bar[h] = U_bar U_bar^H.
+    Y_sel = u_to_wishart_matrix(u_sel)
+    u_bins = _coarse_grain_wishart_y_to_u(Y_sel, Nc=Nc, Nh=Nh)
 
     psd_coarse = wishart_matrix_to_psd(
         u_to_wishart_matrix(u_bins),

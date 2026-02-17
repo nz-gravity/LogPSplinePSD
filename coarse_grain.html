@@ -62,7 +62,7 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'coarse_grain';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Multivariate Blocked NUTS: Math ↔ Code" href="multivar_blocked_nuts.html" />
+    <link rel="next" title="Coarse-grain MWE (2-channel)" href="coarse_grain_mwe.html" />
     <link rel="prev" title="Development Guide" href="development.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -180,6 +180,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Technical Documentation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain_mwe.html">Coarse-grain MWE (2-channel)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Blocked NUTS: Math ↔ Code</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
@@ -412,6 +413,9 @@ is coarse-grained by dividing it into consecutive, disjoint subsets <span class=
 <span class="math notranslate nohighlight">\(J_h\)</span> contains an <strong>odd</strong> number <span class="math notranslate nohighlight">\(N_h\)</span> of Fourier frequencies, and <span class="math notranslate nohighlight">\(\bar f_h\)</span>
 denotes the <em>midpoint Fourier frequency</em> of <span class="math notranslate nohighlight">\(J_h\)</span> (the middle member on the
 discrete Fourier grid, not an average).</p>
+<p>The band limits <span class="math notranslate nohighlight">\([f_{\min}, f_{\max}]\)</span> are chosen upstream via
+<code class="docutils literal notranslate"><span class="pre">model.fmin</span></code>/<code class="docutils literal notranslate"><span class="pre">model.fmax</span></code>. Coarse-grain configuration controls only binning
+(<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p>
 <p>The binning logic
 is implemented by <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.preprocess.compute_binning_structure()</span></code>,
 which returns <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.preprocess.CoarseGrainSpec</span></code>.
@@ -424,7 +428,7 @@ the retained frequency count exactly.</p></li>
 </ul>
 <p>The spec stores</p>
 <ul class="simple">
-<li><p>the masks that select the retained frequencies,</p></li>
+<li><p>a frequency mask aligned with the retained grid,</p></li>
 <li><p>indices to group points into contiguous bins,</p></li>
 <li><p>the member count <span class="math notranslate nohighlight">\(N_h\)</span> per bin, and</p></li>
 <li><p>bin widths (diagnostics only).</p></li>
@@ -509,11 +513,11 @@ implemented.</p>
       </div>
     </a>
     <a class="right-next"
-       href="multivar_blocked_nuts.html"
+       href="coarse_grain_mwe.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Multivariate Blocked NUTS: Math ↔ Code</p>
+        <p class="prev-next-title">Coarse-grain MWE (2-channel)</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

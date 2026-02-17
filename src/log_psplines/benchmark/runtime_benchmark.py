@@ -140,7 +140,7 @@ class RuntimeBenchmark:
             sigma=float(AR_DEFAULTS["sigma"]),
             seed=int(AR_DEFAULTS["seed"]),
         )
-        pdgrm = ar_data.periodogram
+        ts_data = ar_data.ts
 
         diagnostics_cfg = DiagnosticsConfig(verbose=self.verbose)
 
@@ -162,7 +162,7 @@ class RuntimeBenchmark:
                     ),
                     diagnostics=diagnostics_cfg,
                 )
-                idata = run_mcmc(data=pdgrm, config=run_cfg)
+                idata = run_mcmc(data=ts_data, config=run_cfg)
                 runtimes_i.append(idata.attrs["runtime"])
                 ess_i.append(idata.attrs["ess"])
             ess.append(np.concatenate(ess_i))
@@ -203,9 +203,9 @@ class RuntimeBenchmark:
                 f"Invalid sampler: {sampler}. Choose from 'nuts' or 'all'."
             )
 
-        samplers = ["nuts"] if sampler == "all" else [sampler]
+        samplers = ["nuts"] if sampler == "nuts" else ["nuts"]
 
-        for sampler in samplers:
+        for sampler_name in samplers:
             self._run_data_size_analysis(
                 min_n=min_n,
                 max_n=max_n,

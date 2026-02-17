@@ -355,9 +355,11 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
             return fig
 
         has_divergences = False
+        divergences_arg: str | None = None
         if hasattr(idata_plot, "sample_stats"):
             sample_stats_vars = list(idata_plot.sample_stats.data_vars)
             has_divergences = "diverging" in sample_stats_vars
+            divergences_arg = "diverging" if has_divergences else None
 
         # Calculate number of variables to scale figure size
         num_vars = len(idata_plot.posterior.data_vars)
@@ -371,7 +373,7 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
             combined=False,
             compact=False,
             figsize=figsize,
-            divergences=has_divergences,
+            divergences=divergences_arg,
         )
 
         fig = axes.ravel()[0].figure if hasattr(axes, "ravel") else plt.gcf()
@@ -1065,6 +1067,8 @@ def _resolve_target_accept(idata, default: float = 0.8) -> float:
         default,
     )
     for candidate in candidates:
+        if candidate is None:
+            continue
         try:
             value = float(candidate)
         except (TypeError, ValueError):
@@ -2713,7 +2717,7 @@ def generate_vi_diagnostics_summary(
 
     corr_lines = []
     if corr_summary:
-        by_label = {}
+        by_label: dict[str, dict] = {}
         for label, stats in corr_summary.items():
             if not stats:
                 continue

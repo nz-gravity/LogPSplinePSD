@@ -426,7 +426,7 @@ class PSDMatrixPlotSpec:
     extra_empirical_labels: list[str] | None = None
     extra_empirical_styles: list[dict] | None = None
     true_psd: np.ndarray | None = None
-    outdir: str = "."
+    outdir: str | None = "."
     filename: str = "psd_matrix.png"
     dpi: int = 150
     show_coherence: bool = True

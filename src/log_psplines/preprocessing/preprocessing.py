@@ -88,11 +88,14 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
         fft_data,
     )
 
-    fft_data, scaled_true_psd = _coarse_grain_processed_data(
+    fft_data_cg, scaled_true_psd = _coarse_grain_processed_data(
         fft_data,
         _normalize_coarse_grain_config(run_config.coarse_grain_config),
         scaled_true_psd,
     )
+    # _coarse_grain_processed_data preserves the input type
+    assert fft_data_cg is not None
+    fft_data = fft_data_cg
     # Compute + plot welch-estimate before analsysis
     (
         extra_empirical_psd,

@@ -74,46 +74,37 @@ class PreprocessedMCMCInput:
 def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
     if kwargs:
         if config is not None:
-            raise ValueError(
-                "Cannot specify both 'config' and keyword arguments. "
-                "Use either config=RunMCMCConfig(...) or pass kwargs directly."
-            )
+            raise ValueError("Cant use both 'config' and kwargs")
         config = _build_config_from_kwargs(**kwargs)
 
     # This collects all arguments and config options, applies defaults, and performs validation
     run_config = _normalize_run_config(config)
-    processed_data, raw_multivar_ts, sampler_type = _prepare_processed_data(
+    fft_data, raw_ts, sampler_type = _prepare_processed_data(
         data,
         run_config,
     )
     scaled_true_psd = _align_true_psd_to_freq(
         run_config.model.true_psd,
-        processed_data,
+        fft_data,
     )
 
-    processed_after, scaled_true_psd = _coarse_grain_processed_data(
-        processed_data,
+    fft_data, scaled_true_psd = _coarse_grain_processed_data(
+        fft_data,
         _normalize_coarse_grain_config(run_config.coarse_grain_config),
         scaled_true_psd,
     )
-    if processed_after is None:
-        raise ValueError(
-            "Processed data unexpectedly None after coarse graining."
-        )
-    processed_data = processed_after
-
-    # Plot the periodogram before analsysis
+    # Compute + plot welch-estimate before analsysis
     (
         extra_empirical_psd,
         extra_empirical_labels,
         extra_empirical_styles,
-    ) = _build_welch_overlay(raw_multivar_ts, processed_data, run_config)
+    ) = _build_welch_overlay(raw_ts, fft_data, run_config)
 
     # Align true PSD to frequencies of processed data (after coarse graining if enabled)
-    scaled_true_psd = _align_true_psd_to_freq(scaled_true_psd, processed_data)
-    _run_preprocessing_checks(processed_data, run_config)
+    scaled_true_psd = _align_true_psd_to_freq(scaled_true_psd, fft_data)
+    _run_preprocessing_checks(fft_data, run_config)
     return PreprocessedMCMCInput(
-        processed_data=processed_data,
+        processed_data=fft_data,
         scaled_true_psd=scaled_true_psd,
         sampler_type=sampler_type,
         extra_empirical_psd=extra_empirical_psd,

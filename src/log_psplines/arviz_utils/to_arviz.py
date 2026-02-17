@@ -312,6 +312,7 @@ def _create_univar_inference_data(
     # Create posterior predictive samples
     weights_chain0 = samples["weights"][0]  # First chain
     n_pp = min(500, n_draws)
+    pp_idx: np.ndarray | slice
     if n_draws > n_pp:
         pp_idx = np.unique(
             np.linspace(0, n_draws - 1, num=n_pp, dtype=int, endpoint=True)

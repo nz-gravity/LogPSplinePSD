@@ -110,7 +110,11 @@ def _align_true_psd_to_freq(
     elif isinstance(processed_data, MultivarFFT):
         freq_target = np.asarray(processed_data.freq)
     else:
-        return true_psd
+        _, psd = _unpack_true_psd(true_psd)
+        return None if psd is None else np.asarray(psd)
 
     aligned = _prepare_true_psd_for_freq(true_psd, freq_target)
-    return aligned if aligned is not None else true_psd
+    if aligned is not None:
+        return aligned
+    _, psd = _unpack_true_psd(true_psd)
+    return None if psd is None else np.asarray(psd)

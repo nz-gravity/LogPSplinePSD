@@ -228,7 +228,7 @@ def _group_vars_by_block(posterior) -> dict[int, list[str]]:
 
 
 def _posterior_counts(posterior) -> dict:
-    counts = {
+    counts: dict[str, int | float | None | list] = {
         "chains": 0,
         "draws": 0,
         "params_total": None,
@@ -245,16 +245,18 @@ def _posterior_counts(posterior) -> dict:
 
     params_total = 0.0
     var_sizes = []
+    elements_count = 0
     for name, var in posterior.data_vars.items():
         size = int(np.prod(var.shape))
         var_sizes.append((str(name), size))
-        counts["elements"] += size
+        elements_count += size
         if denom and "chain" in var.dims and "draw" in var.dims:
             params_total += size / denom
 
     counts["chains"] = chains
     counts["draws"] = draws
     counts["vars"] = len(posterior.data_vars)
+    counts["elements"] = elements_count
     counts["params_total"] = params_total if denom else None
     counts["top_vars"] = sorted(var_sizes, key=lambda x: x[1], reverse=True)[
         :3

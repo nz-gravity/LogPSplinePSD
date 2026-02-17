@@ -29,7 +29,7 @@ def _basis_dim(var: xr.DataArray) -> str | None:
     if var is None or not hasattr(var, "dims"):
         return None
     dims = [d for d in var.dims if d not in ("chain", "draw")]
-    return dims[-1] if dims else None
+    return str(dims[-1]) if dims else None
 
 
 def _get_penalty_matrix(idata, weight_name: str) -> np.ndarray | None:
@@ -175,7 +175,7 @@ def select_rep_indices(
 def build_plot_dataset(
     idata,
     derived_scalar: Dict[str, xr.DataArray],
-    rep_indices: Dict[str, Iterable[int]],
+    rep_indices: Dict[str, Iterable[int]] | Dict[str, np.ndarray],
 ) -> xr.Dataset:
     """Build a lightweight posterior dataset for ArviZ diagnostics."""
     posterior = getattr(idata, "posterior", None)

@@ -1154,11 +1154,11 @@ def prepare_block_vi(
 
     if psis_hyper_entries or psis_weight_blocks or psis_corr_summary:
         diagnostics = diagnostics or {}
-        moment_summary: Dict[str, Any] = {}
+        psis_moment_summary: Dict[str, Any] = {}
         if psis_hyper_entries:
-            moment_summary["hyperparameters"] = psis_hyper_entries
+            psis_moment_summary["hyperparameters"] = psis_hyper_entries
         if psis_weight_blocks:
-            moment_summary["weights_by_block"] = psis_weight_blocks
+            psis_moment_summary["weights_by_block"] = psis_weight_blocks
             vr_median = [
                 entry.get("var_ratio_median", np.nan)
                 for entry in psis_weight_blocks
@@ -1171,7 +1171,7 @@ def prepare_block_vi(
                 entry.get("bias_abs_median", np.nan)
                 for entry in psis_weight_blocks
             ]
-            moment_summary["weights"] = {
+            psis_moment_summary["weights"] = {
                 "var_ratio_min": float(
                     np.nanmin(
                         [
@@ -1225,9 +1225,9 @@ def prepare_block_vi(
                 ),
             }
         if psis_thresholds:
-            moment_summary["thresholds"] = psis_thresholds
-        if moment_summary:
-            diagnostics["psis_moment_summary"] = moment_summary
+            psis_moment_summary["thresholds"] = psis_thresholds
+        if psis_moment_summary:
+            diagnostics["psis_moment_summary"] = psis_moment_summary
         if psis_corr_summary:
             diagnostics["psis_correlation_summary"] = psis_corr_summary
 

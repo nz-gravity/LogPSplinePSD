@@ -432,15 +432,20 @@ class BaseSampler(ABC):
                 f"Estimated idata size: {estimated_bytes / 1e6:.1f} MB"
             )
         try:
-            n_draws = int(getattr(idata.posterior, "sizes", {}).get("draw", 0))
+            posterior = getattr(idata, "posterior", None)
+            if posterior is None:
+                raise AttributeError("No posterior in idata")
+            n_draws = int(getattr(posterior, "sizes", {}).get("draw", 0))
             max_draws = int(getattr(self.config, "max_saved_draws", 0) or 0)
             if max_draws > 0 and n_draws > max_draws:
                 step = int(np.ceil(n_draws / max_draws))
                 idata_out = idata.sel(draw=slice(None, None, step))
-                logger.info(
-                    f"Thinning outputs: draw step {step} "
-                    f"({n_draws} -> {idata_out.posterior.sizes.get('draw', 0)})"
-                )
+                posterior_out = getattr(idata_out, "posterior", None)
+                if posterior_out is not None:
+                    logger.info(
+                        f"Thinning outputs: draw step {step} "
+                        f"({n_draws} -> {posterior_out.sizes.get('draw', 0)})"
+                    )
         except Exception:
             idata_out = idata
 

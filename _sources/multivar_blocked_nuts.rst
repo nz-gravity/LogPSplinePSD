@@ -158,7 +158,7 @@ Coarse-graining compatibility
 -----------------------------
 
 Coarse graining for multivariate FFT/Wishart statistics is performed by
-:func:`log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft`.
+:func:`log_psplines.preprocessing.coarse_grain.multivar.apply_coarse_grain_multivar_fft`.
 
 Within each coarse bin :math:`J_h`, it sums
 

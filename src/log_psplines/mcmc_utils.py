@@ -61,15 +61,6 @@ class ModelConfig:
 class DiagnosticsConfig:
     verbose: bool = True
     outdir: Optional[str] = None
-    compute_psis: bool = True
-    skip_plot_diagnostics: bool = False
-    diagnostics_summary_mode: Literal["off", "light", "full"] = "full"
-    diagnostics_summary_position: Literal["start", "end"] = "end"
-    save_preprocessing_plots: bool = False
-    preprocessing_plot_path: Optional[str] = None
-    preprocessing_warn_threshold: float = 0.8
-    preprocessing_warn_frac: float = 0.25
-    preprocessing_min_lambda1_quantile: float = 0.0
     compute_lnz: bool = False
 
 
@@ -499,19 +490,19 @@ def _run_preprocessing_checks(
             save_eigenvalue_separation_plot,
         )
 
+        # Use hardcoded defaults
+        min_lambda1_quantile = 0.0
+        warn_threshold = 0.8
+        warn_frac = 0.25
+
         diag = eigenvalue_separation_diagnostics(
             freq=np.asarray(processed_data.freq, dtype=float),
             matrix=np.asarray(processed_data.raw_psd),
-            min_lambda1_quantile=float(
-                config.diagnostics.preprocessing_min_lambda1_quantile
-            ),
+            min_lambda1_quantile=min_lambda1_quantile,
         )
         p = int(diag.eigvals_desc.shape[1])
         if p < 2:
             return
-
-        warn_threshold = float(config.diagnostics.preprocessing_warn_threshold)
-        warn_frac = float(config.diagnostics.preprocessing_warn_frac)
         summaries = None
         if config.diagnostics.verbose:
             summaries = diag.ratio_summary(warn_threshold=warn_threshold)
@@ -548,23 +539,15 @@ def _run_preprocessing_checks(
             if config.diagnostics.verbose and summaries is not None:
                 logger.info(f"Eigenvalue separation {summaries[key]}")
 
-        if not config.diagnostics.save_preprocessing_plots:
+        # Always save preprocessing plots
+        if config.diagnostics.outdir is None:
+            logger.warning("Skipping preprocessing plot save: outdir is None.")
             return
 
-        out_path = None
-        if config.diagnostics.preprocessing_plot_path is not None:
-            out_path = Path(config.diagnostics.preprocessing_plot_path)
-        elif config.diagnostics.outdir is not None:
-            out_path = (
-                Path(config.diagnostics.outdir)
-                / "preprocessing_eigenvalue_ratios.png"
-            )
-
-        if out_path is None:
-            logger.warning(
-                "Skipping preprocessing plot save: outdir is None and preprocessing_plot_path is not set."
-            )
-            return
+        out_path = (
+            Path(config.diagnostics.outdir)
+            / "preprocessing_eigenvalue_ratios.png"
+        )
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
         save_eigenvalue_separation_plot(
@@ -683,16 +666,7 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
     diagnostics_fields = {
         "verbose",
         "outdir",
-        "compute_psis",
-        "skip_plot_diagnostics",
-        "diagnostics_summary_mode",
-        "diagnostics_summary_position",
         "compute_lnz",
-        "save_preprocessing_plots",
-        "preprocessing_plot_path",
-        "preprocessing_warn_threshold",
-        "preprocessing_warn_frac",
-        "preprocessing_min_lambda1_quantile",
     }
     run_mcmc_fields = {
         "sampler",
@@ -767,10 +741,7 @@ def _build_common_sampler_kwargs(
         "rng_key": run.rng_key,
         "verbose": run.diagnostics.verbose,
         "outdir": run.diagnostics.outdir,
-        "compute_psis": run.diagnostics.compute_psis,
-        "skip_plot_diagnostics": run.diagnostics.skip_plot_diagnostics,
-        "diagnostics_summary_mode": run.diagnostics.diagnostics_summary_mode,
-        "diagnostics_summary_position": run.diagnostics.diagnostics_summary_position,
+        "compute_psis": True,
         "compute_lnz": run.diagnostics.compute_lnz,
         "scaling_factor": config.scaling_factor,
         "channel_stds": config.channel_stds,

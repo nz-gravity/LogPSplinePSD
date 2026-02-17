@@ -180,6 +180,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain_mwe.html">Coarse-grain MWE (2-channel)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Blocked NUTS: Math ↔ Code</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
@@ -525,10 +526,12 @@ code all consume spectra with the same units and sidedness.</p>
 <ol class="arabic simple">
 <li><p><strong>Timeseries</strong> – raw or standardised time-domain data.</p></li>
 <li><p><strong>MultivarFFT</strong> – <code class="docutils literal notranslate"><span class="pre">to_wishart_stats</span></code> produces frequency grids, FFT means, and
-the eigenvector replicates <code class="docutils literal notranslate"><span class="pre">U(f)</span></code> on the positive-frequency grid.</p></li>
+the eigenvector replicates <code class="docutils literal notranslate"><span class="pre">U(f)</span></code> on the positive-frequency grid.
+The analysis band is controlled by <code class="docutils literal notranslate"><span class="pre">model.fmin</span></code>/<code class="docutils literal notranslate"><span class="pre">model.fmax</span></code>.</p></li>
 <li><p><strong>CoarseGrain</strong> – optional <strong>linear, full-band</strong> binning combines nearby
 frequencies by summing <span class="math notranslate nohighlight">\(\bar Y_h = \sum_{f\in J_h} Y(f)\)</span> and assigns each
-bin the member count <span class="math notranslate nohighlight">\(N_h\)</span> for log-determinant scaling.</p></li>
+bin the member count <span class="math notranslate nohighlight">\(N_h\)</span> for log-determinant scaling. Coarse-grain
+config controls only binning parameters (<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p></li>
 <li><p><strong>Sampler</strong> – NumPyro samplers consume the (possibly coarse) Wishart stats
 and spline models.</p></li>
 <li><p><strong>ArviZ conversion</strong> – <code class="docutils literal notranslate"><span class="pre">wishart_u_to_psd</span></code> populates

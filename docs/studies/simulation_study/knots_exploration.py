@@ -79,7 +79,7 @@ def run_analysis_for_knots(
             inf_obj = az.from_netcdf(inference_path)
         else:
             print(f"{inference_path} not found. Running MCMC...")
-            inf_obj = run_mcmc(**kawrgs, sampler="nuts", outdir=run_outdir)
+            inf_obj = run_mcmc(**kawrgs, outdir=run_outdir)
 
         median_psd = get_posterior_psd(inf_obj)[1]
 

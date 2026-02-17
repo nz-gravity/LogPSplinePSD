@@ -52,7 +52,6 @@ os.environ.setdefault("XLA_FLAGS", "--xla_force_host_platform_device_count=4")
 import arviz as az
 import numpy as np
 
-from log_psplines.coarse_grain import CoarseGrainConfig
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.datatypes.multivar import _interp_complex_matrix
 from log_psplines.diagnostics._utils import (
@@ -63,6 +62,7 @@ from log_psplines.diagnostics._utils import (
 from log_psplines.example_datasets.lisa_data import LISAData
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
+from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
 
 def _float_tag(value: float) -> str:
@@ -732,7 +732,6 @@ def main() -> None:
         )
 
         run_config = dict(
-            sampler=sampler,
             coarse_grain=bool(cg_on),
             Nc=int(Nc),
             Nb=int(Nb),

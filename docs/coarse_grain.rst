@@ -16,8 +16,8 @@ denotes the *midpoint Fourier frequency* of :math:`J_h` (the middle member on th
 discrete Fourier grid, not an average).
 
 The binning logic
-is implemented by :func:`log_psplines.coarse_grain.preprocess.compute_binning_structure`,
-which returns :class:`log_psplines.coarse_grain.preprocess.CoarseGrainSpec`.
+is implemented by :func:`log_psplines.preprocessing.coarse_grain.preprocess.compute_binning_structure`,
+which returns :class:`log_psplines.preprocessing.coarse_grain.preprocess.CoarseGrainSpec`.
 Only **linear, full-band** binning is supported. Exactly one construction mode
 must be chosen:
 
@@ -35,7 +35,7 @@ The spec stores
 Aggregating FFT data
 --------------------
 
-:func:`log_psplines.coarse_grain.multivar.apply_coarse_grain_multivar_fft` takes the
+:func:`log_psplines.preprocessing.coarse_grain.multivar.apply_coarse_grain_multivar_fft` takes the
 :class:`log_psplines.datatypes.multivar.MultivarFFT` and :class:`CoarseGrainSpec`
 and builds the coarse representation used during sampling. The frequencies are
 grouped by bin across the **entire** retained band. Within each :math:`J_h`, the

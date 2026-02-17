@@ -27,47 +27,8 @@ def test_vi_matches_mcmc_psd_scaling():
     np.random.seed(rng_seed)
     varma = VARMAData(n_samples=16, seed=rng_seed)
     ts = MultivariateTimeseries(t=varma.time, y=varma.data)
-
-    model_cfg = ModelConfig(n_knots=3)
-    diagnostics_cfg = DiagnosticsConfig(outdir=None, verbose=False)
-    vi_cfg = VIConfig(
-        vi_steps=10,
-        vi_posterior_draws=6,
-        vi_psd_max_draws=3,
-        vi_progress_bar=False,
-    )
-    run_cfg = RunMCMCConfig(
-        sampler="nuts",
-        n_samples=2,
-        n_warmup=2,
-        rng_key=rng_seed,
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
-    )
-    vi_only_cfg = RunMCMCConfig(
-        sampler=run_cfg.sampler,
-        n_samples=run_cfg.n_samples,
-        n_warmup=run_cfg.n_warmup,
-        rng_key=run_cfg.rng_key,
-        model=run_cfg.model,
-        diagnostics=run_cfg.diagnostics,
-        vi=VIConfig(
-            only_vi=True,
-            init_from_vi=run_cfg.vi.init_from_vi,
-            vi_steps=run_cfg.vi.vi_steps,
-            vi_lr=run_cfg.vi.vi_lr,
-            vi_guide=run_cfg.vi.vi_guide,
-            vi_posterior_draws=run_cfg.vi.vi_posterior_draws,
-            vi_progress_bar=run_cfg.vi.vi_progress_bar,
-            vi_psd_max_draws=run_cfg.vi.vi_psd_max_draws,
-        ),
-        nuts=run_cfg.nuts,
-        extra_kwargs=run_cfg.extra_kwargs,
-    )
-
-    idata_vi = run_mcmc(data=ts, config=vi_only_cfg)
-    idata_nuts = run_mcmc(data=ts, config=run_cfg)
+    idata_vi = run_mcmc(data=ts, init_from_vi=True, only_vi=True)
+    idata_nuts = run_mcmc(data=ts, init_from_vi=False, only_vi=False)
 
     median_ratios = []
 

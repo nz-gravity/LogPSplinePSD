@@ -6,15 +6,15 @@ from typing import Optional
 
 import numpy as np
 
-from ._jaxtypes import Bool, Float, Int
-from ._typecheck import runtime_typecheck
-from .datatypes.multivar import MultivarFFT
-from .datatypes.multivar_utils import (
+from .._jaxtypes import Bool, Float, Int
+from .._typecheck import runtime_typecheck
+from ..datatypes.multivar import MultivarFFT
+from ..datatypes.multivar_utils import (
     sum_wishart_outer_products,
     u_to_wishart_matrix,
     wishart_matrix_to_psd,
 )
-from .logger import logger
+from ..logger import logger
 
 __all__ = [
     "CoarseGrainConfig",

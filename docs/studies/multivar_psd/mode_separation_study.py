@@ -356,7 +356,6 @@ def run_case(
 
     idata = run_mcmc(
         data=ts,
-        sampler="multivar_blocked_nuts",
         n_knots=cfg.n_knots,
         degree=2,
         diffMatrixOrder=2,

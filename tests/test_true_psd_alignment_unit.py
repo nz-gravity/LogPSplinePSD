@@ -1,10 +1,10 @@
 import numpy as np
 
 from log_psplines.datatypes.univar import Periodogram
-from log_psplines.mcmc import (
+from log_psplines.preprocessing.preprocessing import (
     _align_true_psd_to_freq,
+    _prepare_true_psd_for_freq,
 )
-from log_psplines.mcmc_utils import _prepare_true_psd_for_freq
 
 
 def test_prepare_true_psd_interpolates_on_mismatched_grid_same_length():

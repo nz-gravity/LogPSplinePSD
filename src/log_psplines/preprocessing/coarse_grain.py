@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 
-from .._jaxtypes import Float, Int
+from .._jaxtypes import Complex, Float, Int
 from .._typecheck import runtime_typecheck
 from ..datatypes.multivar import MultivarFFT
 from ..datatypes.multivar_utils import (

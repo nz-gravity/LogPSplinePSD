@@ -203,21 +203,20 @@ class RuntimeBenchmark:
                 f"Invalid sampler: {sampler}. Choose from 'nuts' or 'all'."
             )
 
-        samplers = ["nuts"] if sampler == "nuts" else ["nuts"]
-
-        for sampler_name in samplers:
-            self._run_data_size_analysis(
-                min_n=min_n,
-                max_n=max_n,
-                num_points=n_points,
-                reps=n_reps,
-            )
-            self._run_knots_analysis(
-                min_knots=min_knots,
-                max_knots=max_knots,
-                num_points=n_points,
-                reps=n_reps,
-            )
+        # Currently only NUTS sampler is supported
+        # When sampler == "all", we still only run NUTS
+        self._run_data_size_analysis(
+            min_n=min_n,
+            max_n=max_n,
+            num_points=n_points,
+            reps=n_reps,
+        )
+        self._run_knots_analysis(
+            min_knots=min_knots,
+            max_knots=max_knots,
+            num_points=n_points,
+            reps=n_reps,
+        )
         self.plot()
 
     def plot(self) -> None:

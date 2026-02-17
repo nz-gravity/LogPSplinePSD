@@ -31,6 +31,18 @@ class MultivarFFT:
         freq: Frequency grid (N,)
         N: Number of frequencies
         p: Number of channels
+
+    Notes
+    -----
+    - y_re/y_im are the **mean FFTs across blocks** (first-order statistics).
+      They are useful for plotting and certain diagnostics but do not capture
+      the full second-order information of the spectrum.
+    - The multivariate Wishart matrix is
+        Y(f_k) = sum_b X_b(f_k) X_b(f_k)^H,
+      which is encoded via U such that Y(f_k) = U(f_k) U(f_k)^H.
+      The U factors (u_re/u_im) are the sufficient statistics used by the
+      Wishart likelihood. When coarse-graining, we form Y_bar by summing Y(f)
+      across bins and then re-factorize to get coarse U.
     """
 
     y_re: np.ndarray
@@ -260,10 +272,10 @@ class MultivarFFT:
         y_im = mean_fft.imag
 
         Y = np.einsum("bnc,bnd->ncd", block_ffts, np.conj(block_ffts))
-        eigvals, eigvecs = np.linalg.eigh(Y)
-        eigvals = np.clip(eigvals, a_min=0.0, a_max=None)
-        sqrt_eigvals = np.sqrt(eigvals)[:, None, :]
-        U = eigvecs * sqrt_eigvals
+        lam, v = np.linalg.eigh(Y)
+        lam = np.clip(lam, a_min=0.0, a_max=None)
+        sqrt_lam = np.sqrt(lam)[:, None, :]
+        U = v * sqrt_lam
         u_re = U.real
         u_im = U.imag
         raw_psd = wishart_matrix_to_psd(

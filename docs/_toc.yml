@@ -11,6 +11,7 @@ chapters:
   - file: coarse_grain.rst
     title: Technical Documentation
     sections:
+      - file: coarse_grain_mwe.ipynb
       - file: animations.rst
       - file: multivar_blocked_nuts.rst
       - file: multivar_implementation_notes.rst

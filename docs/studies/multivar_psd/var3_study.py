@@ -108,8 +108,6 @@ def simulation_study(
             enabled=True,
             Nc=None,
             Nh=coarse_Nh,
-            f_min=coarse_f_min,
-            f_max=coarse_f_max,
         )
 
     run_mcmc(
@@ -132,6 +130,8 @@ def simulation_study(
         Nb=DEFAULT_N_TIME_BLOCKS,
         knot_kwargs=dict(method=knot_method),
         coarse_grain_config=coarse_grain_config,
+        fmin=coarse_f_min,
+        fmax=coarse_f_max,
         alpha_delta=DEFAULT_ALPHA_DELTA,
         beta_delta=DEFAULT_BETA_DELTA,
         compute_coherence_quantiles=True,

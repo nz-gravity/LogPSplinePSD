@@ -175,14 +175,10 @@ def main() -> None:
         cfg = CoarseGrainConfig(
             enabled=True,
             Nc=int(args.coarse_Nc),
-            f_min=float(args.fmin),
-            f_max=float(args.fmax),
         )
         spec = compute_binning_structure(
             fft.freq,
             Nc=cfg.Nc,
-            f_min=cfg.f_min,
-            f_max=cfg.f_max,
         )
         fft_used = apply_coarse_grain_multivar_fft(fft, spec)
         freq = np.asarray(fft_used.freq, dtype=float)

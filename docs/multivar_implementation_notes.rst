@@ -46,6 +46,8 @@ When coarse graining multivariate data, the coarse-bin membership is carried as
 the scalar ``fft_data.Nh``. This scalar is used directly to scale the
 log-determinant term in the NumPyro likelihood, so each bin has effective DOF
 :math:`N_b N_h`. There is no separate per-bin weighting vector.
+Frequency-band selection is handled upstream via ``model.fmin``/``model.fmax``
+rather than via coarse-grain config fields.
 
 See:
 

@@ -117,9 +117,11 @@ The multivariate pipeline follows a fixed sequence of transformations:
 1. **Timeseries** – raw or standardised time-domain data.
 2. **MultivarFFT** – ``to_wishart_stats`` produces frequency grids, FFT means, and
    the eigenvector replicates ``U(f)`` on the positive-frequency grid.
+   The analysis band is controlled by ``model.fmin``/``model.fmax``.
 3. **CoarseGrain** – optional **linear, full-band** binning combines nearby
    frequencies by summing :math:`\bar Y_h = \sum_{f\in J_h} Y(f)` and assigns each
-   bin the member count :math:`N_h` for log-determinant scaling.
+   bin the member count :math:`N_h` for log-determinant scaling. Coarse-grain
+   config controls only binning parameters (``Nc``/``Nh``).
 4. **Sampler** – NumPyro samplers consume the (possibly coarse) Wishart stats
    and spline models.
 5. **ArviZ conversion** – ``wishart_u_to_psd`` populates

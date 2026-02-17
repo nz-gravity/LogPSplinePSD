@@ -727,8 +727,6 @@ def main() -> None:
         coarse_cfg = CoarseGrainConfig(
             enabled=bool(cg_on),
             Nc=int(Nc),
-            f_min=FMIN,
-            f_max=FMAX,
         )
 
         run_config = dict(

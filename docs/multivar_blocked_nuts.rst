@@ -15,8 +15,9 @@ The multivariate pipeline is:
 
 1. Build frequency-domain sufficient statistics from a multichannel time series
    using block-averaged FFTs.
+   Frequency truncation is controlled by ``model.fmin``/``model.fmax``.
 2. (Optional) coarse-grain the frequency axis by summing Wishart statistics
-   across bins.
+   across bins (coarse config controls ``Nc``/``Nh`` only).
 3. Fit a Cholesky-parameterised spectral density matrix with P-splines,
    sampling each Cholesky row as an *independent* NumPyro/NUTS problem.
 

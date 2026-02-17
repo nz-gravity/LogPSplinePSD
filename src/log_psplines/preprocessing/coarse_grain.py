@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 
-from .._jaxtypes import Bool, Float, Int
+from .._jaxtypes import Float, Int
 from .._typecheck import runtime_typecheck
 from ..datatypes.multivar import MultivarFFT
 from ..datatypes.multivar_utils import (
@@ -52,14 +52,12 @@ class CoarseGrainConfig:
       - Nh: number of fine-grid frequencies per coarse bin
 
     The retained frequency count Nl must be divisible by the chosen parameter so
-    that bins are exactly equal-sized across the analysis band.
+    that bins are exactly equal-sized across the provided frequency grid.
     """
 
     enabled: bool = False
     Nc: Optional[int] = 1000
     Nh: Optional[int] = None
-    f_min: Optional[float] = None
-    f_max: Optional[float] = None
 
     def __post_init__(self) -> None:
         if (self.Nc is None) == (self.Nh is None):
@@ -78,8 +76,6 @@ class CoarseGrainConfig:
             "enabled": self.enabled,
             "Nc": self.Nc,
             "Nh": self.Nh,
-            "f_min": self.f_min,
-            "f_max": self.f_max,
         }
 
 
@@ -87,9 +83,8 @@ class CoarseGrainConfig:
 class CoarseGrainSpec:
     """Static description of equal-sized coarse bins on a retained frequency grid.
 
-    The frequency grid is restricted to a contiguous analysis band [f_min, f_max],
-    producing a retained grid of length Nl. The retained grid is partitioned into
-    Nc disjoint, consecutive bins J_h, each of constant size Nh (odd).
+    The provided retained grid of length Nl is partitioned into Nc disjoint,
+    consecutive bins J_h, each of constant size Nh (odd).
 
     For each bin h:
       - J_h spans indices J_start[h] : J_start[h] + Nh on the retained grid
@@ -103,7 +98,7 @@ class CoarseGrainSpec:
     """
 
     f_coarse: np.ndarray  # (Nc,)
-    selection_mask: np.ndarray  # (N_full,)
+    selection_mask: np.ndarray  # (Nl,)
 
     Nh: int  # constant bin size (odd)
     J_start: np.ndarray  # (Nc,)
@@ -112,39 +107,6 @@ class CoarseGrainSpec:
 
     def __repr__(self):
         return f"CoarseGrainSpec(Nc={self.Nc}, Nh={self.Nh},Nl={self.Nc * self.Nh}"
-
-
-def _select_band(
-    freqs: Float[np.ndarray, "n_full"],
-    f_min: Optional[float],
-    f_max: Optional[float],
-) -> tuple[Bool[np.ndarray, "n_full"], Float[np.ndarray, "n_sel"]]:
-    """Return (selection_mask, freqs_sel) for the analysis band [f_min, f_max].
-
-    The requested bounds are clamped to the available frequency grid.
-    """
-    freqs = np.asarray(freqs, dtype=np.float64)
-    if freqs.ndim != 1:
-        raise ValueError("freqs must be a 1-D array")
-    if freqs.size == 0:
-        raise ValueError("freqs must be non-empty")
-    if not np.all(np.diff(freqs) >= 0):
-        raise ValueError("freqs must be monotonically increasing")
-
-    f0 = float(freqs[0])
-    f1 = float(freqs[-1])
-    lo = f0 if f_min is None else float(f_min)
-    hi = f1 if f_max is None else float(f_max)
-
-    lo = min(max(lo, f0), f1)
-    hi = min(max(hi, f0), f1)
-    if hi < lo:
-        hi = lo
-
-    mask = (freqs >= lo) & (freqs <= hi)
-    if not np.any(mask):
-        raise ValueError("No frequencies fall within the requested range")
-    return mask, freqs[mask]
 
 
 def _resolve_equal_bin_params(
@@ -196,14 +158,62 @@ def _sum_bins_equal(x: np.ndarray, *, Nh: int) -> np.ndarray:
     return x.reshape(Nc, Nh, *x.shape[1:]).sum(axis=1)
 
 
+def _coarse_grain_wishart_u(
+    u_sel: Complex[np.ndarray, "nl p p"],
+    *,
+    Nc: int,
+    Nh: int,
+) -> Complex[np.ndarray, "nc p p"]:
+    """Coarse-grain Wishart factors by summing Y(f) within each bin.
+
+    For each bin h, compute:
+        Y_bar[h] = sum_{f in J_h} Y(f)
+    and return U_bar such that:
+        Y_bar[h] = U_bar[h] U_bar[h]^H
+
+    This mirrors the math directly and keeps the compact (p x p) factorization.
+    """
+    if Nc <= 0:
+        raise ValueError("Nc must be positive.")
+    if Nh <= 0:
+        raise ValueError("Nh must be positive.")
+    if u_sel.ndim != 3:
+        raise ValueError("u_sel must have shape (Nl, p, p)")
+    if u_sel.shape[0] != Nc * Nh:
+        raise ValueError(
+            "u_sel length must equal Nc * Nh on the retained frequency grid"
+        )
+
+    p = int(u_sel.shape[1])
+    u_bins: np.ndarray = np.zeros((Nc, p, p), dtype=np.complex128)
+
+    for b in range(Nc):
+        sl = slice(b * Nh, (b + 1) * Nh)
+
+        # Y_bar = sum_{f in J_h} Y(f)
+        Y_sum = sum_wishart_outer_products(u_sel[sl])
+
+        # Eigen-based factorization: Y_bar = V diag(lambda) V^H
+        try:
+            eigvals, eigvecs = np.linalg.eigh(Y_sum)
+        except np.linalg.LinAlgError:
+            Ys = 0.5 * (Y_sum + Y_sum.conj().T)
+            eigvals, eigvecs = np.linalg.eigh(Ys)
+
+        # Clamp small negatives from roundoff to preserve PSD.
+        eigvals = np.clip(eigvals.real, a_min=0.0, a_max=None)
+        sqrt_eig = np.sqrt(eigvals).astype(np.float64)
+        u_bins[b] = eigvecs * sqrt_eig[np.newaxis, :]
+
+    return u_bins
+
+
 @runtime_typecheck
 def compute_binning_structure(
-    freqs: Float[np.ndarray, "n_full"],
+    freqs: Float[np.ndarray, "nl"],
     *,
     Nc: Optional[int] = None,
     Nh: Optional[int] = None,
-    f_min: Optional[float] = None,
-    f_max: Optional[float] = None,
 ) -> CoarseGrainSpec:
     """Compute equal-sized, consecutive coarse bins for a frequency grid.
 
@@ -212,12 +222,19 @@ def compute_binning_structure(
       - Nh : number of fine-grid frequencies per bin
 
     The retained frequency count Nl must be divisible by the chosen parameter so
-    that bins are exactly equal-sized across the analysis band. Representative
+    that bins are exactly equal-sized across the provided grid. Representative
     frequencies are midpoint Fourier frequencies (central indices), not averages.
     For even Nh, the lower-middle Fourier frequency is used.
     """
-    selection_mask, freqs_sel = _select_band(freqs, f_min, f_max)
-    Nl = int(freqs_sel.size)
+    freqs = np.asarray(freqs, dtype=np.float64)
+    if freqs.ndim != 1:
+        raise ValueError("freqs must be a 1-D array")
+    if freqs.size == 0:
+        raise ValueError("freqs must be non-empty")
+    if not np.all(np.diff(freqs) >= 0):
+        raise ValueError("freqs must be monotonically increasing")
+
+    Nl = int(freqs.size)
 
     Nc, Nh = _resolve_equal_bin_params(Nl=Nl, Nc=Nc, Nh=Nh)
 
@@ -233,7 +250,8 @@ def compute_binning_structure(
         J_mid: Int[np.ndarray, "nc"] = J_start + (Nh // 2) - 1
     else:
         J_mid = J_start + (Nh // 2)
-    f_coarse: Float[np.ndarray, "nc"] = freqs_sel[J_mid].astype(np.float64)
+    f_coarse: Float[np.ndarray, "nc"] = freqs[J_mid].astype(np.float64)
+    selection_mask = np.ones(Nl, dtype=bool)
 
     return CoarseGrainSpec(
         f_coarse=f_coarse,
@@ -256,7 +274,7 @@ def apply_coarse_graining_univar(
     Parameters
     ----------
     power : ndarray, shape (Nl,)
-        Values defined on the retained frequency grid, ordered as freqs[selection_mask].
+        Values defined on the retained frequency grid.
     spec : CoarseGrainSpec
         Binning specification from compute_binning_structure.
     freqs : ndarray, optional
@@ -311,7 +329,7 @@ def apply_coarse_grain_multivar_fft(
     if Nc <= 0:
         raise ValueError("Coarse-graining spec has no bins.")
 
-    # y sums via shared helper
+    # y sums via shared helper (not part of Wishart math, but kept for consistency)
     y_re_bins: Float[np.ndarray, "nc p"] = _sum_bins_equal(
         y_re_sel, Nh=Nh
     ).astype(np.float64, copy=False)
@@ -319,24 +337,9 @@ def apply_coarse_grain_multivar_fft(
         y_im_sel, Nh=Nh
     ).astype(np.float64, copy=False)
 
-    # u still needs per-bin eigendecomposition
-    p = int(fft.p)
-    u_bins: np.ndarray = np.zeros((Nc, p, p), dtype=np.complex128)
-
-    for b in range(Nc):
-        s = b * Nh
-        sl = slice(s, s + Nh)
-
-        Y_sum = sum_wishart_outer_products(u_sel[sl])
-        try:
-            eigvals, eigvecs = np.linalg.eigh(Y_sum)
-        except np.linalg.LinAlgError:
-            Ys = 0.5 * (Y_sum + Y_sum.conj().T)
-            eigvals, eigvecs = np.linalg.eigh(Ys)
-
-        eigvals = np.clip(eigvals.real, a_min=0.0, a_max=None)
-        sqrt_eig = np.sqrt(eigvals).astype(np.float64)
-        u_bins[b] = eigvecs * sqrt_eig[np.newaxis, :]
+    # u bins are computed directly from the math:
+    # Y_bar[h] = sum_{f in J_h} Y(f), then factorize Y_bar[h] = U_bar U_bar^H.
+    u_bins = _coarse_grain_wishart_u(u_sel, Nc=Nc, Nh=Nh)
 
     psd_coarse = wishart_matrix_to_psd(
         u_to_wishart_matrix(u_bins),

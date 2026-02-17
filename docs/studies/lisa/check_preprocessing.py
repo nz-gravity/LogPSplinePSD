@@ -34,8 +34,6 @@ FMIN, FMAX = 1e-4, 1e-1
 COARSE_CFG = CoarseGrainConfig(
     enabled=True,
     Nc=200,
-    f_min=FMIN,
-    f_max=FMAX,
 )
 
 
@@ -113,8 +111,6 @@ def main() -> None:
     spec = compute_binning_structure(
         fft.freq,
         Nc=COARSE_CFG.Nc,
-        f_min=COARSE_CFG.f_min,
-        f_max=COARSE_CFG.f_max,
     )
     fft = apply_coarse_grain_multivar_fft(fft, spec)
 

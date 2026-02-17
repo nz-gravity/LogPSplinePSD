@@ -48,8 +48,6 @@ def _coarse_grain_processed_data(
             processed_data.freqs,
             Nc=cg_config.Nc,
             Nh=cg_config.Nh,
-            f_min=cg_config.f_min,
-            f_max=cg_config.f_max,
         )
 
         selection_mask = spec.selection_mask
@@ -87,8 +85,6 @@ def _coarse_grain_processed_data(
             processed_data.freq,
             Nc=cg_config.Nc,
             Nh=cg_config.Nh,
-            f_min=cg_config.f_min,
-            f_max=cg_config.f_max,
         )
         processed_data = apply_coarse_grain_multivar_fft(processed_data, spec)
         logger.info(f"Coarse-grained multivariate FFT: {spec}")

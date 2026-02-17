@@ -166,7 +166,6 @@ def _run_multivar_pspline(selected_data, fs):
         coarse_cfg = CoarseGrainConfig(
             enabled=True,
             Nc=200,
-            f_min=1e-2,
         )
         idata = run_mcmc(
             data=multivar_ts,
@@ -183,6 +182,7 @@ def _run_multivar_pspline(selected_data, fs):
             outdir=str(RESULTS_DIR),
             verbose=True,
             coarse_grain_config=coarse_cfg,
+            fmin=1e-2,
         )
         import arviz as az
 

@@ -169,16 +169,12 @@ def main() -> None:
             enabled=True,
             Nc=None,
             Nh=coarse_n_freqs,
-            f_min=fmin,
-            f_max=fmax,
         )
     elif coarse_bins > 0:
         coarse_cfg = CoarseGrainConfig(
             enabled=True,
             Nc=coarse_bins,
             Nh=None,
-            f_min=fmin,
-            f_max=fmax,
         )
 
     if true_psd_source is None and not args.no_true_psd:

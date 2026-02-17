@@ -15,6 +15,10 @@ is coarse-grained by dividing it into consecutive, disjoint subsets :math:`J_h`.
 denotes the *midpoint Fourier frequency* of :math:`J_h` (the middle member on the
 discrete Fourier grid, not an average).
 
+The band limits :math:`[f_{\min}, f_{\max}]` are chosen upstream via
+``model.fmin``/``model.fmax``. Coarse-grain configuration controls only binning
+(``Nc``/``Nh``).
+
 The binning logic
 is implemented by :func:`log_psplines.preprocessing.coarse_grain.preprocess.compute_binning_structure`,
 which returns :class:`log_psplines.preprocessing.coarse_grain.preprocess.CoarseGrainSpec`.
@@ -27,7 +31,7 @@ must be chosen:
 
 The spec stores
 
-- the masks that select the retained frequencies,
+- a frequency mask aligned with the retained grid,
 - indices to group points into contiguous bins,
 - the member count :math:`N_h` per bin, and
 - bin widths (diagnostics only).

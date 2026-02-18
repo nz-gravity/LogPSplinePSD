@@ -12,6 +12,7 @@ from ..datatypes.multivar import MultivarFFT
 from ..datatypes.multivar_utils import (
     U_to_Y,
     Y_to_S,
+    Y_to_U,
 )
 from ..logger import logger
 
@@ -186,7 +187,7 @@ def _coarse_grain_wishart_y_to_u(
     # Coarse-grain by summing within bins.
     Y_bar = Y_sel.reshape(Nc, Nh, *Y_sel.shape[1:]).sum(axis=1)
 
-    return MultivarFFT.Y_to_U(Y_bar)
+    return Y_to_U(Y_bar)
 
 
 @runtime_typecheck
@@ -297,16 +298,16 @@ def apply_coarse_grain_multivar_fft(
     """
 
     # FFT is already on the retained analysis band.
-    u_re_sel = np.asarray(fft.u_re)
-    u_im_sel = np.asarray(fft.u_im)
-    u_sel = (u_re_sel + 1j * u_im_sel).astype(np.complex128)
+    u_sel = fft.U
 
     Nc = int(spec.Nc)
     Nh = int(spec.Nh)
     if Nc <= 0:
         raise ValueError("Coarse-graining spec has no bins.")
     if fft.freq.shape[0] != Nc * Nh:
-        raise ValueError("FFT frequency grid does not match coarse-grain spec.")
+        raise ValueError(
+            "FFT frequency grid does not match coarse-grain spec."
+        )
 
     # Build Y(f_k) explicitly (used only as an intermediate), then coarse-grain
     # and factorize: Y_bar[h] = sum_{f in J_h} Y(f), with Y_bar[h] = U_bar U_bar^H.

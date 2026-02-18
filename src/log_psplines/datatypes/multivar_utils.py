@@ -118,6 +118,26 @@ def _interp_complex_matrix(
 
 
 @runtime_typecheck
+def u_re_im_to_U(
+    u_re: Float[np.ndarray, "..."],
+    u_im: Float[np.ndarray, "..."],
+) -> Complex[np.ndarray, "..."]:
+    """Combine real/imag Wishart factors into a complex U matrix."""
+    u_re = np.asarray(u_re, dtype=np.float64)
+    u_im = np.asarray(u_im, dtype=np.float64)
+    if u_re.shape != u_im.shape:
+        raise ValueError("u_re and u_im must have matching shapes")
+    if u_re.ndim != 3:
+        raise ValueError("u_re and u_im must have shape (N, p, p)")
+    return (u_re + 1j * u_im).astype(np.complex128)
+
+
+def _ishermitian(Y: np.ndarray, atol: float = 1e-10) -> bool:
+    """Check if a matrix or stack of matrices is Hermitian."""
+    return np.allclose(Y, Y.swapaxes(-1, -2).conj(), atol=atol)
+
+
+@runtime_typecheck
 def U_to_Y(
     u: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
 ) -> Complex[np.ndarray, "..."]:
@@ -133,6 +153,22 @@ def U_to_Y(
         raise ValueError("u must have shape (N, p, p)")
 
     return np.einsum("fkc,flc->fkl", u, np.conj(u))
+
+
+@runtime_typecheck
+def Y_to_U(
+    Y: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
+) -> Complex[np.ndarray, "..."]:
+    """Return U factors for Wishart matrices where Y[f] = U[f] U[f]^H."""
+    Y = np.asarray(Y, dtype=np.complex128)
+    if Y.ndim != 3:
+        raise ValueError("Y must have shape (N, p, p)")
+    if not _ishermitian(Y):
+        raise ValueError("Y must be Hermitian for Wishart factorization.")
+    lam, v = np.linalg.eigh(Y)
+    lam = np.clip(lam.real, a_min=0.0, a_max=None)
+    sqrt_lam = np.sqrt(lam, dtype=np.float64)[:, None, :]
+    return v * sqrt_lam
 
 
 @runtime_typecheck
@@ -243,7 +279,9 @@ __all__ = [
     "interp_matrix",
     "_interp_complex_matrix",
     "sum_wishart_outer_products",
+    "u_re_im_to_U",
     "U_to_Y",
+    "Y_to_U",
     "Y_to_S",
     "wishart_u_to_psd",
     "_get_coherence",

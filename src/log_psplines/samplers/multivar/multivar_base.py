@@ -19,10 +19,10 @@ from xarray import DataArray, Dataset
 from ...datatypes import MultivarFFT
 from ...datatypes.multivar import EmpiricalPSD
 from ...datatypes.multivar_utils import (
-    _get_coherence,
-    _interp_complex_matrix,
     U_to_Y,
     Y_to_S,
+    _get_coherence,
+    _interp_complex_matrix,
 )
 from ...diagnostics.plotting import generate_vi_diagnostics_summary
 from ...logger import logger
@@ -197,11 +197,8 @@ class MultivarBaseSampler(BaseSampler):
                 freq=freq, psd=psd, coherence=coherence, channels=channels
             )
 
-        u_re = np.asarray(self.fft_data.u_re, dtype=np.float64)
-        u_im = np.asarray(self.fft_data.u_im, dtype=np.float64)
-        u_complex = u_re + 1j * u_im
         S = Y_to_S(
-            U_to_Y(u_complex),
+            U_to_Y(self.fft_data.U),
             Nb=self.fft_data.Nb,
             duration=float(getattr(self.fft_data, "duration", 1.0) or 1.0),
             scaling_factor=float(self.fft_data.scaling_factor or 1.0),

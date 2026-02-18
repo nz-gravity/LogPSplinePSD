@@ -115,3 +115,29 @@ def test_varma_data(outdir):
     )
     empirical_vars = np.var(varma_data.data, axis=0)
     np.testing.assert_allclose(psd_vars, empirical_vars, rtol=0.1)
+
+
+def test_varma_validity_flags():
+    stable = VARMAData(
+        n_samples=128,
+        var_coeffs=np.array([[[0.35, 0.0], [0.0, 0.25]]], dtype=float),
+        vma_coeffs=np.eye(2)[None, ...],
+        sigma=np.eye(2),
+        seed=1,
+    )
+    assert stable.is_var_stationary is True
+    assert stable.is_valid_var_dataset is True
+    assert stable.var_companion_spectral_radius is not None
+    assert stable.var_companion_spectral_radius < 1.0
+
+    non_stationary = VARMAData(
+        n_samples=128,
+        var_coeffs=np.array([[[1.05, 0.0], [0.0, 0.95]]], dtype=float),
+        vma_coeffs=np.eye(2)[None, ...],
+        sigma=np.eye(2),
+        seed=2,
+    )
+    assert non_stationary.is_var_stationary is False
+    assert non_stationary.is_valid_var_dataset is False
+    assert non_stationary.var_companion_spectral_radius is not None
+    assert non_stationary.var_companion_spectral_radius >= 1.0

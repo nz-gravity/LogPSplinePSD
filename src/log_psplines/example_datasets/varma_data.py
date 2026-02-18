@@ -4,10 +4,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.fft import rfft
 
+from ..logger import logger
+
 
 class VARMAData:
-    """
-    Simulate Vector Autoregressive Moving Average (VARMA) processes and compute related spectral properties.
+    """Simulate a multivariate VARMA process and related spectral quantities.
+
+    The simulated process uses the recursion
+    ``x_t = sum_{k=1}^p A_k x_{t-k} + sum_{j=0}^q B_j eps_{t-j}``,
+    where ``eps_t`` is Gaussian white noise with covariance ``sigma``.
     """
 
     def __init__(
@@ -21,15 +26,27 @@ class VARMAData:
         seed: int | None = None,
         fs: float = 1.0,
     ):
-        """
-        Initialize the SimVARMA class.
+        """Initialise and simulate a VARMA dataset.
 
-        Args:
-            n_samples (int): Number of samples to generate.
-            var_coeffs (np.ndarray): VAR coefficient array.
-            vma_coeffs (np.ndarray): VMA coefficient array.
-            sigma (np.ndarray): Covariance matrix or scalar variance.
+        Parameters
+        ----------
+        n_samples : int, default=1024
+            Number of time samples to generate.
+        sigma : np.ndarray, shape (C, C) or (1, 1), default=[[1.0, 0.9], [0.9, 1.0]]
+            Innovation covariance matrix. A `(1, 1)` input is treated as an isotropic
+            variance and expanded to ``variance * I_C``.
+        var_coeffs : np.ndarray, shape (P, C, C), optional
+            VAR coefficient matrices ``A_1, ..., A_P``.
+        vma_coeffs : np.ndarray, shape (Q + 1, C, C), optional
+            VMA coefficient matrices ``B_0, ..., B_Q``.
+        seed : int | None, default=None
+            Seed for NumPy RNG used during simulation.
+        fs : float, default=1.0
+            Sampling frequency in Hz.
         """
+        _validate_varma_inputs(
+            var_coeffs=var_coeffs, vma_coeffs=vma_coeffs, sigma=sigma
+        )
         self.n_samples = n_samples
         self.var_coeffs = var_coeffs
         self.vma_coeffs = vma_coeffs
@@ -46,6 +63,9 @@ class VARMAData:
         self.periodogram: np.ndarray | None = None  # set in "resimulate"
         self.welch_psd: np.ndarray | None = None  # set in "resimulate"
         self.welch_f: np.ndarray | None = None  # set in "resimulate"
+        self.is_var_stationary: bool | None = None
+        self.is_valid_var_dataset: bool | None = None
+        self.var_companion_spectral_radius: float | None = None
         self.psd: np.ndarray = np.zeros(
             (self.freq.size, self.p, self.p), dtype=np.complex128
         )
@@ -66,15 +86,18 @@ class VARMAData:
             scaling_factor=1.0,
         )
 
-    def resimulate(self, seed=None):
-        """
-        Simulate VARMA process.
+    def resimulate(self, seed: int | None = None) -> np.ndarray:
+        """Simulate or re-simulate the VARMA process.
 
-        Args:
-            seed (int, optional): Random seed for reproducibility.
+        Parameters
+        ----------
+        seed : int | None, default=None
+            Random seed for reproducibility.
 
-        Returns:
-            np.ndarray: Simulated VARMA process data.
+        Returns
+        -------
+        np.ndarray, shape (N, C)
+            Simulated multivariate time series.
         """
         if seed is not None:
             np.random.seed(seed)
@@ -116,10 +139,50 @@ class VARMAData:
             )
 
         self.data = x[101:]
+        self._run_var_validity_checks()
+        return self.data
 
-    def get_periodogram(self):
+    def _run_var_validity_checks(self) -> None:
+        """Evaluate and log basic VAR validity checks for generated samples.
+
+        The check is based on the VAR companion matrix implied by ``var_coeffs``:
+        stationarity requires all companion eigenvalues to lie strictly inside the unit
+        circle. In addition, all generated samples must be finite.
         """
-        Return a one-sided PSD matrix estimate for the simulated data.
+        if self.data is None:
+            raise ValueError(
+                "No simulated data available for validity checks."
+            )
+        is_stationary, spectral_radius = _is_var_stationary(self.var_coeffs)
+        all_finite = bool(np.all(np.isfinite(self.data)))
+        self.is_var_stationary = is_stationary
+        self.var_companion_spectral_radius = spectral_radius
+        self.is_valid_var_dataset = bool(is_stationary and all_finite)
+
+        if self.is_valid_var_dataset:
+            logger.info(
+                f"VAR sanity check passed: stationary AR dynamics "
+                f"(companion spectral radius={spectral_radius:.6f}) with finite samples."
+            )
+            return
+
+        issues: list[str] = []
+        if not is_stationary:
+            issues.append(
+                "AR dynamics are non-stationary "
+                f"(companion spectral radius={spectral_radius:.6f} >= 1)."
+            )
+        if not all_finite:
+            issues.append("simulated samples include NaN/Inf.")
+        logger.warning(f"VAR sanity check failed: {' '.join(issues)}")
+
+    def get_periodogram(self) -> np.ndarray:
+        """Compute a one-sided matrix periodogram from the simulated data.
+
+        Returns
+        -------
+        np.ndarray, shape (F, C, C)
+            One-sided PSD/CSD matrix estimate evaluated on ``self.freq``.
         """
         _ = self.n_freq_samples
         _ = self.p
@@ -142,16 +205,28 @@ class VARMAData:
         periodogram = np.where(np.abs(periodogram) < eps, eps, periodogram)
         return periodogram
 
-    def get_true_psd(self):
-        """Return the theoretical one-sided PSD matrix (original data units)."""
+    def get_true_psd(self) -> np.ndarray:
+        """Return the theoretical one-sided PSD matrix in original data units."""
         eps = 1e-12
         true_psd = np.where(np.abs(self.psd) < eps, eps, self.psd)
         return true_psd
 
-    def plot(self, axs=None, fname: Optional[str] = None):
-        """
-        Matrix plot: diagonal is the PSD, below diagonal is real CSD, above diagonal is imag CSD.
-        Plots both the true PSD and the periodogram using consistent scaling.
+    def plot(
+        self, axs: Optional[np.ndarray] = None, fname: Optional[str] = None
+    ) -> np.ndarray:
+        """Plot PSD/CSD panels for true PSD and empirical periodogram.
+
+        Parameters
+        ----------
+        axs : Optional[np.ndarray], default=None
+            Optional pre-created axes array with shape ``(C, C)``.
+        fname : Optional[str], default=None
+            If provided, save the figure to this path.
+
+        Returns
+        -------
+        np.ndarray
+            Axes array with shape ``(C, C)``.
         """
         if self.data is None:
             raise ValueError("No data to plot. Run resimulate first.")
@@ -233,18 +308,31 @@ def _calculate_true_varma_psd(
     channel_stds: Optional[np.ndarray],
     scaling_factor: Optional[float],
 ) -> np.ndarray:
-    """
-    Calculate the spectral matrix for given frequencies.
+    """Calculate the one-sided theoretical VARMA spectral matrix.
 
-    Args:
-        freqs_hz (np.ndarray): Positive frequency grid in Hz.
-        p (int): Process dimension.
-        var_coeffs/vma_coeffs: VAR/MA coefficient arrays.
-        sigma (np.ndarray): Innovation covariance matrix.
-        fs (float): Sampling frequency in Hz.
+    Parameters
+    ----------
+    freqs_hz : np.ndarray, shape (F,)
+        Positive frequencies in Hz.
+    p : int
+        Number of channels.
+    var_coeffs : np.ndarray, shape (P, C, C)
+        VAR coefficient matrices.
+    vma_coeffs : np.ndarray, shape (Q + 1, C, C)
+        VMA coefficient matrices.
+    sigma : np.ndarray, shape (C, C) or (1, 1)
+        Innovation covariance matrix.
+    fs : float
+        Sampling frequency in Hz.
+    channel_stds : Optional[np.ndarray], shape (C,)
+        Optional channel-wise standard deviations for PSD re-scaling.
+    scaling_factor : Optional[float]
+        Optional global multiplicative scaling.
 
-    Returns:
-        np.ndarray: One-sided PSD matrix evaluated at ``freqs_hz``.
+    Returns
+    -------
+    np.ndarray, shape (F, C, C)
+        One-sided PSD matrix evaluated at ``freqs_hz``.
     """
     freqs_hz = np.asarray(freqs_hz, dtype=np.float64)
     if freqs_hz.size:
@@ -287,11 +375,25 @@ def _calculate_true_varma_psd(
 
 
 def _calculate_spec_matrix_helper(omega, p, var_coeffs, vma_coeffs, sigma):
-    """
-    Helper function to calculate spectral matrix for a single frequency.
+    """Calculate the VARMA spectral matrix at one angular frequency.
 
-    Args:
-        omega (float): Angular frequency (rad/sample).
+    Parameters
+    ----------
+    omega : float
+        Angular frequency in rad/sample.
+    p : int
+        Number of channels.
+    var_coeffs : np.ndarray, shape (P, C, C)
+        VAR coefficient matrices.
+    vma_coeffs : np.ndarray, shape (Q + 1, C, C)
+        VMA coefficient matrices.
+    sigma : np.ndarray, shape (C, C) or (1, 1)
+        Innovation covariance matrix.
+
+    Returns
+    -------
+    np.ndarray, shape (C, C)
+        Complex spectral matrix value at ``omega``.
     """
     if sigma.shape[0] == 1:
         cov_matrix = np.identity(p) * sigma
@@ -316,3 +418,89 @@ def _calculate_spec_matrix_helper(omega, p, var_coeffs, vma_coeffs, sigma):
 
     spec_mat = H_f_ar @ H_f_ma @ cov_matrix @ H_f_ma.conj().T @ H_f_ar.conj().T
     return spec_mat
+
+
+def _validate_varma_inputs(
+    var_coeffs: np.ndarray, vma_coeffs: np.ndarray, sigma: np.ndarray
+) -> None:
+    """Validate core VARMA parameter shapes and matrix consistency.
+
+    Parameters
+    ----------
+    var_coeffs : np.ndarray, shape (P, C, C)
+        VAR coefficient matrices.
+    vma_coeffs : np.ndarray, shape (Q + 1, C, C)
+        VMA coefficient matrices.
+    sigma : np.ndarray, shape (C, C) or (1, 1)
+        Innovation covariance matrix.
+    """
+    if var_coeffs.ndim != 3:
+        raise ValueError(
+            f"var_coeffs must have shape (P, C, C), got ndim={var_coeffs.ndim}."
+        )
+    if vma_coeffs.ndim != 3:
+        raise ValueError(
+            f"vma_coeffs must have shape (Q + 1, C, C), got ndim={vma_coeffs.ndim}."
+        )
+    if var_coeffs.shape[1] != var_coeffs.shape[2]:
+        raise ValueError(
+            "var_coeffs channel matrices must be square with shape (C, C)."
+        )
+    if vma_coeffs.shape[1] != vma_coeffs.shape[2]:
+        raise ValueError(
+            "vma_coeffs channel matrices must be square with shape (C, C)."
+        )
+    if var_coeffs.shape[1] != vma_coeffs.shape[1]:
+        raise ValueError(
+            "var_coeffs and vma_coeffs must use the same channel dimension."
+        )
+    if sigma.ndim != 2:
+        raise ValueError(
+            f"sigma must be a 2D array with shape (C, C) or (1, 1), got ndim={sigma.ndim}."
+        )
+    if sigma.shape != (1, 1) and sigma.shape != (
+        vma_coeffs.shape[1],
+        vma_coeffs.shape[1],
+    ):
+        raise ValueError(
+            "sigma must have shape (C, C) matching channels, or shape (1, 1)."
+        )
+
+
+def _is_var_stationary(
+    var_coeffs: np.ndarray, tol: float = 1e-10
+) -> tuple[bool, float]:
+    """Check VAR stationarity from the companion matrix eigenvalues.
+
+    For ``x_t = A_1 x_{t-1} + ... + A_P x_{t-P} + e_t``, covariance stationarity
+    holds when all eigenvalues of the companion matrix satisfy ``|lambda| < 1``.
+
+    Parameters
+    ----------
+    var_coeffs : np.ndarray, shape (P, C, C)
+        VAR coefficient matrices.
+    tol : float, default=1e-10
+        Tolerance margin used in ``|lambda| < 1 - tol``.
+
+    Returns
+    -------
+    tuple[bool, float]
+        `(is_stationary, spectral_radius)`.
+    """
+    ar_order = int(var_coeffs.shape[0])
+    n_channels = int(var_coeffs.shape[1])
+    if ar_order == 0:
+        return True, 0.0
+
+    companion = np.zeros(
+        (n_channels * ar_order, n_channels * ar_order), dtype=float
+    )
+    companion[:n_channels, : n_channels * ar_order] = np.hstack(var_coeffs)
+    if ar_order > 1:
+        companion[n_channels:, :-n_channels] = np.eye(
+            n_channels * (ar_order - 1), dtype=float
+        )
+
+    eigvals = np.linalg.eigvals(companion)
+    spectral_radius = float(np.max(np.abs(eigvals))) if eigvals.size else 0.0
+    return bool(spectral_radius < (1.0 - tol)), spectral_radius

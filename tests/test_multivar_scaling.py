@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from log_psplines.datatypes import MultivariateTimeseries, Timeseries
-from log_psplines.datatypes.multivar import _interp_complex_matrix
+from log_psplines.datatypes.multivar_utils import _interp_complex_matrix
 from log_psplines.example_datasets.varma_data import (
     VARMAData,
     _calculate_true_varma_psd,

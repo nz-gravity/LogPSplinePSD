@@ -184,37 +184,6 @@ def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
                     channels=channels,
                 )
 
-            # Fallback to reconstructing from FFT components
-            if all(
-                key in obs_data
-                for key in ["freq", "channels", "fft_re", "fft_im"]
-            ):
-                freq = obs_data["freq"].values
-                channels = obs_data["channels"].values
-                fft_re = obs_data["fft_re"].values
-                fft_im = obs_data["fft_im"].values
-
-                fft_complex = fft_re + 1j * fft_im
-                p = len(channels)
-                N = len(freq)
-
-                psd_matrix = np.zeros((N, p, p), dtype=np.complex128)
-
-                for i in range(p):
-                    for j in range(p):
-                        psd_matrix[:, i, j] = fft_complex[:, i] * np.conj(
-                            fft_complex[:, j]
-                        )
-
-                coherence = _get_coherence(psd_matrix)
-
-                return EmpiricalPSD(
-                    freq=freq,
-                    psd=psd_matrix,
-                    coherence=coherence,
-                    channels=channels,
-                )
-
         return None
 
     except Exception as e:

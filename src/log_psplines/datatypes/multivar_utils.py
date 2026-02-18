@@ -118,7 +118,7 @@ def _interp_complex_matrix(
 
 
 @runtime_typecheck
-def u_to_wishart_matrix(
+def U_to_Y(
     u: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
 ) -> Complex[np.ndarray, "..."]:
     """Convert eigenvector-weighted periodogram components to Wishart matrices.
@@ -157,7 +157,7 @@ def sum_wishart_outer_products(
 
 
 @runtime_typecheck
-def wishart_matrix_to_psd(
+def Y_to_S(
     Y: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
     Nb: int,
     *,
@@ -197,10 +197,10 @@ def wishart_u_to_psd(
     scaling_factor: float = 1.0,
     Nh: int = 1,
 ) -> Complex[np.ndarray, "..."]:
-    """Convenience wrapper combining :func:`u_to_wishart_matrix` and conversion."""
+    """Convenience wrapper combining :func:`U_to_Y` and conversion."""
 
-    Y = u_to_wishart_matrix(u)
-    return wishart_matrix_to_psd(
+    Y = U_to_Y(u)
+    return Y_to_S(
         Y,
         Nb,
         duration=duration,
@@ -243,8 +243,8 @@ __all__ = [
     "interp_matrix",
     "_interp_complex_matrix",
     "sum_wishart_outer_products",
-    "u_to_wishart_matrix",
-    "wishart_matrix_to_psd",
+    "U_to_Y",
+    "Y_to_S",
     "wishart_u_to_psd",
     "_get_coherence",
 ]

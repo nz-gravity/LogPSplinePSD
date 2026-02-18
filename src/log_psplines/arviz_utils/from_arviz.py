@@ -109,7 +109,8 @@ def get_periodogram(idata: az.InferenceData) -> Periodogram:
     except KeyError:
         # For VI or other data structures where periodogram is not available
         raise KeyError(
-            "No variable named 'periodogram'. Variables on the dataset include ['freq', 'channels', 'fft_im', 'fft_re']"
+            "No variable named 'periodogram'. Observed data should include "
+            "['freq', 'channels', 'periodogram']."
         )
 
 

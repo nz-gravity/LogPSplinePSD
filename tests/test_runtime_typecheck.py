@@ -77,7 +77,7 @@ def test_runtime_typecheck_rejects_list_wishart_stack(monkeypatch) -> None:
 
     u_stack_list = [[[1.0, 0.0], [0.0, 1.0]]]
     with pytest.raises(Exception):
-        multivar_utils.u_to_wishart_matrix(u_stack_list)
+        multivar_utils.U_to_Y(u_stack_list)
 
 
 def test_runtime_typecheck_can_allow_list_wishart_stack_when_disabled(
@@ -86,5 +86,5 @@ def test_runtime_typecheck_can_allow_list_wishart_stack_when_disabled(
     monkeypatch.setenv("LOG_PSPLINES_RUNTIME_TYPECHECK", "0")
 
     u_stack_list = [[[1.0, 0.0], [0.0, 1.0]]]
-    out = multivar_utils.u_to_wishart_matrix(u_stack_list)
+    out = multivar_utils.U_to_Y(u_stack_list)
     assert out.shape == (1, 2, 2)

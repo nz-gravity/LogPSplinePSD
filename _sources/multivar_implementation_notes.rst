@@ -31,7 +31,7 @@ Practical consequences:
 - the DC bin is dropped (numerical stability on log axes and to avoid leakage
   dominating the first bin);
 - the rFFT produces the positive-frequency grid; the normalisation ensures that
-  :func:`log_psplines.spectrum_utils.wishart_matrix_to_psd` produces spectra in
+  :func:`log_psplines.spectrum_utils.Y_to_S` produces spectra in
   one-sided “per Hz” units;
 - the Whittle observation-duration factor :math:`T` is tracked explicitly as
   ``fft_data.duration`` (seconds per time-domain block) and enters the
@@ -86,3 +86,13 @@ tests the key coarse-graining invariant:
 
 This is useful when changing coarse-grain logic or the frequency weighting
 convention.
+
+Observed data (Wishart-based)
+-----------------------------
+
+The multivariate pipeline now treats Wishart statistics as the sole observed
+data for inference and diagnostics. ArviZ exports store only the complex
+periodogram (``observed_data.periodogram``) derived from ``u_re/u_im`` or
+``raw_psd``; mean FFT components (``fft_re/fft_im``) are no longer retained.
+This keeps diagnostics aligned with the likelihood, which is written in terms
+of :math:`Y(f)=U(f)U(f)^\ast` and its coarse-grained sum :math:`\bar{Y}_h`.

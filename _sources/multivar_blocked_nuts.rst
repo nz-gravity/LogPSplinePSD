@@ -34,8 +34,8 @@ drift over time):
 - `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L104-L260>`_
 - `Coarse graining (apply_coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138>`_
 - `PSD reconstruction (reconstruct_psd_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py#L387-L438>`_
-- `Wishart→PSD conversion (wishart_matrix_to_psd) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L157-L183>`_
-- `U→Y conversion (u_to_wishart_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L137-L145>`_
+- `Wishart→PSD conversion (Y_to_S) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L157-L183>`_
+- `U→Y conversion (U_to_Y) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L137-L145>`_
 
 .. math::
 
@@ -229,7 +229,7 @@ likelihood. Concretely:
   the stored frequency-domain components so the quadratic term can be written as
   :math:`(1/T)\,d(f_k)^* S(f_k)^{-1} d(f_k)`.
 - PSD conversions divide by ``duration`` via
-  :func:`~log_psplines.spectrum_utils.wishart_matrix_to_psd(duration=...)`, so
+  :func:`~log_psplines.spectrum_utils.Y_to_S(duration=...)`, so
   the resulting PSD matrices remain in the same one-sided “per Hz” convention
   used elsewhere in the codebase.
 

@@ -159,7 +159,7 @@ def test_plot_univariate_fitted_data_blocks(outdir: str, seed: int, test_mode):
 
     # 3) Build a P-spline on the coarse grid and plot with knots
     power_coarse = apply_coarse_graining_univar(
-        pdgrm_full.power[spec.selection_mask], spec, freqs[spec.selection_mask]
+        pdgrm_full.power, spec, freqs
     )
     pdgrm_coarse = Periodogram(
         freqs=spec.f_coarse,

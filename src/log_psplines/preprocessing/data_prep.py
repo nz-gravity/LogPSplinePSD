@@ -50,11 +50,9 @@ def _coarse_grain_processed_data(
             Nh=cg_config.Nh,
         )
 
-        selection_mask = spec.selection_mask
-        power_selected = np.asarray(processed_data.power[selection_mask])
-        freqs_selected = processed_data.freqs[selection_mask]
+        freqs = processed_data.freqs
         power_coarse = apply_coarse_graining_univar(
-            power_selected, spec, freqs_selected
+            np.asarray(processed_data.power), spec, freqs
         )
 
         processed_data = Periodogram(
@@ -68,9 +66,8 @@ def _coarse_grain_processed_data(
 
         if scaled_true_psd is not None:
             try:
-                true_selected = np.asarray(scaled_true_psd)[selection_mask]
                 true_coarse = apply_coarse_graining_univar(
-                    true_selected, spec, freqs_selected
+                    np.asarray(scaled_true_psd), spec, freqs
                 )
                 scaled_true_psd = true_coarse
             except Exception:
@@ -91,40 +88,6 @@ def _coarse_grain_processed_data(
         return processed_data, scaled_true_psd
 
     return processed_data, scaled_true_psd
-
-
-def _truncate_frequency_range(
-    processed_data: Optional[Union[Periodogram, MultivarFFT]],
-    fmin: Optional[float],
-    fmax: Optional[float],
-) -> Optional[Union[Periodogram, MultivarFFT]]:
-    if processed_data is None or (fmin is None and fmax is None):
-        return processed_data
-
-    freq_attr = "freqs" if isinstance(processed_data, Periodogram) else "freq"
-    freqs = np.asarray(getattr(processed_data, freq_attr), dtype=float)
-    if freqs.size == 0:
-        raise ValueError("Processed data contains no frequencies.")
-
-    freq_min = float(freqs[0])
-    freq_max = float(freqs[-1])
-    lower = freq_min if fmin is None else float(fmin)
-    upper = freq_max if fmax is None else float(fmax)
-
-    lower = min(max(lower, freq_min), freq_max)
-    upper = min(max(upper, freq_min), freq_max)
-    if upper < lower:
-        upper = lower
-
-    truncated = processed_data.cut(lower, upper)
-    n_points = (
-        truncated.n if isinstance(truncated, Periodogram) else truncated.N
-    )
-    if n_points == 0:
-        raise ValueError(
-            "Frequency truncation removed all data points. Check fmin/fmax."
-        )
-    return truncated
 
 
 def _prepare_processed_data(
@@ -163,11 +126,6 @@ def _prepare_processed_data(
         )
         logger.info(f"Inferred sampler type: {sampler}")
 
-    processed = _truncate_frequency_range(
-        processed,
-        config.model.fmin,
-        config.model.fmax,
-    )
     if processed is None:
         raise ValueError("Processed data unexpectedly None.")
     return processed, raw_multivar_ts, sampler

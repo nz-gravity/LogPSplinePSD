@@ -436,17 +436,6 @@ def _create_multivar_inference_data(
     coherence_q_rescaled = coh_q
     scalar_factor = float(getattr(config, "scaling_factor", 1.0) or 1.0)
 
-    fft_y_re = np.array(fft_data.y_re)
-    fft_y_im = np.array(fft_data.y_im)
-
-    # Also rescale observed FFT data
-    if channel_stds is not None:
-        observed_fft_re_rescaled = fft_y_re * channel_stds[None, :]
-        observed_fft_im_rescaled = fft_y_im * channel_stds[None, :]
-    else:
-        observed_fft_re_rescaled = fft_y_re
-        observed_fft_im_rescaled = fft_y_im
-
     # Compute and rescale observed cross-spectral density (periodogram)
     raw_psd = getattr(fft_data, "raw_psd", None)
     psd_has_global_scale = False
@@ -477,16 +466,9 @@ def _create_multivar_inference_data(
         if channel_stds is not None:
             observed_csd = observed_csd / sf
     else:
-        y_re = observed_fft_re_rescaled
-        y_im = observed_fft_im_rescaled
-        N, p = y_re.shape
-        observed_csd = np.zeros((N, p, p), dtype=np.complex64)
-        for i in range(p):
-            for j in range(p):
-                observed_csd[:, i, j] = (
-                    y_re[:, i] + 1j * y_im[:, i]
-                ) * np.conj(y_re[:, j] + 1j * y_im[:, j])
-        # Keep complex form for consistency
+        raise ValueError(
+            "Multivariate observed data requires raw_psd or u_re/u_im."
+        )
 
     if channel_stds is not None and factor_matrix is not None:
         observed_csd = observed_csd * factor_matrix[None, :, :]
@@ -499,10 +481,6 @@ def _create_multivar_inference_data(
             f"Rescaling multivariate posterior samples: max scaling ~{config.scaling_factor:.2e}"
         )
 
-    observed_fft_data_rescaled = {
-        "fft_re": observed_fft_re_rescaled,
-        "fft_im": observed_fft_im_rescaled,
-    }
     observed_psd_rescaled = {"periodogram": observed_csd}
 
     _handle_log_posterior(sample_stats)
@@ -545,8 +523,6 @@ def _create_multivar_inference_data(
 
     dims.update(
         {
-            "fft_re": ["freq", "channels"],
-            "fft_im": ["freq", "channels"],
             "periodogram": ["freq", "channels", "channels2"],
             "psd_matrix_real": ["percentile", "freq", "channels", "channels2"],
             "psd_matrix_imag": ["percentile", "freq", "channels", "channels2"],
@@ -580,8 +556,6 @@ def _create_multivar_inference_data(
         posterior=samples,
         sample_stats=sample_stats,
         observed_data={
-            "fft_re": np.array(observed_fft_data_rescaled["fft_re"]),
-            "fft_im": np.array(observed_fft_data_rescaled["fft_im"]),
             "periodogram": np.array(
                 observed_psd_rescaled["periodogram"], dtype=np.complex128
             ),

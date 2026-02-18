@@ -390,6 +390,7 @@ document.write(`
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-scalar-nh">Coarse graining: scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#observed-data-wishart-based">Observed data (Wishart-based)</a></li>
 </ul>
             </nav>
         </div>
@@ -424,7 +425,7 @@ Source: <a class="reference external" href="https://github.com/nz-gravity/LogPSp
 <li><p>the DC bin is dropped (numerical stability on log axes and to avoid leakage
 dominating the first bin);</p></li>
 <li><p>the rFFT produces the positive-frequency grid; the normalisation ensures that
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.wishart_matrix_to_psd()</span></code> produces spectra in
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.Y_to_S()</span></code> produces spectra in
 one-sided “per Hz” units;</p></li>
 <li><p>the Whittle observation-duration factor <span class="math notranslate nohighlight">\(T\)</span> is tracked explicitly as
 <code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code> (seconds per time-domain block) and enters the
@@ -479,6 +480,15 @@ term.</p></li>
 </ul>
 <p>This is useful when changing coarse-grain logic or the frequency weighting
 convention.</p>
+</section>
+<section id="observed-data-wishart-based">
+<h2>Observed data (Wishart-based)<a class="headerlink" href="#observed-data-wishart-based" title="Link to this heading">#</a></h2>
+<p>The multivariate pipeline now treats Wishart statistics as the sole observed
+data for inference and diagnostics. ArviZ exports store only the complex
+periodogram (<code class="docutils literal notranslate"><span class="pre">observed_data.periodogram</span></code>) derived from <code class="docutils literal notranslate"><span class="pre">u_re/u_im</span></code> or
+<code class="docutils literal notranslate"><span class="pre">raw_psd</span></code>; mean FFT components (<code class="docutils literal notranslate"><span class="pre">fft_re/fft_im</span></code>) are no longer retained.
+This keeps diagnostics aligned with the likelihood, which is written in terms
+of <span class="math notranslate nohighlight">\(Y(f)=U(f)U(f)^\ast\)</span> and its coarse-grained sum <span class="math notranslate nohighlight">\(\bar{Y}_h\)</span>.</p>
 </section>
 </section>
 
@@ -550,6 +560,7 @@ convention.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-scalar-nh">Coarse graining: scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#observed-data-wishart-based">Observed data (Wishart-based)</a></li>
 </ul>
   </nav></div>
 

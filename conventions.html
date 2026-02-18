@@ -506,7 +506,7 @@ u^{(h)}_\nu = \sqrt{\lambda^{(h)}_\nu}\, v^{(h)}_\nu.\]</div>
 statistics and PSD matrices. The current conventions are:</p>
 <ul class="simple">
 <li><p><strong>Normalisation</strong> – PSD matrices are <strong>one-sided</strong> and expressed per Hz. The
-helper <code class="xref py py-func docutils literal notranslate"><span class="pre">wishart_matrix_to_psd()</span></code> simply divides the summed Wishart
+helper <code class="xref py py-func docutils literal notranslate"><span class="pre">Y_to_S()</span></code> simply divides the summed Wishart
 matrices by <span class="math notranslate nohighlight">\(N_b N_h\)</span>, i.e., <span class="math notranslate nohighlight">\(S(f) = Y(f) / (N_b N_h)\)</span>.</p></li>
 <li><p><strong>Degrees of freedom</strong> – <code class="docutils literal notranslate"><span class="pre">N_b</span></code> is the block count and <code class="docutils literal notranslate"><span class="pre">N_h</span></code> is the
 (constant) coarse-bin size multiplier.</p></li>

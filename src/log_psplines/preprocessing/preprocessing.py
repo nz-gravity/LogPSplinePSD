@@ -15,7 +15,6 @@ from .data_prep import (
     _coarse_grain_processed_data,
     _normalize_coarse_grain_config,
     _prepare_processed_data,
-    _truncate_frequency_range,
 )
 from .sampler_factory import (
     _build_common_sampler_kwargs,
@@ -53,7 +52,6 @@ __all__ = [
     "_prepare_true_psd_for_freq",
     "_preprocess_data",
     "_run_preprocessing_checks",
-    "_truncate_frequency_range",
     "_unpack_true_psd",
     "_validate_extra_kwargs",
     "_validate_sampler_selection",

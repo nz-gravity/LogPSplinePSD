@@ -6,13 +6,12 @@ from typing import Optional
 
 import numpy as np
 
-from .._jaxtypes import Float, Int
+from .._jaxtypes import Complex, Float, Int
 from .._typecheck import runtime_typecheck
 from ..datatypes.multivar import MultivarFFT
 from ..datatypes.multivar_utils import (
-    sum_wishart_outer_products,
-    u_to_wishart_matrix,
-    wishart_matrix_to_psd,
+    U_to_Y,
+    Y_to_S,
 )
 from ..logger import logger
 
@@ -98,7 +97,6 @@ class CoarseGrainSpec:
     """
 
     f_coarse: np.ndarray  # (Nc,)
-    selection_mask: np.ndarray  # (Nl,)
 
     Nh: int  # constant bin size (odd)
     J_start: np.ndarray  # (Nc,)
@@ -188,22 +186,7 @@ def _coarse_grain_wishart_y_to_u(
     # Coarse-grain by summing within bins.
     Y_bar = Y_sel.reshape(Nc, Nh, *Y_sel.shape[1:]).sum(axis=1)
 
-    p = int(Y_sel.shape[1])
-    u_bins: np.ndarray = np.zeros((Nc, p, p), dtype=np.complex128)
-    for b in range(Nc):
-        # Eigen-based factorization: Y_bar = V diag(lambda) V^H
-        try:
-            lam, v = np.linalg.eigh(Y_bar[b])
-        except np.linalg.LinAlgError:
-            Ys = 0.5 * (Y_bar[b] + Y_bar[b].conj().T)
-            lam, v = np.linalg.eigh(Ys)
-
-        # Clamp small negatives from roundoff to preserve PSD.
-        lam = np.clip(lam.real, a_min=0.0, a_max=None)
-        sqrt_lam = np.sqrt(lam).astype(np.float64)
-        u_bins[b] = v * sqrt_lam[np.newaxis, :]
-
-    return u_bins
+    return MultivarFFT.Y_to_U(Y_bar)
 
 
 @runtime_typecheck
@@ -249,11 +232,9 @@ def compute_binning_structure(
     else:
         J_mid = J_start + (Nh // 2)
     f_coarse: Float[np.ndarray, "nc"] = freqs[J_mid].astype(np.float64)
-    selection_mask = np.ones(Nl, dtype=bool)
 
     return CoarseGrainSpec(
         f_coarse=f_coarse,
-        selection_mask=selection_mask,
         Nh=Nh,
         J_start=J_start,
         J_mid=J_mid,
@@ -287,8 +268,8 @@ def apply_coarse_graining_univar(
     if power.ndim != 1:
         raise ValueError("power must be 1-D")
 
-    Nl = int(np.sum(spec.selection_mask))
-    if power.size != Nl:
+    Nl = int(power.size)
+    if Nl != int(spec.Nc * spec.Nh):
         raise ValueError("power length must match retained grid size")
 
     if freqs is not None:
@@ -310,48 +291,30 @@ def apply_coarse_grain_multivar_fft(
 
     Notes
     -----
-    - y_re/y_im are mean FFTs across blocks (first-order). We sum them across
-      bins only for consistency with the retained grid and plotting; they are
-      not part of the Wishart likelihood.
     - Y(f_k) is the Wishart matrix built from block FFTs (second-order). We
       form Y_bar by summing Y(f_k) across bins and then re-factorize to obtain
       the coarse-grid U factors used by the likelihood.
     """
-    selection = np.asarray(spec.selection_mask, dtype=bool)
-    if selection.ndim != 1:
-        raise ValueError("CoarseGrainSpec.selection_mask must be 1-D")
-    if selection.shape[0] != fft.freq.shape[0]:
-        raise ValueError(
-            "CoarseGrainSpec.selection_mask length does not match FFT frequencies"
-        )
 
-    # Restrict to retained analysis band.
-    y_re_sel = np.asarray(fft.y_re)[selection]
-    y_im_sel = np.asarray(fft.y_im)[selection]
-    u_re_sel = np.asarray(fft.u_re)[selection]
-    u_im_sel = np.asarray(fft.u_im)[selection]
+    # FFT is already on the retained analysis band.
+    u_re_sel = np.asarray(fft.u_re)
+    u_im_sel = np.asarray(fft.u_im)
     u_sel = (u_re_sel + 1j * u_im_sel).astype(np.complex128)
 
     Nc = int(spec.Nc)
     Nh = int(spec.Nh)
     if Nc <= 0:
         raise ValueError("Coarse-graining spec has no bins.")
-
-    # y sums via shared helper (not part of Wishart math, but kept for consistency)
-    y_re_bins: Float[np.ndarray, "nc p"] = _sum_bins_equal(
-        y_re_sel, Nh=Nh
-    ).astype(np.float64, copy=False)
-    y_im_bins: Float[np.ndarray, "nc p"] = _sum_bins_equal(
-        y_im_sel, Nh=Nh
-    ).astype(np.float64, copy=False)
+    if fft.freq.shape[0] != Nc * Nh:
+        raise ValueError("FFT frequency grid does not match coarse-grain spec.")
 
     # Build Y(f_k) explicitly (used only as an intermediate), then coarse-grain
     # and factorize: Y_bar[h] = sum_{f in J_h} Y(f), with Y_bar[h] = U_bar U_bar^H.
-    Y_sel = u_to_wishart_matrix(u_sel)
+    Y_sel = U_to_Y(u_sel)
     u_bins = _coarse_grain_wishart_y_to_u(Y_sel, Nc=Nc, Nh=Nh)
 
-    psd_coarse = wishart_matrix_to_psd(
-        u_to_wishart_matrix(u_bins),
+    psd_coarse = Y_to_S(
+        U_to_Y(u_bins),
         Nb=int(fft.Nb),
         duration=float(getattr(fft, "duration", 1.0) or 1.0),
         scaling_factor=float(fft.scaling_factor or 1.0),
@@ -361,8 +324,6 @@ def apply_coarse_grain_multivar_fft(
     f_coarse = np.asarray(spec.f_coarse, dtype=np.float64)
 
     fft_coarse = MultivarFFT(
-        y_re=y_re_bins.astype(np.float64),
-        y_im=y_im_bins.astype(np.float64),
         u_re=u_bins.real.astype(np.float64),
         u_im=u_bins.imag.astype(np.float64),
         freq=f_coarse,

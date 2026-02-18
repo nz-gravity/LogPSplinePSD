@@ -7,10 +7,9 @@ from scipy.signal import csd, welch, windows
 from ..logger import logger
 from .multivar_utils import (
     _get_coherence,
-    _interp_complex_matrix,
-    sum_wishart_outer_products,
-    u_to_wishart_matrix,
-    wishart_matrix_to_psd,
+    U_to_Y,
+    Y_to_S,
+    wishart_u_to_psd,
 )
 
 
@@ -18,11 +17,9 @@ from .multivar_utils import (
 class MultivarFFT:
     """
     Discrete FFTs for multivariate time series.
-    Stores real/imaginary parts of the FFT together with Wishart replicates.
+    Stores Wishart replicates for multivariate spectral estimation.
 
     Attributes:
-        y_re: Real part of FFT (N, p)
-        y_im: Imag part of FFT (N, p)
         u_re: Real part of eigenvector-weighted periodogram replicates
               (N, p, p)
         u_im: Imag part of eigenvector-weighted periodogram replicates
@@ -34,9 +31,6 @@ class MultivarFFT:
 
     Notes
     -----
-    - y_re/y_im are the **mean FFTs across blocks** (first-order statistics).
-      They are useful for plotting and certain diagnostics but do not capture
-      the full second-order information of the spectrum.
     - The multivariate Wishart matrix is
         Y(f_k) = sum_b X_b(f_k) X_b(f_k)^H,
       which is encoded via U such that Y(f_k) = U(f_k) U(f_k)^H.
@@ -45,8 +39,6 @@ class MultivarFFT:
       across bins and then re-factorize to get coarse U.
     """
 
-    y_re: np.ndarray
-    y_im: np.ndarray
     u_re: np.ndarray
     u_im: np.ndarray
     freq: np.ndarray
@@ -68,24 +60,12 @@ class MultivarFFT:
     Nh: int = 1
 
     def __post_init__(self) -> None:
-        self.y_re = np.asarray(self.y_re, dtype=np.float64)
-        self.y_im = np.asarray(self.y_im, dtype=np.float64)
         self.u_re = np.asarray(self.u_re, dtype=np.float64)
         self.u_im = np.asarray(self.u_im, dtype=np.float64)
         self.freq = np.asarray(self.freq, dtype=np.float64)
         self.duration = float(self.duration)
         if not np.isfinite(self.duration) or self.duration <= 0.0:
             raise ValueError("duration must be a positive finite float")
-
-        expected_fft_shape = (self.N, self.p)
-        if self.y_re.shape != expected_fft_shape:
-            raise ValueError(
-                f"y_re must have shape {expected_fft_shape}, got {self.y_re.shape}"
-            )
-        if self.y_im.shape != expected_fft_shape:
-            raise ValueError(
-                f"y_im must have shape {expected_fft_shape}, got {self.y_im.shape}"
-            )
 
         expected_u_shape = (self.N, self.p, self.p)
         if self.u_re.shape != expected_u_shape:
@@ -137,6 +117,33 @@ class MultivarFFT:
                 raise ValueError(
                     "channel_stds must have length equal to number of channels"
                 )
+
+    @staticmethod
+    def Y_to_U(
+        Y: np.ndarray,
+    ) -> np.ndarray:
+        """Return U factors for Wishart matrices where Y[f] = U[f] U[f]^H.
+
+        Parameters
+        ----------
+        Y : ndarray, shape (N, p, p)
+            Hermitian PSD matrices indexed by frequency.
+
+        Returns
+        -------
+        U : ndarray, shape (N, p, p)
+            Eigenvector-weighted factors used by the Wishart likelihood.
+        """
+        Y = np.asarray(Y, dtype=np.complex128)
+        if not(_ishermitian(Y)):
+            raise ValueError("Y must be Hermitian for Wishart factorization.")
+        
+        lam, v = np.linalg.eigh(Y)
+        lam = np.clip(lam.real, a_min=0.0, a_max=None)
+        sqrt_lam = np.sqrt(lam, dtype=np.float64)[:, None, :]
+        return v * sqrt_lam
+    
+
 
     @classmethod
     def compute_fft(
@@ -243,7 +250,7 @@ class MultivarFFT:
         # Convert from a "per-block-periodogram" normalisation to the Whittle
         # convention that keeps an explicit 1/T in the likelihood. This ensures
         # the likelihood uses the observation duration explicitly while PSD
-        # conversions remain unchanged (see wishart_matrix_to_psd(duration=...)).
+        # conversions remain unchanged (see Y_to_S(duration=...)).
         duration = float(Lb) / float(fs)
         sqrt_duration = float(np.sqrt(np.asarray(duration, dtype=np.float64)))
         block_ffts = block_ffts * sqrt_duration
@@ -267,27 +274,18 @@ class MultivarFFT:
             freq = freq[freq_mask]
             block_ffts = block_ffts[:, freq_mask, :]
 
-        mean_fft = np.mean(block_ffts, axis=0)
-        y_re = mean_fft.real
-        y_im = mean_fft.imag
-
         Y = np.einsum("bnc,bnd->ncd", block_ffts, np.conj(block_ffts))
-        lam, v = np.linalg.eigh(Y)
-        lam = np.clip(lam, a_min=0.0, a_max=None)
-        sqrt_lam = np.sqrt(lam)[:, None, :]
-        U = v * sqrt_lam
+        U = cls.Y_to_U(Y)
         u_re = U.real
         u_im = U.imag
-        raw_psd = wishart_matrix_to_psd(
-            u_to_wishart_matrix(U),
+        raw_psd = Y_to_S(
+            U_to_Y(U),
             Nb=Nb,
             duration=duration,
             scaling_factor=float(scaling_factor or 1.0),
         )
 
         return cls(
-            y_re=y_re,
-            y_im=y_im,
             freq=freq,
             N=len(freq),
             p=p,
@@ -319,8 +317,6 @@ class MultivarFFT:
             raw_psd = self.raw_psd[mask]
             raw_freq = self.freq[mask]
         return MultivarFFT(
-            y_re=self.y_re[mask],
-            y_im=self.y_im[mask],
             freq=self.freq[mask],
             N=int(np.sum(mask)),
             p=self.p,
@@ -336,64 +332,48 @@ class MultivarFFT:
             channel_stds=self.channel_stds,
         )
 
-    @property
-    def amplitude_range(self) -> Tuple[float, float]:
-        min_amp = float(np.min(self.y_re))
-        max_amp = float(np.max(self.y_re))
-        return (float(f"{min_amp:.3g}"), float(f"{max_amp:.3g}"))
-
     def __repr__(self):
-        return f"MultivarFFT(N={self.N}, p={self.p}, amplitudes={self.amplitude_range})"
+        return f"MultivarFFT(N={self.N}, p={self.p})"
 
     @property
     def empirical_psd(self) -> "EmpiricalPSD":
-        psd = self.get_empirical_psd(
-            self.freq,
-            self.y_re,
-            self.y_im,
-            self.duration,
-            float(self.scaling_factor or 1.0),
-        )
+        sf = float(self.scaling_factor or 1.0)
+        if self.raw_psd is not None:
+            freq = (
+                np.asarray(self.raw_freq, dtype=np.float64)
+                if self.raw_freq is not None
+                else np.asarray(self.freq, dtype=np.float64)
+            )
+            psd = np.asarray(self.raw_psd, dtype=np.complex128)
+        else:
+            u_complex = self.u_re + 1j * self.u_im
+            freq = np.asarray(self.freq, dtype=np.float64)
+            psd = wishart_u_to_psd(
+                u_complex,
+                Nb=self.Nb,
+                duration=self.duration,
+                scaling_factor=sf,
+                Nh=self.Nh,
+            )
+
+        coherence = _get_coherence(psd)
+        out = EmpiricalPSD(freq=freq, psd=psd, coherence=coherence)
         if self.channel_stds is not None:
             scale_matrix = np.outer(self.channel_stds, self.channel_stds)
-            sf = float(self.scaling_factor or 1.0)
-            psd = EmpiricalPSD(
-                freq=psd.freq,
-                psd=psd.psd * (scale_matrix / sf),
-                coherence=psd.coherence,
-                channels=psd.channels,
+            out = EmpiricalPSD(
+                freq=out.freq,
+                psd=out.psd * (scale_matrix / sf),
+                coherence=out.coherence,
+                channels=out.channels,
             )
-        return psd
+        return out
 
-    @staticmethod
-    def get_empirical_psd(
-        freq: np.ndarray,
-        y_re: np.ndarray,
-        y_im: np.ndarray,
-        duration: float,
-        scaling: float = 1.0,
-    ) -> "EmpiricalPSD":
-        y_re = np.array(y_re, dtype=np.float64)
-        y_im = np.array(y_im, dtype=np.float64)
-        freq = np.asarray(freq, dtype=np.float64)
-        N, p = y_re.shape
-        if freq.shape != (N,):
-            raise ValueError(f"freq must have shape ({N},), got {freq.shape}")
-        y_complex = y_re + 1j * y_im
-        Y = np.einsum("fi,fj->fij", y_complex, np.conj(y_complex))
-        psd = wishart_matrix_to_psd(
-            Y,
-            Nb=1,
-            duration=float(duration),
-            scaling_factor=float(scaling),
-        )
-        coherence = _get_coherence(psd)
-        return EmpiricalPSD(
-            freq=freq,
-            psd=psd,
-            coherence=coherence,
-        )
 
+    @property
+    def Y(self) -> np.ndarray:
+        """Return the Wishart matrices Y[f] = U[f] U[f]^H."""
+        U = (self.u_re + 1j * self.u_im).astype(np.complex128)
+        return U_to_Y(U)
 
 @dataclass
 class MultivariateTimeseries:
@@ -589,3 +569,13 @@ class EmpiricalPSD:
 
         coh = _get_coherence(S)
         return cls(freq=f_ref, psd=S, coherence=coh)
+
+
+
+def _ishermitian(Y, atol=1e-10):
+    """
+    Checks if a matrix or a stack of matrices is Hermitian.
+    Supports shape (p, p) or (N, p, p).
+    """
+    # swapaxes(-1, -2) handles both 2D and 3D cases correctly
+    return np.allclose(Y, Y.swapaxes(-1, -2).conj(), atol=atol)

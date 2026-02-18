@@ -139,27 +139,20 @@ class MultivariateLogPSplines:
             knots, degree, N, diffMatrixOrder, grid_points=freq_norm
         )
 
-        use_wishart = fft_data.u_re is not None and fft_data.u_im is not None
-        if use_wishart:
-            u_re = jnp.asarray(fft_data.u_re)
-            u_im = jnp.asarray(fft_data.u_im)
-            u_complex = u_re + 1j * u_im
-            Y = jnp.einsum("fkc,fkd->fcd", u_complex, jnp.conj(u_complex))
-            Nb = max(int(fft_data.Nb), 1)
-        else:
-            Y = None
-            Nb = 1
+        if fft_data.u_re is None or fft_data.u_im is None:
+            raise ValueError(
+                "Multivariate models require Wishart statistics (u_re/u_im)."
+            )
+        u_re = jnp.asarray(fft_data.u_re)
+        u_im = jnp.asarray(fft_data.u_im)
+        u_complex = u_re + 1j * u_im
+        Y = jnp.einsum("fkc,fkd->fcd", u_complex, jnp.conj(u_complex))
+        Nb = max(int(fft_data.Nb), 1)
 
         # Create diagonal models (one per channel)
         diagonal_models = []
         for i in range(p):
-            if use_wishart:
-                assert Y is not None
-                empirical_diag_power = jnp.real(Y[:, i, i]) / Nb
-            else:
-                empirical_diag_power = (
-                    fft_data.y_re[:, i] ** 2 + fft_data.y_im[:, i] ** 2
-                )
+            empirical_diag_power = jnp.real(Y[:, i, i]) / Nb
             empirical_diag_power = jnp.maximum(
                 empirical_diag_power, 1e-12
             )  # Avoid log(0)
@@ -206,14 +199,7 @@ class MultivariateLogPSplines:
             theta_idx = 0
             for i in range(1, p):
                 for j in range(i):
-                    if use_wishart:
-                        assert Y is not None
-                        csd_ij = jnp.abs(Y[:, i, j]) / Nb
-                    else:
-                        csd_ij = (
-                            fft_data.y_re[:, i] * fft_data.y_re[:, j]
-                            + fft_data.y_im[:, i] * fft_data.y_im[:, j]
-                        )
+                    csd_ij = jnp.abs(Y[:, i, j]) / Nb
                     empirical_csd = empirical_csd.at[:].add(jnp.abs(csd_ij))
                     theta_idx += 1
             empirical_csd = (

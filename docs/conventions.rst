@@ -95,7 +95,7 @@ PSD terminology
 statistics and PSD matrices. The current conventions are:
 
 - **Normalisation** – PSD matrices are **one-sided** and expressed per Hz. The
-  helper :func:`wishart_matrix_to_psd` simply divides the summed Wishart
+  helper :func:`Y_to_S` simply divides the summed Wishart
   matrices by :math:`N_b N_h`, i.e., :math:`S(f) = Y(f) / (N_b N_h)`.
 - **Degrees of freedom** – ``N_b`` is the block count and ``N_h`` is the
   (constant) coarse-bin size multiplier.

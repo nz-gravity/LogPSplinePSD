@@ -17,14 +17,12 @@ import numpy as np
 from xarray import DataArray, Dataset
 
 from ...datatypes import MultivarFFT
-from ...datatypes.multivar import (
-    EmpiricalPSD,
+from ...datatypes.multivar import EmpiricalPSD
+from ...datatypes.multivar_utils import (
     _get_coherence,
     _interp_complex_matrix,
-)
-from ...datatypes.multivar_utils import (
-    u_to_wishart_matrix,
-    wishart_matrix_to_psd,
+    U_to_Y,
+    Y_to_S,
 )
 from ...diagnostics.plotting import generate_vi_diagnostics_summary
 from ...logger import logger
@@ -89,8 +87,6 @@ class MultivarBaseSampler(BaseSampler):
         self.all_penalties = all_penalties
 
         # FFT data arrays for JAX operations
-        self.y_re = jnp.array(self.fft_data.y_re, dtype=jnp.float32)
-        self.y_im = jnp.array(self.fft_data.y_im, dtype=jnp.float32)
         self.freq = jnp.array(self.fft_data.freq, dtype=jnp.float32)
         self.u_re = jnp.array(self.fft_data.u_re, dtype=jnp.float32)
         self.u_im = jnp.array(self.fft_data.u_im, dtype=jnp.float32)
@@ -204,8 +200,8 @@ class MultivarBaseSampler(BaseSampler):
         u_re = np.asarray(self.fft_data.u_re, dtype=np.float64)
         u_im = np.asarray(self.fft_data.u_im, dtype=np.float64)
         u_complex = u_re + 1j * u_im
-        S = wishart_matrix_to_psd(
-            u_to_wishart_matrix(u_complex),
+        S = Y_to_S(
+            U_to_Y(u_complex),
             Nb=self.fft_data.Nb,
             duration=float(getattr(self.fft_data, "duration", 1.0) or 1.0),
             scaling_factor=float(self.fft_data.scaling_factor or 1.0),

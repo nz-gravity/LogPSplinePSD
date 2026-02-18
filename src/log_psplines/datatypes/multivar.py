@@ -6,9 +6,11 @@ from scipy.signal import csd, welch, windows
 
 from ..logger import logger
 from .multivar_utils import (
-    _get_coherence,
     U_to_Y,
     Y_to_S,
+    Y_to_U,
+    _get_coherence,
+    u_re_im_to_U,
     wishart_u_to_psd,
 )
 
@@ -117,33 +119,6 @@ class MultivarFFT:
                 raise ValueError(
                     "channel_stds must have length equal to number of channels"
                 )
-
-    @staticmethod
-    def Y_to_U(
-        Y: np.ndarray,
-    ) -> np.ndarray:
-        """Return U factors for Wishart matrices where Y[f] = U[f] U[f]^H.
-
-        Parameters
-        ----------
-        Y : ndarray, shape (N, p, p)
-            Hermitian PSD matrices indexed by frequency.
-
-        Returns
-        -------
-        U : ndarray, shape (N, p, p)
-            Eigenvector-weighted factors used by the Wishart likelihood.
-        """
-        Y = np.asarray(Y, dtype=np.complex128)
-        if not(_ishermitian(Y)):
-            raise ValueError("Y must be Hermitian for Wishart factorization.")
-        
-        lam, v = np.linalg.eigh(Y)
-        lam = np.clip(lam.real, a_min=0.0, a_max=None)
-        sqrt_lam = np.sqrt(lam, dtype=np.float64)[:, None, :]
-        return v * sqrt_lam
-    
-
 
     @classmethod
     def compute_fft(
@@ -275,7 +250,7 @@ class MultivarFFT:
             block_ffts = block_ffts[:, freq_mask, :]
 
         Y = np.einsum("bnc,bnd->ncd", block_ffts, np.conj(block_ffts))
-        U = cls.Y_to_U(Y)
+        U = Y_to_U(Y)
         u_re = U.real
         u_im = U.imag
         raw_psd = Y_to_S(
@@ -346,10 +321,9 @@ class MultivarFFT:
             )
             psd = np.asarray(self.raw_psd, dtype=np.complex128)
         else:
-            u_complex = self.u_re + 1j * self.u_im
             freq = np.asarray(self.freq, dtype=np.float64)
             psd = wishart_u_to_psd(
-                u_complex,
+                self.U,
                 Nb=self.Nb,
                 duration=self.duration,
                 scaling_factor=sf,
@@ -368,12 +342,16 @@ class MultivarFFT:
             )
         return out
 
-
     @property
     def Y(self) -> np.ndarray:
         """Return the Wishart matrices Y[f] = U[f] U[f]^H."""
-        U = (self.u_re + 1j * self.u_im).astype(np.complex128)
-        return U_to_Y(U)
+        return U_to_Y(self.U)
+
+    @property
+    def U(self) -> np.ndarray:
+        """Return the complex Wishart factors U[f]."""
+        return u_re_im_to_U(self.u_re, self.u_im)
+
 
 @dataclass
 class MultivariateTimeseries:
@@ -569,13 +547,3 @@ class EmpiricalPSD:
 
         coh = _get_coherence(S)
         return cls(freq=f_ref, psd=S, coherence=coh)
-
-
-
-def _ishermitian(Y, atol=1e-10):
-    """
-    Checks if a matrix or a stack of matrices is Hermitian.
-    Supports shape (p, p) or (N, p, p).
-    """
-    # swapaxes(-1, -2) handles both 2D and 3D cases correctly
-    return np.allclose(Y, Y.swapaxes(-1, -2).conj(), atol=atol)

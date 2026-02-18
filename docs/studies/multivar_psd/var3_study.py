@@ -16,7 +16,7 @@ import argparse
 import numpy as np
 
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.logger import set_level
+from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 
 set_level("DEBUG")
@@ -73,6 +73,36 @@ VAR_COEFFS = np.array(
 )
 
 
+def _assert_valid_var3_dataset(varma: VARMAData) -> None:
+    """Fail fast if the generated VAR3 dataset is invalid/non-stationary."""
+    if varma.var_companion_spectral_radius is None:
+        raise RuntimeError(
+            "VAR3 dataset check failed: companion spectral radius was not computed."
+        )
+
+    spectral_radius = float(varma.var_companion_spectral_radius)
+    is_stationary = bool(varma.is_var_stationary)
+    is_valid = bool(varma.is_valid_var_dataset)
+
+    logger.info(
+        f"VAR3 dataset check: valid={is_valid}, stationary={is_stationary}, "
+        f"companion spectral radius={spectral_radius:.6f}"
+    )
+    if spectral_radius > 0.98:
+        logger.warning(
+            f"VAR3 AR dynamics are close to a unit root "
+            f"(spectral radius={spectral_radius:.6f}); "
+            "long-memory effects may be pronounced."
+        )
+
+    if not is_valid:
+        raise ValueError(
+            f"Invalid VAR3 dataset: stationary={is_stationary}, "
+            f"spectral_radius={spectral_radius:.6f}. "
+            "Adjust VAR coefficients to enforce stability (< 1)."
+        )
+
+
 def simulation_study(
     outdir: str = OUT,
     N: int = 5024,
@@ -96,6 +126,7 @@ def simulation_study(
         vma_coeffs=VMA_COEFFS,
         sigma=SIGMA,
     )
+    _assert_valid_var3_dataset(varma)
     ts = MultivariateTimeseries(t=varma.time, y=varma.data)
 
     coarse_grain_config = None

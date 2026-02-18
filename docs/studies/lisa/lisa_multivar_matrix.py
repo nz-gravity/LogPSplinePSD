@@ -53,7 +53,7 @@ import arviz as az
 import numpy as np
 
 from log_psplines.datatypes import MultivariateTimeseries
-from log_psplines.datatypes.multivar import _interp_complex_matrix
+from log_psplines.datatypes.multivar_utils import _interp_complex_matrix
 from log_psplines.diagnostics._utils import (
     compute_ci_coverage_multivar,
     compute_matrix_riae,

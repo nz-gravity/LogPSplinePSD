@@ -80,7 +80,7 @@ REUSE_EXISTING = _env_flag(
     "LISA_REUSE_EXISTING", False
 )  # set True to skip sampling when results already exist
 USE_LISATOOLS_SYNTH = _env_flag("LISA_USE_LISATOOLS_SYNTH", True)
-LISATOOLS_SYNTH_NPZ = RESULTS_DIR / "lisatools_synth_data.npz"
+LISATOOLS_SYNTH_NPZ = RESULTS_DIR / "lisa_data.npz"
 
 # Hyperparameters and spline configuration for this study
 ALPHA_DELTA = _env_float("LISA_ALPHA_DELTA", 3.0)
@@ -99,12 +99,16 @@ VI_LR = _env_float("LISA_VI_LR", 1e-4)
 VI_POSTERIOR_DRAWS = _env_int("LISA_VI_POSTERIOR_DRAWS", 1024)
 MAX_TIME_BLOCKS = 12
 N_TIME_BLOCKS_OVERRIDE: int | None = None
+BLOCK_DAYS = _env_float("LISA_BLOCK_DAYS", 7.0)
 MAX_DAYS = _env_float("LISA_MAX_DAYS", 0.0)
 MAX_MONTHS = _env_float("LISA_MAX_MONTHS", 0.0)
 WELCH_NPERSEG = _env_int("LISA_WELCH_NPERSEG", 0)
 WELCH_OVERLAP_FRAC = _env_float("LISA_WELCH_OVERLAP_FRAC", 0.5)
 WELCH_WINDOW = _env_str("LISA_WELCH_WINDOW", "hann")
 WELCH_BLOCK_AVG = _env_flag("LISA_WELCH_BLOCK_AVG", True)
+ENABLE_COARSE_GRAIN = _env_flag("LISA_ENABLE_COARSE_GRAIN", True)
+COARSE_GRAIN_FACTOR = _env_int("LISA_COARSE_GRAIN_FACTOR", 0)
+TARGET_COARSE_BINS = _env_int("LISA_TARGET_COARSE_BINS", 1024)
 
 C_LIGHT = 299_792_458.0  # m / s
 L_ARM = 2.5e9  # m
@@ -133,7 +137,7 @@ if USE_LISATOOLS_SYNTH:
                 )
         else:
             raise FileNotFoundError(
-                f"{LISATOOLS_SYNTH_NPZ} not found. Run lisatools_synth_check.py first."
+                f"{LISATOOLS_SYNTH_NPZ} not found. Run lisa_datagen.py first."
             )
     with np.load(LISATOOLS_SYNTH_NPZ, allow_pickle=False) as synth:
         t_full = synth["time"]
@@ -197,24 +201,41 @@ n = y_full.shape[0]
 n_duration = t_full[-1] - t_full[0]
 n_duration_days = n_duration / 86_400.0
 
-# Choose block structure. Prefer NPZ metadata when available to avoid crossing
-# chunk boundaries in synthetic generators.
+# Choose block structure.
+# Priority:
+# 1) explicit Nb override
+# 2) explicit block duration in days
+# 3) NPZ metadata hints
+# 4) MAX_TIME_BLOCKS fallback
+Lb: int | None = None
 if N_TIME_BLOCKS_OVERRIDE is not None:
     Nb = int(N_TIME_BLOCKS_OVERRIDE)
     if Nb < 1:
         raise ValueError("N_TIME_BLOCKS_OVERRIDE must be >= 1.")
     Nb = min(Nb, n)
+elif BLOCK_DAYS > 0.0:
+    Lb_target = int(round(float(BLOCK_DAYS) * 86_400.0 / dt))
+    if Lb_target < 2:
+        raise ValueError("LISA_BLOCK_DAYS is too small for the current cadence.")
+    Lb = min(Lb_target, n)
+    Nb = max(1, int(n // Lb))
+    logger.info(
+        f"Using block duration target {BLOCK_DAYS:.3g} days "
+        f"(Lb={Lb} samples before trim)."
+    )
+elif Lb_hint is not None and Lb_hint > 0:
+    Lb = int(min(int(Lb_hint), n))
+    Nb = max(1, int(n // Lb))
 elif Nb_hint is not None and Nb_hint > 0:
     Nb = min(int(Nb_hint), n)
-elif Lb_hint is not None and Lb_hint > 0:
-    Nb = max(1, int(n // Lb_hint))
 else:
     Nb = min(MAX_TIME_BLOCKS, n)
 
 if Nb < 1:
     raise ValueError("Derived Nb must be >= 1.")
 
-Lb = n // Nb
+if Lb is None:
+    Lb = n // Nb
 if Lb < 1:
     raise ValueError(
         f"Derived block length Lb={Lb} is invalid for n={n}, Nb={Nb}."
@@ -251,18 +272,59 @@ if Nl_analysis < 1:
         f"No positive frequencies retained in [{FMIN}, {FMAX}] for Lb={Lb}."
     )
 
-target_Nc = 512
-if Nl_analysis % target_Nc != 0:
-    Nc_candidates = [
-        k for k in range(1, Nl_analysis + 1) if Nl_analysis % k == 0
-    ]
-    target_Nc = max(c for c in Nc_candidates if c <= min(512, Nl_analysis))
-    logger.info(
-        f"Adjusting coarse bins: retained Nl={Nl_analysis} is not divisible by 512; "
-        f"using Nc={target_Nc}."
-    )
-
-coarse_cfg = CoarseGrainConfig(enabled=True, Nc=target_Nc)
+if ENABLE_COARSE_GRAIN:
+    if COARSE_GRAIN_FACTOR > 0:
+        nh_eff = int(COARSE_GRAIN_FACTOR)
+        if Nl_analysis % nh_eff != 0:
+            Nh_candidates = [
+                k for k in range(1, Nl_analysis + 1) if Nl_analysis % k == 0
+            ]
+            nh_eff = min(Nh_candidates, key=lambda d: (abs(d - nh_eff), d))
+            logger.info(
+                f"Adjusting coarse factor: Nl={Nl_analysis} not divisible by "
+                f"{COARSE_GRAIN_FACTOR}; using Nh={nh_eff}."
+            )
+        nc_eff = Nl_analysis // nh_eff
+        # Guardrail: tiny Nc collapses the spectrum and makes diagnostics misleading.
+        if nc_eff < 32:
+            logger.warning(
+                f"Requested coarse graining gives Nc={nc_eff} (<32) for Nl={Nl_analysis}; "
+                "disabling coarse graining."
+            )
+            coarse_cfg = CoarseGrainConfig(enabled=False)
+        else:
+            logger.info(
+                f"Coarse graining enabled with Nh={nh_eff} "
+                f"(~{nh_eff}:1 compression, Nc={nc_eff})."
+            )
+            coarse_cfg = CoarseGrainConfig(enabled=True, Nh=nh_eff)
+    else:
+        target_Nc = int(TARGET_COARSE_BINS)
+        if target_Nc <= 0:
+            raise ValueError("LISA_TARGET_COARSE_BINS must be positive.")
+        if Nl_analysis % target_Nc != 0:
+            Nc_candidates = [
+                k for k in range(1, Nl_analysis + 1) if Nl_analysis % k == 0
+            ]
+            target_Nc = max(
+                c for c in Nc_candidates if c <= min(target_Nc, Nl_analysis)
+            )
+            logger.info(
+                f"Adjusting coarse bins: retained Nl={Nl_analysis} is not divisible by "
+                f"{TARGET_COARSE_BINS}; using Nc={target_Nc}."
+            )
+        if target_Nc < 32:
+            logger.warning(
+                f"Requested coarse graining would use Nc={target_Nc} (<32) for Nl={Nl_analysis}; "
+                "disabling coarse graining."
+            )
+            coarse_cfg = CoarseGrainConfig(enabled=False)
+        else:
+            logger.info(f"Coarse graining enabled with Nc={target_Nc}.")
+            coarse_cfg = CoarseGrainConfig(enabled=True, Nc=target_Nc)
+else:
+    logger.info("Coarse graining disabled (full frequency resolution).")
+    coarse_cfg = CoarseGrainConfig(enabled=False)
 
 raw_series = MultivariateTimeseries(y=y_full, t=t_full)
 
@@ -429,9 +491,8 @@ def _blocked_welch(
 
 
 # Traditional Welch-style empirical PSD on the original (unstandardised) data.
-# For lisatools synthetic data, the generator can introduce small discontinuities
-# at chunk boundaries; computing Welch within each block and averaging avoids
-# leakage from crossing those boundaries.
+# Computing Welch within each analysis block and averaging keeps the diagnostic
+# estimate aligned with the blocked Wishart preprocessing.
 if WELCH_BLOCK_AVG and Lb is not None:
     logger.info(
         f"Welch block-averaging enabled: {Nb} block(s) of {Lb} samples."

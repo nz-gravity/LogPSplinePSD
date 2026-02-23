@@ -1,7 +1,7 @@
 """Generate paper-sized LISA XYZ synthetic data with lisatools.
 
-This script generates a 3-channel XYZ time series directly at the requested
-cadence (no naive downsampling), and writes an ``.npz`` bundle suitable for
+This script generates one continuous 3-channel XYZ time series at the requested
+cadence (no chunk-and-concatenate), and writes an ``.npz`` bundle suitable for
 ``paper_plots``:
 
 - ``time``: (N,)
@@ -9,11 +9,9 @@ cadence (no naive downsampling), and writes an ``.npz`` bundle suitable for
 - ``freq_true`` / ``true_matrix``: analytic spectral matrix over a user-chosen
   frequency band (used for plotting overlays).
 
-Internally it uses lisatools' ``XYZ2SensitivityMatrix`` to construct the
-frequency-domain covariance for a configurable FFT block size, then draws
-Fourier coefficients with that covariance and transforms back to the time
-domain. This mirrors the approach in ``docs/studies/lisa/lisatools_synth_check.py``
-but is focused on producing paper-ready datasets.
+Internally it uses lisatools' ``XYZ2SensitivityMatrix`` on the full-length FFT
+grid, draws correlated Fourier coefficients once, and transforms back to time
+domain.
 """
 
 from __future__ import annotations
@@ -39,6 +37,10 @@ from lisatools import detector as lisa_models  # noqa: E402
 from lisatools.sensitivity import XYZ2SensitivityMatrix  # noqa: E402
 
 WEEK_SECONDS = 7.0 * 86_400.0
+CHOLESKY_FLOOR_REL = 1e-12
+CHOLESKY_FLOOR_ABS = 0.0
+FREQ_CHUNK_SIZE = 200_000
+GENERATION_FMIN_FLOOR = 1e-5
 
 
 def _resolve_duration_seconds(
@@ -76,81 +78,110 @@ def _resolve_duration_seconds(
     return n_time_i, n_time_i * dt
 
 
-def _trim_to_multiple(n: int, multiple: int) -> int:
-    n = int(n)
-    multiple = int(multiple)
-    if multiple <= 0:
-        raise ValueError("multiple must be positive.")
-    n_used = n - (n % multiple)
-    return n_used if n_used > 0 else multiple
-
-
-def _draw_fft_noise(chol: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    N = int(chol.shape[0])
-    eps = rng.normal(0.0, 1.0 / math.sqrt(2.0), (3, N)) + 1j * rng.normal(
-        0.0, 1.0 / math.sqrt(2.0), (3, N)
-    )
-    eps[:, 0] = rng.normal(0.0, 1.0, 3)
-    eps[:, -1] = rng.normal(0.0, 1.0, 3)
-    return np.einsum("fij,jf->if", chol, eps)  # (3, N)
-
-
-def generate_xyz_chunks(
+def generate_xyz_continuous(
     *,
     n_total: int,
     dt: float,
-    chunk_len: int,
     model: str,
     seed: int,
+    fmin_generate: float,
+    fmax_generate: float,
+    cholesky_floor_rel: float,
+    cholesky_floor_abs: float,
+    freq_chunk_size: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Generate XYZ time series by concatenating independent FFT chunks."""
+    """Generate one continuous XYZ time series from a band-limited FFT draw."""
     n_total = int(n_total)
-    chunk_len = int(chunk_len)
     dt = float(dt)
 
     if n_total <= 1:
         raise ValueError("n_total must be > 1.")
-    if chunk_len <= 2:
-        raise ValueError("chunk_len must be > 2.")
-    n_chunks = n_total // chunk_len
-    if n_chunks < 1:
-        raise ValueError("Total length shorter than one chunk.")
-    n_used = n_chunks * chunk_len
+    if freq_chunk_size <= 0:
+        raise ValueError("freq_chunk_size must be positive.")
+    freq = np.fft.rfftfreq(n_total, d=dt)
+    if freq.size < 2:
+        raise ValueError("n_total too short for rFFT.")
 
-    freq_chunk = np.fft.rfftfreq(chunk_len, d=dt)
-    if freq_chunk.size < 2:
-        raise ValueError("Chunk length too short for rFFT.")
-    freq_eval = freq_chunk.copy()
-    if freq_eval[0] == 0.0:
-        freq_eval[0] = freq_eval[1]
+    nyq = 0.5 / dt
+    fmin_eff = max(float(fmin_generate), 0.0)
+    fmax_eff = min(float(fmax_generate), nyq)
+    if fmax_eff <= fmin_eff:
+        raise ValueError(
+            f"Invalid generation band [{fmin_generate}, {fmax_generate}] for dt={dt:g} (Nyquist={nyq:g})."
+        )
+    active_mask = (freq >= fmin_eff) & (freq <= fmax_eff)
+    if active_mask.size:
+        active_mask[0] = False
+    active_idx = np.flatnonzero(active_mask)
+    if active_idx.size == 0:
+        raise ValueError(
+            "No active FFT bins in the generation band. Increase duration or widen [fmin, fmax]."
+        )
 
     model_checked = lisa_models.check_lisa_model(model)
-    sens_chunk = XYZ2SensitivityMatrix(freq_eval, model=model_checked)
-    S_true_chunk = np.transpose(sens_chunk.sens_mat, (2, 0, 1))
-
-    cov_fft = (chunk_len / (2.0 * dt)) * np.asarray(
-        S_true_chunk, dtype=np.complex128
-    )
-    chol = np.linalg.cholesky(cov_fft)
+    floor_rel = float(cholesky_floor_rel)
+    floor_abs = float(cholesky_floor_abs)
+    eye = np.eye(3, dtype=np.complex128)
+    fft_scale = n_total / (2.0 * dt)
 
     rng = np.random.default_rng(int(seed))
-    data = np.empty((n_used, 3), dtype=np.float32)
+    noise_fft = np.zeros((3, freq.size), dtype=np.complex64)
 
-    for idx in range(n_chunks):
-        noise_fft = _draw_fft_noise(chol, rng)
-        start = idx * chunk_len
-        end = start + chunk_len
-        data[start:end, 0] = np.fft.irfft(noise_fft[0], n=chunk_len).astype(
-            np.float32
+    for start in range(0, active_idx.size, int(freq_chunk_size)):
+        stop = min(start + int(freq_chunk_size), active_idx.size)
+        idx = active_idx[start:stop]
+        freq_chunk = np.asarray(freq[idx], dtype=np.float64)
+
+        sens_chunk = XYZ2SensitivityMatrix(freq_chunk, model=model_checked)
+        s_chunk = np.transpose(sens_chunk.sens_mat, (2, 0, 1)).astype(
+            np.complex128
         )
-        data[start:end, 1] = np.fft.irfft(noise_fft[1], n=chunk_len).astype(
-            np.float32
-        )
-        data[start:end, 2] = np.fft.irfft(noise_fft[2], n=chunk_len).astype(
-            np.float32
+        cov_chunk = fft_scale * s_chunk
+        cov_chunk = 0.5 * (
+            cov_chunk + np.conj(np.swapaxes(cov_chunk, 1, 2))
         )
 
-    time = (np.arange(n_used) * dt).astype(np.float64)
+        if floor_rel > 0.0 or floor_abs > 0.0:
+            min_eig = np.linalg.eigvalsh(cov_chunk)[:, 0].real
+            diag_scale = (
+                np.real(np.trace(cov_chunk, axis1=1, axis2=2)) / 3.0
+            )
+            target_floor = np.maximum(
+                floor_abs, floor_rel * np.maximum(diag_scale, 0.0)
+            )
+            shift = np.maximum(target_floor - min_eig, 0.0)
+            if np.any(shift > 0.0):
+                cov_chunk = cov_chunk + shift[:, None, None] * eye[None, :, :]
+
+        try:
+            chol_chunk = np.linalg.cholesky(cov_chunk)
+        except np.linalg.LinAlgError:
+            min_eig = np.linalg.eigvalsh(cov_chunk)[:, 0].real
+            diag_scale = np.real(np.trace(cov_chunk, axis1=1, axis2=2)) / 3.0
+            fallback_floor = 1e-15 * np.maximum(diag_scale, 1.0)
+            shift = np.maximum(fallback_floor - min_eig, 0.0)
+            cov_chunk = cov_chunk + shift[:, None, None] * eye[None, :, :]
+            chol_chunk = np.linalg.cholesky(cov_chunk)
+        n_chunk = idx.size
+        eps = rng.normal(0.0, 1.0 / math.sqrt(2.0), (3, n_chunk)) + 1j * (
+            rng.normal(0.0, 1.0 / math.sqrt(2.0), (3, n_chunk))
+        )
+
+        if n_total % 2 == 0:
+            nyquist_idx = freq.size - 1
+            nyq_loc = np.where(idx == nyquist_idx)[0]
+            if nyq_loc.size:
+                eps[:, int(nyq_loc[0])] = rng.normal(0.0, 1.0, 3)
+
+        coeff_chunk = np.einsum("fij,jf->if", chol_chunk, eps)
+        noise_fft[:, idx] = coeff_chunk.astype(np.complex64)
+
+    data = np.empty((n_total, 3), dtype=np.float32)
+    data[:, 0] = np.fft.irfft(noise_fft[0], n=n_total).astype(np.float32)
+    data[:, 1] = np.fft.irfft(noise_fft[1], n=n_total).astype(np.float32)
+    data[:, 2] = np.fft.irfft(noise_fft[2], n=n_total).astype(np.float32)
+
+    time = (np.arange(n_total) * dt).astype(np.float64)
     return time, data
 
 
@@ -179,7 +210,10 @@ def main() -> None:
         "--block-size",
         type=int,
         default=5000,
-        help="Chunk length in samples (also stored as Lb).",
+        help=(
+            "Postprocessing block length in samples (stored as Lb metadata and "
+            "used for freq_true grid). Does not affect time-series generation."
+        ),
     )
     parser.add_argument(
         "--delta-t",
@@ -223,29 +257,38 @@ def main() -> None:
         return
 
     dt = float(args.delta_t)
-    chunk_len = int(args.block_size)
-    n_target, duration_seconds = _resolve_duration_seconds(
+    block_len = int(args.block_size)
+    if block_len <= 2:
+        raise ValueError("--block-size must be > 2.")
+    n_target, _ = _resolve_duration_seconds(
         duration_weeks=args.duration_weeks,
         duration_days=args.duration_days,
-        n=args.n,
+        n=args.n_time,
         dt=dt,
     )
-    n_used = _trim_to_multiple(n_target, chunk_len)
-    duration_days = duration_seconds / 86_400.0
+    n_used = int(n_target)
+    duration_days = (n_used * dt) / 86_400.0
+    gen_fmin = min(float(args.fmin), float(GENERATION_FMIN_FLOOR))
+    gen_fmax = float(args.fmax)
 
-    time, data = generate_xyz_chunks(
+    time, data = generate_xyz_continuous(
         n_total=int(n_used),
         dt=float(dt),
-        chunk_len=int(chunk_len),
         model=str(args.model),
         seed=int(args.seed),
+        fmin_generate=gen_fmin,
+        fmax_generate=gen_fmax,
+        cholesky_floor_rel=float(CHOLESKY_FLOOR_REL),
+        cholesky_floor_abs=float(CHOLESKY_FLOOR_ABS),
+        freq_chunk_size=int(FREQ_CHUNK_SIZE),
     )
 
-    # Store analytic PSD/CSD matrix only in the requested band on the chunk FFT grid.
-    freq_chunk = np.fft.rfftfreq(int(chunk_len), d=float(dt))[1:]
-    if freq_chunk.size == 0:
+    # Store analytic PSD/CSD matrix only in the requested band on the
+    # postprocessing block FFT grid.
+    freq_block = np.fft.rfftfreq(int(block_len), d=float(dt))[1:]
+    if freq_block.size == 0:
         raise ValueError(
-            "Chunk length too short to retain positive frequencies."
+            "Block length too short to retain positive frequencies."
         )
     fmin = float(args.fmin)
     fmax = float(args.fmax)
@@ -256,11 +299,11 @@ def main() -> None:
     if fmax > nyq:
         fmax = nyq
 
-    mask = (freq_chunk >= fmin) & (freq_chunk <= fmax)
-    freq_true = freq_chunk[mask]
+    mask = (freq_block >= fmin) & (freq_block <= fmax)
+    freq_true = freq_block[mask]
     if freq_true.size == 0:
         raise ValueError(
-            "No frequencies remain in [fmin, fmax] for the chosen delta-t/chunk length."
+            "No frequencies remain in [fmin, fmax] for the chosen delta-t/block length."
         )
 
     model_checked = lisa_models.check_lisa_model(str(args.model))
@@ -322,6 +365,7 @@ def main() -> None:
         )
         print(f"Wrote Welch-vs-true plot to {plot_path}.")
 
+    nb_blocks = max(1, int(n_used // block_len))
     np.savez_compressed(
         out,
         time=time,
@@ -330,14 +374,14 @@ def main() -> None:
         true_matrix=true_matrix,
         delta_t=float(dt),
         model=str(args.model),
-        Lb=int(chunk_len),
-        n_chunks=int(n_used // chunk_len),
+        Lb=int(block_len),
+        Nb=int(nb_blocks),
         fmin=float(args.fmin),
         fmax=float(args.fmax),
         duration_days=float(duration_days),
     )
     print(
-        f"Wrote {out} (N={n_used}, dt={dt:g}s, duration_days={duration_days:.2f}, chunk_len={chunk_len})."
+        f"Wrote {out} (N={n_used}, dt={dt:g}s, duration_days={duration_days:.2f}, block_len={block_len})."
     )
 
 

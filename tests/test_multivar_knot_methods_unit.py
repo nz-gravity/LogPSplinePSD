@@ -187,3 +187,40 @@ def test_multivar_density_allows_component_specific_diagonal_knots():
     knots_0 = np.round(np.asarray(model.diagonal_models[0].knots), 12)
     knots_1 = np.round(np.asarray(model.diagonal_models[1].knots), 12)
     assert not np.array_equal(knots_0, knots_1)
+
+
+def test_multivar_density_uses_fixed_basis_count_per_component():
+    n_freq = 64
+    p = 3
+    rng = np.random.default_rng(0)
+    freq = np.linspace(0.1, 1.0, n_freq, dtype=np.float64)
+    u_re = rng.normal(size=(n_freq, p, p)).astype(np.float64) * 0.1
+    u_im = rng.normal(size=(n_freq, p, p)).astype(np.float64) * 0.1
+    fft_data = MultivarFFT(
+        u_re=u_re,
+        u_im=u_im,
+        freq=freq,
+        N=n_freq,
+        p=p,
+        Nb=2,
+    )
+
+    n_knots = 12
+    degree = 2
+    model = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=n_knots,
+        degree=degree,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+    )
+
+    component_models = model.diagonal_models + [
+        model.offdiag_re_model,
+        model.offdiag_im_model,
+    ]
+    knot_sizes = {int(component.knots.shape[0]) for component in component_models}
+    basis_sizes = {int(component.basis.shape[1]) for component in component_models}
+
+    assert knot_sizes == {n_knots}
+    assert basis_sizes == {n_knots + degree - 1}

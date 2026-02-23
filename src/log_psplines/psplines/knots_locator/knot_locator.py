@@ -5,6 +5,56 @@ import numpy as np
 from ...datatypes import Periodogram
 from .lvk_knot_allocator import LvkKnotAllocator
 
+_KNOT_TOL = 1e-12
+
+
+def _dedup_sorted_with_tol(
+    knots: np.ndarray, *, tol: float = _KNOT_TOL
+) -> np.ndarray:
+    """Deduplicate a sorted knot array using a distance tolerance."""
+    if knots.size == 0:
+        return knots
+    uniq = [float(knots[0])]
+    for value in knots[1:]:
+        if float(value) - float(uniq[-1]) > tol:
+            uniq.append(float(value))
+            continue
+        if abs(float(value)) <= tol:
+            uniq[-1] = 0.0
+        elif abs(float(value) - 1.0) <= tol:
+            uniq[-1] = 1.0
+    return np.asarray(uniq, dtype=np.float64)
+
+
+def _enforce_exact_knot_count(
+    knots: np.ndarray, *, target_count: int
+) -> np.ndarray:
+    """Ensure knots has exactly target_count entries while preserving endpoints."""
+    if target_count < 2:
+        raise ValueError("target_count must be >= 2")
+
+    knots = np.asarray(knots, dtype=np.float64)
+    if knots.size == 0:
+        return np.linspace(0.0, 1.0, target_count)
+    if knots[0] != 0.0 or knots[-1] != 1.0:
+        raise ValueError("knots must include endpoints before count enforcement")
+
+    while knots.size > target_count:
+        # Drop the least informative interior knot in the tightest local region.
+        gaps = np.diff(knots)
+        interior_scores = np.minimum(gaps[:-1], gaps[1:])
+        drop_idx = 1 + int(np.argmin(interior_scores))
+        knots = np.delete(knots, drop_idx)
+
+    while knots.size < target_count:
+        # Add a new knot at the midpoint of the widest interval.
+        gaps = np.diff(knots)
+        insert_left = int(np.argmax(gaps))
+        new_knot = 0.5 * (knots[insert_left] + knots[insert_left + 1])
+        knots = np.insert(knots, insert_left + 1, new_knot)
+
+    return knots
+
 
 def init_knots(
     n_knots: int,
@@ -115,6 +165,8 @@ def _init_knots_from_arrays(
     knots = np.sort(knots)
     knots = (knots - min_freq) / (max_freq - min_freq)
     knots = np.clip(knots, 0.0, 1.0)
+    knots[np.abs(knots) <= _KNOT_TOL] = 0.0
+    knots[np.abs(knots - 1.0) <= _KNOT_TOL] = 1.0
     # print if we have some nanas
     if np.isnan(knots).any():
         missing_knots = original_knots[np.isnan(knots)]
@@ -126,9 +178,22 @@ def _init_knots_from_arrays(
 
     # ensure we have knots at ends 0 and 1
     knots = np.concatenate([[0.0], knots, [1.0]])
-    unique_knots, counts = np.unique(knots, return_counts=True)
+    knots = np.sort(knots)
+    knots = _dedup_sorted_with_tol(knots)
+    if knots.size == 0 or knots[0] != 0.0:
+        knots = np.concatenate([[0.0], knots])
+    else:
+        knots[0] = 0.0
+    if knots[-1] != 1.0:
+        knots = np.concatenate([knots, [1.0]])
+    else:
+        knots[-1] = 1.0
 
-    return unique_knots
+    # Density-based knots are expected to honor the requested count exactly.
+    if method == "density":
+        knots = _enforce_exact_knot_count(knots, target_count=int(n_knots))
+
+    return knots
 
 
 def _quantile_based_knots(

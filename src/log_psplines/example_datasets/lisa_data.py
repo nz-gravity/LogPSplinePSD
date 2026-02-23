@@ -299,7 +299,17 @@ def spectral_matrix_from_components(
 
 
 def coherence(Sii: np.ndarray, Sjj: np.ndarray, Sij: np.ndarray) -> np.ndarray:
-    return np.abs(Sij) / np.sqrt(Sii * Sjj)
+    # Guard against exact/null bins so plotting/diagnostics stay finite.
+    sii = np.maximum(np.asarray(Sii).real, 0.0)
+    sjj = np.maximum(np.asarray(Sjj).real, 0.0)
+    denom = np.sqrt(sii * sjj)
+    coh = np.divide(
+        np.abs(Sij),
+        denom,
+        out=np.zeros_like(denom, dtype=np.float64),
+        where=denom > 0.0,
+    )
+    return np.clip(coh, 0.0, 1.0)
 
 
 def analytic_covariance_from_model(
@@ -334,6 +344,7 @@ def plot_psd_coherence(
     fname: Optional[Union[Path, str]] = None,
     *,
     psd_unit_label: str = "1/Hz",
+    empirical_label: str = "Welch",
 ) -> None:
     """
     Plot PSDs on the diagonal and coherences on the lower triangle.
@@ -395,7 +406,12 @@ def plot_psd_coherence(
 
             if i == j:
                 ax.loglog(freq, true_psd[i], label="True PSD")
-                ax.loglog(freq, emp_psd[i], alpha=0.5, label="Welch PSD")
+                ax.loglog(
+                    freq,
+                    emp_psd[i],
+                    alpha=0.5,
+                    label=f"{empirical_label} PSD",
+                )
                 ax.set_title(f"{channels[i]} PSD")
                 ax.set_ylabel(f"PSD [{psd_unit_label}]")
                 ax.grid(True, which="both", ls="--", alpha=0.3)
@@ -404,7 +420,12 @@ def plot_psd_coherence(
                 continue
 
             ax.semilogx(freq, true_coh[i][j], label="True coh")
-            ax.semilogx(freq, emp_coh[i][j], alpha=0.5, label="Welch coh")
+            ax.semilogx(
+                freq,
+                emp_coh[i][j],
+                alpha=0.5,
+                label=f"{empirical_label} coh",
+            )
             ax.set_ylim(0, 1.05)
             ax.set_ylabel("Coherence")
             ax.grid(True, which="both", ls="--", alpha=0.3)

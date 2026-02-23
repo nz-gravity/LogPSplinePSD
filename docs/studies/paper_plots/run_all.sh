@@ -31,7 +31,7 @@ LISA_REGEN="${LISA_REGEN:-0}" # 0|1
 LISA_DELTA_T="${LISA_DELTA_T:-5}" # seconds (<= 50s, and satisfies Nyquist for fmax=1e-1)
 LISA_SHORT_WEEKS="${LISA_SHORT_WEEKS:-4}"
 LISA_LONG_WEEKS="${LISA_LONG_WEEKS:-12}"
-LISA_BLOCK_SIZE="${LISA_BLOCK_SIZE:-5000}" # generation chunk length + Wishart block length
+LISA_BLOCK_SIZE="${LISA_BLOCK_SIZE:-5000}" # analysis block length (Wishart/preprocessing)
 
 if [[ ! "${LISA_DELTA_T}" =~ ^[0-9]+$ ]] || [[ "${LISA_DELTA_T}" -le 0 ]]; then
   echo "LISA_DELTA_T must be a positive integer seconds value, got '${LISA_DELTA_T}'."

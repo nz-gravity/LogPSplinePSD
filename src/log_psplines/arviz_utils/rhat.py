@@ -45,9 +45,10 @@ def _posterior_subset_for_rhat(idata, *, drop_draws: int = 0):
 
     if not subset:
         return None
-    ds = posterior.__class__(
-        subset, coords=posterior.coords, attrs=posterior.attrs
-    )
+    # Do not pass parent coords here: weight variables may have been indexed
+    # down to a representative subset, and reusing the original coordinates
+    # causes xarray to align/reindex and fill dropped indices with NaNs.
+    ds = posterior.__class__(subset, attrs=posterior.attrs)
     if drop_draws > 0 and "draw" in ds.dims:
         ds = ds.isel(draw=slice(int(drop_draws), None))
     return ds

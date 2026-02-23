@@ -200,7 +200,7 @@ def main() -> None:
 
     target_block_seconds = 7.0 * SEC_IN_DAY
     Lb = int(round(target_block_seconds / delta_t))
-    chunk_seconds = Lb * delta_t
+    block_seconds = Lb * delta_t
     total_samples = int(duration / delta_t)
     print(
         f"Total duration: {duration_days:.2f} days "
@@ -208,7 +208,7 @@ def main() -> None:
     )
     print(
         "Using chunk length = 7 days: "
-        f"{Lb} samples ({chunk_seconds:.0f} s)."
+        f"{Lb} samples ({block_seconds:.0f} s)."
     )
 
     x_t, y_t, z_t, freq_true, S_true = generate_lisatools_xyz_noise_timeseries(
@@ -216,7 +216,7 @@ def main() -> None:
         delta_t=delta_t,
         model=model,
         seed=123,
-        chunk_seconds=chunk_seconds,
+        chunk_seconds=block_seconds,
     )
 
     if args.welch_days is None:
@@ -228,26 +228,27 @@ def main() -> None:
     overlap = float(args.welch_overlap)
     if not (0.0 <= overlap < 1.0):
         raise ValueError("welch-overlap must be in [0, 1).")
-    n_chunks = len(x_t) // Lb
-    if n_chunks < 1:
-        n_chunks = 1
+    Nb = len(x_t) // Lb
+    if Nb < 1:
+        Nb = 1
         Lb = len(x_t)
+    block_seconds = Lb * delta_t
     if L > Lb:
         L = Lb
     print(
         "Welch segment length: "
         f"{L} samples ({L * delta_t:.0f} s), overlap={overlap:.2f}."
     )
-    print(f"Welch averaging across {n_chunks} chunk(s) of {Lb} samples.")
+    print(f"Welch averaging across {Nb} block(s) of {Lb} samples.")
 
-    x_chunks = x_t[: n_chunks * Lb].reshape(n_chunks, Lb)
-    y_chunks = y_t[: n_chunks * Lb].reshape(n_chunks, Lb)
-    z_chunks = z_t[: n_chunks * Lb].reshape(n_chunks, Lb)
+    x_chunks = x_t[: Nb * Lb].reshape(Nb, Lb)
+    y_chunks = y_t[: Nb * Lb].reshape(Nb, Lb)
+    z_chunks = z_t[: Nb * Lb].reshape(Nb, Lb)
 
     Sxx = Syy = Szz = 0.0
     Sxy = Syz = Szx = 0.0
     freq_est = None
-    for idx in range(n_chunks):
+    for idx in range(Nb):
         freq_chunk, Sxx_i, Syy_i, Szz_i, Sxy_i, Syz_i, Szx_i = (
             welch_spectral_matrix_xyz(
                 x_chunks[idx],
@@ -267,12 +268,12 @@ def main() -> None:
         Syz += Syz_i
         Szx += Szx_i
 
-    Sxx /= n_chunks
-    Syy /= n_chunks
-    Szz /= n_chunks
-    Sxy /= n_chunks
-    Syz /= n_chunks
-    Szx /= n_chunks
+    Sxx /= Nb
+    Syy /= Nb
+    Szz /= Nb
+    Sxy /= Nb
+    Syz /= Nb
+    Szx /= Nb
 
     freq_mask = (freq_est >= fmin_diag) & (freq_est <= fmax_diag)
     if not np.any(freq_mask):
@@ -360,8 +361,9 @@ def main() -> None:
             delta_t=delta_t,
             model=model,
             use_freq_units=USE_FREQ_UNITS,
+            Nb=Nb,
             Lb=Lb,
-            block_seconds=chunk_seconds,
+            block_seconds=block_seconds,
         )
         print(f"Saved synthetic lisatools data to {NPZ_PATH}")
 

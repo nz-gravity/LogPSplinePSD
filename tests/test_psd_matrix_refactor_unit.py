@@ -7,12 +7,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+import xarray as xr
 
 from log_psplines.datatypes.multivar import EmpiricalPSD, _get_coherence
 from log_psplines.example_datasets.lisa_data import LISAData
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.plotting.psd_matrix import (
     PSDMatrixPlotSpec,
+    _get_panel_knots_from_idata,
     _pack_ci_dict,
     plot_psd_matrix,
 )
@@ -29,6 +31,35 @@ def _build_ci(p: int = 2, n: int = 32):
             scale = 1.0 + 0.1 * (i + j)
             psd_samples[:, :, i, j] *= scale
     return freq, _pack_ci_dict(psd_samples=psd_samples, show_coherence=True)
+
+
+def test_get_panel_knots_from_idata_multivar_dataset():
+    spline_dataset = xr.Dataset(
+        {
+            "diag_0_knots": (
+                ["diag_0_knots_dim"],
+                np.array([0.0, 0.2, 1.0], dtype=np.float64),
+            ),
+            "diag_1_knots": (
+                ["diag_1_knots_dim"],
+                np.array([0.0, 0.6, 1.0], dtype=np.float64),
+            ),
+            "offdiag_re_knots": (
+                ["offdiag_re_knots_dim"],
+                np.array([0.0, 0.4, 1.0], dtype=np.float64),
+            ),
+        }
+    )
+    fake_idata = {"spline_model": spline_dataset}
+
+    diag_knots, offdiag_knots, fallback_knots = _get_panel_knots_from_idata(
+        fake_idata
+    )
+    assert set(diag_knots.keys()) == {0, 1}
+    np.testing.assert_allclose(diag_knots[0], np.array([0.0, 0.2, 1.0]))
+    np.testing.assert_allclose(diag_knots[1], np.array([0.0, 0.6, 1.0]))
+    np.testing.assert_allclose(offdiag_knots, np.array([0.0, 0.4, 1.0]))
+    assert fallback_knots is None
 
 
 def test_plot_psd_matrix_accepts_spec_object():

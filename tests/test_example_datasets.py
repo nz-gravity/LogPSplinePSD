@@ -127,6 +127,8 @@ def test_varma_validity_flags():
     )
     assert stable.is_var_stationary is True
     assert stable.is_valid_var_dataset is True
+    assert stable.is_empirically_stationary is True
+    assert stable.empirical_stationarity_metrics is not None
     assert stable.var_companion_spectral_radius is not None
     assert stable.var_companion_spectral_radius < 1.0
 
@@ -139,5 +141,7 @@ def test_varma_validity_flags():
     )
     assert non_stationary.is_var_stationary is False
     assert non_stationary.is_valid_var_dataset is False
+    assert non_stationary.is_empirically_stationary is False
+    assert non_stationary.empirical_stationarity_metrics is not None
     assert non_stationary.var_companion_spectral_radius is not None
     assert non_stationary.var_companion_spectral_radius >= 1.0

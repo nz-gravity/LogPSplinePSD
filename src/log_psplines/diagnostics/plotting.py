@@ -48,6 +48,24 @@ class DiagnosticsConfig:
     pair_max_vars: int = 4
 
 
+def _to_flat_finite_array(obj) -> np.ndarray:
+    """Convert ArviZ/xarray outputs to a flat finite float array."""
+    if obj is None:
+        return np.array([], dtype=float)
+    if hasattr(obj, "data_vars"):
+        values: list[np.ndarray] = []
+        for var in obj.data_vars.values():
+            arr = np.asarray(var).reshape(-1)
+            arr = arr[np.isfinite(arr)]
+            if arr.size:
+                values.append(arr)
+        if not values:
+            return np.array([], dtype=float)
+        return np.concatenate(values)
+    arr = np.asarray(obj).reshape(-1)
+    return arr[np.isfinite(arr)]
+
+
 def _var_priority(name: str) -> tuple[int, str]:
     if name.startswith("delta"):
         return (0, name)
@@ -205,8 +223,8 @@ def _create_ess_rhat_profiles(
         try:
             ess = az.ess(var, method="bulk")
             rhat = az.rhat(var)
-            ess_vals = np.asarray(ess)
-            rhat_vals = np.asarray(rhat)
+            ess_vals = _to_flat_finite_array(ess)
+            rhat_vals = _to_flat_finite_array(rhat)
         except Exception:
             continue
 
@@ -384,18 +402,12 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
             for var_name in idata_plot.posterior.data_vars:
                 var_data = posterior[var_name]
                 rhat = az.rhat(var_data)
-
-                # Extract values from xarray object
-                if hasattr(rhat, "values"):
-                    rhat_array = np.asarray(rhat.values)
-                else:
-                    rhat_array = np.asarray(rhat)
+                rhat_array = _to_flat_finite_array(rhat)
 
                 # Handle both scalar and array R-hats
-                if rhat_array.ndim == 0:
-                    rhat_val = float(rhat_array)
-                else:
-                    rhat_val = float(rhat_array.mean())
+                if rhat_array.size == 0:
+                    continue
+                rhat_val = float(np.mean(rhat_array))
 
                 # Find axes for this variable and update title
                 for ax in fig.axes:

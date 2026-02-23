@@ -65,7 +65,9 @@ class VARMAData:
         self.welch_f: np.ndarray | None = None  # set in "resimulate"
         self.is_var_stationary: bool | None = None
         self.is_valid_var_dataset: bool | None = None
+        self.is_empirically_stationary: bool | None = None
         self.var_companion_spectral_radius: float | None = None
+        self.empirical_stationarity_metrics: dict[str, float] | None = None
         self.psd: np.ndarray = np.zeros(
             (self.freq.size, self.p, self.p), dtype=np.complex128
         )
@@ -147,22 +149,34 @@ class VARMAData:
 
         The check is based on the VAR companion matrix implied by ``var_coeffs``:
         stationarity requires all companion eigenvalues to lie strictly inside the unit
-        circle. In addition, all generated samples must be finite.
+        circle. In addition, samples are checked for finiteness and empirical
+        stationarity (windowed moment drift).
         """
         if self.data is None:
             raise ValueError(
                 "No simulated data available for validity checks."
             )
         is_stationary, spectral_radius = _is_var_stationary(self.var_coeffs)
+        is_empirical, empirical_metrics = _empirical_stationarity_check(
+            self.data
+        )
         all_finite = bool(np.all(np.isfinite(self.data)))
         self.is_var_stationary = is_stationary
+        self.is_empirically_stationary = is_empirical
         self.var_companion_spectral_radius = spectral_radius
+        self.empirical_stationarity_metrics = empirical_metrics
+        # Keep "valid VAR dataset" tied to the structural VAR condition and
+        # finite simulations; empirical checks are diagnostic and stochastic.
         self.is_valid_var_dataset = bool(is_stationary and all_finite)
 
-        if self.is_valid_var_dataset:
+        if self.is_valid_var_dataset and is_empirical:
             logger.info(
                 f"VAR sanity check passed: stationary AR dynamics "
-                f"(companion spectral radius={spectral_radius:.6f}) with finite samples."
+                f"(companion spectral radius={spectral_radius:.6f}) with finite samples. "
+                f"Empirical stationarity passed "
+                f"(max_mean_shift_z={empirical_metrics['max_mean_shift_z']:.3f}, "
+                f"max_var_ratio={empirical_metrics['max_var_ratio']:.3f}, "
+                f"covariance_rel_drift={empirical_metrics['covariance_rel_drift']:.3f})."
             )
             return
 
@@ -174,6 +188,13 @@ class VARMAData:
             )
         if not all_finite:
             issues.append("simulated samples include NaN/Inf.")
+        if not is_empirical:
+            issues.append(
+                "empirical stationarity check suggests moment drift "
+                f"(max_mean_shift_z={empirical_metrics['max_mean_shift_z']:.3f}, "
+                f"max_var_ratio={empirical_metrics['max_var_ratio']:.3f}, "
+                f"covariance_rel_drift={empirical_metrics['covariance_rel_drift']:.3f})."
+            )
         logger.warning(f"VAR sanity check failed: {' '.join(issues)}")
 
     def get_periodogram(self) -> np.ndarray:
@@ -504,3 +525,88 @@ def _is_var_stationary(
     eigvals = np.linalg.eigvals(companion)
     spectral_radius = float(np.max(np.abs(eigvals))) if eigvals.size else 0.0
     return bool(spectral_radius < (1.0 - tol)), spectral_radius
+
+
+def _empirical_stationarity_check(
+    data: np.ndarray,
+    *,
+    min_samples: int = 32,
+    mean_shift_tol: float = 0.75,
+    var_ratio_tol: float = 2.0,
+    cov_drift_tol: float = 0.5,
+    eps: float = 1e-12,
+) -> tuple[bool, dict[str, float]]:
+    """Heuristic stationarity check from first/second-half moment drift.
+
+    Parameters
+    ----------
+    data : np.ndarray, shape (N, C)
+        Simulated multivariate series.
+    min_samples : int, default=32
+        If fewer than this many samples are available, return pass with metrics.
+    mean_shift_tol : float, default=0.75
+        Maximum allowed channel-wise mean shift in z-score units.
+    var_ratio_tol : float, default=2.0
+        Maximum allowed ratio between half-sample variances.
+    cov_drift_tol : float, default=0.5
+        Maximum allowed relative Frobenius drift between half-sample covariance
+        matrices.
+    eps : float, default=1e-12
+        Numerical floor used in divisions.
+
+    Returns
+    -------
+    tuple[bool, dict[str, float]]
+        `(passes, metrics)` where `metrics` contains
+        `max_mean_shift_z`, `max_var_ratio`, `covariance_rel_drift`,
+        and `n_samples_used`.
+    """
+    x = np.asarray(data, dtype=float)
+    if x.ndim != 2:
+        raise ValueError(f"Expected data shape (N, C), got {x.shape}.")
+
+    n = int(x.shape[0])
+    if n < min_samples:
+        return True, {
+            "max_mean_shift_z": 0.0,
+            "max_var_ratio": 1.0,
+            "covariance_rel_drift": 0.0,
+            "n_samples_used": float(n),
+        }
+
+    split = n // 2
+    first_half = x[:split]
+    second_half = x[-split:]
+
+    mean_first = np.mean(first_half, axis=0)
+    mean_second = np.mean(second_half, axis=0)
+    full_std = np.std(x, axis=0)
+    mean_shift_z = np.abs(mean_second - mean_first) / (full_std + eps)
+    max_mean_shift = float(np.max(mean_shift_z))
+
+    var_first = np.var(first_half, axis=0)
+    var_second = np.var(second_half, axis=0)
+    var_ratio = np.maximum(var_first, var_second) / (
+        np.minimum(var_first, var_second) + eps
+    )
+    max_var_ratio = float(np.max(var_ratio))
+
+    cov_first = np.cov(first_half, rowvar=False)
+    cov_second = np.cov(second_half, rowvar=False)
+    cov_ref = 0.5 * (cov_first + cov_second)
+    cov_rel_drift = float(
+        np.linalg.norm(cov_first - cov_second, ord="fro")
+        / (np.linalg.norm(cov_ref, ord="fro") + eps)
+    )
+
+    passes = bool(
+        (max_mean_shift < mean_shift_tol)
+        and (max_var_ratio < var_ratio_tol)
+        and (cov_rel_drift < cov_drift_tol)
+    )
+    return passes, {
+        "max_mean_shift_z": max_mean_shift,
+        "max_var_ratio": max_var_ratio,
+        "covariance_rel_drift": cov_rel_drift,
+        "n_samples_used": float(split * 2),
+    }

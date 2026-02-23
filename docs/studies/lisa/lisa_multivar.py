@@ -14,12 +14,8 @@ from log_psplines.datatypes.multivar_utils import interp_matrix
 from log_psplines.diagnostics import psd_compare
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import run_mcmc
-from log_psplines.plotting.psd_matrix import plot_psd_matrix
-from log_psplines.preprocessing.coarse_grain import (
-    CoarseGrainConfig,
-    apply_coarse_graining_univar,
-    compute_binning_structure,
-)
+from log_psplines.plotting.psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
+from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
 logger.info(f"JAX devices: {jax.devices()}")
 
@@ -98,7 +94,7 @@ TARGET_ACCEPT_BY_CHANNEL: list[float] | None = [0.7, 0.6, 0.75]
 MAX_TREE_DEPTH_BY_CHANNEL: list[int] | None = [10, 10, 10]
 DENSE_MASS = True
 VI_GUIDE = _env_str("LISA_VI_GUIDE", "diag")
-VI_STEPS = _env_int("LISA_VI_STEPS", 200_000)
+VI_STEPS = _env_int("LISA_VI_STEPS", 1000_000)
 VI_LR = _env_float("LISA_VI_LR", 1e-4)
 VI_POSTERIOR_DRAWS = _env_int("LISA_VI_POSTERIOR_DRAWS", 1024)
 MAX_TIME_BLOCKS = 12
@@ -117,6 +113,8 @@ METRICS_MIN_PCT = 5.0
 METRICS_LOG_EPS = 1e-60
 PLOT_PSD_UNITS = "freq"  # "freq" -> Hz^2/Hz, "strain" -> 1/Hz
 
+Nb_hint: int | None = None
+Lb_hint: int | None = None
 
 if USE_LISATOOLS_SYNTH:
     if not LISATOOLS_SYNTH_NPZ.exists():
@@ -151,10 +149,13 @@ if USE_LISATOOLS_SYNTH:
                 "Synthetic NPZ stores PSD in frequency units only; "
                 "regenerate to include strain units for consistent overlays."
             )
+        if "Nb" in synth.files:
+            Nb_hint = int(synth["Nb"])
         if "Lb" in synth.files:
-            Lb = int(synth["Lb"])
-        else:
-            Lb = None
+            Lb_hint = int(synth["Lb"])
+        elif "block_len_samples" in synth.files:
+            # Backward-compatible read for older synth NPZ files.
+            Lb_hint = int(synth["block_len_samples"])
         base_psd_units = "strain"
         true_psd_source = (synth["freq_true"], true_matrix)
 else:
@@ -200,10 +201,24 @@ n_duration_days = n_duration / 86_400.0
 # chunk boundaries in synthetic generators.
 if N_TIME_BLOCKS_OVERRIDE is not None:
     Nb = int(N_TIME_BLOCKS_OVERRIDE)
-elif Lb is not None:
-    Nb = max(1, int(n // Lb))
+    if Nb < 1:
+        raise ValueError("N_TIME_BLOCKS_OVERRIDE must be >= 1.")
+    Nb = min(Nb, n)
+elif Nb_hint is not None and Nb_hint > 0:
+    Nb = min(int(Nb_hint), n)
+elif Lb_hint is not None and Lb_hint > 0:
+    Nb = max(1, int(n // Lb_hint))
+else:
+    Nb = min(MAX_TIME_BLOCKS, n)
+
+if Nb < 1:
+    raise ValueError("Derived Nb must be >= 1.")
 
 Lb = n // Nb
+if Lb < 1:
+    raise ValueError(
+        f"Derived block length Lb={Lb} is invalid for n={n}, Nb={Nb}."
+    )
 block_seconds = Lb * dt
 n_used = Nb * Lb
 if n_used != n:
@@ -228,10 +243,26 @@ logger.info(
 
 FMIN, FMAX = 10**-4, 10**-1
 
-coarse_cfg = CoarseGrainConfig(
-    enabled=True,
-    Nc=512,
-)
+analysis_freq = np.fft.rfftfreq(Lb, d=dt)[1:]
+analysis_mask = (analysis_freq >= FMIN) & (analysis_freq <= FMAX)
+Nl_analysis = int(np.count_nonzero(analysis_mask))
+if Nl_analysis < 1:
+    raise ValueError(
+        f"No positive frequencies retained in [{FMIN}, {FMAX}] for Lb={Lb}."
+    )
+
+target_Nc = 512
+if Nl_analysis % target_Nc != 0:
+    Nc_candidates = [
+        k for k in range(1, Nl_analysis + 1) if Nl_analysis % k == 0
+    ]
+    target_Nc = max(c for c in Nc_candidates if c <= min(512, Nl_analysis))
+    logger.info(
+        f"Adjusting coarse bins: retained Nl={Nl_analysis} is not divisible by 512; "
+        f"using Nc={target_Nc}."
+    )
+
+coarse_cfg = CoarseGrainConfig(enabled=True, Nc=target_Nc)
 
 raw_series = MultivariateTimeseries(y=y_full, t=t_full)
 
@@ -428,28 +459,28 @@ empirical_welch = _restrict_freq_range(empirical_welch, fmin=FMIN, fmax=FMAX)
 
 
 plot_psd_matrix(
-    idata=idata,
-    freq=freq_plot,
-    empirical_psd=None,  # will be extracted from idata.observed_data
-    extra_empirical_psd=[empirical_welch],
-    extra_empirical_labels=[
-        "Welch (block-avg)" if WELCH_BLOCK_AVG else "Welch"
-    ],
-    extra_empirical_styles=[
-        dict(color="0.5", lw=1.3, alpha=0.9, ls="-", zorder=-4),
-    ],
-    outdir=str(RESULTS_DIR),
-    filename="psd_matrix.png",
-    diag_yscale="log",
-    offdiag_yscale="linear",
-    xscale="log",
-    show_csd_magnitude=False,
-    show_coherence=True,
-    overlay_vi=True,
-    freq_range=(FMIN, FMAX),
-    true_psd=true_psd_physical,
-    psd_scale=None,
-    psd_unit_label=None,
+    PSDMatrixPlotSpec(
+        idata=idata,
+        freq=freq_plot,
+        empirical_psd=None,  # extracted from idata.observed_data
+        extra_empirical_psd=[empirical_welch],
+        extra_empirical_labels=[
+            "Welch (block-avg)" if WELCH_BLOCK_AVG else "Welch"
+        ],
+        extra_empirical_styles=[
+            dict(color="0.5", lw=1.3, alpha=0.9, ls="-", zorder=-4),
+        ],
+        outdir=str(RESULTS_DIR),
+        filename="psd_matrix.png",
+        diag_yscale="log",
+        offdiag_yscale="linear",
+        xscale="log",
+        show_csd_magnitude=False,
+        show_coherence=True,
+        overlay_vi=True,
+        freq_range=(FMIN, FMAX),
+        true_psd=true_psd_physical,
+    )
 )
 
 true_diag = np.diagonal(true_psd_physical.real, axis1=1, axis2=2)

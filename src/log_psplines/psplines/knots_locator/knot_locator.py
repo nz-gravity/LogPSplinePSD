@@ -37,10 +37,42 @@ def init_knots(
     np.ndarray
         Array of knot locations normalized to [0, 1]
     """
-
-    min_freq, max_freq = float(periodogram.freqs[0]), float(
-        periodogram.freqs[-1]
+    return _init_knots_from_arrays(
+        n_knots=n_knots,
+        freqs=np.asarray(periodogram.freqs),
+        power=np.asarray(periodogram.power),
+        parametric_model=parametric_model,
+        method=method,
+        knots=knots,
+        **kwargs,
     )
+
+
+def _init_knots_from_arrays(
+    n_knots: int,
+    freqs: np.ndarray,
+    power: np.ndarray,
+    parametric_model: np.ndarray | None = None,
+    method: str = "density",
+    knots: np.ndarray | None = None,
+    **kwargs,
+) -> np.ndarray:
+    """Core knot allocation implementation from raw frequency/power arrays."""
+    freqs = np.asarray(freqs, dtype=np.float64)
+    power = np.asarray(power, dtype=np.float64)
+    if freqs.ndim != 1:
+        raise ValueError(f"freqs must be 1-D, got shape {freqs.shape}")
+    if power.ndim != 1:
+        raise ValueError(f"power must be 1-D, got shape {power.shape}")
+    if freqs.shape[0] != power.shape[0]:
+        raise ValueError(
+            "freqs and power must have the same length, "
+            f"got {freqs.shape[0]} and {power.shape[0]}"
+        )
+    if freqs.shape[0] == 0:
+        raise ValueError("freqs/power must be non-empty.")
+
+    min_freq, max_freq = float(freqs[0]), float(freqs[-1])
 
     if n_knots == 2:
         return np.array([0.0, 1.0])
@@ -59,14 +91,15 @@ def init_knots(
             )
 
         elif method == "density":
+            periodogram = Periodogram(freqs=freqs, power=power)
             knots = _quantile_based_knots(
                 n_knots, periodogram, parametric_model
             )
 
         elif method == "lvk":
             knot_alloc = LvkKnotAllocator(
-                freqs=periodogram.freqs,
-                psd=periodogram.power,
+                freqs=freqs,
+                psd=power,
                 fmin=min_freq,
                 fmax=max_freq,
                 **kwargs,
@@ -127,10 +160,14 @@ def _quantile_based_knots(
     # Step 2: Standardize
     x_mean = np.mean(x)
     x_std = np.std(x)
-    y = (x - x_mean) / x_std
+    if not np.isfinite(x_std) or x_std <= 0.0:
+        y = np.zeros_like(x)
+    else:
+        y = (x - x_mean) / x_std
 
     # Step 3: Absolute values and normalize to create PMF
     z = np.abs(y)
+    z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
     total = np.sum(z)
     if total <= 0:
         z = np.ones_like(z) / z.size

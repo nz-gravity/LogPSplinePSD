@@ -29,7 +29,6 @@ SIGMA = np.array([[1.0, 0.10, 0.45], [0.10, 1.0, 0.00], [0.45, 0.00, 1.0]])
 VMA_COEFFS = np.array(
     [
         np.eye(3),
-        [[0.00, 0.00, 0.15], [0.00, 0.00, 0.00], [0.12, 0.00, 0.00]],
     ]
 )
 VAR_COEFFS = np.array(
@@ -51,6 +50,14 @@ VAR_COEFFS = np.array(
         ],
     ]
 )
+
+
+def _log_var_coefficients() -> None:
+    """Log the VAR(p) coefficient matrices used by this job."""
+    logger.info("Using VAR coefficients:")
+    for lag, coeff in enumerate(VAR_COEFFS, start=1):
+        coeff_str = np.array2string(coeff, precision=4, suppress_small=False)
+        logger.info(f"A{lag} =\n{coeff_str}")
 
 
 def _resolve_blocks(n_time_target: int, block_size: int) -> tuple[int, int]:
@@ -109,6 +116,7 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    _log_var_coefficients()
 
     outdir = Path(args.outdir).expanduser().resolve()
     outdir.mkdir(parents=True, exist_ok=True)

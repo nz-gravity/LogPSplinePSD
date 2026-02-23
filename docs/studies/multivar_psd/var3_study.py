@@ -1,4 +1,4 @@
-"""Multivariate PSD simulation study with VARMA data.
+"""Multivariate PSD simulation study with VAR(3) data.
 
 Inputs: N (data size), K (number of knots), SEED (random seed to start)
 Outputs: Estimated PSDs, coverage probabilities, and performance metrics
@@ -24,13 +24,13 @@ set_level("DEBUG")
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join("out_var3")
 
-DEFAULT_KNOT_METHOD = "log"
+DEFAULT_KNOT_METHOD = "density"
 DEFAULT_N_TIME_BLOCKS = 4
-DEFAULT_TARGET_ACCEPT_PROB = 0.9
-DEFAULT_MAX_TREE_DEPTH = 12
+DEFAULT_TARGET_ACCEPT_PROB = 0.95
+DEFAULT_MAX_TREE_DEPTH = 14
 DEFAULT_INIT_FROM_VI = True
-DEFAULT_VI_STEPS = 100_000
-DEFAULT_VI_GUIDE = "flow:2"
+DEFAULT_VI_STEPS = 500_000
+DEFAULT_VI_GUIDE = "lowrank:32"
 VI_LR = 5e-4
 DEFAULT_VI_PSD_MAX_DRAWS = 256
 DEFAULT_POSTERIOR_PSD_MAX_DRAWS = 256
@@ -41,14 +41,8 @@ DEFAULT_N_WARMUP = 3000
 DEFAULT_NUM_CHAINS = 4
 
 SIGMA = np.array([[1.0, 0.10, 0.45], [0.10, 1.0, 0.00], [0.45, 0.00, 1.0]])
-# 3x3 identity MA(0) to match VAR dimension
-VMA_COEFFS = np.array(
-    [
-        np.eye(3),
-        # MA(1) mixing only between channels 1 and 3
-        [[0.00, 0.00, 0.15], [0.00, 0.00, 0.00], [0.12, 0.00, 0.00]],
-    ]
-)
+# Pure VAR(3): MA(0) only (B0 = I)
+VMA_COEFFS = np.array([np.eye(3)])
 VAR_COEFFS = np.array(
     [
         # Lag 1 coefficients (A1)
@@ -73,6 +67,14 @@ VAR_COEFFS = np.array(
 )
 
 
+def _log_var_coefficients() -> None:
+    """Log the VAR(p) coefficient matrices used by this study."""
+    logger.info("Using VAR coefficients:")
+    for lag, coeff in enumerate(VAR_COEFFS, start=1):
+        coeff_str = np.array2string(coeff, precision=4, suppress_small=False)
+        logger.info(f"A{lag} =\n{coeff_str}")
+
+
 def _assert_valid_var3_dataset(varma: VARMAData) -> None:
     """Fail fast if the generated VAR3 dataset is invalid/non-stationary."""
     if varma.var_companion_spectral_radius is None:
@@ -82,17 +84,31 @@ def _assert_valid_var3_dataset(varma: VARMAData) -> None:
 
     spectral_radius = float(varma.var_companion_spectral_radius)
     is_stationary = bool(varma.is_var_stationary)
+    is_empirical = bool(varma.is_empirically_stationary)
     is_valid = bool(varma.is_valid_var_dataset)
+    empirical_metrics = varma.empirical_stationarity_metrics or {}
 
     logger.info(
         f"VAR3 dataset check: valid={is_valid}, stationary={is_stationary}, "
+        f"empirical_stationary={is_empirical}, "
         f"companion spectral radius={spectral_radius:.6f}"
     )
+    if empirical_metrics:
+        logger.info(
+            f"VAR3 empirical metrics: max_mean_shift_z={empirical_metrics.get('max_mean_shift_z', float('nan')):.3f}, "
+            f"max_var_ratio={empirical_metrics.get('max_var_ratio', float('nan')):.3f}, "
+            f"covariance_rel_drift={empirical_metrics.get('covariance_rel_drift', float('nan')):.3f}"
+        )
     if spectral_radius > 0.98:
         logger.warning(
             f"VAR3 AR dynamics are close to a unit root "
             f"(spectral radius={spectral_radius:.6f}); "
             "long-memory effects may be pronounced."
+        )
+    if not is_empirical:
+        logger.warning(
+            "VAR3 empirical stationarity check failed for this realization; "
+            "the process can still be theoretically stationary."
         )
 
     if not is_valid:
@@ -109,15 +125,16 @@ def simulation_study(
     K: int = 10,
     SEED: int = 42,
     *,
-    coarse_Nh: int | None = 4,
+    coarse_Nh: int | None = 5,
     coarse_f_min: float | None = None,
     coarse_f_max: float | None = None,
 ):
     print(f">>>> Running simulation with N={N}, K={K}, SEED={SEED} <<<<")
+    _log_var_coefficients()
     outdir = f"{HERE}/{outdir}/seed_{SEED}_N{N}_K{K}"
     os.makedirs(outdir, exist_ok=True)
 
-    # Generate VARMA data
+    # Generate VAR(3) data (via VARMAData with MA(0))
     np.random.seed(SEED)
     varma = VARMAData(
         n_samples=N,
@@ -172,7 +189,7 @@ def simulation_study(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Multivariate PSD simulation study with VARMA data"
+        description="Multivariate PSD simulation study with VAR(3) data"
     )
     parser.add_argument(
         "--N", type=int, default=5024, help="Number of time points"

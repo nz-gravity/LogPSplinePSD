@@ -5,10 +5,101 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..datatypes import MultivarFFT
+from ..datatypes import MultivarFFT, Periodogram
 from ..logger import logger
-from .initialisation import init_basis_and_penalty, init_knots, init_weights
+from .initialisation import init_basis_and_penalty, init_weights
+from .knots_locator import init_knots
 from .psplines import LogPSplines
+
+_MULTIVAR_ALLOWED_KNOT_METHODS = ("uniform", "log", "density")
+
+
+def _build_component_knots_basis_penalty(
+    *,
+    freq: np.ndarray,
+    n_knots: int,
+    score: np.ndarray,
+    degree: int,
+    n_freq: int,
+    diff_matrix_order: int,
+    freq_norm: np.ndarray,
+    knot_kwargs: dict[str, object],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Build knots, basis, and penalty for one spline component."""
+    method_raw = knot_kwargs.get("method", "density")
+    method = str(method_raw).strip().lower()
+    if method not in _MULTIVAR_ALLOWED_KNOT_METHODS:
+        allowed = ", ".join(_MULTIVAR_ALLOWED_KNOT_METHODS)
+        raise ValueError(
+            f"Unsupported multivariate knot method '{method}'. "
+            f"Allowed methods: {allowed}. "
+            "Use univariate-compatible names via knot_kwargs['method']."
+        )
+    score_array = np.asarray(score, dtype=np.float64)
+    if score_array.ndim != 1:
+        raise ValueError(
+            f"score must be 1-D with shape (N,), got {score_array.shape}"
+        )
+    if score_array.shape[0] != int(n_freq):
+        raise ValueError(
+            f"score length must match n_freq={n_freq}, got {score_array.shape[0]}"
+        )
+    score_array = np.maximum(score_array, 1e-12)
+    knot_periodogram = Periodogram(
+        freqs=np.asarray(freq, dtype=np.float64),
+        power=score_array,
+    )
+    knots = init_knots(
+        n_knots=n_knots,
+        periodogram=knot_periodogram,
+        parametric_model=None,
+        **{**knot_kwargs, "method": method},
+    )
+    basis, penalty = init_basis_and_penalty(
+        knots,
+        degree,
+        n_freq,
+        diff_matrix_order,
+        grid_points=freq_norm,
+    )
+    return knots, np.asarray(basis), np.asarray(penalty)
+
+
+def _build_pspline_from_log_target(
+    *,
+    log_target: np.ndarray,
+    knots: np.ndarray,
+    basis: np.ndarray,
+    penalty: np.ndarray,
+    degree: int,
+    diff_matrix_order: int,
+    n_freq: int,
+) -> LogPSplines:
+    """Create a LogPSplines model and initialize weights from log-target data."""
+    basis_jnp = jnp.asarray(basis)
+    penalty_jnp = jnp.asarray(penalty)
+    parametric_model = jnp.ones(n_freq)
+    dummy_model = LogPSplines(
+        degree=degree,
+        diffMatrixOrder=diff_matrix_order,
+        n=n_freq,
+        basis=basis_jnp,
+        penalty_matrix=penalty_jnp,
+        knots=knots,
+        weights=jnp.zeros(basis_jnp.shape[1]),
+        parametric_model=parametric_model,
+    )
+    weights = init_weights(jnp.asarray(log_target), dummy_model)
+    return LogPSplines(
+        degree=degree,
+        diffMatrixOrder=diff_matrix_order,
+        n=n_freq,
+        basis=basis_jnp,
+        penalty_matrix=penalty_jnp,
+        knots=knots,
+        weights=weights,
+        parametric_model=parametric_model,
+    )
 
 
 @dataclass
@@ -75,7 +166,7 @@ class MultivariateLogPSplines:
         n_knots: int,
         degree: int = 3,
         diffMatrixOrder: int = 2,
-        knot_kwargs: dict = {},
+        knot_kwargs: dict[str, object] | None = None,
     ) -> "MultivariateLogPSplines":
         """
         Factory method to construct multivariate P-spline model from FFT data.
@@ -90,14 +181,23 @@ class MultivariateLogPSplines:
             Polynomial degree of B-spline basis
         diffMatrixOrder : int, default=2
             Order of difference penalty matrix
-        knot_kwargs : dict, default={}
-            Additional arguments for knot placement
+        knot_kwargs : dict, optional
+            Additional arguments passed to the shared knot locator.
+            Supported methods match univariate naming:
+            ``method in {"uniform", "log", "density"}``.
+            When omitted, defaults to ``method="density"``.
+            For ``method="density"``, the knot CDF is built from the
+            trace-equivalent Wishart energy ``sum(u_re**2 + u_im**2)``
+            computed per frequency.
 
         Returns
         -------
         MultivariateLogPSplines
             Fully initialized multivariate model
         """
+        if knot_kwargs is None:
+            knot_kwargs = {}
+
         N = fft_data.N
         p = fft_data.p
 
@@ -117,74 +217,50 @@ class MultivariateLogPSplines:
                 freq_norm = (freq - freq_min) / denom
                 freq_norm = np.where(finite_mask, freq_norm, 0.0)
 
-        # Initialize knots (same for all components for now, linear spacing)
-        knot_method = knot_kwargs.get("method", "linear")
-        if knot_method == "linear":
-            knots = np.linspace(0, 1, n_knots)
-        elif knot_method == "log":
-            if N < 2:
-                knots = np.linspace(0, 1, n_knots)
-            else:
-                knots_raw = np.geomspace(
-                    fft_data.freq[1], fft_data.freq[-1], n_knots
-                )
-                knots = (knots_raw - knots_raw.min()) / (
-                    knots_raw.max() - knots_raw.min()
-                )
-        else:
-            raise ValueError(f"Unknown knot placement method: {knot_method}")
-
-        # Create basis and penalty matrices (same for all components)
-        basis, penalty = init_basis_and_penalty(
-            knots, degree, N, diffMatrixOrder, grid_points=freq_norm
-        )
-
         if fft_data.u_re is None or fft_data.u_im is None:
             raise ValueError(
                 "Multivariate models require Wishart statistics (u_re/u_im)."
             )
-        u_re = jnp.asarray(fft_data.u_re)
-        u_im = jnp.asarray(fft_data.u_im)
-        u_complex = u_re + 1j * u_im
-        Y = jnp.einsum("fkc,fkd->fcd", u_complex, jnp.conj(u_complex))
+        u_re_np = np.asarray(fft_data.u_re, dtype=np.float64)
+        u_im_np = np.asarray(fft_data.u_im, dtype=np.float64)
+        u_complex_np = u_re_np + 1j * u_im_np
+        Y_np = np.einsum("fkc,fkd->fcd", u_complex_np, np.conj(u_complex_np))
         Nb = max(int(fft_data.Nb), 1)
 
-        # Create diagonal models (one per channel)
+        # Create diagonal models (one per channel), each with its own
+        # knot placement and basis construction.
         diagonal_models = []
         for i in range(p):
-            empirical_diag_power = jnp.real(Y[:, i, i]) / Nb
-            empirical_diag_power = jnp.maximum(
+            score_diag = np.sum(
+                np.square(u_re_np[:, i, :]) + np.square(u_im_np[:, i, :]),
+                axis=1,
+            )
+            knots_diag, basis_diag, penalty_diag = (
+                _build_component_knots_basis_penalty(
+                    freq=freq,
+                    n_knots=n_knots,
+                    score=score_diag,
+                    degree=degree,
+                    n_freq=N,
+                    diff_matrix_order=diffMatrixOrder,
+                    freq_norm=freq_norm,
+                    knot_kwargs=knot_kwargs,
+                )
+            )
+
+            empirical_diag_power = np.real(Y_np[:, i, i]) / Nb
+            empirical_diag_power = np.maximum(
                 empirical_diag_power, 1e-12
             )  # Avoid log(0)
-
-            # Create dummy LogPSplines object for init_weights function
-            dummy_model = LogPSplines(
+            log_diag_target = np.log(empirical_diag_power)
+            diagonal_model = _build_pspline_from_log_target(
+                log_target=log_diag_target,
+                knots=knots_diag,
+                basis=basis_diag,
+                penalty=penalty_diag,
                 degree=degree,
-                diffMatrixOrder=diffMatrixOrder,
-                n=N,
-                basis=basis,
-                penalty_matrix=penalty,
-                knots=knots,
-                weights=jnp.zeros(basis.shape[1]),
-                parametric_model=jnp.ones(N),
-            )
-
-            # Initialize weights for this diagonal component
-            initial_weights = init_weights(
-                jnp.log(empirical_diag_power), dummy_model
-            )
-
-            diagonal_model = LogPSplines(
-                degree=degree,
-                diffMatrixOrder=diffMatrixOrder,
-                n=N,
-                basis=basis,
-                penalty_matrix=penalty,
-                knots=knots,
-                weights=initial_weights,
-                parametric_model=jnp.ones(
-                    N
-                ),  # No parametric component for now
+                diff_matrix_order=diffMatrixOrder,
+                n_freq=N,
             )
             diagonal_models.append(diagonal_model)
 
@@ -195,53 +271,54 @@ class MultivariateLogPSplines:
         if p > 1:
             # Simple empirical cross-spectra initialization for sanity checking
             n_theta = int(p * (p - 1) / 2)  # Number of off-diagonal parameters
-            empirical_csd = jnp.zeros(N)
-            theta_idx = 0
+            empirical_csd = np.zeros(N, dtype=np.float64)
             for i in range(1, p):
                 for j in range(i):
-                    csd_ij = jnp.abs(Y[:, i, j]) / Nb
-                    empirical_csd = empirical_csd.at[:].add(jnp.abs(csd_ij))
-                    theta_idx += 1
+                    csd_ij = np.abs(Y_np[:, i, j]) / Nb
+                    empirical_csd += np.abs(csd_ij)
             empirical_csd = (
                 empirical_csd / n_theta
             )  # Average across theta components
 
             # Initialize with small values based on empirical estimates
-            small_init = jnp.log(jnp.maximum(empirical_csd, 1e-8))
+            small_init = np.log(np.maximum(empirical_csd, 1e-8))
 
-            # Create dummy LogPSplines object for init_weights function
-            dummy_model = LogPSplines(
-                degree=degree,
-                diffMatrixOrder=diffMatrixOrder,
-                n=N,
-                basis=basis,
-                penalty_matrix=penalty,
-                knots=knots,
-                weights=jnp.zeros(basis.shape[1]),
-                parametric_model=jnp.ones(N),
-            )
-            initial_weights_offdiag = init_weights(small_init, dummy_model)
-
-            offdiag_re_model = LogPSplines(
-                degree=degree,
-                diffMatrixOrder=diffMatrixOrder,
-                n=N,
-                basis=basis,
-                penalty_matrix=penalty,
-                knots=knots,
-                weights=initial_weights_offdiag,
-                parametric_model=jnp.ones(N),
+            # Build a dedicated off-diagonal basis from cross-spectral energy.
+            theta_scores = []
+            for i in range(1, p):
+                for j in range(i):
+                    theta_scores.append(np.abs(Y_np[:, i, j]))
+            score_theta = np.mean(np.vstack(theta_scores), axis=0)
+            knots_theta, basis_theta, penalty_theta = (
+                _build_component_knots_basis_penalty(
+                    freq=freq,
+                    n_knots=n_knots,
+                    score=score_theta,
+                    degree=degree,
+                    n_freq=N,
+                    diff_matrix_order=diffMatrixOrder,
+                    freq_norm=freq_norm,
+                    knot_kwargs=knot_kwargs,
+                )
             )
 
-            offdiag_im_model = LogPSplines(
+            offdiag_re_model = _build_pspline_from_log_target(
+                log_target=small_init,
+                knots=knots_theta,
+                basis=basis_theta,
+                penalty=penalty_theta,
                 degree=degree,
-                diffMatrixOrder=diffMatrixOrder,
-                n=N,
-                basis=basis,
-                penalty_matrix=penalty,
-                knots=knots,
-                weights=initial_weights_offdiag,  # Same initialization for real and imaginary
-                parametric_model=jnp.ones(N),
+                diff_matrix_order=diffMatrixOrder,
+                n_freq=N,
+            )
+            offdiag_im_model = _build_pspline_from_log_target(
+                log_target=small_init,
+                knots=knots_theta,
+                basis=basis_theta,
+                penalty=penalty_theta,
+                degree=degree,
+                diff_matrix_order=diffMatrixOrder,
+                n_freq=N,
             )
 
         return cls(
@@ -256,7 +333,7 @@ class MultivariateLogPSplines:
 
     @property
     def n_knots(self) -> int:
-        """Number of knots (same for all components)."""
+        """Representative knot count from the first diagonal component."""
         return len(self.diagonal_models[0].knots)
 
     @property

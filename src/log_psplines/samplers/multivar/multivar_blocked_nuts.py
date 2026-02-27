@@ -26,6 +26,7 @@ assembled into global arrays ``log_delta_sq`` with shape (draw, freq, p) and
 ``theta_re|im`` with shape (draw, freq, n_theta) matching the unified sampler.
 """
 
+import tempfile
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, Tuple, cast
@@ -33,13 +34,18 @@ from typing import Any, Dict, Optional, Sequence, Tuple, cast
 import arviz as az
 import jax
 import jax.numpy as jnp
+import morphZ
 import numpy as np
 import numpyro
 from numpyro.infer import MCMC, NUTS
 
 from ...logger import logger
 from ..base_sampler import SamplerConfig
-from ..utils import sample_pspline_block
+from ..utils import (
+    build_log_density_fn,
+    evaluate_log_density_batch,
+    sample_pspline_block,
+)
 from ..vi_init.adapters import prepare_block_vi
 from .multivar_base import MultivarBaseSampler
 
@@ -285,6 +291,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             if self.n_theta > 0
             else jnp.zeros((0, 0))
         )
+        self._lnz_by_block: list[float] = []
+        self._lnz_err_by_block: list[float] = []
+        self._lnz_block_ids: list[str] = []
 
     @property
     def sampler_type(self) -> str:
@@ -310,6 +319,164 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             )
         return values[channel_index]
 
+    def _reset_lnz_details(self) -> None:
+        self._lnz_by_block = []
+        self._lnz_err_by_block = []
+        self._lnz_block_ids = []
+
+    def _channel_model_kwargs(self, channel_index: int) -> Dict[str, Any]:
+        return {
+            "channel_index": channel_index,
+            "u_re_channel": self.u_re[:, channel_index, :],
+            "u_im_channel": self.u_im[:, channel_index, :],
+            "u_re_prev": self.u_re[:, :channel_index, :],
+            "u_im_prev": self.u_im[:, :channel_index, :],
+            "basis_delta": self.all_bases[channel_index],
+            "penalty_delta": self.all_penalties[channel_index],
+            "basis_theta": self._theta_basis,
+            "penalty_theta": self._theta_penalty,
+            "alpha_phi": float(self.config.alpha_phi),
+            "beta_phi": float(self.config.beta_phi),
+            "alpha_phi_theta": float(self.config.alpha_phi_theta),
+            "beta_phi_theta": float(self.config.beta_phi_theta),
+            "alpha_delta": float(self.config.alpha_delta),
+            "beta_delta": float(self.config.beta_delta),
+            "duration": float(self.duration),
+            "Nb": int(self.Nb),
+            "Nh": int(self.Nh),
+        }
+
+    def _channel_parameter_names(self, channel_index: int) -> list[str]:
+        names = [
+            f"weights_delta_{channel_index}",
+            f"phi_delta_{channel_index}",
+            f"delta_{channel_index}",
+        ]
+        for theta_idx in range(channel_index):
+            for theta_prefix in ("theta_re", "theta_im"):
+                names.extend(
+                    [
+                        f"weights_{theta_prefix}_{channel_index}_{theta_idx}",
+                        f"phi_{theta_prefix}_{channel_index}_{theta_idx}",
+                        f"delta_{theta_prefix}_{channel_index}_{theta_idx}",
+                    ]
+                )
+        return names
+
+    def _flatten_sample_array(self, array: np.ndarray) -> np.ndarray:
+        if array.ndim == 0:
+            return array.reshape(1)
+        if array.ndim == 1:
+            return array
+        if array.ndim == 2:
+            if array.shape[0] == int(self.config.num_chains):
+                return array.reshape(-1)
+            return array
+        return array.reshape((-1, *array.shape[2:]))
+
+    def _extract_channel_params_batch(
+        self, samples: Dict[str, Any], channel_index: int
+    ) -> Tuple[Dict[str, jnp.ndarray], list[str]]:
+        param_names = self._channel_parameter_names(channel_index)
+        params_batch: Dict[str, jnp.ndarray] = {}
+        n_batch: Optional[int] = None
+        for name in param_names:
+            if name not in samples:
+                raise KeyError(
+                    f"Missing posterior parameter '{name}' for channel {channel_index} LnZ."
+                )
+            array = np.asarray(samples[name], dtype=np.float64)
+            flat_array = self._flatten_sample_array(array)
+            if name.startswith("phi_"):
+                flat_array = np.log(
+                    np.maximum(flat_array, np.asarray(1e-12, dtype=np.float64))
+                )
+            if flat_array.ndim == 0:
+                flat_array = flat_array.reshape(1)
+            current_n_batch = int(flat_array.shape[0])
+            if n_batch is None:
+                n_batch = current_n_batch
+            elif current_n_batch != n_batch:
+                raise ValueError(
+                    f"Inconsistent draw counts for channel {channel_index}: "
+                    f"expected {n_batch}, got {current_n_batch} for '{name}'."
+                )
+            params_batch[name] = jnp.asarray(flat_array)
+        return params_batch, param_names
+
+    def _pack_morphz_samples(
+        self, params_batch: Dict[str, jnp.ndarray], param_names: list[str]
+    ) -> Tuple[np.ndarray, list[Tuple[str, Tuple[int, ...]]]]:
+        flat_blocks = []
+        layout: list[Tuple[str, Tuple[int, ...]]] = []
+        for name in param_names:
+            array = np.asarray(params_batch[name], dtype=np.float64)
+            if array.ndim == 1:
+                shape: Tuple[int, ...] = ()
+                flat_blocks.append(array[:, None])
+            else:
+                shape = tuple(array.shape[1:])
+                flat_blocks.append(array.reshape(array.shape[0], -1))
+            layout.append((name, shape))
+        return np.concatenate(flat_blocks, axis=1), layout
+
+    def _parse_morphz_result(self, lnz_result: Any) -> Tuple[float, float]:
+        if hasattr(lnz_result, "lnz"):
+            lnz = float(lnz_result.lnz)
+            uncertainty = getattr(lnz_result, "uncertainty", np.nan)
+            return lnz, float(uncertainty)
+        if isinstance(lnz_result, (tuple, list, np.ndarray)):
+            if len(lnz_result) < 2:
+                raise ValueError(
+                    "morphZ result did not include both lnz and uncertainty."
+                )
+            return float(lnz_result[0]), float(lnz_result[1])
+        raise TypeError(
+            f"Unsupported morphZ result type: {type(lnz_result).__name__}."
+        )
+
+    def _compute_channel_lnz(
+        self, samples: Dict[str, Any], channel_index: int
+    ) -> Tuple[float, float]:
+        params_batch, param_names = self._extract_channel_params_batch(
+            samples, channel_index
+        )
+        logpost_fn = build_log_density_fn(
+            _blocked_channel_model,
+            self._channel_model_kwargs(channel_index),
+        )
+        lp = evaluate_log_density_batch(logpost_fn, params_batch)
+        post_smp, layout = self._pack_morphz_samples(params_batch, param_names)
+        if lp.ndim > 1:
+            lp = lp.reshape(-1)
+        if lp.shape[0] != post_smp.shape[0]:
+            raise ValueError(
+                f"morphZ input shape mismatch for channel {channel_index}: "
+                f"{lp.shape[0]} lp values for {post_smp.shape[0]} samples."
+            )
+
+        def lp_fn(sample_vec: np.ndarray) -> float:
+            offset = 0
+            params: Dict[str, jnp.ndarray] = {}
+            for name, shape in layout:
+                size = int(np.prod(shape)) if shape else 1
+                segment = sample_vec[offset : offset + size]
+                offset += size
+                if shape:
+                    params[name] = jnp.asarray(segment.reshape(shape))
+                else:
+                    params[name] = jnp.asarray(segment.item())
+            return float(logpost_fn(params))
+
+        lnz_result = morphZ.evidence(
+            post_smp,
+            lp,
+            lp_fn,
+            kde_bw="scott",
+            output_path=tempfile.gettempdir(),
+        )[0]
+        return self._parse_morphz_result(lnz_result)
+
     def sample(
         self,
         n_samples: int,
@@ -334,6 +501,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         logger.info(
             f"Blocked multivariate NUTS sampler [{self.device}] - {self.p} channels"
         )
+        self._reset_lnz_details()
 
         combined_samples: Dict[str, np.ndarray] = {}
         combined_stats: Dict[str, np.ndarray] = {}
@@ -558,12 +726,69 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     def _get_lnz(
         self, samples: Dict[str, Any], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
-        """LnZ is currently not computed for the multivariate samplers."""
-        return super()._get_lnz(samples, sample_stats)
+        """Compute blockwise multivariate LnZ via morphZ."""
+        self._reset_lnz_details()
+        if not self.config.compute_lnz:
+            return np.nan, np.nan
+
+        try:
+            lnz_by_block: list[float] = []
+            lnz_err_by_block: list[float] = []
+            block_ids: list[str] = []
+
+            for channel_index in range(self.p):
+                lnz_j, lnz_err_j = self._compute_channel_lnz(
+                    samples, channel_index
+                )
+                lnz_by_block.append(float(lnz_j))
+                lnz_err_by_block.append(float(lnz_err_j))
+                block_ids.append(f"channel_{channel_index}")
+                if self.config.verbose:
+                    logger.info(
+                        f"LnZ channel {channel_index}: {lnz_j:.3f} ± {lnz_err_j:.3f}"
+                    )
+
+            lnz_arr = np.asarray(lnz_by_block, dtype=np.float64)
+            lnz_err_arr = np.asarray(lnz_err_by_block, dtype=np.float64)
+            lnz_total = float(np.sum(lnz_arr))
+            lnz_err_total = float(np.sqrt(np.sum(lnz_err_arr**2)))
+
+            self._lnz_by_block = lnz_by_block
+            self._lnz_err_by_block = lnz_err_by_block
+            self._lnz_block_ids = block_ids
+            return lnz_total, lnz_err_total
+        except Exception as exc:
+            self._reset_lnz_details()
+            if self.config.verbose:
+                logger.warning(
+                    f"Blockwise multivariate LnZ computation failed: {exc}"
+                )
+            return np.nan, np.nan
+
+    def _create_inference_data(
+        self,
+        samples: Dict[str, Any],
+        sample_stats: Dict[str, Any],
+        lnz: float,
+        lnz_err: float,
+    ) -> az.InferenceData:
+        idata = super()._create_inference_data(
+            samples, sample_stats, lnz, lnz_err
+        )
+        if self._lnz_by_block:
+            idata.attrs["lnz_by_block"] = np.asarray(
+                self._lnz_by_block, dtype=np.float64
+            )
+            idata.attrs["lnz_err_by_block"] = np.asarray(
+                self._lnz_err_by_block, dtype=np.float64
+            )
+            idata.attrs["lnz_block_ids"] = list(self._lnz_block_ids)
+        return idata
 
     def _vi_only_inference_data(
         self, diagnostics: Optional[Dict[str, Any]]
     ) -> az.InferenceData:
+        self._reset_lnz_details()
         if not diagnostics:
             raise ValueError(
                 "Variational-only mode is unavailable because VI diagnostics "

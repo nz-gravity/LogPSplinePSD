@@ -40,7 +40,7 @@ class SamplerConfig:
     rng_key: int = 42
     verbose: bool = True
     outdir: Optional[str] = None
-    compute_lnz: bool = False
+    compute_lnz: bool = True
     scaling_factor: float = 1.0  # To track any data scaling
     channel_stds: Optional[np.ndarray] = (
         None  # Per-channel stds for multivariate scaling

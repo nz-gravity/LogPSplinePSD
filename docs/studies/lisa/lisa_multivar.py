@@ -7,8 +7,16 @@ os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
 # Print number of JAX devices
 import jax
 import numpy as np
+from evidence_utils import (
+    combine_diag_lnz,
+    compare_full_vs_diag,
+    extract_lnz,
+    parse_channel_names,
+    parse_hypothesis_mode,
+    write_evidence_summary,
+)
 
-from log_psplines.datatypes import MultivariateTimeseries
+from log_psplines.datatypes import MultivariateTimeseries, Timeseries
 from log_psplines.datatypes.multivar import EmpiricalPSD
 from log_psplines.datatypes.multivar_utils import interp_matrix
 from log_psplines.diagnostics import psd_compare
@@ -72,7 +80,20 @@ RESULTS_DIR = (
 )
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-RESULT_FN = RESULTS_DIR / "inference_data.nc"
+FULL_RESULTS_DIR = RESULTS_DIR / "full"
+DIAG_RESULTS_DIR = RESULTS_DIR / "diag"
+COMPARE_TXT = RESULTS_DIR / "evidence_comparison.txt"
+COMPARE_JSON = RESULTS_DIR / "evidence_comparison.json"
+LISA_HYPOTHESIS_MODE = parse_hypothesis_mode(
+    _env_str("LISA_HYPOTHESIS_MODE", "both")
+)
+LISA_RUN_COMPARE_SUMMARY = _env_flag("LISA_RUN_COMPARE_SUMMARY", True)
+_raw_channel_names = _env_str("LISA_CHANNEL_NAMES", "X,Y,Z")
+LISA_CHANNEL_NAMES = parse_channel_names(_raw_channel_names)
+if ",".join(LISA_CHANNEL_NAMES) != _raw_channel_names.replace(" ", ""):
+    logger.warning(
+        f"Invalid LISA_CHANNEL_NAMES='{_raw_channel_names}'. Using default channel labels X,Y,Z."
+    )
 
 RUN_VI_ONLY = _env_flag("LISA_RUN_VI_ONLY", False)
 INIT_FROM_VI = _env_flag("LISA_INIT_FROM_VI", True)
@@ -216,7 +237,9 @@ if N_TIME_BLOCKS_OVERRIDE is not None:
 elif BLOCK_DAYS > 0.0:
     Lb_target = int(round(float(BLOCK_DAYS) * 86_400.0 / dt))
     if Lb_target < 2:
-        raise ValueError("LISA_BLOCK_DAYS is too small for the current cadence.")
+        raise ValueError(
+            "LISA_BLOCK_DAYS is too small for the current cadence."
+        )
     Lb = min(Lb_target, n)
     Nb = max(1, int(n // Lb))
     logger.info(
@@ -328,17 +351,26 @@ else:
 
 raw_series = MultivariateTimeseries(y=y_full, t=t_full)
 
-idata = None
 
-if RESULT_FN.exists() and REUSE_EXISTING:
-    logger.info(f"Found existing results at {RESULT_FN}, loading...")
-    import arviz as az
+def _run_full_hypothesis(
+    *,
+    full_outdir: Path,
+):
+    full_outdir.mkdir(parents=True, exist_ok=True)
+    result_path = full_outdir / "inference_data.nc"
 
-    idata = az.from_netcdf(str(RESULT_FN))
+    if result_path.exists() and REUSE_EXISTING:
+        logger.info(
+            f"Found existing full-hypothesis results at {result_path}, loading..."
+        )
+        import arviz as az
 
-else:
-    logger.info(f"No existing {RESULT_FN} found, running inference...")
-    idata = run_mcmc(
+        return az.from_netcdf(str(result_path)), result_path
+
+    logger.info(
+        f"No existing full-hypothesis results at {result_path}, running inference..."
+    )
+    idata_full = run_mcmc(
         data=raw_series,
         n_samples=4000,
         n_warmup=4000,
@@ -347,7 +379,7 @@ else:
         degree=2,
         diffMatrixOrder=2,
         knot_kwargs=dict(strategy="log"),
-        outdir=str(RESULTS_DIR),
+        outdir=str(full_outdir),
         verbose=True,
         coarse_grain_config=coarse_cfg,
         Nb=Nb,
@@ -368,14 +400,178 @@ else:
         max_tree_depth_by_channel=MAX_TREE_DEPTH_BY_CHANNEL,
         dense_mass=DENSE_MASS,
         true_psd=true_psd_source,
+        compute_lnz=True,
     )
-    idata.to_netcdf(str(RESULT_FN))
+    idata_full.to_netcdf(str(result_path))
+    return idata_full, result_path
+
+
+def _run_diag_hypothesis(
+    *,
+    diag_outdir: Path,
+):
+    import arviz as az
+
+    diag_outdir.mkdir(parents=True, exist_ok=True)
+    true_freq = np.asarray(true_psd_source[0], dtype=np.float64)
+    true_psd_matrix = np.asarray(true_psd_source[1])
+    channel_results: list[dict[str, object]] = []
+
+    for channel_index, channel_name in enumerate(LISA_CHANNEL_NAMES):
+        channel_dir = diag_outdir / channel_name
+        channel_dir.mkdir(parents=True, exist_ok=True)
+        result_path = channel_dir / "inference_data.nc"
+
+        if result_path.exists() and REUSE_EXISTING:
+            logger.info(
+                f"Found existing diagonal-channel results [{channel_name}] at {result_path}, loading..."
+            )
+            idata_channel = az.from_netcdf(str(result_path))
+        else:
+            logger.info(
+                f"No existing diagonal-channel results [{channel_name}] at {result_path}, running inference..."
+            )
+            channel_series = Timeseries(t=t_full, y=y_full[:, channel_index])
+            true_psd_channel = np.real(
+                true_psd_matrix[:, channel_index, channel_index]
+            )
+            idata_channel = run_mcmc(
+                data=channel_series,
+                n_samples=4000,
+                n_warmup=4000,
+                num_chains=4,
+                n_knots=N_KNOTS,
+                degree=2,
+                diffMatrixOrder=2,
+                knot_kwargs=dict(strategy="log"),
+                outdir=str(channel_dir),
+                verbose=True,
+                coarse_grain_config=coarse_cfg,
+                Nb=Nb,
+                fmin=FMIN,
+                fmax=FMAX,
+                alpha_delta=ALPHA_DELTA,
+                beta_delta=BETA_DELTA,
+                only_vi=RUN_VI_ONLY,
+                init_from_vi=INIT_FROM_VI,
+                vi_steps=VI_STEPS,
+                vi_lr=VI_LR,
+                vi_guide=VI_GUIDE,
+                vi_posterior_draws=VI_POSTERIOR_DRAWS,
+                vi_progress_bar=True,
+                target_accept_prob=TARGET_ACCEPT,
+                max_tree_depth=MAX_TREE_DEPTH,
+                dense_mass=DENSE_MASS,
+                true_psd=(true_freq, true_psd_channel),
+                compute_lnz=True,
+            )
+            idata_channel.to_netcdf(str(result_path))
+
+        lnz_ch, lnz_err_ch, lnz_valid = extract_lnz(idata_channel)
+        channel_results.append(
+            {
+                "name": channel_name,
+                "path": str(result_path),
+                "lnz": lnz_ch,
+                "lnz_err": lnz_err_ch,
+                "valid": lnz_valid,
+            }
+        )
+
+    return channel_results
+
+
+run_full = LISA_HYPOTHESIS_MODE in {"full", "both"}
+run_diag = LISA_HYPOTHESIS_MODE in {"diag", "both"}
+if not (run_full or run_diag):
+    raise ValueError(
+        f"Invalid LISA_HYPOTHESIS_MODE='{LISA_HYPOTHESIS_MODE}'. Expected full/diag/both."
+    )
+
+idata = None
+full_result_path = FULL_RESULTS_DIR / "inference_data.nc"
+diag_channel_results: list[dict[str, object]] = []
+if run_full:
+    idata, full_result_path = _run_full_hypothesis(
+        full_outdir=FULL_RESULTS_DIR
+    )
+    logger.info(f"Full-hypothesis results saved at {full_result_path}")
+if run_diag:
+    diag_channel_results = _run_diag_hypothesis(diag_outdir=DIAG_RESULTS_DIR)
+    logger.info(
+        f"Diagonal-hypothesis channel outputs saved under {DIAG_RESULTS_DIR}"
+    )
+
+full_lnz = np.nan
+full_lnz_err = np.nan
+full_valid = False
+if idata is not None:
+    full_lnz, full_lnz_err, full_valid = extract_lnz(idata)
+
+diag_lnz, diag_lnz_err, diag_valid = combine_diag_lnz(diag_channel_results)
+log_bf, log_bf_err, log_bf_valid = compare_full_vs_diag(
+    full_lnz,
+    full_lnz_err,
+    diag_lnz,
+    diag_lnz_err,
+    full_valid=full_valid,
+    diag_valid=diag_valid,
+)
+
+if LISA_RUN_COMPARE_SUMMARY:
+    write_evidence_summary(
+        txt_path=COMPARE_TXT,
+        json_path=COMPARE_JSON,
+        run_mode=LISA_HYPOTHESIS_MODE,
+        full=(
+            {
+                "path": str(full_result_path),
+                "lnz": full_lnz,
+                "lnz_err": full_lnz_err,
+                "valid": full_valid,
+            }
+            if run_full
+            else None
+        ),
+        diag_channels=diag_channel_results,
+        diag_combined=(
+            {
+                "lnz": diag_lnz,
+                "lnz_err": diag_lnz_err,
+                "valid": diag_valid,
+            }
+            if run_diag
+            else None
+        ),
+        comparison={
+            "log_bf": log_bf,
+            "log_bf_err": log_bf_err,
+            "valid": log_bf_valid,
+        },
+    )
+    logger.info(
+        f"Saved evidence comparison summaries to {COMPARE_TXT} and {COMPARE_JSON}"
+    )
+
+if run_diag:
+    for entry in diag_channel_results:
+        logger.info(
+            f"Diag[{entry['name']}]: lnz={entry['lnz']} lnz_err={entry['lnz_err']} valid={entry['valid']}"
+        )
+if run_full:
+    logger.info(
+        f"Full: lnz={full_lnz} lnz_err={full_lnz_err} valid={full_valid}"
+    )
+if run_full and run_diag:
+    logger.info(
+        f"logBF(full-diag)={log_bf} ± {log_bf_err} (valid={log_bf_valid})"
+    )
 
 if idata is None:
-    raise RuntimeError("Inference data was not produced or loaded.")
-
-
-logger.info(f"Saved results to {RESULT_FN}")
+    logger.info(
+        "Full-hypothesis run not requested; skipping multivariate PSD matrix plotting/metrics."
+    )
+    raise SystemExit(0)
 
 logger.info(idata)
 
@@ -531,7 +727,7 @@ plot_psd_matrix(
         extra_empirical_styles=[
             dict(color="0.5", lw=1.3, alpha=0.9, ls="-", zorder=-4),
         ],
-        outdir=str(RESULTS_DIR),
+        outdir=str(FULL_RESULTS_DIR),
         filename="psd_matrix.png",
         diag_yscale="log",
         offdiag_yscale="linear",
@@ -581,7 +777,7 @@ metrics.append(
 
 metrics = [entry for entry in metrics if entry is not None]
 if metrics:
-    summary_path = RESULTS_DIR / "psd_accuracy_summary.txt"
+    summary_path = FULL_RESULTS_DIR / "psd_accuracy_summary.txt"
     with summary_path.open("w") as handle:
         handle.write(
             f"Dip mask threshold (min diag, p{METRICS_MIN_PCT:.1f}): {dip_threshold:.4g}\n"

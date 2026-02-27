@@ -6,6 +6,8 @@ CLI args:
 """
 
 import argparse
+import csv
+import json
 import os
 from typing import Literal
 
@@ -25,7 +27,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join("out_var3")
 
 DEFAULT_KNOT_METHOD = "density"
-DEFAULT_N_TIME_BLOCKS = 4  # keep averaging enabled in both short/large modes
 DEFAULT_TARGET_ACCEPT_PROB = 0.95
 DEFAULT_MAX_TREE_DEPTH = 14
 DEFAULT_INIT_FROM_VI = True
@@ -36,8 +37,9 @@ DEFAULT_VI_PSD_MAX_DRAWS = 256
 DEFAULT_POSTERIOR_PSD_MAX_DRAWS = 256
 DEFAULT_ALPHA_DELTA = 1.0
 DEFAULT_BETA_DELTA = 1.0
-DEFAULT_N_SAMPLES = 1000
-DEFAULT_N_WARMUP = 3000
+# Total Niter=8000 implemented as 4000 warmup + 4000 posterior samples.
+DEFAULT_N_SAMPLES = 4000
+DEFAULT_N_WARMUP = 4000
 DEFAULT_NUM_CHAINS = 4
 
 DEFAULT_FS = 1.0  # Hz
@@ -68,8 +70,10 @@ SIGMA = np.array(
 )
 
 MODE_CONFIG = {
-    "short": {"N": 1024, "coarse_Nh": None},
-    "large": {"N": 16 * 1024, "coarse_Nh": 4},
+    # short: N=2048, Nb=2 -> block length 1024 -> 512 positive bins
+    "short": {"N": 2048, "Nb": 2, "coarse_Nh": None},
+    # large: N=16384, Nb=4 with Nh=4 -> effective 512 coarse bins
+    "large": {"N": 16 * 1024, "Nb": 4, "coarse_Nh": 4},
 }
 
 
@@ -181,6 +185,161 @@ def _calculate_true_var_psd_hz(
     return psd
 
 
+def _extract_percentile_slice(
+    values: np.ndarray, percentiles: np.ndarray, target: float
+) -> np.ndarray:
+    """Return percentile slice nearest to target."""
+    if values.shape[0] == 0:
+        raise ValueError("values must contain percentile axis.")
+    idx = int(np.argmin(np.abs(percentiles - target)))
+    return np.asarray(values[idx], dtype=np.float64)
+
+
+def _compute_ci_width_metrics(idata) -> dict[str, float]:
+    """Compute CI-width summaries from posterior PSD/coherence quantiles."""
+    metrics: dict[str, float] = {}
+    psd_group = getattr(idata, "posterior_psd", None)
+    if psd_group is None or "psd_matrix_real" not in psd_group:
+        return metrics
+
+    psd_real = np.asarray(
+        psd_group["psd_matrix_real"].values, dtype=np.float64
+    )
+    percentiles = np.asarray(
+        psd_group["psd_matrix_real"].coords.get(
+            "percentile", np.arange(psd_real.shape[0], dtype=float)
+        ),
+        dtype=np.float64,
+    )
+    if psd_real.shape[0] < 2:
+        return metrics
+
+    q05 = _extract_percentile_slice(psd_real, percentiles, 5.0)
+    q95 = _extract_percentile_slice(psd_real, percentiles, 95.0)
+    width_psd = np.maximum(q95 - q05, 0.0)
+
+    p = width_psd.shape[1]
+    diag_idx = np.arange(p)
+    offdiag_mask = ~np.eye(p, dtype=bool)
+    diag_width = width_psd[:, diag_idx, diag_idx]
+    offdiag_width = width_psd[:, offdiag_mask]
+
+    metrics["ciw_psd_diag_mean"] = float(np.mean(diag_width))
+    metrics["ciw_psd_diag_median"] = float(np.median(diag_width))
+    metrics["ciw_psd_diag_max"] = float(np.max(diag_width))
+    metrics["ciw_psd_offdiag_mean"] = float(np.mean(offdiag_width))
+    metrics["ciw_psd_offdiag_median"] = float(np.median(offdiag_width))
+    metrics["ciw_psd_offdiag_max"] = float(np.max(offdiag_width))
+
+    if "coherence" in psd_group:
+        coherence = np.asarray(psd_group["coherence"].values, dtype=np.float64)
+        coh_percentiles = np.asarray(
+            psd_group["coherence"].coords.get(
+                "percentile", np.arange(coherence.shape[0], dtype=float)
+            ),
+            dtype=np.float64,
+        )
+        if coherence.shape[0] >= 2:
+            coh_q05 = _extract_percentile_slice(
+                coherence, coh_percentiles, 5.0
+            )
+            coh_q95 = _extract_percentile_slice(
+                coherence, coh_percentiles, 95.0
+            )
+            coh_width = np.maximum(coh_q95 - coh_q05, 0.0)
+            coh_offdiag = coh_width[:, offdiag_mask]
+            metrics["ciw_coh_offdiag_mean"] = float(np.mean(coh_offdiag))
+            metrics["ciw_coh_offdiag_median"] = float(np.median(coh_offdiag))
+            metrics["ciw_coh_offdiag_max"] = float(np.max(coh_offdiag))
+
+    return metrics
+
+
+def _extract_run_metrics(
+    idata,
+    *,
+    seed: int,
+    mode: str,
+    N: int,
+    Nb: int,
+    coarse_Nh: int | None,
+) -> dict[str, float | int | str]:
+    """Extract compact run-level metrics for downstream aggregation."""
+    attrs = idata.attrs
+    ess_raw = attrs.get("ess", np.nan)
+    ess_arr = np.asarray(ess_raw, dtype=float)
+    ess_median = float(np.nanmedian(ess_arr)) if ess_arr.size else float("nan")
+
+    metrics: dict[str, float | int | str] = {
+        "seed": int(seed),
+        "mode": str(mode),
+        "N": int(N),
+        "Nb": int(Nb),
+        "Nh": "OFF" if coarse_Nh is None else int(coarse_Nh),
+        "riae_matrix": float(
+            attrs.get("riae_matrix", attrs.get("riae", np.nan))
+        ),
+        "coverage": float(attrs.get("coverage", np.nan)),
+        "runtime": float(attrs.get("runtime", np.nan)),
+        "ess_median": ess_median,
+    }
+    metrics.update(_compute_ci_width_metrics(idata))
+    return metrics
+
+
+def _save_metrics_summary(
+    outdir: str, metrics: dict[str, float | int | str]
+) -> None:
+    """Persist compact metrics as JSON and single-row CSV."""
+    metrics_json = os.path.join(outdir, "metrics_summary.json")
+    metrics_csv = os.path.join(outdir, "metrics_summary.csv")
+
+    with open(metrics_json, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2, sort_keys=True)
+
+    with open(metrics_csv, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(metrics.keys()))
+        writer.writeheader()
+        writer.writerow(metrics)
+
+    logger.info(f"Saved compact metrics to {metrics_json} and {metrics_csv}")
+
+
+def _prune_outputs_keep_psd_plot(outdir: str) -> None:
+    """Delete heavy artifacts, keeping only PSD plot(s) and compact metrics."""
+    image_ext = (".png", ".pdf", ".svg", ".jpg", ".jpeg")
+    removed_files = 0
+
+    for root, _, files in os.walk(outdir):
+        for name in files:
+            lower = name.lower()
+            path = os.path.join(root, name)
+            if lower.endswith(".nc"):
+                os.remove(path)
+                removed_files += 1
+                continue
+            if lower.endswith(image_ext):
+                stem = os.path.splitext(lower)[0]
+                if stem.startswith("psd_matrix"):
+                    continue
+                os.remove(path)
+                removed_files += 1
+
+    # Remove empty subdirectories left after pruning.
+    for root, dirs, files in os.walk(outdir, topdown=False):
+        if root == outdir:
+            continue
+        if not dirs and not files:
+            try:
+                os.rmdir(root)
+            except OSError:
+                pass
+
+    logger.info(
+        f"Pruned heavy outputs in {outdir}; removed {removed_files} files."
+    )
+
+
 def simulation_study(
     *,
     seed: int = 0,
@@ -190,10 +349,11 @@ def simulation_study(
 ) -> None:
     cfg = MODE_CONFIG[mode]
     N = int(cfg["N"])
+    Nb = int(cfg["Nb"])
     coarse_Nh = cfg["coarse_Nh"]
 
     print(
-        f">>>> Running simulation with mode={mode}, N={N}, K={K}, seed={seed} <<<<"
+        f">>>> Running simulation with mode={mode}, N={N}, Nb={Nb}, K={K}, seed={seed} <<<<"
     )
     _log_var_coefficients()
     outdir = f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}"
@@ -240,7 +400,7 @@ def simulation_study(
             Nh=coarse_Nh,
         )
 
-    run_mcmc(
+    idata = run_mcmc(
         data=ts,
         n_knots=K,
         degree=2,
@@ -257,7 +417,7 @@ def simulation_study(
         vi_guide=DEFAULT_VI_GUIDE,
         vi_psd_max_draws=DEFAULT_VI_PSD_MAX_DRAWS,
         vi_lr=VI_LR,
-        Nb=DEFAULT_N_TIME_BLOCKS,
+        Nb=Nb,
         knot_kwargs=dict(method=DEFAULT_KNOT_METHOD),
         coarse_grain_config=coarse_grain_config,
         alpha_delta=DEFAULT_ALPHA_DELTA,
@@ -265,6 +425,16 @@ def simulation_study(
         compute_coherence_quantiles=True,
         true_psd=(freq_true_hz, true_psd),
     )
+    metrics = _extract_run_metrics(
+        idata,
+        seed=seed,
+        mode=mode,
+        N=N,
+        Nb=Nb,
+        coarse_Nh=coarse_Nh,
+    )
+    _save_metrics_summary(outdir, metrics)
+    _prune_outputs_keep_psd_plot(outdir)
 
 
 if __name__ == "__main__":
@@ -286,7 +456,7 @@ if __name__ == "__main__":
         nargs="?",
         choices=("large", "short"),
         default="short",
-        help="Preset size: short=1K samples (averaging only), large=16K samples (averaging + coarse graining).",
+        help="Preset size: short=2K samples with Nb=2 (averaging only), large=16K samples with Nb=4 and Nh=4.",
     )
 
     args = parser.parse_args()

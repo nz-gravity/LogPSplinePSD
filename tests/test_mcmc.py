@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+import log_psplines.samplers.multivar.multivar_blocked_nuts as blocked_nuts_mod
 from log_psplines.arviz_utils import get_weights
 from log_psplines.arviz_utils.compare_results import compare_results
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
@@ -138,6 +139,15 @@ def test_multivar_mcmc(outdir, test_mode):
         print(
             f"[{sampler_name}] Log likelihood range: {ll_samples.min():.2f} to {ll_samples.max():.2f}"
         )
+        # print all LnZ
+        if "lnz" in idata.attrs:
+            print(
+                f"[{sampler_name}] LnZ: {idata.attrs['lnz']:.3f} ± {idata.attrs.get('lnz_err', np.nan):.3f}"
+            )
+        if "lnz_by_block" in idata.attrs:
+            print(
+                f"[{sampler_name}] LnZ by block: {idata.attrs['lnz_by_block']}, errors: {idata.attrs.get('lnz_err_by_block', np.nan)}"
+            )
 
         # check the posterior psd matrix shape
         psd_matrix_real = idata.posterior_psd["psd_matrix_real"]
@@ -240,6 +250,106 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
     )
     diag = np.diagonal(psd_vals, axis1=1, axis2=2)
     assert np.all(diag > 0.0)
+
+
+def test_multivar_blocked_lnz_aggregates_blocks(
+    synthetic_multivar_timeseries, monkeypatch
+):
+    captured_params: list[dict[str, np.ndarray]] = []
+    morphz_calls: list[tuple[np.ndarray, np.ndarray]] = []
+    evidence_values = [(1.25, 0.1), (2.75, 0.2)]
+
+    def fake_build_log_density_fn(model, model_kwargs):
+        def _logpost(params):
+            return 0.0
+
+        return _logpost
+
+    def fake_evaluate_log_density_batch(logpost_fn, params_batch):
+        snapshot: dict[str, np.ndarray] = {}
+        n_batch = None
+        for name, value in params_batch.items():
+            array = np.asarray(value, dtype=np.float64)
+            snapshot[name] = array.copy()
+            if n_batch is None:
+                n_batch = int(array.shape[0])
+            else:
+                assert int(array.shape[0]) == n_batch
+        assert n_batch is not None
+        captured_params.append(snapshot)
+        return np.zeros(n_batch, dtype=np.float64)
+
+    def fake_morphz_evidence(post_smp, lp, lp_fn, **kwargs):
+        call_idx = len(morphz_calls)
+        morphz_calls.append(
+            (
+                np.asarray(post_smp, dtype=np.float64).copy(),
+                np.asarray(lp, dtype=np.float64).copy(),
+            )
+        )
+        assert kwargs.get("kde_bw") == "scott"
+        _ = lp_fn(np.asarray(post_smp)[0])
+        return [evidence_values[call_idx]]
+
+    monkeypatch.setattr(
+        blocked_nuts_mod, "build_log_density_fn", fake_build_log_density_fn
+    )
+    monkeypatch.setattr(
+        blocked_nuts_mod,
+        "evaluate_log_density_batch",
+        fake_evaluate_log_density_batch,
+    )
+    monkeypatch.setattr(
+        blocked_nuts_mod.morphZ,
+        "evidence",
+        fake_morphz_evidence,
+    )
+
+    model_cfg = ModelConfig(n_knots=3)
+    diagnostics_cfg = DiagnosticsConfig(
+        outdir=None,
+        verbose=False,
+        compute_lnz=True,
+    )
+    vi_cfg = VIConfig(init_from_vi=False)
+    run_cfg = RunMCMCConfig(
+        n_samples=1,
+        n_warmup=1,
+        num_chains=1,
+        Nb=1,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+    )
+    idata = run_mcmc(
+        data=synthetic_multivar_timeseries,
+        config=run_cfg,
+    )
+
+    assert len(morphz_calls) == 2
+    assert len(captured_params) == 2
+    assert idata.attrs.get("lnz") == pytest.approx(4.0)
+    assert idata.attrs.get("lnz_err") == pytest.approx(np.sqrt(0.05))
+    assert np.allclose(
+        np.asarray(idata.attrs.get("lnz_by_block"), dtype=np.float64),
+        np.asarray([1.25, 2.75], dtype=np.float64),
+    )
+    assert np.allclose(
+        np.asarray(idata.attrs.get("lnz_err_by_block"), dtype=np.float64),
+        np.asarray([0.1, 0.2], dtype=np.float64),
+    )
+    assert list(idata.attrs.get("lnz_block_ids")) == [
+        "channel_0",
+        "channel_1",
+    ]
+
+    for params in captured_params:
+        for name, logged_phi in params.items():
+            if not name.startswith("phi_"):
+                continue
+            posterior_phi = np.asarray(idata.posterior[name]).reshape(-1)
+            assert np.all(posterior_phi > 0.0)
+            assert np.allclose(logged_phi, np.log(posterior_phi))
 
 
 def test_mcmc_unit(synthetic_univar_timeseries):

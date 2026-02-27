@@ -262,3 +262,24 @@ with
 The blocked sampler’s internal likelihood corresponds to the per-row likelihood
 factors :math:`\mathcal{L}_j` (see Eq. (likelihoodj) in ``overleaf``),
 modulo the implementation’s FFT/PSD normalisation conventions.
+
+Blockwise MorphZ evidence
+-------------------------
+
+When ``compute_lnz=True`` for the blocked multivariate sampler, evidence is
+computed per row of the Cholesky factor using MorphZ on that row's posterior
+draws and then combined:
+
+.. math::
+
+   \log Z = \sum_{j=1}^{p} \log Z_j.
+
+The reported uncertainty is combined in quadrature:
+
+.. math::
+
+   \sigma_{\log Z} = \sqrt{\sum_{j=1}^{p}\sigma_j^2}.
+
+Each row's log posterior is evaluated post hoc from the sampled row parameters
+(:math:`\delta_j`, :math:`\theta_{j,<j}`), so no extra per-draw ``lp`` arrays
+are stored in ``sample_stats`` for this calculation.

@@ -402,6 +402,7 @@ document.write(`
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction">PSD reconstruction</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes-on-scaling-conventions">Notes on scaling conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-cholesky-factorisation-from-overleaf">Exact Cholesky factorisation (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blockwise-morphz-evidence">Blockwise MorphZ evidence</a></li>
 </ul>
             </nav>
         </div>
@@ -617,6 +618,20 @@ parameterisation:</p>
 factors <span class="math notranslate nohighlight">\(\mathcal{L}_j\)</span> (see Eq. (likelihoodj) in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>),
 modulo the implementation’s FFT/PSD normalisation conventions.</p>
 </section>
+<section id="blockwise-morphz-evidence">
+<h2>Blockwise MorphZ evidence<a class="headerlink" href="#blockwise-morphz-evidence" title="Link to this heading">#</a></h2>
+<p>When <code class="docutils literal notranslate"><span class="pre">compute_lnz=True</span></code> for the blocked multivariate sampler, evidence is
+computed per row of the Cholesky factor using MorphZ on that row’s posterior
+draws and then combined:</p>
+<div class="math notranslate nohighlight">
+\[\log Z = \sum_{j=1}^{p} \log Z_j.\]</div>
+<p>The reported uncertainty is combined in quadrature:</p>
+<div class="math notranslate nohighlight">
+\[\sigma_{\log Z} = \sqrt{\sum_{j=1}^{p}\sigma_j^2}.\]</div>
+<p>Each row’s log posterior is evaluated post hoc from the sampled row parameters
+(<span class="math notranslate nohighlight">\(\delta_j\)</span>, <span class="math notranslate nohighlight">\(\theta_{j,&lt;j}\)</span>), so no extra per-draw <code class="docutils literal notranslate"><span class="pre">lp</span></code> arrays
+are stored in <code class="docutils literal notranslate"><span class="pre">sample_stats</span></code> for this calculation.</p>
+</section>
 </section>
 
     <script type="text/x-thebe-config">
@@ -699,6 +714,7 @@ modulo the implementation’s FFT/PSD normalisation conventions.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction">PSD reconstruction</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes-on-scaling-conventions">Notes on scaling conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-cholesky-factorisation-from-overleaf">Exact Cholesky factorisation (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blockwise-morphz-evidence">Blockwise MorphZ evidence</a></li>
 </ul>
   </nav></div>
 

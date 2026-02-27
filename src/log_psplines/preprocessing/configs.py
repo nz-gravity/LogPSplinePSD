@@ -61,7 +61,7 @@ class ModelConfig:
 class DiagnosticsConfig:
     verbose: bool = True
     outdir: Optional[str] = None
-    compute_lnz: bool = False
+    compute_lnz: bool = True
 
 
 @dataclass(frozen=True)

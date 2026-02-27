@@ -13,6 +13,15 @@ from .._jaxtypes import Float
 from .._typecheck import runtime_typecheck
 
 
+def _prepare_model_kwarg(value: Any) -> Any:
+    """Convert array-like model kwargs to JAX arrays, preserving scalars."""
+    if isinstance(value, (jax.Array, np.ndarray)):
+        return jnp.asarray(value)
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
 def build_log_density_fn(model, model_kwargs: dict[str, Any]):
     """Return a JIT-compiled callable that evaluates the NumPyro log posterior.
 
@@ -29,7 +38,7 @@ def build_log_density_fn(model, model_kwargs: dict[str, Any]):
         Function that maps a pytree of parameter arrays to the log posterior.
     """
 
-    model_kwargs = jax.tree_util.tree_map(jnp.asarray, model_kwargs)
+    model_kwargs = jax.tree_util.tree_map(_prepare_model_kwarg, model_kwargs)
 
     def _logpost(params: dict[str, jnp.ndarray]) -> jnp.ndarray:
         log_prob, _ = log_density(model, (), model_kwargs, params)

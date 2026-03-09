@@ -9,6 +9,7 @@ import numpy as np
 
 from ..logger import logger
 from ..plotting.base import safe_plot, setup_plot_style
+from ._utils import extract_percentile
 from .derived_weights import (
     HDI_PROB,
     REP_WEIGHT_ESS_K,
@@ -292,6 +293,222 @@ def _posterior_draw_count(idata: az.InferenceData) -> int:
     return int(chains * draws)
 
 
+def _resolve_true_psd(
+    idata: az.InferenceData, true_psd: Optional[np.ndarray]
+) -> Optional[np.ndarray]:
+    if true_psd is not None:
+        try:
+            arr = np.asarray(true_psd)
+            if arr.ndim == 3:
+                return arr
+        except Exception:
+            pass
+
+    attrs = getattr(idata, "attrs", {}) or {}
+    if hasattr(attrs, "get"):
+        attr_val = attrs.get("true_psd")
+        if attr_val is not None:
+            try:
+                arr = np.asarray(attr_val)
+                if arr.ndim == 3:
+                    return arr
+            except Exception:
+                pass
+    return None
+
+
+def _entry_labels(n_channels: int) -> list[str]:
+    labels: list[str] = []
+    for i in range(n_channels):
+        for j in range(n_channels):
+            labels.append(f"S{i + 1}{j + 1}")
+    return labels
+
+
+def _relative_error_epsilon(values: np.ndarray) -> float:
+    abs_vals = np.abs(np.asarray(values))
+    finite = abs_vals[np.isfinite(abs_vals)]
+    if finite.size == 0:
+        return 1e-12
+    ref = float(np.percentile(finite, 5.0))
+    return max(1e-12, 1e-6 * ref)
+
+
+def _build_multivar_truth_frequency_maps(
+    idata: az.InferenceData, true_psd: Optional[np.ndarray]
+) -> Optional[tuple[np.ndarray, list[str], np.ndarray, np.ndarray]]:
+    psd_ds = getattr(idata, "posterior_psd", None)
+    if psd_ds is None or "psd_matrix_real" not in psd_ds:
+        return None
+
+    truth = _resolve_true_psd(idata, true_psd)
+    if truth is None:
+        return None
+
+    psd_real = np.asarray(psd_ds["psd_matrix_real"].values)
+    if psd_real.ndim != 4:
+        return None
+
+    freqs = np.asarray(
+        psd_ds["psd_matrix_real"].coords.get(
+            "freq", np.arange(psd_real.shape[1], dtype=float)
+        ),
+        dtype=float,
+    )
+    if freqs.ndim != 1 or freqs.size != psd_real.shape[1]:
+        return None
+
+    truth_arr = np.asarray(truth)
+    if truth_arr.shape[0] != freqs.size:
+        logger.info(
+            f"Diagnostics plot: truth-aware PSD map skipped (truth freq bins={truth_arr.shape[0]}, posterior freq bins={freqs.size})."
+        )
+        return None
+
+    n_channels = int(psd_real.shape[2])
+    if truth_arr.shape[1:] != (n_channels, n_channels):
+        logger.info(
+            "Diagnostics plot: truth-aware PSD map skipped "
+            + f"(truth matrix shape={truth_arr.shape[1:]}, posterior matrix shape={(n_channels, n_channels)})."
+        )
+        return None
+
+    percentiles = np.asarray(
+        psd_ds["psd_matrix_real"].coords.get("percentile", []), dtype=float
+    )
+    if percentiles.size == 0:
+        percentiles = np.arange(psd_real.shape[0], dtype=float)
+
+    q50_real = extract_percentile(psd_real, percentiles, 50.0)
+    q05_real = extract_percentile(psd_real, percentiles, 5.0)
+    q95_real = extract_percentile(psd_real, percentiles, 95.0)
+
+    if "psd_matrix_imag" in psd_ds:
+        psd_imag = np.asarray(psd_ds["psd_matrix_imag"].values)
+        q50_imag = extract_percentile(psd_imag, percentiles, 50.0)
+        q05_imag = extract_percentile(psd_imag, percentiles, 5.0)
+        q95_imag = extract_percentile(psd_imag, percentiles, 95.0)
+    else:
+        q50_imag = np.zeros_like(q50_real)
+        q05_imag = np.zeros_like(q05_real)
+        q95_imag = np.zeros_like(q95_real)
+
+    estimate = q50_real + 1j * q50_imag
+    q05 = q05_real + 1j * q05_imag
+    q95 = q95_real + 1j * q95_imag
+    truth_complex = truth_arr.astype(np.complex128, copy=False)
+
+    eps = _relative_error_epsilon(truth_complex)
+    denom = np.maximum(np.abs(truth_complex), eps)
+    rel_error = np.abs(estimate - truth_complex) / denom
+
+    lower_real = np.minimum(q05.real, q95.real)
+    upper_real = np.maximum(q05.real, q95.real)
+    inside_real = (truth_complex.real >= lower_real) & (
+        truth_complex.real <= upper_real
+    )
+
+    lower_imag = np.minimum(q05.imag, q95.imag)
+    upper_imag = np.maximum(q05.imag, q95.imag)
+    inside_imag = (truth_complex.imag >= lower_imag) & (
+        truth_complex.imag <= upper_imag
+    )
+
+    coverage = np.logical_and(inside_real, inside_imag).astype(float)
+
+    labels = _entry_labels(n_channels)
+    rel_error_map = np.asarray(rel_error).reshape(freqs.size, -1).T
+    coverage_map = np.asarray(coverage).reshape(freqs.size, -1).T
+    return freqs, labels, rel_error_map, coverage_map
+
+
+def _create_truth_psd_frequency_diagnostics(
+    idata: az.InferenceData,
+    diag_dir: str,
+    config: DiagnosticsConfig,
+    true_psd: Optional[np.ndarray] = None,
+) -> bool:
+    maps = _build_multivar_truth_frequency_maps(idata, true_psd)
+    if maps is None:
+        logger.info(
+            "Diagnostics plot: psd_truth_error_vs_freq skipped (requires multivariate posterior_psd and true_psd)."
+        )
+        return False
+
+    freqs, labels, rel_error_map, coverage_map = maps
+    n_entries, n_freqs = rel_error_map.shape
+    if n_entries == 0 or n_freqs == 0:
+        return False
+
+    finite_error = rel_error_map[np.isfinite(rel_error_map)]
+    err_vmax = (
+        float(np.percentile(finite_error, 95.0)) if finite_error.size else 1.0
+    )
+    if err_vmax <= 0:
+        err_vmax = 1.0
+
+    y_step = max(1, n_entries // 18)
+    y_ticks = np.arange(0, n_entries, y_step, dtype=int)
+    if y_ticks[-1] != n_entries - 1:
+        y_ticks = np.append(y_ticks, n_entries - 1)
+
+    x_step = max(1, n_freqs // 8)
+    x_ticks = np.arange(0, n_freqs, x_step, dtype=int)
+    if x_ticks[-1] != n_freqs - 1:
+        x_ticks = np.append(x_ticks, n_freqs - 1)
+    x_labels = [f"{freqs[idx]:.3g}" for idx in x_ticks]
+
+    @safe_plot(f"{diag_dir}/psd_truth_error_vs_freq.png", config.dpi)
+    def _plot():
+        fig_height = float(np.clip(4.5 + 0.14 * n_entries, 6.0, 16.0))
+        fig, axes = plt.subplots(2, 1, figsize=(12, fig_height), sharex=True)
+
+        im_err = axes[0].imshow(
+            rel_error_map,
+            origin="lower",
+            aspect="auto",
+            cmap="magma",
+            vmin=0.0,
+            vmax=err_vmax,
+            interpolation="nearest",
+        )
+        axes[0].set_title("Frequency-Resolved Relative Error")
+        axes[0].set_ylabel("Spectral Entry")
+        axes[0].set_yticks(y_ticks)
+        axes[0].set_yticklabels([labels[idx] for idx in y_ticks], fontsize=8)
+        cbar_err = fig.colorbar(im_err, ax=axes[0], pad=0.01)
+        cbar_err.set_label("|S_hat - S_true| / max(|S_true|, eps)")
+
+        im_cov = axes[1].imshow(
+            coverage_map,
+            origin="lower",
+            aspect="auto",
+            cmap="RdYlGn",
+            vmin=0.0,
+            vmax=1.0,
+            interpolation="nearest",
+        )
+        axes[1].set_title("Frequency-Resolved 90% CI Coverage")
+        axes[1].set_ylabel("Spectral Entry")
+        axes[1].set_xlabel("Frequency")
+        axes[1].set_yticks(y_ticks)
+        axes[1].set_yticklabels([labels[idx] for idx in y_ticks], fontsize=8)
+        axes[1].set_xticks(x_ticks)
+        axes[1].set_xticklabels(x_labels, rotation=30, ha="right")
+        cbar_cov = fig.colorbar(im_cov, ax=axes[1], pad=0.01)
+        cbar_cov.set_label("Inside interval (0/1)")
+
+        plt.tight_layout()
+        return fig
+
+    ok = _plot()
+    logger.info(
+        "Diagnostics plot: psd_truth_error_vs_freq.png "
+        + f"{'ok' if ok else 'failed'}"
+    )
+    return bool(ok)
+
+
 def plot_diagnostics(
     idata: az.InferenceData,
     outdir: str,
@@ -303,6 +520,7 @@ def plot_diagnostics(
     *,
     summary_mode: Literal["off", "light", "full"] = "light",
     summary_position: Literal["start", "end"] = "end",
+    true_psd: Optional[np.ndarray] = None,
 ) -> None:
     """
     Create essential MCMC diagnostics in organized subdirectories.
@@ -331,7 +549,9 @@ def plot_diagnostics(
 
     t_plots = time.perf_counter()
     logger.info("Diagnostics step: plots")
-    _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model)
+    _create_diagnostic_plots(
+        idata, diag_dir, config, p, N, runtime, model, true_psd
+    )
     logger.info(
         f"Diagnostics step: plots done in {time.perf_counter() - t_plots:.2f}s"
     )
@@ -349,7 +569,9 @@ def plot_diagnostics(
     )
 
 
-def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
+def _create_diagnostic_plots(
+    idata, diag_dir, config, p, N, runtime, model, true_psd
+):
     """Create only the essential diagnostic plots."""
     logger.debug("Generating diagnostic plots...")
 
@@ -467,7 +689,18 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
         f"Diagnostics plot: summary_dashboard.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
     )
 
-    # 5. Acceptance rate diagnostics
+    # 5. Truth-aware PSD error diagnostics (multivariate only)
+    t = time.perf_counter()
+    logger.info("Diagnostics plot: psd_truth_error_vs_freq.png starting")
+    _create_truth_psd_frequency_diagnostics(
+        idata, diag_dir, config, true_psd=true_psd
+    )
+    logger.info(
+        "Diagnostics plot: psd_truth_error_vs_freq.png done in "
+        + f"{time.perf_counter() - t:.2f}s"
+    )
+
+    # 6. Acceptance rate diagnostics
     if config.save_acceptance:
 
         @safe_plot(f"{diag_dir}/acceptance_diagnostics.png", config.dpi)
@@ -485,7 +718,7 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
             "Diagnostics plot: acceptance_diagnostics skipped (disabled)."
         )
 
-    # 6. Sampler-specific diagnostics
+    # 7. Sampler-specific diagnostics
     t = time.perf_counter()
     logger.info("Diagnostics plots: sampler-specific starting")
     _create_sampler_diagnostics(idata, diag_dir, config)
@@ -493,7 +726,7 @@ def _create_diagnostic_plots(idata, diag_dir, config, p, N, runtime, model):
         f"Diagnostics plots: sampler-specific done in {time.perf_counter() - t:.2f}s"
     )
 
-    # 7. Divergences diagnostics now included in summary dashboard.
+    # 8. Divergences diagnostics now included in summary dashboard.
 
 
 def _create_rank_diagnostics(idata, diag_dir, config):

@@ -62,7 +62,14 @@ def _coarse_grain_processed_data(
             Nh=int(spec.Nh),
         )
 
-        logger.info(f"Coarse-grained periodogram: {spec}")
+        nl = int(spec.Nc * spec.Nh)
+        percent_retained = 100.0 * float(spec.Nc) / float(nl)
+        percent_decimated = 100.0 - percent_retained
+        logger.info(
+            f"Coarse-grained periodogram: {spec} "
+            f"(kept {percent_retained:.1f}% of points, "
+            f"decimated {percent_decimated:.1f}%)."
+        )
 
         if scaled_true_psd is not None:
             try:
@@ -84,7 +91,14 @@ def _coarse_grain_processed_data(
             Nh=cg_config.Nh,
         )
         processed_data = apply_coarse_grain_multivar_fft(processed_data, spec)
-        logger.info(f"Coarse-grained multivariate FFT: {spec}")
+        nl = int(spec.Nc * spec.Nh)
+        percent_retained = 100.0 * float(spec.Nc) / float(nl)
+        percent_decimated = 100.0 - percent_retained
+        logger.info(
+            f"Coarse-grained multivariate FFT: {spec} "
+            f"(kept {percent_retained:.1f}% of points, "
+            f"decimated {percent_decimated:.1f}%)."
+        )
         return processed_data, scaled_true_psd
 
     return processed_data, scaled_true_psd

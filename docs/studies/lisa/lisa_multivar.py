@@ -32,49 +32,7 @@ set_level("DEBUG")
 HERE = Path(__file__).resolve().parent
 BASE_RESULTS_DIR = HERE / "results" / "lisa"
 
-
-def _env_flag(name: str, default: bool) -> bool:
-    val = os.getenv(name)
-    if val is None:
-        return default
-    return val.strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
-def _env_float(name: str, default: float) -> float:
-    val = os.getenv(name)
-    if val is None:
-        return default
-    return float(val)
-
-
-def _env_int(name: str, default: int) -> int:
-    val = os.getenv(name)
-    if val is None:
-        return default
-    return int(val)
-
-
-def _env_str(name: str, default: str) -> str:
-    val = os.getenv(name)
-    if val is None:
-        return default
-    return str(val)
-
-
-def _env_blocks(name: str, default: tuple[int, ...] | str):
-    val = os.getenv(name)
-    if val is None:
-        return default
-    val = val.strip().lower()
-    if val == "all":
-        return "all"
-    if val == "":
-        return default
-    parts = [p for p in val.split(",") if p.strip()]
-    return tuple(int(p) for p in parts)
-
-
-RUN_TAG = _env_str("LISA_RUN_TAG", "")
+RUN_TAG = ""
 RESULTS_DIR = (
     BASE_RESULTS_DIR if RUN_TAG == "" else HERE / "results" / f"lisa_{RUN_TAG}"
 )
@@ -84,52 +42,51 @@ FULL_RESULTS_DIR = RESULTS_DIR / "full"
 DIAG_RESULTS_DIR = RESULTS_DIR / "diag"
 COMPARE_TXT = RESULTS_DIR / "evidence_comparison.txt"
 COMPARE_JSON = RESULTS_DIR / "evidence_comparison.json"
-LISA_HYPOTHESIS_MODE = parse_hypothesis_mode(
-    _env_str("LISA_HYPOTHESIS_MODE", "both")
-)
-LISA_RUN_COMPARE_SUMMARY = _env_flag("LISA_RUN_COMPARE_SUMMARY", True)
-_raw_channel_names = _env_str("LISA_CHANNEL_NAMES", "X,Y,Z")
+LISA_HYPOTHESIS_MODE = parse_hypothesis_mode("full")
+LISA_RUN_COMPARE_SUMMARY = True
+_raw_channel_names = "X,Y,Z"
 LISA_CHANNEL_NAMES = parse_channel_names(_raw_channel_names)
 if ",".join(LISA_CHANNEL_NAMES) != _raw_channel_names.replace(" ", ""):
     logger.warning(
         f"Invalid LISA_CHANNEL_NAMES='{_raw_channel_names}'. Using default channel labels X,Y,Z."
     )
 
-RUN_VI_ONLY = _env_flag("LISA_RUN_VI_ONLY", False)
-INIT_FROM_VI = _env_flag("LISA_INIT_FROM_VI", True)
-REUSE_EXISTING = _env_flag(
-    "LISA_REUSE_EXISTING", False
-)  # set True to skip sampling when results already exist
-USE_LISATOOLS_SYNTH = _env_flag("LISA_USE_LISATOOLS_SYNTH", True)
+RUN_VI_ONLY = False
+INIT_FROM_VI = True
+# Main multivariate run can be decoupled from VI init when diagnosing
+# pathological adaptation; diagonal runs still use INIT_FROM_VI.
+INIT_FROM_VI_FULL = False
+REUSE_EXISTING = False  # set True to skip sampling when results already exist
+USE_LISATOOLS_SYNTH = True
 LISATOOLS_SYNTH_NPZ = RESULTS_DIR / "lisa_data.npz"
 
 # Hyperparameters and spline configuration for this study
-ALPHA_DELTA = _env_float("LISA_ALPHA_DELTA", 3.0)
-BETA_DELTA = _env_float("LISA_BETA_DELTA", 3.0)
-N_KNOTS = _env_int("LISA_N_KNOTS", 30)
-TARGET_ACCEPT = _env_float("LISA_TARGET_ACCEPT", 0.7)
-MAX_TREE_DEPTH = _env_int("LISA_MAX_TREE_DEPTH", 10)
-TARGET_ACCEPT_BY_CHANNEL: list[float] | None = [0.7, 0.6, 0.75]
+ALPHA_DELTA = 3.0
+BETA_DELTA = 3.0
+N_KNOTS = 10
+TARGET_ACCEPT = 0.9
+MAX_TREE_DEPTH = 10
+TARGET_ACCEPT_BY_CHANNEL: list[float] | None = [0.9, 0.92, 0.95]
 # Avoid raising max_tree_depth unless you have to: if a channel already hits the
 # max steps, increasing max_tree_depth can dramatically increase walltime.
-MAX_TREE_DEPTH_BY_CHANNEL: list[int] | None = [10, 10, 10]
+MAX_TREE_DEPTH_BY_CHANNEL: list[int] | None = [10, 11, 12]
 DENSE_MASS = True
-VI_GUIDE = _env_str("LISA_VI_GUIDE", "diag")
-VI_STEPS = _env_int("LISA_VI_STEPS", 1000_000)
-VI_LR = _env_float("LISA_VI_LR", 1e-4)
-VI_POSTERIOR_DRAWS = _env_int("LISA_VI_POSTERIOR_DRAWS", 1024)
+VI_GUIDE = "diag"
+VI_STEPS = 100_000
+VI_LR = 1e-4
+VI_POSTERIOR_DRAWS = 1024
 MAX_TIME_BLOCKS = 12
 N_TIME_BLOCKS_OVERRIDE: int | None = None
-BLOCK_DAYS = _env_float("LISA_BLOCK_DAYS", 7.0)
-MAX_DAYS = _env_float("LISA_MAX_DAYS", 0.0)
-MAX_MONTHS = _env_float("LISA_MAX_MONTHS", 0.0)
-WELCH_NPERSEG = _env_int("LISA_WELCH_NPERSEG", 0)
-WELCH_OVERLAP_FRAC = _env_float("LISA_WELCH_OVERLAP_FRAC", 0.5)
-WELCH_WINDOW = _env_str("LISA_WELCH_WINDOW", "hann")
-WELCH_BLOCK_AVG = _env_flag("LISA_WELCH_BLOCK_AVG", True)
-ENABLE_COARSE_GRAIN = _env_flag("LISA_ENABLE_COARSE_GRAIN", True)
-COARSE_GRAIN_FACTOR = _env_int("LISA_COARSE_GRAIN_FACTOR", 0)
-TARGET_COARSE_BINS = _env_int("LISA_TARGET_COARSE_BINS", 1024)
+BLOCK_DAYS = 1.0
+MAX_DAYS = 14.0
+MAX_MONTHS = 0.0
+WELCH_NPERSEG = 0
+WELCH_OVERLAP_FRAC = 0.5
+WELCH_WINDOW = "hann"
+WELCH_BLOCK_AVG = True
+ENABLE_COARSE_GRAIN = False
+COARSE_GRAIN_FACTOR = 0
+TARGET_COARSE_BINS = 4096
 
 C_LIGHT = 299_792_458.0  # m / s
 L_ARM = 2.5e9  # m
@@ -285,7 +242,8 @@ logger.info(
 )
 
 
-FMIN, FMAX = 10**-4, 10**-1
+# Pilot stability band: reduce extreme high-frequency geometry while tuning.
+FMIN, FMAX = 10**-4, 10**-2
 
 analysis_freq = np.fft.rfftfreq(Lb, d=dt)[1:]
 analysis_mask = (analysis_freq >= FMIN) & (analysis_freq <= FMAX)
@@ -372,8 +330,8 @@ def _run_full_hypothesis(
     )
     idata_full = run_mcmc(
         data=raw_series,
-        n_samples=4000,
-        n_warmup=4000,
+        n_samples=1000,
+        n_warmup=1500,
         num_chains=4,
         n_knots=N_KNOTS,
         degree=2,
@@ -388,7 +346,7 @@ def _run_full_hypothesis(
         alpha_delta=ALPHA_DELTA,
         beta_delta=BETA_DELTA,
         only_vi=RUN_VI_ONLY,
-        init_from_vi=INIT_FROM_VI,
+        init_from_vi=INIT_FROM_VI_FULL,
         vi_steps=VI_STEPS,
         vi_lr=VI_LR,
         vi_guide=VI_GUIDE,

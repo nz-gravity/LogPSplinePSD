@@ -476,6 +476,7 @@ class BaseSampler(ABC):
             model=self.model,
             summary_mode="full",
             summary_position="end",
+            true_psd=self.config.true_psd,
         )
         logger.info("save_results: plotting diagnostics done")
         t0 = time.perf_counter()

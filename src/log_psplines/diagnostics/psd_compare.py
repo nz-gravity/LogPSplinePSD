@@ -82,7 +82,7 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
     if "psd_matrix_imag" in psd_ds:
         psd_imag = np.asarray(psd_ds["psd_matrix_imag"].values)
 
-    true_psd_real = np.real(reference)
+    true_psd_real = reference
 
     metrics: Dict[str, float] = {}
 

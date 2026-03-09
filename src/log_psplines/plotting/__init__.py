@@ -7,6 +7,7 @@ from .base import (
     setup_plot_style,
 )
 from .pdgrm import plot_pdgrm
+from .psd_diagnostics import plot_true_psd_diagnostics
 from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 from .utils import PlottingData, unpack_data
 from .vi import (
@@ -30,6 +31,7 @@ __all__ = [
     # Main plotting functions
     "plot_pdgrm",
     "plot_psd_matrix",
+    "plot_true_psd_diagnostics",
     "PSDMatrixPlotSpec",
     "plot_vi_elbo",
     "plot_vi_initial_psd_matrix",

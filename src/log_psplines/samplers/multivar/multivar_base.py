@@ -29,6 +29,7 @@ from ...logger import logger
 from ...plotting import (
     PSDMatrixPlotSpec,
     plot_psd_matrix,
+    plot_true_psd_diagnostics,
     save_vi_diagnostics_multivariate,
 )
 from ...psplines.multivar_psplines import MultivariateLogPSplines
@@ -113,6 +114,12 @@ class MultivarBaseSampler(BaseSampler):
             logger.info(
                 f"Applied coarse-grain counts; total effective count = {total}"
             )
+            percent_retained = 100.0 / float(self.Nh)
+            percent_decimated = 100.0 - percent_retained
+            logger.info(
+                f"Coarse-grain retention: {percent_retained:.1f}% "
+                f"(decimated {percent_decimated:.1f}%, Nh={self.Nh})."
+            )
 
     @property
     def data_type(self) -> str:
@@ -165,6 +172,21 @@ class MultivarBaseSampler(BaseSampler):
             logger.info(
                 f"save_plots(multivar): PSD matrix plot done in {time.perf_counter() - t0:.2f}s"
             )
+
+            if true_psd is not None:
+                t0 = time.perf_counter()
+                logger.info(
+                    "save_plots(multivar): plotting true-PSD diagnostics"
+                )
+                plot_true_psd_diagnostics(
+                    idata,
+                    true_psd,
+                    freq=np.array(self.freq),
+                    outdir=self.config.outdir,
+                )
+                logger.info(
+                    f"save_plots(multivar): true-PSD diagnostics done in {time.perf_counter() - t0:.2f}s"
+                )
 
             t0 = time.perf_counter()
             logger.info("save_plots(multivar): saving VI diagnostics")

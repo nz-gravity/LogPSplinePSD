@@ -5,6 +5,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
+import xarray as xr
 
 from log_psplines.diagnostics.plotting import (
     DiagnosticsConfig,
@@ -12,6 +13,7 @@ from log_psplines.diagnostics.plotting import (
     _create_pair_diagnostics,
     _create_rank_diagnostics,
     _create_sampler_diagnostics,
+    _create_truth_psd_frequency_diagnostics,
     _plot_acceptance_diagnostics,
     _plot_nuts_diagnostics_blockaware,
     _select_pair_plot_vars,
@@ -149,3 +151,49 @@ def test_pair_var_selection_and_plot(tmp_path):
     diag_dir.mkdir()
     _create_pair_diagnostics(idata, str(diag_dir), config)
     assert (diag_dir / "pair_plot.png").exists()
+
+
+def test_truth_psd_frequency_diagnostics_writes_file(tmp_path):
+    rng = np.random.default_rng(21)
+    posterior = {"weights_0": rng.normal(size=(1, 8, 2))}
+    idata = az.from_dict(posterior=posterior)
+    idata.attrs["data_type"] = "multivar"
+
+    freqs = np.array([0.1, 0.2, 0.3, 0.4], dtype=float)
+    true_psd = np.zeros((4, 2, 2), dtype=np.complex128)
+    true_psd[:, 0, 0] = 1.2
+    true_psd[:, 1, 1] = 0.8
+    true_psd[:, 0, 1] = 0.15 + 0.05j
+    true_psd[:, 1, 0] = 0.15 - 0.05j
+
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=float)
+    psd_real = np.stack(
+        [0.9 * true_psd.real, true_psd.real, 1.1 * true_psd.real], axis=0
+    )
+    psd_imag = np.stack(
+        [0.9 * true_psd.imag, true_psd.imag, 1.1 * true_psd.imag], axis=0
+    )
+    psd_ds = xr.Dataset(
+        {
+            "psd_matrix_real": xr.DataArray(
+                psd_real,
+                coords={"percentile": percentiles, "freq": freqs},
+                dims=("percentile", "freq", "channel", "channel2"),
+            ),
+            "psd_matrix_imag": xr.DataArray(
+                psd_imag,
+                coords={"percentile": percentiles, "freq": freqs},
+                dims=("percentile", "freq", "channel", "channel2"),
+            ),
+        }
+    )
+    idata.add_groups(posterior_psd=psd_ds)
+
+    diag_dir = tmp_path / "diagnostics"
+    diag_dir.mkdir()
+    config = DiagnosticsConfig(figsize=(6, 4))
+    ok = _create_truth_psd_frequency_diagnostics(
+        idata, str(diag_dir), config, true_psd=true_psd
+    )
+    assert ok
+    assert (diag_dir / "psd_truth_error_vs_freq.png").exists()

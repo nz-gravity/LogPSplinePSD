@@ -486,6 +486,54 @@ def _validate_varma_inputs(
         raise ValueError(
             "sigma must have shape (C, C) matching channels, or shape (1, 1)."
         )
+    _validate_sigma_positive_definite(sigma=sigma)
+
+
+def _validate_sigma_positive_definite(
+    sigma: np.ndarray,
+    *,
+    symmetry_tol: float = 1e-12,
+    min_eig_tol: float = 1e-12,
+) -> None:
+    """Validate that innovation covariance is finite, symmetric, and PD.
+
+    Parameters
+    ----------
+    sigma : np.ndarray, shape (C, C) or (1, 1)
+        Innovation covariance matrix.
+    symmetry_tol : float, default=1e-12
+        Absolute tolerance used for symmetry checks.
+    min_eig_tol : float, default=1e-12
+        Strict lower bound for the minimum eigenvalue.
+    """
+    sigma_arr = np.asarray(sigma, dtype=np.float64)
+    if not np.all(np.isfinite(sigma_arr)):
+        raise ValueError("sigma must contain only finite values.")
+
+    if sigma_arr.shape == (1, 1):
+        variance = float(sigma_arr[0, 0])
+        if variance <= min_eig_tol:
+            raise ValueError(
+                "Scalar sigma must be strictly positive. "
+                f"Got variance={variance:.6g}."
+            )
+        return
+
+    if not np.allclose(sigma_arr, sigma_arr.T, atol=symmetry_tol, rtol=0.0):
+        max_abs_diff = float(np.max(np.abs(sigma_arr - sigma_arr.T)))
+        raise ValueError(
+            "sigma must be symmetric for a valid covariance matrix. "
+            f"Max |sigma - sigma.T|={max_abs_diff:.3e}."
+        )
+
+    eigvals = np.linalg.eigvalsh(sigma_arr)
+    min_eig = float(np.min(eigvals))
+    if min_eig <= min_eig_tol:
+        raise ValueError(
+            "sigma must be strictly positive definite to avoid singular/indefinite "
+            "innovation covariance in simulation. "
+            f"Minimum eigenvalue={min_eig:.3e}."
+        )
 
 
 def _is_var_stationary(

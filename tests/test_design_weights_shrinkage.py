@@ -242,9 +242,9 @@ def test_sample_pspline_block_tau_no_design_ignored():
 # ---------------------------------------------------------------------------
 
 _SHARED_MCMC_KWARGS = dict(
-    n_knots=5,
-    n_samples=200,
-    n_warmup=200,
+    n_knots=10,
+    n_samples=500,
+    n_warmup=500,
     num_chains=1,
     Nb=2,
     init_from_vi=False,
@@ -367,11 +367,16 @@ def test_var3_design_vs_no_design_comparison(outdir):
         ), "Expected design run to have comparable or narrower diagonal CIs"
 
     # ----- Overlay plot: base vs design on the same axes -----
+    # Plot on the same frequency grid used by idata quantiles; otherwise
+    # plot_psd_matrix drops true_psd when frequency lengths differ.
+    plot_freq = np.asarray(idata_base.attrs.get("frequencies", freqs_hz))
+    true_psd_plot = _true_psd(plot_freq)
+
     # First pass: no-design run (creates the figure/axes grid)
     spec_base = PSDMatrixPlotSpec(
         idata=idata_base,
-        true_psd=true_psd,
-        freq=freqs_hz,
+        true_psd=true_psd_plot,
+        freq=plot_freq,
         outdir=None,
         save=False,
         close=False,
@@ -392,6 +397,8 @@ def test_var3_design_vs_no_design_comparison(outdir):
         label=f"Design (tau=1.0)",
         model_color="tab:orange",
         show_knots=False,
+        true_psd=true_psd_plot,  # show same true PSD for both
+        freq=plot_freq,
     )
     plot_psd_matrix(spec_design)
 

@@ -1,0 +1,3 @@
+[submodule "docs/manuscript"]
+	path = docs/manuscript
+	url = git@github.com:avivajpeyi/multivar_pspline_paper_draft.git

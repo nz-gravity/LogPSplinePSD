@@ -305,6 +305,171 @@ def _save_metrics_summary(
     logger.info(f"Saved compact metrics to {metrics_json} and {metrics_csv}")
 
 
+def _extract_lnz_summary(idata) -> tuple[float, float]:
+    """Best-effort extraction of total lnZ and its uncertainty."""
+    attrs = getattr(idata, "attrs", {})
+
+    lnz = attrs.get("lnz", attrs.get("logz", np.nan))
+    lnz_err = attrs.get(
+        "lnz_err",
+        attrs.get("logz_err", attrs.get("lnz_se", np.nan)),
+    )
+
+    return float(lnz), float(lnz_err)
+
+
+def _save_compact_ci_curves(outdir: str, idata) -> None:
+    """Save compact CI-vs-frequency arrays for plotting comparisons."""
+    psd_group = getattr(idata, "posterior_psd", None)
+    if psd_group is None:
+        raise ValueError("InferenceData has no posterior_psd group.")
+    if (
+        "psd_matrix_real" not in psd_group
+        or "psd_matrix_imag" not in psd_group
+    ):
+        raise ValueError(
+            "posterior_psd must contain psd_matrix_real and psd_matrix_imag."
+        )
+
+    freq = np.asarray(psd_group.coords["freq"].values, dtype=np.float64)
+    percentiles = np.asarray(
+        psd_group.coords["percentile"].values, dtype=np.float64
+    )
+
+    psd_real = np.asarray(
+        psd_group["psd_matrix_real"].values, dtype=np.float64
+    )
+    psd_imag = np.asarray(
+        psd_group["psd_matrix_imag"].values, dtype=np.float64
+    )
+
+    q05_real = _extract_percentile_slice(psd_real, percentiles, 5.0)
+    q50_real = _extract_percentile_slice(psd_real, percentiles, 50.0)
+    q95_real = _extract_percentile_slice(psd_real, percentiles, 95.0)
+
+    q05_imag = _extract_percentile_slice(psd_imag, percentiles, 5.0)
+    q50_imag = _extract_percentile_slice(psd_imag, percentiles, 50.0)
+    q95_imag = _extract_percentile_slice(psd_imag, percentiles, 95.0)
+
+    if q50_real.ndim != 3:
+        raise ValueError(
+            f"Expected q50_real to have shape (F, P, P), got {q50_real.shape}"
+        )
+
+    _, p, _ = q50_real.shape
+    diag_idx = np.arange(p)
+    offdiag_pairs = [(i, j) for i in range(p) for j in range(i + 1, p)]
+
+    psd_diag_q05 = q05_real[:, diag_idx, diag_idx]
+    psd_diag_q50 = q50_real[:, diag_idx, diag_idx]
+    psd_diag_q95 = q95_real[:, diag_idx, diag_idx]
+
+    if offdiag_pairs:
+        off_i = np.array([i for i, _ in offdiag_pairs], dtype=int)
+        off_j = np.array([j for _, j in offdiag_pairs], dtype=int)
+
+        psd_offre_q05 = q05_real[:, off_i, off_j]
+        psd_offre_q50 = q50_real[:, off_i, off_j]
+        psd_offre_q95 = q95_real[:, off_i, off_j]
+
+        psd_offim_q05 = q05_imag[:, off_i, off_j]
+        psd_offim_q50 = q50_imag[:, off_i, off_j]
+        psd_offim_q95 = q95_imag[:, off_i, off_j]
+    else:
+        psd_offre_q05 = np.empty((freq.size, 0), dtype=np.float64)
+        psd_offre_q50 = np.empty((freq.size, 0), dtype=np.float64)
+        psd_offre_q95 = np.empty((freq.size, 0), dtype=np.float64)
+        psd_offim_q05 = np.empty((freq.size, 0), dtype=np.float64)
+        psd_offim_q50 = np.empty((freq.size, 0), dtype=np.float64)
+        psd_offim_q95 = np.empty((freq.size, 0), dtype=np.float64)
+
+    periodogram_real = None
+    periodogram_imag = None
+    observed_group = getattr(idata, "observed_data", None)
+    if observed_group is not None and "periodogram" in observed_group:
+        periodogram = np.asarray(observed_group["periodogram"].values)
+        periodogram_real = np.real(periodogram).astype(np.float64, copy=False)
+        periodogram_imag = np.imag(periodogram).astype(np.float64, copy=False)
+
+    true_psd = _calculate_true_var_psd_hz(
+        freq,
+        VAR_COEFFS,
+        SIGMA,
+        fs=DEFAULT_FS,
+    )
+    true_psd_real = np.real(true_psd).astype(np.float64, copy=False)
+    true_psd_imag = np.imag(true_psd).astype(np.float64, copy=False)
+
+    outpath = os.path.join(outdir, "compact_ci_curves.npz")
+    save_payload = dict(
+        freq=freq,
+        psd_diag_q05=psd_diag_q05,
+        psd_diag_q50=psd_diag_q50,
+        psd_diag_q95=psd_diag_q95,
+        psd_offre_q05=psd_offre_q05,
+        psd_offre_q50=psd_offre_q50,
+        psd_offre_q95=psd_offre_q95,
+        psd_offim_q05=psd_offim_q05,
+        psd_offim_q50=psd_offim_q50,
+        psd_offim_q95=psd_offim_q95,
+        offdiag_pairs=np.asarray(offdiag_pairs, dtype=int),
+        # Full matrix quantiles (convenient for direct plotting)
+        psd_real_q05=q05_real,
+        psd_real_q50=q50_real,
+        psd_real_q95=q95_real,
+        psd_imag_q05=q05_imag,
+        psd_imag_q50=q50_imag,
+        psd_imag_q95=q95_imag,
+        # Optional overlays for plotting without InferenceData.
+        true_psd_real=true_psd_real,
+        true_psd_imag=true_psd_imag,
+    )
+    if periodogram_real is not None and periodogram_imag is not None:
+        save_payload["periodogram_real"] = periodogram_real
+        save_payload["periodogram_imag"] = periodogram_imag
+
+    np.savez_compressed(outpath, **save_payload)
+    logger.info(f"Saved compact CI curves to {outpath}")
+
+
+def _save_compact_run_summary(
+    outdir: str,
+    *,
+    idata,
+    seed: int,
+    mode: str,
+    N: int,
+    Nb: int,
+    coarse_Nh: int | None,
+) -> None:
+    """Save compact scalar summaries for later comparison tables."""
+    metrics = _extract_run_metrics(
+        idata,
+        seed=seed,
+        mode=mode,
+        N=N,
+        Nb=Nb,
+        coarse_Nh=coarse_Nh,
+    )
+
+    lnz, lnz_err = _extract_lnz_summary(idata)
+    metrics["lnz"] = lnz
+    metrics["lnz_err"] = lnz_err
+
+    out_json = os.path.join(outdir, "compact_run_summary.json")
+    out_csv = os.path.join(outdir, "compact_run_summary.csv")
+
+    with open(out_json, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2, sort_keys=True)
+
+    with open(out_csv, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(metrics.keys()))
+        writer.writeheader()
+        writer.writerow(metrics)
+
+    logger.info(f"Saved compact run summary to {out_json} and {out_csv}")
+
+
 def _prune_outputs_keep_psd_plot(outdir: str) -> None:
     """Delete heavy artifacts, keeping only PSD plot(s) and compact metrics."""
     image_ext = (".png", ".pdf", ".svg", ".jpg", ".jpeg")
@@ -424,6 +589,7 @@ def simulation_study(
         beta_delta=DEFAULT_BETA_DELTA,
         compute_coherence_quantiles=True,
         true_psd=(freq_true_hz, true_psd),
+        max_save_bytes=20_000_000,
     )
     metrics = _extract_run_metrics(
         idata,
@@ -434,7 +600,17 @@ def simulation_study(
         coarse_Nh=coarse_Nh,
     )
     _save_metrics_summary(outdir, metrics)
-    _prune_outputs_keep_psd_plot(outdir)
+    _save_compact_ci_curves(outdir, idata)
+    _save_compact_run_summary(
+        outdir,
+        idata=idata,
+        seed=seed,
+        mode=mode,
+        N=N,
+        Nb=Nb,
+        coarse_Nh=coarse_Nh,
+    )
+    # _prune_outputs_keep_psd_plot(outdir)
 
 
 if __name__ == "__main__":

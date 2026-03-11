@@ -48,6 +48,9 @@ N_KNOTS = 20
 TARGET_ACCEPT = 0.7
 MAX_TREE_DEPTH = 10
 TARGET_ACCEPT_BY_CHANNEL: list[float] | None = None
+DESIGN_PSD_TAU: float | None = (
+    1.0  # tau for soft shrinkage toward true PSD; None = disabled
+)
 # Avoid raising max_tree_depth unless you have to: if a channel already hits the
 # max steps, increasing max_tree_depth can dramatically increase walltime.
 MAX_TREE_DEPTH_BY_CHANNEL: list[int] | None = [10, 10, 10]
@@ -337,6 +340,11 @@ def _build_run_slug() -> str:
         f"nutsW{FULL_N_WARMUP}S{FULL_N_SAMPLES}",
         f"steps{total_nuts_steps}",
         "viOn" if vi_enabled else "viOff",
+        (
+            f"tau{_format_decimal_slug(DESIGN_PSD_TAU)}"
+            if DESIGN_PSD_TAU is not None
+            else "tauOff"
+        ),
     ]
     return "_".join(parts)
 
@@ -411,6 +419,8 @@ def _run_full_hypothesis(
         dense_mass=DENSE_MASS,
         true_psd=true_psd_source,
         compute_lnz=True,
+        design_psd=true_psd_source if DESIGN_PSD_TAU is not None else None,
+        tau=DESIGN_PSD_TAU,
     )
     idata_full.to_netcdf(str(result_path))
     return idata_full, result_path

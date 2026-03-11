@@ -66,8 +66,23 @@ def sample_pspline_block(
     alpha_delta: float,
     beta_delta: float,
     factor_name: Optional[str] = None,
+    w_design: Optional[jax.Array] = None,
+    tau: Optional[float] = None,
 ) -> dict[str, Any]:
-    """Draw hierarchical Gamma-Normal P-spline weights and record log priors."""
+    """Draw hierarchical Gamma-Normal P-spline weights and record log priors.
+
+    Parameters
+    ----------
+    w_design:
+        Reference weights to shrink toward instead of zero. When provided,
+        the smoothness penalty acts on ``weights - w_design``. If ``None``
+        (default), behavior is identical to the original implementation.
+    tau:
+        Standard deviation for an additional isotropic Gaussian prior on
+        ``weights - w_design``. Only applied when ``w_design`` is also
+        provided. Smaller values pull the posterior more strongly toward the
+        design.
+    """
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
     delta = numpyro.sample(delta_name, delta_dist)
     log_prior_delta = delta_dist.log_prob(delta)
@@ -97,8 +112,11 @@ def sample_pspline_block(
     base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
     weights = numpyro.sample(weights_name, base_normal)
 
-    wPw = jnp.dot(weights, jnp.dot(penalty_matrix, weights))
+    residual = weights if w_design is None else weights - w_design
+    wPw = jnp.dot(residual, jnp.dot(penalty_matrix, residual))
     log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
+    if tau is not None and w_design is not None:
+        log_prior_w += -0.5 * jnp.sum(residual**2) / tau**2
     base_log_prob = base_normal.log_prob(weights)
     log_prior_adjustment = log_prior_w - base_log_prob
 

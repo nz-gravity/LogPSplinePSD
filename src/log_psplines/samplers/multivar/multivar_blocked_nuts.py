@@ -69,6 +69,8 @@ def _blocked_channel_model(
     duration: float,
     Nb: int,
     Nh: int,
+    design_weights: dict | None = None,
+    tau: Optional[float] = None,
 ) -> None:
     """NumPyro model for a single Cholesky block (row of ``T``).
 
@@ -107,6 +109,7 @@ def _blocked_channel_model(
     """
 
     channel_label = f"{channel_index}"
+    _dw = design_weights or {}
 
     delta_block = sample_pspline_block(
         delta_name=f"delta_{channel_label}",
@@ -117,6 +120,8 @@ def _blocked_channel_model(
         beta_phi=beta_phi,
         alpha_delta=alpha_delta,
         beta_delta=beta_delta,
+        w_design=_dw.get(f"delta_{channel_index}"),
+        tau=tau,
     )
     log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
     # Numerical guard:
@@ -144,6 +149,8 @@ def _blocked_channel_model(
                 beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
+                w_design=_dw.get(f"theta_re_{channel_index}_{theta_idx}"),
+                tau=tau,
             )
             theta_re_eval = jnp.einsum(
                 "nk,k->n", basis_theta, theta_re_block["weights"]
@@ -160,6 +167,8 @@ def _blocked_channel_model(
                 beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
+                w_design=_dw.get(f"theta_im_{channel_index}_{theta_idx}"),
+                tau=tau,
             )
 
             theta_im_eval = jnp.einsum(
@@ -243,6 +252,15 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     alpha_phi_theta: Optional[float] = None
     beta_phi_theta: Optional[float] = None
 
+    # Soft shrinkage toward a design PSD.
+    # ``design_psd``: complex array (N, p, p) at model frequencies.  When
+    # provided, each P-spline component is shrunk toward the spline fit to the
+    # corresponding Cholesky component of the design.
+    # ``tau``: isotropic Gaussian scale for level shrinkage.  ``None`` means no
+    # additional L2 term beyond the smoothness penalty.
+    design_psd: Optional[np.ndarray] = None
+    tau: Optional[float] = None
+
     def __post_init__(self):
         super().__post_init__()
         if self.alpha_phi_theta is None:
@@ -295,6 +313,67 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         self._lnz_err_by_block: list[float] = []
         self._lnz_block_ids: list[str] = []
 
+        self._design_weights: dict = {}
+        if self.config.design_psd is not None:
+            design_psd = self._align_design_psd(self.config.design_psd)
+            self._design_weights = self.spline_model.compute_design_weights(
+                design_psd
+            )
+
+    def _align_design_psd(
+        self,
+        design_psd,
+    ) -> np.ndarray:
+        """Return design PSD interpolated to model frequencies.
+
+        Accepts either:
+        - ``np.ndarray`` of shape ``(N, p, p)`` already at model frequencies.
+        - A tuple ``(freqs, psd)`` where ``freqs`` is shape ``(M,)`` and
+          ``psd`` is shape ``(M, p, p)``; each element is interpolated to
+          ``self.fft_data.freq``.
+        """
+        model_freq = np.asarray(self.fft_data.freq)
+        if isinstance(design_psd, tuple):
+            src_freq, src_psd = design_psd
+            src_freq = np.asarray(src_freq)
+            src_psd = np.asarray(src_psd, dtype=np.complex128)
+            aligned = np.stack(
+                [
+                    [
+                        np.interp(model_freq, src_freq, src_psd[:, j, l].real)
+                        + 1j
+                        * np.interp(
+                            model_freq, src_freq, src_psd[:, j, l].imag
+                        )
+                        for l in range(self.p)
+                    ]
+                    for j in range(self.p)
+                ],
+                axis=0,
+            )  # (p, p, N)
+            design_psd = np.moveaxis(
+                aligned, [0, 1, 2], [1, 2, 0]
+            )  # (N, p, p)
+        else:
+            design_psd = np.asarray(design_psd, dtype=np.complex128)
+            if design_psd.shape != (self.N, self.p, self.p):
+                raise ValueError(
+                    f"design_psd array must have shape ({self.N}, {self.p}, {self.p}), "
+                    f"got {design_psd.shape}. "
+                    "Pass a (freqs, psd) tuple to enable automatic interpolation."
+                )
+
+        # The model operates on channel-standardized data.  Divide the design
+        # PSD by the outer product of channel stds so design_weights correspond
+        # to the standardized parameterization that NUTS samples from.
+        channel_stds = getattr(self.config, "channel_stds", None)
+        if channel_stds is not None:
+            stds = np.asarray(channel_stds, dtype=np.float64)
+            scale_matrix = np.outer(stds, stds)  # (p, p)
+            design_psd = design_psd / scale_matrix[np.newaxis, :, :]
+
+        return design_psd
+
     @property
     def sampler_type(self) -> str:
         return "multivariate_blocked_nuts"
@@ -344,6 +423,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             "duration": float(self.duration),
             "Nb": int(self.Nb),
             "Nh": int(self.Nh),
+            "design_weights": self._design_weights,
+            "tau": self.config.tau,
         }
 
     def _channel_parameter_names(self, channel_index: int) -> list[str]:
@@ -610,6 +691,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.duration,
                 self.Nb,
                 self.Nh,
+                self._design_weights or None,
+                self.config.tau,
                 extra_fields=(
                     (
                         "potential_energy",

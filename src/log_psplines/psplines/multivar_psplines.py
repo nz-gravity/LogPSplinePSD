@@ -381,6 +381,81 @@ class MultivariateLogPSplines:
 
         return all_bases, all_penalties
 
+    def compute_design_weights(
+        self,
+        design_psd: np.ndarray,
+    ) -> dict[str, jnp.ndarray]:
+        """Fit spline weights to a known design PSD matrix via Cholesky decomposition.
+
+        Parameters
+        ----------
+        design_psd:
+            Complex array of shape ``(N, p, p)`` giving the design PSD matrix at the
+            model's frequency grid (after any coarse-graining).
+
+        Returns
+        -------
+        dict
+            Keys ``'delta_{j}'``, ``'theta_re_{j}_{l}'``, and
+            ``'theta_im_{j}_{l}'`` mapping to fitted weight arrays.  The dict
+            covers every model component so each lookup in the sampler is
+            well-defined.
+        """
+        design_psd = np.asarray(design_psd)
+        if design_psd.shape != (self.N, self.p, self.p):
+            raise ValueError(
+                f"design_psd must have shape ({self.N}, {self.p}, {self.p}), "
+                f"got {design_psd.shape}"
+            )
+
+        # Lower Cholesky: S = L L^H, L lower-triangular with real positive diagonal
+        L = np.linalg.cholesky(design_psd)  # (N, p, p)
+
+        design_weights: dict[str, jnp.ndarray] = {}
+
+        # Diagonal components: log δ_j(f)² = 2 log L_{jj}(f)
+        for j, diag_model in enumerate(self.diagonal_models):
+            log_delta_sq = 2.0 * np.log(np.abs(L[:, j, j]))  # (N,)
+            design_weights[f"delta_{j}"] = init_weights(
+                jnp.asarray(log_delta_sq), diag_model
+            )
+
+        # Off-diagonal components: θ_{j,l} = −T_{j,l} where T = D^{1/2} L^{-1}
+        # Unit lower-triangular T^{-1} = L / diag(L), so T = (T^{-1})^{-1}.
+        if self.offdiag_re_model is not None:
+            # Build unit lower-triangular T^{-1}[f] = L[f] / L[f,l,l] per column l
+            diag_L = np.abs(
+                L[..., np.arange(self.p), np.arange(self.p)]
+            )  # (N, p)
+            T_inv = (
+                L / diag_L[:, np.newaxis, :]
+            )  # (N, p, p), unit lower triangular
+
+            # Invert unit lower-triangular matrix at each frequency via scipy
+            import scipy.linalg  # local import to keep top-level imports light
+
+            T = np.stack(
+                [
+                    scipy.linalg.solve_triangular(
+                        T_inv[f], np.eye(self.p), lower=True
+                    )
+                    for f in range(self.N)
+                ]
+            )  # (N, p, p)
+
+            for j in range(1, self.p):
+                for l in range(j):
+                    # theta_{j,l} = -T_{j,l} (complex)
+                    theta_jl = -T[:, j, l]  # (N,) complex
+                    design_weights[f"theta_re_{j}_{l}"] = init_weights(
+                        jnp.asarray(theta_jl.real), self.offdiag_re_model
+                    )
+                    design_weights[f"theta_im_{j}_{l}"] = init_weights(
+                        jnp.asarray(theta_jl.imag), self.offdiag_im_model
+                    )
+
+        return design_weights
+
     def _psd_chunk_iterator(
         self,
         log_delta_sq_samples: np.ndarray,

@@ -23,7 +23,7 @@ EMPIRICAL_KWGS: dict[str, Any] = dict(
     zorder=-5,
 )
 TRUE_KWGS: dict[str, Any] = dict(
-    color="k", lw=1.2, label="Analytical", zorder=-2
+    color="k", lw=1.6, label="Analytical", zorder=6
 )
 
 
@@ -489,7 +489,9 @@ def _prepare_plot_inputs(
             )
 
         freq = extracted.get("frequencies", freq)
-        true_psd = extracted.get("true_psd", true_psd)
+        extracted_true_psd = extracted.get("true_psd")
+        if extracted_true_psd is not None:
+            true_psd = extracted_true_psd
         if empirical_psd is None:
             empirical_psd = _extract_empirical_psd_from_idata(spec.idata)
 

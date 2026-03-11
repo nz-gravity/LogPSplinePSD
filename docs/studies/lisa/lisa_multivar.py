@@ -7,16 +7,9 @@ os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
 # Print number of JAX devices
 import jax
 import numpy as np
-from evidence_utils import (
-    combine_diag_lnz,
-    compare_full_vs_diag,
-    extract_lnz,
-    parse_channel_names,
-    parse_hypothesis_mode,
-    write_evidence_summary,
-)
+from evidence_utils import extract_lnz
 
-from log_psplines.datatypes import MultivariateTimeseries, Timeseries
+from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.datatypes.multivar import EmpiricalPSD
 from log_psplines.datatypes.multivar_utils import interp_matrix
 from log_psplines.diagnostics import psd_compare
@@ -30,63 +23,51 @@ logger.info(f"JAX devices: {jax.devices()}")
 set_level("DEBUG")
 
 HERE = Path(__file__).resolve().parent
-BASE_RESULTS_DIR = HERE / "results" / "lisa"
+RESULTS_ROOT = HERE / "results"
+RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
+SHARED_CACHE_DIR = RESULTS_ROOT / "lisa_shared"
+SHARED_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+LEGACY_RESULTS_DIR = RESULTS_ROOT / "lisa"
+LEGACY_SYNTH_NPZ = LEGACY_RESULTS_DIR / "lisa_data.npz"
+LEGACY_FALLBACK_SYNTH_NPZ = LEGACY_RESULTS_DIR / "lisatools_synth_data.npz"
+SHARED_SYNTH_NPZ = SHARED_CACHE_DIR / "lisa_data.npz"
 
-RUN_TAG = ""
-RESULTS_DIR = (
-    BASE_RESULTS_DIR if RUN_TAG == "" else HERE / "results" / f"lisa_{RUN_TAG}"
-)
-RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-
-FULL_RESULTS_DIR = RESULTS_DIR / "full"
-DIAG_RESULTS_DIR = RESULTS_DIR / "diag"
-COMPARE_TXT = RESULTS_DIR / "evidence_comparison.txt"
-COMPARE_JSON = RESULTS_DIR / "evidence_comparison.json"
-LISA_HYPOTHESIS_MODE = parse_hypothesis_mode("full")
-LISA_RUN_COMPARE_SUMMARY = True
-_raw_channel_names = "X,Y,Z"
-LISA_CHANNEL_NAMES = parse_channel_names(_raw_channel_names)
-if ",".join(LISA_CHANNEL_NAMES) != _raw_channel_names.replace(" ", ""):
-    logger.warning(
-        f"Invalid LISA_CHANNEL_NAMES='{_raw_channel_names}'. Using default channel labels X,Y,Z."
-    )
+FULL_N_SAMPLES = 1000
+FULL_N_WARMUP = 1500
+FULL_NUM_CHAINS = 4
 
 RUN_VI_ONLY = False
-INIT_FROM_VI = True
-# Main multivariate run can be decoupled from VI init when diagnosing
-# pathological adaptation; diagonal runs still use INIT_FROM_VI.
-INIT_FROM_VI_FULL = False
+INIT_FROM_VI_FULL = True
 REUSE_EXISTING = False  # set True to skip sampling when results already exist
 USE_LISATOOLS_SYNTH = True
-LISATOOLS_SYNTH_NPZ = RESULTS_DIR / "lisa_data.npz"
 
 # Hyperparameters and spline configuration for this study
 ALPHA_DELTA = 3.0
 BETA_DELTA = 3.0
-N_KNOTS = 10
-TARGET_ACCEPT = 0.9
+N_KNOTS = 20
+TARGET_ACCEPT = 0.7
 MAX_TREE_DEPTH = 10
-TARGET_ACCEPT_BY_CHANNEL: list[float] | None = [0.9, 0.92, 0.95]
+TARGET_ACCEPT_BY_CHANNEL: list[float] | None = None
 # Avoid raising max_tree_depth unless you have to: if a channel already hits the
 # max steps, increasing max_tree_depth can dramatically increase walltime.
-MAX_TREE_DEPTH_BY_CHANNEL: list[int] | None = [10, 11, 12]
+MAX_TREE_DEPTH_BY_CHANNEL: list[int] | None = [10, 10, 10]
 DENSE_MASS = True
 VI_GUIDE = "diag"
-VI_STEPS = 100_000
+VI_STEPS = 1000_000
 VI_LR = 1e-4
 VI_POSTERIOR_DRAWS = 1024
 MAX_TIME_BLOCKS = 12
 N_TIME_BLOCKS_OVERRIDE: int | None = None
-BLOCK_DAYS = 1.0
-MAX_DAYS = 14.0
+BLOCK_DAYS = 7.0
+MAX_DAYS = 365.0
 MAX_MONTHS = 0.0
 WELCH_NPERSEG = 0
 WELCH_OVERLAP_FRAC = 0.5
 WELCH_WINDOW = "hann"
 WELCH_BLOCK_AVG = True
-ENABLE_COARSE_GRAIN = False
+ENABLE_COARSE_GRAIN = True
 COARSE_GRAIN_FACTOR = 0
-TARGET_COARSE_BINS = 4096
+TARGET_COARSE_BINS = 2048
 
 C_LIGHT = 299_792_458.0  # m / s
 L_ARM = 2.5e9  # m
@@ -99,25 +80,40 @@ Nb_hint: int | None = None
 Lb_hint: int | None = None
 
 if USE_LISATOOLS_SYNTH:
-    if not LISATOOLS_SYNTH_NPZ.exists():
-        fallback_npz = BASE_RESULTS_DIR / "lisatools_synth_data.npz"
-        if fallback_npz.exists():
-            RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    preferred_npz: Path | None = None
+    if LEGACY_FALLBACK_SYNTH_NPZ.exists():
+        preferred_npz = LEGACY_FALLBACK_SYNTH_NPZ
+    elif LEGACY_SYNTH_NPZ.exists():
+        preferred_npz = LEGACY_SYNTH_NPZ
+
+    if preferred_npz is None and not SHARED_SYNTH_NPZ.exists():
+        raise FileNotFoundError(
+            f"{SHARED_SYNTH_NPZ} not found. Run lisa_datagen.py first."
+        )
+
+    if preferred_npz is not None:
+        needs_refresh = True
+        if SHARED_SYNTH_NPZ.exists():
             try:
-                LISATOOLS_SYNTH_NPZ.symlink_to(fallback_npz)
+                needs_refresh = not SHARED_SYNTH_NPZ.samefile(preferred_npz)
+            except OSError:
+                needs_refresh = True
+        if needs_refresh:
+            SHARED_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            if SHARED_SYNTH_NPZ.exists() or SHARED_SYNTH_NPZ.is_symlink():
+                SHARED_SYNTH_NPZ.unlink()
+            try:
+                SHARED_SYNTH_NPZ.symlink_to(preferred_npz)
                 logger.info(
-                    f"Symlinked synth data from {fallback_npz} -> {LISATOOLS_SYNTH_NPZ}."
+                    f"Symlinked synth data from {preferred_npz} -> {SHARED_SYNTH_NPZ}."
                 )
             except OSError:
-                shutil.copy2(fallback_npz, LISATOOLS_SYNTH_NPZ)
+                shutil.copy2(preferred_npz, SHARED_SYNTH_NPZ)
                 logger.info(
-                    f"Copied synth data from {fallback_npz} -> {LISATOOLS_SYNTH_NPZ}."
+                    f"Copied synth data from {preferred_npz} -> {SHARED_SYNTH_NPZ}."
                 )
-        else:
-            raise FileNotFoundError(
-                f"{LISATOOLS_SYNTH_NPZ} not found. Run lisa_datagen.py first."
-            )
-    with np.load(LISATOOLS_SYNTH_NPZ, allow_pickle=False) as synth:
+
+    with np.load(SHARED_SYNTH_NPZ, allow_pickle=False) as synth:
         t_full = synth["time"]
         y_full = synth["data"]
         true_matrix = synth["true_matrix"]
@@ -144,7 +140,6 @@ else:
     from log_psplines.example_datasets.lisa_data import LISAData
 
     lisa_data = LISAData.load()
-    lisa_data.plot(f"{RESULTS_DIR}/lisa_raw.png")
     t_full = lisa_data.time
     y_full = lisa_data.data
     base_psd_units = "freq"
@@ -243,7 +238,7 @@ logger.info(
 
 
 # Pilot stability band: reduce extreme high-frequency geometry while tuning.
-FMIN, FMAX = 10**-4, 10**-2
+FMIN, FMAX = 10**-4, 10**-1
 
 analysis_freq = np.fft.rfftfreq(Lb, d=dt)[1:]
 analysis_mask = (analysis_freq >= FMIN) & (analysis_freq <= FMAX)
@@ -307,6 +302,63 @@ else:
     logger.info("Coarse graining disabled (full frequency resolution).")
     coarse_cfg = CoarseGrainConfig(enabled=False)
 
+
+def _format_freq_slug(value: float) -> str:
+    return f"{float(value):.0e}".replace("+", "")
+
+
+def _format_decimal_slug(value: float) -> str:
+    return f"{float(value):g}".replace(".", "p")
+
+
+def _coarse_slug(cfg: CoarseGrainConfig) -> str:
+    if not cfg.enabled:
+        return "cgOff"
+    if cfg.Nc is not None:
+        return f"cgNc{int(cfg.Nc)}"
+    if cfg.Nh is not None:
+        return f"cgNh{int(cfg.Nh)}"
+    return "cgOn"
+
+
+def _build_run_slug() -> str:
+    vi_enabled = bool(RUN_VI_ONLY or INIT_FROM_VI_FULL)
+    total_nuts_steps = FULL_NUM_CHAINS * (FULL_N_WARMUP + FULL_N_SAMPLES)
+    parts = [
+        "lisa",
+        f"nb{Nb}",
+        f"lb{Lb}",
+        _coarse_slug(coarse_cfg),
+        f"k{N_KNOTS}",
+        f"f{_format_freq_slug(FMIN)}-{_format_freq_slug(FMAX)}",
+        f"ta{_format_decimal_slug(TARGET_ACCEPT)}",
+        f"td{MAX_TREE_DEPTH}",
+        "dmOn" if DENSE_MASS else "dmOff",
+        f"nutsW{FULL_N_WARMUP}S{FULL_N_SAMPLES}",
+        f"steps{total_nuts_steps}",
+        "viOn" if vi_enabled else "viOff",
+    ]
+    return "_".join(parts)
+
+
+RUN_SLUG = _build_run_slug()
+RUN_DIR = RESULTS_ROOT / RUN_SLUG
+RUN_DIR.mkdir(parents=True, exist_ok=True)
+
+if USE_LISATOOLS_SYNTH:
+    run_npz = RUN_DIR / "lisa_data.npz"
+    if not run_npz.exists():
+        try:
+            run_npz.symlink_to(SHARED_SYNTH_NPZ)
+            logger.info(
+                f"Linked run-local synth NPZ: {run_npz} -> {SHARED_SYNTH_NPZ}"
+            )
+        except OSError:
+            shutil.copy2(SHARED_SYNTH_NPZ, run_npz)
+            logger.info(f"Copied synth NPZ into run directory: {run_npz}")
+else:
+    lisa_data.plot(f"{RUN_DIR}/lisa_raw.png")
+
 raw_series = MultivariateTimeseries(y=y_full, t=t_full)
 
 
@@ -330,9 +382,9 @@ def _run_full_hypothesis(
     )
     idata_full = run_mcmc(
         data=raw_series,
-        n_samples=1000,
-        n_warmup=1500,
-        num_chains=4,
+        n_samples=FULL_N_SAMPLES,
+        n_warmup=FULL_N_WARMUP,
+        num_chains=FULL_NUM_CHAINS,
         n_knots=N_KNOTS,
         degree=2,
         diffMatrixOrder=2,
@@ -364,172 +416,10 @@ def _run_full_hypothesis(
     return idata_full, result_path
 
 
-def _run_diag_hypothesis(
-    *,
-    diag_outdir: Path,
-):
-    import arviz as az
-
-    diag_outdir.mkdir(parents=True, exist_ok=True)
-    true_freq = np.asarray(true_psd_source[0], dtype=np.float64)
-    true_psd_matrix = np.asarray(true_psd_source[1])
-    channel_results: list[dict[str, object]] = []
-
-    for channel_index, channel_name in enumerate(LISA_CHANNEL_NAMES):
-        channel_dir = diag_outdir / channel_name
-        channel_dir.mkdir(parents=True, exist_ok=True)
-        result_path = channel_dir / "inference_data.nc"
-
-        if result_path.exists() and REUSE_EXISTING:
-            logger.info(
-                f"Found existing diagonal-channel results [{channel_name}] at {result_path}, loading..."
-            )
-            idata_channel = az.from_netcdf(str(result_path))
-        else:
-            logger.info(
-                f"No existing diagonal-channel results [{channel_name}] at {result_path}, running inference..."
-            )
-            channel_series = Timeseries(t=t_full, y=y_full[:, channel_index])
-            true_psd_channel = np.real(
-                true_psd_matrix[:, channel_index, channel_index]
-            )
-            idata_channel = run_mcmc(
-                data=channel_series,
-                n_samples=4000,
-                n_warmup=4000,
-                num_chains=4,
-                n_knots=N_KNOTS,
-                degree=2,
-                diffMatrixOrder=2,
-                knot_kwargs=dict(strategy="log"),
-                outdir=str(channel_dir),
-                verbose=True,
-                coarse_grain_config=coarse_cfg,
-                Nb=Nb,
-                fmin=FMIN,
-                fmax=FMAX,
-                alpha_delta=ALPHA_DELTA,
-                beta_delta=BETA_DELTA,
-                only_vi=RUN_VI_ONLY,
-                init_from_vi=INIT_FROM_VI,
-                vi_steps=VI_STEPS,
-                vi_lr=VI_LR,
-                vi_guide=VI_GUIDE,
-                vi_posterior_draws=VI_POSTERIOR_DRAWS,
-                vi_progress_bar=True,
-                target_accept_prob=TARGET_ACCEPT,
-                max_tree_depth=MAX_TREE_DEPTH,
-                dense_mass=DENSE_MASS,
-                true_psd=(true_freq, true_psd_channel),
-                compute_lnz=True,
-            )
-            idata_channel.to_netcdf(str(result_path))
-
-        lnz_ch, lnz_err_ch, lnz_valid = extract_lnz(idata_channel)
-        channel_results.append(
-            {
-                "name": channel_name,
-                "path": str(result_path),
-                "lnz": lnz_ch,
-                "lnz_err": lnz_err_ch,
-                "valid": lnz_valid,
-            }
-        )
-
-    return channel_results
-
-
-run_full = LISA_HYPOTHESIS_MODE in {"full", "both"}
-run_diag = LISA_HYPOTHESIS_MODE in {"diag", "both"}
-if not (run_full or run_diag):
-    raise ValueError(
-        f"Invalid LISA_HYPOTHESIS_MODE='{LISA_HYPOTHESIS_MODE}'. Expected full/diag/both."
-    )
-
-idata = None
-full_result_path = FULL_RESULTS_DIR / "inference_data.nc"
-diag_channel_results: list[dict[str, object]] = []
-if run_full:
-    idata, full_result_path = _run_full_hypothesis(
-        full_outdir=FULL_RESULTS_DIR
-    )
-    logger.info(f"Full-hypothesis results saved at {full_result_path}")
-if run_diag:
-    diag_channel_results = _run_diag_hypothesis(diag_outdir=DIAG_RESULTS_DIR)
-    logger.info(
-        f"Diagonal-hypothesis channel outputs saved under {DIAG_RESULTS_DIR}"
-    )
-
-full_lnz = np.nan
-full_lnz_err = np.nan
-full_valid = False
-if idata is not None:
-    full_lnz, full_lnz_err, full_valid = extract_lnz(idata)
-
-diag_lnz, diag_lnz_err, diag_valid = combine_diag_lnz(diag_channel_results)
-log_bf, log_bf_err, log_bf_valid = compare_full_vs_diag(
-    full_lnz,
-    full_lnz_err,
-    diag_lnz,
-    diag_lnz_err,
-    full_valid=full_valid,
-    diag_valid=diag_valid,
-)
-
-if LISA_RUN_COMPARE_SUMMARY:
-    write_evidence_summary(
-        txt_path=COMPARE_TXT,
-        json_path=COMPARE_JSON,
-        run_mode=LISA_HYPOTHESIS_MODE,
-        full=(
-            {
-                "path": str(full_result_path),
-                "lnz": full_lnz,
-                "lnz_err": full_lnz_err,
-                "valid": full_valid,
-            }
-            if run_full
-            else None
-        ),
-        diag_channels=diag_channel_results,
-        diag_combined=(
-            {
-                "lnz": diag_lnz,
-                "lnz_err": diag_lnz_err,
-                "valid": diag_valid,
-            }
-            if run_diag
-            else None
-        ),
-        comparison={
-            "log_bf": log_bf,
-            "log_bf_err": log_bf_err,
-            "valid": log_bf_valid,
-        },
-    )
-    logger.info(
-        f"Saved evidence comparison summaries to {COMPARE_TXT} and {COMPARE_JSON}"
-    )
-
-if run_diag:
-    for entry in diag_channel_results:
-        logger.info(
-            f"Diag[{entry['name']}]: lnz={entry['lnz']} lnz_err={entry['lnz_err']} valid={entry['valid']}"
-        )
-if run_full:
-    logger.info(
-        f"Full: lnz={full_lnz} lnz_err={full_lnz_err} valid={full_valid}"
-    )
-if run_full and run_diag:
-    logger.info(
-        f"logBF(full-diag)={log_bf} ± {log_bf_err} (valid={log_bf_valid})"
-    )
-
-if idata is None:
-    logger.info(
-        "Full-hypothesis run not requested; skipping multivariate PSD matrix plotting/metrics."
-    )
-    raise SystemExit(0)
+idata, full_result_path = _run_full_hypothesis(full_outdir=RUN_DIR)
+logger.info(f"Full-hypothesis results saved at {full_result_path}")
+full_lnz, full_lnz_err, full_valid = extract_lnz(idata)
+logger.info(f"Full: lnz={full_lnz} lnz_err={full_lnz_err} valid={full_valid}")
 
 logger.info(idata)
 
@@ -685,7 +575,7 @@ plot_psd_matrix(
         extra_empirical_styles=[
             dict(color="0.5", lw=1.3, alpha=0.9, ls="-", zorder=-4),
         ],
-        outdir=str(FULL_RESULTS_DIR),
+        outdir=str(RUN_DIR),
         filename="psd_matrix.png",
         diag_yscale="log",
         offdiag_yscale="linear",
@@ -735,7 +625,7 @@ metrics.append(
 
 metrics = [entry for entry in metrics if entry is not None]
 if metrics:
-    summary_path = FULL_RESULTS_DIR / "psd_accuracy_summary.txt"
+    summary_path = RUN_DIR / "psd_accuracy_summary.txt"
     with summary_path.open("w") as handle:
         handle.write(
             f"Dip mask threshold (min diag, p{METRICS_MIN_PCT:.1f}): {dip_threshold:.4g}\n"

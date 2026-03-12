@@ -1,4 +1,3 @@
-import arviz as az
 import numpy as np
 import pytest
 import xarray as xr
@@ -7,8 +6,20 @@ from scipy.integrate import simpson
 from log_psplines.diagnostics import psd_bands
 
 
+def _make_idata(*groups_kw):
+    """Build a minimal DataTree with named group datasets."""
+    import xarray as _xr
+
+    idata = _xr.DataTree()
+    for name, ds in groups_kw:
+        idata[name] = _xr.DataTree(dataset=ds)
+    return idata
+
+
 def test_run_returns_empty_without_psd():
-    idata = az.InferenceData()
+    import xarray as _xr
+
+    idata = _xr.DataTree()
     assert psd_bands._run(idata=idata) == {}
 
 
@@ -27,7 +38,7 @@ def test_run_univariate_with_percentiles():
         coords={"percentile": percentiles, "freq": freqs},
         dims=("percentile", "freq"),
     )
-    idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
+    idata = _make_idata(("posterior_psd", xr.Dataset({"psd": psd_da})))
     metrics = psd_bands._run(idata=idata)
     expected_median = float(simpson(values[1], x=freqs))
     expected_width = float(
@@ -49,7 +60,7 @@ def test_run_univariate_without_percentile_coord():
     psd_da = xr.DataArray(
         values, coords={"freq": freqs}, dims=("sample", "freq")
     )
-    idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
+    idata = _make_idata(("posterior_psd", xr.Dataset({"psd": psd_da})))
     metrics = psd_bands._run(idata=idata)
     assert "variance_median" in metrics
     assert "variance_ci_width" in metrics
@@ -76,9 +87,10 @@ def test_run_multivariate_with_coherence():
         coords={"percentile": percentiles, "freq": freqs},
         dims=("percentile", "freq", "channel", "channel2"),
     )
-    idata = az.InferenceData(
-        posterior_psd=xr.Dataset(
-            {"psd_matrix_real": psd_da, "coherence": coh_da}
+    idata = _make_idata(
+        (
+            "posterior_psd",
+            xr.Dataset({"psd_matrix_real": psd_da, "coherence": coh_da}),
         )
     )
     metrics = psd_bands._run(idata=idata)

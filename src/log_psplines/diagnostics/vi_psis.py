@@ -10,6 +10,43 @@ import jax.numpy as jnp
 import numpy as np
 from numpyro.infer.util import log_density
 
+
+# arviz >= 1.0.0 removed psislw; provide a compatible replacement
+def _psislw(log_weights: np.ndarray):  # type: ignore[no-redef]
+    """Pareto-smoothed importance log-weights.
+
+    Returns (smoothed_log_weights, k_hat) matching the old az.psislw signature.
+    Uses arviz_stats._ps_tail directly with tail='right' to check the upper
+    tail of the importance weights (large positive log-weights = heavy right
+    tail = high k-hat), which matches the original az.psislw convention.
+    """
+    lw = np.asarray(log_weights, dtype=np.float64).ravel()
+    n_draws = lw.size
+    try:
+        from arviz_stats.base.array import BaseArray, _DiagnosticsBase
+
+        class _Diag(BaseArray, _DiagnosticsBase):
+            pass
+
+        n_tail = int(min(n_draws / 5, 3 * np.sqrt(n_draws)))
+        if n_tail < 5:
+            return lw, np.array(np.nan)
+        smoothed_lw, khat = _Diag()._ps_tail(
+            lw,
+            n_draws,
+            n_tail,
+            smooth_draws=True,
+            tail="right",
+            log_weights=True,
+        )
+        return np.asarray(smoothed_lw, dtype=np.float64), np.atleast_1d(
+            np.array(khat, dtype=np.float64)
+        )
+    except Exception:
+        # Minimal fallback: return raw log_weights and k_hat=nan
+        return lw, np.array(np.nan)
+
+
 from ..logger import logger
 
 MIN_PSIS_DRAWS = 200
@@ -317,7 +354,7 @@ def _compute_psis_khat(
         log_r = np.asarray(
             jax.device_get(log_posterior - log_guide), dtype=np.float64
         )
-        lw, k_hat = az.psislw(log_r)
+        lw, k_hat = _psislw(log_r)
         lw = np.asarray(lw, dtype=np.float64)
         k_hat = np.asarray(k_hat, dtype=np.float64)
         khat_max = float(np.max(k_hat)) if k_hat.size else np.nan

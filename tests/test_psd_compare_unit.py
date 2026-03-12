@@ -1,9 +1,16 @@
-import arviz as az
 import numpy as np
 import pytest
 import xarray as xr
 
 from log_psplines.diagnostics import psd_compare
+
+
+def _make_idata(**groups):
+    """Build a DataTree with the given group datasets."""
+    idata = xr.DataTree()
+    for name, ds in groups.items():
+        idata[name] = xr.DataTree(dataset=ds)
+    return idata
 
 
 def test_run_univariate_identity_metrics():
@@ -16,7 +23,7 @@ def test_run_univariate_identity_metrics():
         coords={"percentile": percentiles, "freq": freqs},
         dims=("percentile", "freq"),
     )
-    idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
+    idata = _make_idata(posterior_psd=xr.Dataset({"psd": psd_da}))
 
     metrics = psd_compare._run(idata=idata, truth=truth)
     assert metrics["riae"] == pytest.approx(0.0)
@@ -35,7 +42,7 @@ def test_run_univariate_scaled_metrics():
         coords={"percentile": percentiles, "freq": freqs},
         dims=("percentile", "freq"),
     )
-    idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
+    idata = _make_idata(posterior_psd=xr.Dataset({"psd": psd_da}))
 
     metrics = psd_compare._run(idata=idata, truth=truth)
     assert metrics["riae"] == pytest.approx(1.0)
@@ -64,7 +71,7 @@ def test_run_multivariate_identity_metrics():
             ),
         }
     )
-    idata = az.InferenceData(posterior_psd=psd_ds)
+    idata = _make_idata(posterior_psd=psd_ds)
 
     metrics = psd_compare._run(idata=idata, truth=true_psd)
     assert metrics["riae_matrix"] == pytest.approx(0.0)
@@ -76,6 +83,6 @@ def test_run_multivariate_identity_metrics():
 def test_run_returns_empty_when_missing_inputs():
     freqs = np.array([0.1, 0.2])
     truth = np.ones_like(freqs)
-    idata = az.InferenceData()
+    idata = xr.DataTree()
     assert psd_compare._run(idata=idata, truth=truth) == {}
     assert psd_compare._run(idata=None, truth=None) == {}

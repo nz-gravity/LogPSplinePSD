@@ -1,4 +1,3 @@
-import arviz as az
 import numpy as np
 import pytest
 import xarray as xr
@@ -10,6 +9,14 @@ from log_psplines.arviz_utils.from_arviz import (
 )
 
 
+def _make_idata(**groups):
+    """Build a DataTree with the given group datasets."""
+    idata = xr.DataTree()
+    for name, ds in groups.items():
+        idata[name] = xr.DataTree(dataset=ds)
+    return idata
+
+
 def test_get_posterior_psd_extracts_percentiles():
     freqs = np.array([0.1, 0.2])
     percentiles = np.array([5.0, 50.0, 95.0])
@@ -19,7 +26,7 @@ def test_get_posterior_psd_extracts_percentiles():
         coords={"percentile": percentiles, "freq": freqs},
         dims=("percentile", "freq"),
     )
-    idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
+    idata = _make_idata(posterior_psd=xr.Dataset({"psd": psd_da}))
     out_freqs, median, lower, upper = get_posterior_psd(idata)
     np.testing.assert_allclose(out_freqs, freqs)
     np.testing.assert_allclose(median, values[1])
@@ -28,21 +35,23 @@ def test_get_posterior_psd_extracts_percentiles():
 
 
 def test_get_posterior_psd_missing_group():
-    idata = az.InferenceData()
+    idata = xr.DataTree()
     with pytest.raises(KeyError):
         get_posterior_psd(idata)
 
 
 def test_get_weights_thins_samples():
+    import arviz as az
+
     weights = np.arange(12.0).reshape(1, 6, 2)
-    idata = az.from_dict(posterior={"weights": weights})
+    idata = az.from_dict({"posterior": {"weights": weights}})
     thinned = get_weights(idata, thin=2)
     assert thinned.shape == (3, 2)
     np.testing.assert_allclose(thinned[0], weights.reshape(-1, 2)[0])
 
 
 def test_get_weights_missing_group():
-    idata = az.InferenceData()
+    idata = xr.DataTree()
     with pytest.raises(KeyError):
         get_weights(idata, thin=1)
 
@@ -53,7 +62,7 @@ def test_get_periodogram_extracts_data():
     periodogram_da = xr.DataArray(
         periodogram, coords={"freq": freqs}, dims=("freq",)
     )
-    idata = az.InferenceData(
+    idata = _make_idata(
         observed_data=xr.Dataset({"periodogram": periodogram_da})
     )
     out = get_periodogram(idata)
@@ -62,6 +71,6 @@ def test_get_periodogram_extracts_data():
 
 
 def test_get_periodogram_missing_group():
-    idata = az.InferenceData()
+    idata = xr.DataTree()
     with pytest.raises(KeyError):
         get_periodogram(idata)

@@ -34,14 +34,18 @@ def _build_idata_with_psd(truth: np.ndarray, q50_scale: float = 1.1):
         }
     )
 
+    import xarray as _xr
+
     idata = az.from_dict(
-        posterior={"x": np.random.randn(2, 20)},
-        sample_stats={
-            "diverging": np.zeros((2, 20)),
-            "acceptance_rate": np.full((2, 20), 0.8),
-        },
+        {
+            "posterior": {"x": np.random.randn(2, 20)},
+            "sample_stats": {
+                "diverging": np.zeros((2, 20)),
+                "acceptance_rate": np.full((2, 20), 0.8),
+            },
+        }
     )
-    idata.add_groups(posterior_psd=posterior_psd)
+    idata["posterior_psd"] = _xr.DataTree(dataset=posterior_psd)
     return idata, freqs, psd_values
 
 
@@ -109,7 +113,9 @@ def test_run_all_ignores_energy_channel_metrics():
 
 def test_derived_weight_summaries_penalty():
     weights = np.array([[[1.0, -2.0, 3.0], [0.5, -1.5, 2.0]]])
-    idata = az.from_dict(posterior={"weights": weights})
+    import xarray as _xr
+
+    idata = az.from_dict({"posterior": {"weights": weights}})
     penalty = np.diag([1.0, 2.0, 3.0])
     spline_model = Dataset(
         {
@@ -119,7 +125,7 @@ def test_derived_weight_summaries_penalty():
             )
         }
     )
-    idata.add_groups(spline_model=spline_model)
+    idata["spline_model"] = _xr.DataTree(dataset=spline_model)
 
     scalar, vector = compute_weight_summaries(idata, hdi_prob=HDI_PROB)
     assert "w_rms__weights" in scalar

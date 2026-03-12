@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Base class for multivariate PSD samplers.
 """
@@ -434,7 +436,9 @@ class MultivarBaseSampler(BaseSampler):
         }
         if attrs:
             dataset.attrs.update(attrs)
-        idata.add_groups(vi_posterior_psd=dataset)
+        import xarray as _xr
+
+        idata["vi_posterior_psd"] = _xr.DataTree(dataset=dataset)
 
     def _get_lnz(
         self, samples: Dict[str, Any], sample_stats: Dict[str, Any]

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import arviz as az
 import numpy as np
 
@@ -47,8 +49,10 @@ class _DummySampler(BaseSampler):
             ess=np.array([10.0, 20.0]),
         )
         return az.from_dict(
-            posterior=samples,
-            sample_stats=sample_stats,
+            {
+                "posterior": samples,
+                "sample_stats": sample_stats,
+            },
             attrs=attrs,
         )
 
@@ -56,9 +60,11 @@ class _DummySampler(BaseSampler):
 def test_extract_rhat_values_handles_disjoint_dims():
     rng = np.random.default_rng(0)
     idata = az.from_dict(
-        posterior={
-            "a": rng.normal(size=(2, 6, 3)),
-            "b": rng.normal(size=(2, 6, 4)),
+        {
+            "posterior": {
+                "a": rng.normal(size=(2, 6, 3)),
+                "b": rng.normal(size=(2, 6, 4)),
+            }
         }
     )
 

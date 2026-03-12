@@ -247,7 +247,9 @@ def _collect_functional_idata(
     if not posterior_dict:
         return None
 
-    return az.from_dict(posterior=posterior_dict, coords=coords, dims=dims)
+    return az.from_dict(
+        {"posterior": posterior_dict}, coords=coords, dims=dims
+    )
 
 
 def plot_subset_traces_and_ranks(

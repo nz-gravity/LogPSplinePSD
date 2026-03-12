@@ -236,6 +236,7 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     target_accept_prob: float = 0.8
     max_tree_depth: int = 10
     dense_mass: bool = True
+    compute_lnz: bool = False
     target_accept_prob_by_channel: Optional[Sequence[float]] = None
     max_tree_depth_by_channel: Optional[Sequence[int]] = None
     save_nuts_diagnostics: bool = True

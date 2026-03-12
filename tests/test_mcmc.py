@@ -679,6 +679,40 @@ def test_multivar_blocked_nuts_records_step_size():
     assert step_size_keys, "Blocked NUTS should record per-channel step size."
 
 
+def test_run_mcmc_multivar_disables_lnz_by_default():
+    t, y = _synthetic_multivar_series()
+    ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
+
+    model_cfg = ModelConfig(
+        n_knots=4,
+        degree=3,
+        diffMatrixOrder=2,
+    )
+    diagnostics_cfg = DiagnosticsConfig(verbose=False)
+    vi_cfg = VIConfig(init_from_vi=False)
+    run_cfg = RunMCMCConfig(
+        n_samples=1,
+        n_warmup=2,
+        num_chains=1,
+        Nb=1,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+    )
+    idata = run_mcmc(
+        data=ts_run,
+        config=run_cfg,
+    )
+
+    assert "lnz" in idata.attrs
+    assert "lnz_err" in idata.attrs
+    assert np.isnan(float(idata.attrs["lnz"]))
+    assert np.isnan(float(idata.attrs["lnz_err"]))
+    assert "lnz_by_block" not in idata.attrs
+    assert "lnz_err_by_block" not in idata.attrs
+    assert "lnz_block_ids" not in idata.attrs
+
+
 def test_prepare_samples_and_stats_preserves_chain_dim():
     samples = {"weights_delta_0": np.zeros((2, 3, 4), dtype=float)}
     sample_stats = {"log_likelihood": np.zeros((2, 3), dtype=float)}

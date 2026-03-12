@@ -18,6 +18,15 @@ from ..samplers import (
 from .configs import RunMCMCConfig, SamplerFactoryConfig, SamplerName
 
 
+def _resolve_compute_lnz(
+    sampler_type: SamplerName,
+    compute_lnz: bool | None,
+) -> bool:
+    if compute_lnz is not None:
+        return compute_lnz
+    return sampler_type == "nuts"
+
+
 def _build_model_from_data(
     processed_data: Union[Periodogram, MultivarFFT],
     model_config,
@@ -79,6 +88,10 @@ def _build_common_sampler_kwargs(
     config: SamplerFactoryConfig,
 ) -> dict[str, Any]:
     run = config.run_config
+    compute_lnz = _resolve_compute_lnz(
+        config.sampler_type,
+        run.diagnostics.compute_lnz,
+    )
     return {
         "alpha_phi": run.alpha_phi,
         "beta_phi": run.beta_phi,
@@ -90,7 +103,7 @@ def _build_common_sampler_kwargs(
         "verbose": run.diagnostics.verbose,
         "outdir": run.diagnostics.outdir,
         "compute_psis": True,
-        "compute_lnz": run.diagnostics.compute_lnz,
+        "compute_lnz": compute_lnz,
         "scaling_factor": config.scaling_factor,
         "channel_stds": config.channel_stds,
         "true_psd": config.true_psd,

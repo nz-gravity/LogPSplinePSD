@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 NUTS sampler for univariate PSD estimation.
 """

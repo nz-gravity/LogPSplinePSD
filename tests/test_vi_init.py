@@ -60,7 +60,7 @@ def test_univariate_vi_initialisation_smoke(outdir):
         config=run_cfg,
     )
 
-    assert "posterior" in idata.groups()
+    assert "posterior" in idata.children
     assert "delta" in idata.posterior.data_vars
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd.png")
@@ -125,7 +125,7 @@ def test_multivariate_vi_initialisation_smoke(outdir):
         config=run_cfg,
     )
 
-    assert "posterior" in idata.groups()
+    assert "posterior" in idata.children
     assert any(name.startswith("delta_") for name in idata.posterior.data_vars)
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd_matrix.png")
@@ -179,9 +179,9 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
 
     print(idata)
 
-    assert "posterior" in idata.groups()
-    assert "vi_posterior_psd" in idata.groups()
-    assert "posterior_psd" in idata.groups()
+    assert "posterior" in idata.children
+    assert "vi_posterior_psd" in idata.children
+    assert "posterior_psd" in idata.children
     assert any(
         name.startswith("weights_delta_") for name in idata.posterior.data_vars
     )

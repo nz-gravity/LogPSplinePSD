@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Blocked NUTS sampler for multivariate PSD (Cholesky parameterisation).
 
 This module implements the factorised form of the multivariate Whittle

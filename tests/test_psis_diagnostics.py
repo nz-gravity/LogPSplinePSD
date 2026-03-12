@@ -1,6 +1,6 @@
-import arviz as az
 import numpy as np
 
+from log_psplines.diagnostics.vi_psis import _psislw
 from log_psplines.samplers.vi_init.mixin import (
     _compute_psis_moment_checks,
 )
@@ -10,13 +10,13 @@ def test_psis_khat_bounds_regression():
     """Ensure PSIS k-hat flags both well-behaved and heavy-tailed cases."""
     rng = np.random.default_rng(0)
     log_r_good = rng.normal(0.0, 0.1, size=500)
-    _, khat_good = az.psislw(log_r_good)
+    _, khat_good = _psislw(log_r_good)
     assert float(np.max(khat_good)) < 0.5
 
     log_r_bad = np.concatenate(
         [rng.normal(0.0, 0.1, size=450), np.full(50, 6.0)]
     )
-    _, khat_bad = az.psislw(log_r_bad)
+    _, khat_bad = _psislw(log_r_bad)
     assert float(np.max(khat_bad)) > 0.9
 
 

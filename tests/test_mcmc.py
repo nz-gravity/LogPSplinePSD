@@ -102,7 +102,7 @@ def test_multivar_mcmc(outdir, test_mode):
 
         # Basic checks
         assert idata is not None
-        assert "posterior" in idata.groups()
+        assert "posterior" in idata.children
         assert idata.posterior.sizes["draw"] == n_samples
         print(
             f"[{sampler_name}] posterior variables: {idata.posterior}",
@@ -237,7 +237,7 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
     )
 
     assert idata is not None
-    assert "posterior" in idata.groups()
+    assert "posterior" in idata.children
     assert idata.attrs.get("full_diagnostics_computed") == 1
     assert "full_diagnostics_timestamp" in idata.attrs
     psd = idata.posterior_psd["psd_matrix_real"].sel(
@@ -373,8 +373,8 @@ def test_mcmc_unit(synthetic_univar_timeseries):
         config=run_cfg,
     )
 
-    assert "posterior" in idata.groups()
-    assert "sample_stats" in idata.groups()
+    assert "posterior" in idata.children
+    assert "sample_stats" in idata.children
     assert idata.attrs.get("full_diagnostics_computed") == 1
     assert "full_diagnostics_timestamp" in idata.attrs
     assert "lp" in idata.sample_stats.data_vars

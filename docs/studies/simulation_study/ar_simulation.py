@@ -6,7 +6,6 @@ import morphz
 import numpy as np
 from spectrum import pyule
 
-from log_psplines.arviz_utils.compare_results import compare_results
 from log_psplines.example_datasets import ARData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import plot_pdgrm
@@ -74,7 +73,6 @@ order, fs = 4, 512.0
 data = ARData(order=order, duration=2.0, fs=fs, sigma=1.0, seed=42)
 true_psd = data.psd_theoretical
 
-results = {}
 for use_parametric_model in [False, True]:
     label = "without_parametric"
     if use_parametric_model:
@@ -83,11 +81,3 @@ for use_parametric_model in [False, True]:
     run_analysis(
         data, use_parametric_model=use_parametric_model, outdir=outdir
     )
-    results[label] = f"{outdir}/nuts_out/inference_data.nc"
-
-compare_results(
-    results["without_parametric"],
-    results["with_parametric"],
-    labels=["No parametric", "Parametric"],
-    outdir="output/parametric_compare",
-)

@@ -343,8 +343,9 @@ def test_var3_design_vs_no_design_comparison(outdir):
     _print_comparison(m_base, m_design)
 
     # Both runs must produce valid posterior draws
-    assert idata_base.posterior.sizes["draw"] == 200
-    assert idata_design.posterior.sizes["draw"] == 200
+    expected_draws = _SHARED_MCMC_KWARGS["n_samples"]
+    assert idata_base.posterior.sizes["draw"] == expected_draws
+    assert idata_design.posterior.sizes["draw"] == expected_draws
 
     # RIAE should be finite and reasonable in both cases
     assert np.isfinite(m_base["riae_matrix"])

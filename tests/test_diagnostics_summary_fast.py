@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import arviz as az
 import numpy as np
 
@@ -16,7 +18,9 @@ def _make_min_idata() -> az.InferenceData:
         "tree_depth": np.ones((1, 8), dtype=int),
         "step_size": np.ones((1, 8), dtype=float) * 0.1,
     }
-    idata = az.from_dict(posterior=posterior, sample_stats=sample_stats)
+    idata = az.from_dict(
+        {"posterior": posterior, "sample_stats": sample_stats}
+    )
     idata.attrs["sampler_type"] = "nuts"
     idata.attrs["max_tree_depth"] = 10
     idata.attrs["ess"] = np.asarray([250.0, 500.0])

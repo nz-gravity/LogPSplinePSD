@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import arviz as az
 import numpy as np
 import pytest
@@ -19,7 +21,8 @@ def test_get_posterior_psd_extracts_percentiles():
         coords={"percentile": percentiles, "freq": freqs},
         dims=("percentile", "freq"),
     )
-    idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
+    idata = az.from_dict({})
+    idata["posterior_psd"] = xr.DataTree(dataset=xr.Dataset({"psd": psd_da}))
     out_freqs, median, lower, upper = get_posterior_psd(idata)
     np.testing.assert_allclose(out_freqs, freqs)
     np.testing.assert_allclose(median, values[1])
@@ -28,21 +31,21 @@ def test_get_posterior_psd_extracts_percentiles():
 
 
 def test_get_posterior_psd_missing_group():
-    idata = az.InferenceData()
+    idata = az.from_dict({})
     with pytest.raises(KeyError):
         get_posterior_psd(idata)
 
 
 def test_get_weights_thins_samples():
     weights = np.arange(12.0).reshape(1, 6, 2)
-    idata = az.from_dict(posterior={"weights": weights})
+    idata = az.from_dict({"posterior": {"weights": weights}})
     thinned = get_weights(idata, thin=2)
     assert thinned.shape == (3, 2)
     np.testing.assert_allclose(thinned[0], weights.reshape(-1, 2)[0])
 
 
 def test_get_weights_missing_group():
-    idata = az.InferenceData()
+    idata = az.from_dict({})
     with pytest.raises(KeyError):
         get_weights(idata, thin=1)
 
@@ -53,8 +56,9 @@ def test_get_periodogram_extracts_data():
     periodogram_da = xr.DataArray(
         periodogram, coords={"freq": freqs}, dims=("freq",)
     )
-    idata = az.InferenceData(
-        observed_data=xr.Dataset({"periodogram": periodogram_da})
+    idata = az.from_dict({})
+    idata["observed_data"] = xr.DataTree(
+        dataset=xr.Dataset({"periodogram": periodogram_da})
     )
     out = get_periodogram(idata)
     np.testing.assert_allclose(out.freqs, freqs)
@@ -62,6 +66,6 @@ def test_get_periodogram_extracts_data():
 
 
 def test_get_periodogram_missing_group():
-    idata = az.InferenceData()
+    idata = az.from_dict({})
     with pytest.raises(KeyError):
         get_periodogram(idata)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import time
 from dataclasses import dataclass
@@ -6,6 +8,7 @@ from typing import Literal, Optional
 import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
+import xarray as xr
 
 from ..logger import logger
 from ..plotting.base import safe_plot, setup_plot_style
@@ -153,10 +156,13 @@ def _build_arviz_plot_data(idata):
     if not plot_ds.data_vars:
         return None, derived_vector, weight_vars
 
-    idata_plot = az.InferenceData(posterior=plot_ds)
+    idata_plot = xr.DataTree()
+    idata_plot["posterior"] = xr.DataTree(dataset=plot_ds)
     if hasattr(idata, "sample_stats"):
         try:
-            idata_plot.add_groups(sample_stats=idata.sample_stats)
+            ss = idata.sample_stats
+            ss_ds = ss.ds if hasattr(ss, "ds") else ss
+            idata_plot["sample_stats"] = xr.DataTree(dataset=ss_ds)
             _ensure_diverging_sample_stats(idata_plot)
         except Exception:
             pass
@@ -776,13 +782,10 @@ def _create_pair_diagnostics(idata, diag_dir, config):
 
     @safe_plot(f"{diag_dir}/pair_plot.png", config.dpi)
     def _plot_pair():
-        az.plot_pair(
-            idata,
-            var_names=pair_vars,
-            divergences=has_divergences,
-            kind="scatter",
-            marginals=True,
-        )
+        pair_kwargs = dict(var_names=pair_vars, marginal=True)
+        if has_divergences:
+            pair_kwargs["aes_by_visuals"] = {"divergence": ["color"]}
+        az.plot_pair(idata, **pair_kwargs)
 
     ok = _plot_pair()
     logger.info(

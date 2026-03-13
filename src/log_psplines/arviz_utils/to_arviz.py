@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Convert inference results to ArviZ InferenceData format."""
 
 import warnings
@@ -362,16 +364,20 @@ def _create_univar_inference_data(
     )
 
     idata = az.from_dict(
-        posterior=samples,
-        sample_stats=sample_stats,
-        observed_data={"periodogram": observed_power_rescaled},
+        {
+            "posterior": samples,
+            "sample_stats": sample_stats,
+            "observed_data": {"periodogram": observed_power_rescaled},
+        },
         dims={k: v for k, v in dims.items() if k not in ["psd", "lp"]},
         coords=coords,
         attrs=attributes,
     )
 
-    idata.add_groups(
-        posterior_psd=Dataset(
+    import xarray as _xr
+
+    idata["posterior_psd"] = _xr.DataTree(
+        dataset=Dataset(
             {"psd": DataArray(psd_percentiles, dims=["percentile", "freq"])},
             coords={
                 "percentile": coords["percentile"],
@@ -380,7 +386,9 @@ def _create_univar_inference_data(
         )
     )
 
-    idata.add_groups(spline_model=_pack_spline_model(spline_model))
+    idata["spline_model"] = _xr.DataTree(
+        dataset=_pack_spline_model(spline_model)
+    )
     return idata
 
 
@@ -551,12 +559,14 @@ def _create_multivar_inference_data(
     )
 
     idata = az.from_dict(
-        posterior=samples,
-        sample_stats=sample_stats,
-        observed_data={
-            "periodogram": np.array(
-                observed_psd_rescaled["periodogram"], dtype=np.complex128
-            ),
+        {
+            "posterior": samples,
+            "sample_stats": sample_stats,
+            "observed_data": {
+                "periodogram": np.array(
+                    observed_psd_rescaled["periodogram"], dtype=np.complex128
+                ),
+            },
         },
         dims={
             k: v
@@ -573,6 +583,8 @@ def _create_multivar_inference_data(
         coords=coords,
         attrs=attributes,
     )
+
+    import xarray as _xr
 
     posterior_psd_vars = {
         "psd_matrix_real": DataArray(
@@ -608,9 +620,13 @@ def _create_multivar_inference_data(
             },
         )
 
-    idata.add_groups(posterior_psd=Dataset(posterior_psd_vars, coords=coords))
+    idata["posterior_psd"] = _xr.DataTree(
+        dataset=Dataset(posterior_psd_vars, coords=coords)
+    )
 
-    idata.add_groups(spline_model=_pack_spline_model_multivar(spline_model))
+    idata["spline_model"] = _xr.DataTree(
+        dataset=_pack_spline_model_multivar(spline_model)
+    )
     return idata
 
 

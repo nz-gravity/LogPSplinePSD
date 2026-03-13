@@ -78,6 +78,7 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "beta_delta",
         "coarse_grain_config",
         "Nb",
+        "wishart_window",
         "welch_nperseg",
         "welch_noverlap",
         "welch_window",

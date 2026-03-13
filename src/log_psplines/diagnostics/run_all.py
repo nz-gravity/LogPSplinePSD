@@ -53,9 +53,9 @@ def run_all_diagnostics(
         if not predicate():
             continue
         t0 = time.perf_counter()
-        logger.info(f"Full diagnostics: {name} starting")
+        logger.debug(f"Full diagnostics: {name} starting")
         metrics = fn(**context)
-        logger.info(
+        logger.debug(
             f"Full diagnostics: {name} done in {time.perf_counter() - t0:.2f}s"
         )
         if metrics:

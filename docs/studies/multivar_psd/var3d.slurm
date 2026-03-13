@@ -15,8 +15,6 @@ SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID:-0}   # fallback for local testing
 START_SEED=$((SLURM_ARRAY_TASK_ID * 10))
 END_SEED=$((START_SEED + 9))
 
-cd "$(dirname "$0")"
-
 for SEED in $(seq ${START_SEED} ${END_SEED}); do
     echo "Running seed=${SEED}, window=rect, K=20, mode=short_nb4"
     python 3d_study.py ${SEED} short_nb4 --K 20 --window rect

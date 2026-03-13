@@ -391,6 +391,8 @@ def _create_univar_inference_data(
         coords=coords,
         attrs=attributes,
     )
+    # ArviZ variants may ignore attrs in from_dict; enforce them explicitly.
+    idata.attrs.update(attributes)
 
     import xarray as _xr
 
@@ -601,6 +603,8 @@ def _create_multivar_inference_data(
         coords=coords,
         attrs=attributes,
     )
+    # ArviZ variants may ignore attrs in from_dict; enforce them explicitly.
+    idata.attrs.update(attributes)
 
     import xarray as _xr
 

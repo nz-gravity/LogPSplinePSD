@@ -186,7 +186,7 @@ def plot_phi_marginal_priors(
                 conditional_phi_pdf = stats.gamma.pdf(
                     phi_val, a=alpha_phi, scale=1 / rate_param
                 )
-                phi_pdf[i] = np.trapz(
+                phi_pdf[i] = np.trapezoid(
                     conditional_phi_pdf * delta_prior_pdf, delta_samples
                 )
 

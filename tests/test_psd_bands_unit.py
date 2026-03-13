@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import arviz as az
 import numpy as np
 import pytest
@@ -8,7 +10,7 @@ from log_psplines.diagnostics import psd_bands
 
 
 def test_run_returns_empty_without_psd():
-    idata = az.InferenceData()
+    idata = az.from_dict({})
     assert psd_bands._run(idata=idata) == {}
 
 
@@ -27,7 +29,8 @@ def test_run_univariate_with_percentiles():
         coords={"percentile": percentiles, "freq": freqs},
         dims=("percentile", "freq"),
     )
-    idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
+    idata = az.from_dict({})
+    idata["posterior_psd"] = xr.DataTree(dataset=xr.Dataset({"psd": psd_da}))
     metrics = psd_bands._run(idata=idata)
     expected_median = float(simpson(values[1], x=freqs))
     expected_width = float(
@@ -49,7 +52,8 @@ def test_run_univariate_without_percentile_coord():
     psd_da = xr.DataArray(
         values, coords={"freq": freqs}, dims=("sample", "freq")
     )
-    idata = az.InferenceData(posterior_psd=xr.Dataset({"psd": psd_da}))
+    idata = az.from_dict({})
+    idata["posterior_psd"] = xr.DataTree(dataset=xr.Dataset({"psd": psd_da}))
     metrics = psd_bands._run(idata=idata)
     assert "variance_median" in metrics
     assert "variance_ci_width" in metrics
@@ -76,10 +80,9 @@ def test_run_multivariate_with_coherence():
         coords={"percentile": percentiles, "freq": freqs},
         dims=("percentile", "freq", "channel", "channel2"),
     )
-    idata = az.InferenceData(
-        posterior_psd=xr.Dataset(
-            {"psd_matrix_real": psd_da, "coherence": coh_da}
-        )
+    idata = az.from_dict({})
+    idata["posterior_psd"] = xr.DataTree(
+        dataset=xr.Dataset({"psd_matrix_real": psd_da, "coherence": coh_da})
     )
     metrics = psd_bands._run(idata=idata)
     expected_var0 = float(simpson(base[:, 0, 0], x=freqs))

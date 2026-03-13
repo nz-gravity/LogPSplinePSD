@@ -65,3 +65,25 @@ def test_save_eigenvalue_separation_plot(tmp_path):
     save_eigenvalue_separation_plot(diag, str(out), warn_threshold=0.8)
     assert out.exists()
     assert out.stat().st_size > 0
+
+
+def test_save_eigenvalue_separation_plot_with_cholesky_components(tmp_path):
+    pytest.importorskip("matplotlib")
+
+    freq = np.array([0.1, 0.2, 0.3], dtype=float)
+    matrix = np.zeros((freq.size, 2, 2), dtype=np.complex128)
+    matrix[:, 0, 0] = np.array([3.0, 2.5, 2.0])
+    matrix[:, 1, 1] = np.array([2.0, 1.7, 1.5])
+    matrix[:, 1, 0] = np.array([0.2 + 0.1j, 0.3 - 0.05j, 0.25 + 0.08j])
+    matrix[:, 0, 1] = np.conj(matrix[:, 1, 0])
+    diag = eigenvalue_separation_diagnostics(freq=freq, matrix=matrix)
+
+    out = tmp_path / "eig_ratios_chol.png"
+    save_eigenvalue_separation_plot(
+        diag,
+        str(out),
+        warn_threshold=0.8,
+        cholesky_matrix=matrix,
+    )
+    assert out.exists()
+    assert out.stat().st_size > 0

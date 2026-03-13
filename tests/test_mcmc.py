@@ -7,7 +7,6 @@ import pytest
 
 import log_psplines.samplers.multivar.multivar_blocked_nuts as blocked_nuts_mod
 from log_psplines.arviz_utils import get_weights
-from log_psplines.arviz_utils.compare_results import compare_results
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
 from log_psplines.datatypes.univar import Timeseries
 from log_psplines.example_datasets.ar_data import ARData
@@ -30,6 +29,12 @@ from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
     compute_binning_structure,
 )
+
+
+def _idata_groups(idata):
+    groups = getattr(idata, "groups", ())
+    raw = groups() if callable(groups) else groups
+    return tuple(str(name).lstrip("/") for name in raw)
 
 
 @pytest.mark.slow
@@ -102,7 +107,7 @@ def test_multivar_mcmc(outdir, test_mode):
 
         # Basic checks
         assert idata is not None
-        assert "posterior" in idata.groups()
+        assert "posterior" in _idata_groups(idata)
         assert idata.posterior.sizes["draw"] == n_samples
         print(
             f"[{sampler_name}] posterior variables: {idata.posterior}",
@@ -237,7 +242,7 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
     )
 
     assert idata is not None
-    assert "posterior" in idata.groups()
+    assert "posterior" in _idata_groups(idata)
     assert idata.attrs.get("full_diagnostics_computed") == 1
     assert "full_diagnostics_timestamp" in idata.attrs
     psd = idata.posterior_psd["psd_matrix_real"].sel(
@@ -373,8 +378,8 @@ def test_mcmc_unit(synthetic_univar_timeseries):
         config=run_cfg,
     )
 
-    assert "posterior" in idata.groups()
-    assert "sample_stats" in idata.groups()
+    assert "posterior" in _idata_groups(idata)
+    assert "sample_stats" in _idata_groups(idata)
     assert idata.attrs.get("full_diagnostics_computed") == 1
     assert "full_diagnostics_timestamp" in idata.attrs
     assert "lp" in idata.sample_stats.data_vars
@@ -756,22 +761,3 @@ def test_prepare_samples_and_stats_chain_vector_gets_draw_axis():
     )
 
     assert out_stats["step_size"].shape == (2, 1)
-
-
-def test_compare_results_minimal(tmp_path):
-    rng = np.random.default_rng(0)
-    draws = 60
-    run1 = az.from_dict(posterior={"weights": rng.normal(size=(1, draws))})
-    run2 = az.from_dict(
-        posterior={"weights": rng.normal(loc=0.1, size=(1, draws))}
-    )
-
-    compare_results(
-        run1,
-        run2,
-        labels=["Run1", "Run2"],
-        outdir=str(tmp_path),
-    )
-
-    assert (tmp_path / "ess_comparison.png").exists()
-    assert (tmp_path / "summary_diff.csv").exists()

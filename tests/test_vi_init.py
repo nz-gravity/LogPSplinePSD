@@ -18,6 +18,12 @@ from log_psplines.mcmc import (
 )
 
 
+def _idata_groups(idata):
+    groups = getattr(idata, "groups", ())
+    raw = groups() if callable(groups) else groups
+    return tuple(str(name).lstrip("/") for name in raw)
+
+
 def _mean_divergence(idata):
     if not hasattr(idata, "sample_stats"):
         return 0.0
@@ -60,7 +66,7 @@ def test_univariate_vi_initialisation_smoke(outdir):
         config=run_cfg,
     )
 
-    assert "posterior" in idata.groups()
+    assert "posterior" in _idata_groups(idata)
     assert "delta" in idata.posterior.data_vars
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd.png")
@@ -125,7 +131,7 @@ def test_multivariate_vi_initialisation_smoke(outdir):
         config=run_cfg,
     )
 
-    assert "posterior" in idata.groups()
+    assert "posterior" in _idata_groups(idata)
     assert any(name.startswith("delta_") for name in idata.posterior.data_vars)
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd_matrix.png")
@@ -179,9 +185,9 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
 
     print(idata)
 
-    assert "posterior" in idata.groups()
-    assert "vi_posterior_psd" in idata.groups()
-    assert "posterior_psd" in idata.groups()
+    assert "posterior" in _idata_groups(idata)
+    assert "vi_posterior_psd" in _idata_groups(idata)
+    assert "posterior_psd" in _idata_groups(idata)
     assert any(
         name.startswith("weights_delta_") for name in idata.posterior.data_vars
     )

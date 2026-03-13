@@ -210,6 +210,9 @@ def save_eigenvalue_separation_plot(
     out: str,
     *,
     warn_threshold: float = 0.8,
+    cholesky_matrix: np.ndarray | None = None,
+    cholesky_jitter: float = 1e-12,
+    max_cholesky_jitter: float = 1e-4,
     dpi: int = 200,
 ) -> None:
     """Save an eigenvalue separation plot (ratios + eigenvalues).
@@ -218,6 +221,10 @@ def save_eigenvalue_separation_plot(
         diag: Diagnostics output from :func:`eigenvalue_separation_diagnostics`.
         out: Output image path.
         warn_threshold: Horizontal threshold shown on ratio panel.
+        cholesky_matrix: Optional spectral matrix with shape (N, p, p) used to
+            plot lower-triangular Cholesky components across frequency.
+        cholesky_jitter: Initial diagonal regularization used if Cholesky fails.
+        max_cholesky_jitter: Maximum diagonal regularization before giving up.
         dpi: Figure DPI for saved image.
     """
 
@@ -233,9 +240,12 @@ def save_eigenvalue_separation_plot(
     ratios = {k: np.asarray(v, dtype=float) for k, v in diag.ratios.items()}
 
     use_log_x = bool(freq.size) and np.all(freq > 0)
-
-    fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
-    ax_ratio, ax_eig = axes
+    show_cholesky = cholesky_matrix is not None
+    nrows = 3 if show_cholesky else 2
+    fig, axes = plt.subplots(
+        nrows, 1, figsize=(10, 8 if show_cholesky else 6), sharex=True
+    )
+    ax_ratio, ax_eig = axes[0], axes[1]
 
     # Ratios
     for key, ratio in ratios.items():
@@ -269,6 +279,78 @@ def save_eigenvalue_separation_plot(
     ax_eig.grid(True, which="both", alpha=0.2)
     if p:
         ax_eig.legend(fontsize=8, ncol=min(3, p))
+
+    if show_cholesky:
+        matrix = np.asarray(cholesky_matrix, dtype=np.complex128)
+        if matrix.ndim != 3 or matrix.shape[0] != freq.size:
+            raise ValueError(
+                "cholesky_matrix must have shape (N, p, p) with N=len(freq)."
+            )
+        if matrix.shape[-1] != matrix.shape[-2]:
+            raise ValueError("cholesky_matrix must be square per frequency.")
+
+        p = int(matrix.shape[-1])
+        herm = 0.5 * (matrix + np.swapaxes(np.conj(matrix), -1, -2))
+
+        if cholesky_jitter < 0.0 or max_cholesky_jitter < 0.0:
+            raise ValueError(
+                "cholesky_jitter and max_cholesky_jitter must be non-negative."
+            )
+        if max_cholesky_jitter < cholesky_jitter:
+            raise ValueError("max_cholesky_jitter must be >= cholesky_jitter.")
+
+        jitter = float(cholesky_jitter)
+        eye = np.eye(p, dtype=np.complex128)[None, :, :]
+        last_error: Exception | None = None
+        while True:
+            try:
+                chol = np.linalg.cholesky(herm + jitter * eye)
+                break
+            except np.linalg.LinAlgError as err:
+                last_error = err
+                if jitter >= float(max_cholesky_jitter):
+                    raise np.linalg.LinAlgError(
+                        "Cholesky decomposition failed for preprocessing plot "
+                        f"up to jitter={max_cholesky_jitter:.3e}."
+                    ) from last_error
+                jitter = max(10.0 * jitter, 1e-16)
+
+        ax_chol = axes[2]
+        for i in range(p):
+            for j in range(i + 1):
+                comp = chol[:, i, j]
+                label_base = f"L{i+1}{j+1}"
+                if i == j:
+                    y = np.maximum(np.real(comp), 0.0)
+                    if use_log_x:
+                        ax_chol.semilogx(freq, y, label=f"Re({label_base})")
+                    else:
+                        ax_chol.plot(freq, y, label=f"Re({label_base})")
+                    continue
+                if use_log_x:
+                    ax_chol.semilogx(
+                        freq, np.real(comp), label=f"Re({label_base})"
+                    )
+                    ax_chol.semilogx(
+                        freq,
+                        np.imag(comp),
+                        ls="--",
+                        label=f"Im({label_base})",
+                    )
+                else:
+                    ax_chol.plot(
+                        freq, np.real(comp), label=f"Re({label_base})"
+                    )
+                    ax_chol.plot(
+                        freq, np.imag(comp), ls="--", label=f"Im({label_base})"
+                    )
+
+        ax_chol.set_xlabel("Frequency")
+        ax_chol.set_ylabel("Cholesky components")
+        ax_chol.grid(True, which="both", alpha=0.2)
+        ax_chol.set_title("Raw periodogram Cholesky components")
+        ncol = 2 if p <= 2 else 3
+        ax_chol.legend(fontsize=7, ncol=ncol)
 
     fig.tight_layout()
     fig.savefig(out, dpi=int(dpi))

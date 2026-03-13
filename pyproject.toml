@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "LogPSplinePSD"
 dynamic = ["version"] # scm versioning (using tags)
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 description = "LogPsplines in JAX"
 readme = "README.rst"
 authors = [
@@ -30,7 +30,7 @@ dependencies = [
     "matplotlib",
     "tqdm",
     "numpyro",
-    "arviz",
+    "arviz[h5netcdf, matplotlib]",
     "click",
     "ipywidgets",
     "plotly",

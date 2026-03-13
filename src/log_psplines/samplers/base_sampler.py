@@ -164,30 +164,30 @@ class BaseSampler(ABC):
         except Exception:
             pass
         t_step = time.perf_counter()
-        logger.info("to_arviz: attaching VI diagnostics")
+        logger.debug("to_arviz: attaching VI diagnostics")
         self._attach_vi_group_safe(idata)
-        logger.info(
+        logger.debug(
             f"to_arviz: attaching VI diagnostics done in {time.perf_counter() - t_step:.2f}s"
         )
 
         t_step = time.perf_counter()
-        logger.info("to_arviz: computing chain summaries")
+        logger.debug("to_arviz: computing chain summaries")
         rhat_vals = self._compute_chain_summaries(idata)
-        logger.info(
+        logger.debug(
             f"to_arviz: computing chain summaries done in {time.perf_counter() - t_step:.2f}s"
         )
 
         t_step = time.perf_counter()
-        logger.info("to_arviz: caching full diagnostics")
+        logger.debug("to_arviz: caching full diagnostics")
         self._cache_full_diagnostics(idata)
-        logger.info(
+        logger.debug(
             f"to_arviz: caching full diagnostics done in {time.perf_counter() - t_step:.2f}s"
         )
 
         t_step = time.perf_counter()
-        logger.info("to_arviz: logging summary metrics")
+        logger.debug("to_arviz: logging summary metrics")
         self._log_summary_metrics(idata, lnz, lnz_err, rhat_vals)
-        logger.info(
+        logger.debug(
             f"to_arviz: logging summary metrics done in {time.perf_counter() - t_step:.2f}s"
         )
 
@@ -199,9 +199,9 @@ class BaseSampler(ABC):
             pass
 
         t_step = time.perf_counter()
-        logger.info("to_arviz: saving outputs")
+        logger.debug("to_arviz: saving outputs")
         self._maybe_save_outputs(idata)
-        logger.info(
+        logger.debug(
             f"to_arviz: saving outputs done in {time.perf_counter() - t_step:.2f}s"
         )
 
@@ -473,7 +473,7 @@ class BaseSampler(ABC):
             logger.info("save_results: wrote inference_data.nc")
         # Optionally skip heavy MCMC diagnostics plots/summaries.
         # Always plot diagnostics
-        logger.info("save_results: plotting diagnostics")
+        logger.debug("save_results: plotting diagnostics")
         plot_diagnostics(
             idata_out,
             self.config.outdir,
@@ -482,14 +482,14 @@ class BaseSampler(ABC):
             summary_position="end",
             true_psd=self.config.true_psd,
         )
-        logger.info("save_results: plotting diagnostics done")
+        logger.debug("save_results: plotting diagnostics done")
         t0 = time.perf_counter()
-        logger.info("Writing summary_statistics.csv...")
+        logger.debug("Writing summary_statistics.csv...")
         if not skip_heavy:
             az.summary(idata_out).to_csv(
                 f"{self.config.outdir}/summary_statistics.csv"
             )
-            logger.info(
+            logger.debug(
                 f"Wrote summary_statistics.csv in {time.perf_counter() - t0:.2f}s"
             )
         else:
@@ -497,9 +497,9 @@ class BaseSampler(ABC):
 
         # Always save the main PSD plots for the given data type.
         try:
-            logger.info("save_results: saving PSD plots")
+            logger.debug("save_results: saving PSD plots")
             self._save_plots(idata_out)
-            logger.info("save_results: saving PSD plots done")
+            logger.debug("save_results: saving PSD plots done")
         except Exception as exc:  # pragma: no cover
             logger.warning(f"Could not save plots: {exc}")
 

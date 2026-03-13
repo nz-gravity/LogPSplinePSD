@@ -294,7 +294,7 @@ def _log_posterior_summary(stage: str, posterior, weight_meta=None) -> None:
         top = ", ".join(
             f"{name}={size:,}" for name, size in counts["top_vars"]
         )
-        logger.info(f"MCMC diagnostics: top vars by size: {top}")
+        logger.debug(f"MCMC diagnostics: top vars by size: {top}")
 
 
 def _select_posterior_subset(idata):
@@ -548,7 +548,7 @@ def _run(
                 "skipping ESS/Rhat/PSIS to avoid OOM."
             )
     if not thinned:
-        logger.info(f"MCMC diagnostics: posterior elements={total_elements:,}")
+        logger.debug(f"MCMC diagnostics: posterior elements={total_elements:,}")
 
     rhat_drop = 0
     if rhat_drop > 0:
@@ -557,7 +557,7 @@ def _run(
         except Exception:
             pass
     if light_mode:
-        logger.info("MCMC diagnostics: light mode, skipping ESS/PSIS compute.")
+        logger.debug("MCMC diagnostics: light mode, skipping ESS/PSIS compute.")
 
     skip_heavy = (
         not thinned and max_elements > 0 and total_elements > max_elements

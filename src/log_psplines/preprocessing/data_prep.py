@@ -132,6 +132,7 @@ def _prepare_processed_data(
             Nb=config.Nb,
             fmin=config.model.fmin,
             fmax=config.model.fmax,
+            window=config.wishart_window,
         )
 
     if config.diagnostics.verbose:

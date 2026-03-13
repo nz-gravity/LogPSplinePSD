@@ -140,6 +140,168 @@ def compute_ci_coverage_multivar(
     return float(coverage)
 
 
+def compute_ci_coverage_multivar_detailed(
+    psd_matrix_samples: np.ndarray,
+    true_psd_real: np.ndarray,
+) -> dict[str, float]:
+    """Compute 90% CI coverage broken down by element type.
+
+    Returns a dict with keys:
+    - ``overall``       : same value as :func:`compute_ci_coverage_multivar`
+    - ``diag``          : coverage over diagonal (auto-spectral) real parts
+    - ``offdiag_re``    : coverage over upper-triangle real parts (cross-spectral Re)
+    - ``offdiag_im``    : coverage over lower-triangle imaginary parts (cross-spectral Im)
+    - ``n_diag``        : number of (freq, element) pairs in diagonal
+    - ``n_offdiag_re``  : number of pairs in real off-diagonal
+    - ``n_offdiag_im``  : number of pairs in imaginary off-diagonal
+
+    Parameters
+    ----------
+    psd_matrix_samples : ndarray, shape (3, F, p, p) or (S, F, p, p)
+        Posterior samples or stacked [q05, q50, q95] percentile matrices.
+        Complex-valued (q05_re + 1j*q05_im convention) when shape[0] == 3.
+    true_psd_real : ndarray, shape (F, p, p)
+        True PSD matrix (complex or real-encoded via :func:`_complex_to_real`).
+    """
+    true_psd_arr = np.asarray(true_psd_real)
+    true_enc = np.zeros(true_psd_arr.shape, dtype=np.float64)
+    for i in range(true_psd_arr.shape[0]):
+        true_enc[i] = _complex_to_real(true_psd_arr[i])
+
+    arr = np.asarray(psd_matrix_samples)
+    if arr.ndim == 4 and arr.shape[0] == 3:
+        lower_raw = arr[0]
+        upper_raw = arr[-1]
+        lower = np.zeros(lower_raw.shape, dtype=np.float64)
+        upper = np.zeros(upper_raw.shape, dtype=np.float64)
+        for i in range(lower_raw.shape[0]):
+            lower[i] = _complex_to_real(lower_raw[i])
+            upper[i] = _complex_to_real(upper_raw[i])
+    else:
+        if np.iscomplexobj(arr):
+            real_arr = np.zeros_like(arr, dtype=np.float64)
+            for i in range(arr.shape[0]):
+                for j in range(arr.shape[1]):
+                    real_arr[i, j] = _complex_to_real(arr[i, j])
+        else:
+            real_arr = np.asarray(arr, dtype=np.float64)
+        lower = np.percentile(real_arr, 5.0, axis=0)
+        upper = np.percentile(real_arr, 95.0, axis=0)
+
+    # covered[f, i, j] = True if true_enc[f, i, j] is inside [lower, upper]
+    covered = (true_enc >= lower) & (true_enc <= upper)  # (F, p, p)
+
+    p = covered.shape[-1]
+    diag_mask = np.eye(p, dtype=bool)  # diagonal
+    upper_tri_mask = np.triu(
+        np.ones((p, p), dtype=bool), k=1
+    )  # strict upper → Re
+    lower_tri_mask = np.tril(
+        np.ones((p, p), dtype=bool), k=-1
+    )  # strict lower → Im
+
+    cov_diag = float(np.mean(covered[:, diag_mask]))
+    cov_re = float(np.mean(covered[:, upper_tri_mask]))
+    cov_im = float(np.mean(covered[:, lower_tri_mask]))
+    cov_all = float(np.mean(covered))
+
+    F = covered.shape[0]
+    return {
+        "overall": cov_all,
+        "diag": cov_diag,
+        "offdiag_re": cov_re,
+        "offdiag_im": cov_im,
+        "n_diag": int(F * p),
+        "n_offdiag_re": int(F * p * (p - 1) // 2),
+        "n_offdiag_im": int(F * p * (p - 1) // 2),
+    }
+
+
+def find_posterior_inflation_factor(
+    psd_matrix_samples: np.ndarray,
+    true_psd_real: np.ndarray,
+    *,
+    target_coverage: float = 0.90,
+    tol: float = 1e-3,
+    max_iter: int = 60,
+) -> dict[str, float]:
+    """Find the posterior inflation factor needed to achieve ``target_coverage``.
+
+    Inflates (or deflates) each posterior sample around the posterior median by
+    a scalar factor ``c``, then recomputes coverage.  Binary-searches for the ``c``
+    such that coverage ≈ ``target_coverage``.
+
+    Useful for quantifying how miscalibrated the Whittle posterior is: a value
+    of ``c`` > 1 means the posterior is too narrow; the CI widths need to be
+    multiplied by ``c`` to be well-calibrated.
+
+    Parameters
+    ----------
+    psd_matrix_samples : ndarray, shape (3, F, p, p)
+        Stacked [q05, q50, q95] percentile matrices (complex convention).
+    true_psd_real : ndarray, shape (F, p, p)
+        True PSD matrix (complex or real-encoded).
+    target_coverage : float
+        Desired coverage level (default 0.90).
+    tol : float
+        Convergence tolerance on coverage.
+    max_iter : int
+        Maximum bisection iterations.
+
+    Returns
+    -------
+    dict with keys:
+    - ``inflation_factor``  : the found c
+    - ``achieved_coverage`` : coverage at that c
+    - ``n_iter``            : bisection iterations used
+    """
+    arr = np.asarray(psd_matrix_samples)
+    if not (arr.ndim == 4 and arr.shape[0] == 3):
+        raise ValueError(
+            "psd_matrix_samples must have shape (3, F, p, p) with [q05, q50, q95]."
+        )
+
+    q05_raw, q50_raw, q95_raw = arr[0], arr[1], arr[2]
+
+    def _coverage_at_c(c: float) -> float:
+        """Inflate CI around median and recompute coverage."""
+        inflated_lower = q50_raw + c * (q05_raw - q50_raw)
+        inflated_upper = q50_raw + c * (q95_raw - q50_raw)
+        inflated_stack = np.stack(
+            [inflated_lower, q50_raw, inflated_upper], axis=0
+        )
+        return compute_ci_coverage_multivar(inflated_stack, true_psd_real)
+
+    # Check that c=1 gives current coverage
+    c_low, c_high = 0.0, 20.0
+    cov_low = _coverage_at_c(c_low)  # 0 at c=0
+    cov_high = _coverage_at_c(c_high)  # should be ~1
+
+    if cov_high < target_coverage:
+        return {
+            "inflation_factor": c_high,
+            "achieved_coverage": cov_high,
+            "n_iter": 0,
+        }
+
+    n_iter = 0
+    for n_iter in range(1, max_iter + 1):
+        c_mid = 0.5 * (c_low + c_high)
+        cov_mid = _coverage_at_c(c_mid)
+        if abs(cov_mid - target_coverage) < tol:
+            break
+        if cov_mid < target_coverage:
+            c_low = c_mid
+        else:
+            c_high = c_mid
+
+    return {
+        "inflation_factor": float(c_mid),
+        "achieved_coverage": float(cov_mid),
+        "n_iter": n_iter,
+    }
+
+
 def extract_percentile(
     values: np.ndarray, percentiles: np.ndarray, target: float
 ) -> np.ndarray:

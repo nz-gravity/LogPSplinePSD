@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Extracts data from arviz InferenceData objects"""
 
 import arviz as az

@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=var3_rect_%A_%a
+#SBATCH --job-name=var3_rect
 #SBATCH --output=logs_var3_runs/var3_rect_%A_%a.out
 #SBATCH --error=logs_var3_runs/var3_rect_%A_%a.err
 #SBATCH --array=0-9
-#SBATCH --time=10:00:00
+#SBATCH --time=1:00:00
 #SBATCH --mem=4G
 #SBATCH --cpus-per-task=4
 

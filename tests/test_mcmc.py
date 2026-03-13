@@ -735,6 +735,29 @@ def test_prepare_samples_and_stats_adds_chain_dim():
     assert out_stats["log_likelihood"].shape[0] == 1
 
 
+def test_prepare_samples_and_stats_transposes_draw_chain_layout():
+    samples = {"weights_delta_0": np.zeros((2, 3, 4), dtype=float)}
+    sample_stats = {
+        "accept_prob_channel_0": np.zeros((3, 2), dtype=float),
+    }
+    out_samples, out_stats = _prepare_samples_and_stats(
+        samples, sample_stats, num_chains=2
+    )
+
+    assert out_samples["weights_delta_0"].shape == (2, 3, 4)
+    assert out_stats["accept_prob_channel_0"].shape == (2, 3)
+
+
+def test_prepare_samples_and_stats_chain_vector_gets_draw_axis():
+    samples = {"weights_delta_0": np.zeros((2, 3, 4), dtype=float)}
+    sample_stats = {"step_size": np.array([0.1, 0.2], dtype=float)}
+    _, out_stats = _prepare_samples_and_stats(
+        samples, sample_stats, num_chains=2
+    )
+
+    assert out_stats["step_size"].shape == (2, 1)
+
+
 def test_compare_results_minimal(tmp_path):
     rng = np.random.default_rng(0)
     draws = 60

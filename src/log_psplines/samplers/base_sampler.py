@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Abstract base classes for MCMC samplers.
 
@@ -465,7 +467,9 @@ class BaseSampler(ABC):
 
         if not skip_heavy:
             logger.info("save_results: writing inference_data.nc")
-            az.to_netcdf(idata_out, f"{self.config.outdir}/inference_data.nc")
+            idata_out.to_netcdf(
+                f"{self.config.outdir}/inference_data.nc", engine="h5netcdf"
+            )
             logger.info("save_results: wrote inference_data.nc")
         # Optionally skip heavy MCMC diagnostics plots/summaries.
         # Always plot diagnostics

@@ -71,7 +71,19 @@ SIGMA = np.array(
 
 MODE_CONFIG = {
     # short: N=2048, Nb=2 -> block length 1024 -> 512 positive bins
+    # Note: Nb=2 < p=3, so Wishart is rank-deficient per frequency.
     "short": {"N": 2048, "Nb": 2, "coarse_Nh": None},
+    # short_nb3: N=2048, Nb=3 -> block length 683 (truncated to 682 due to
+    # divisibility: use N=2049 or keep N=2048 and allow Nb=4 instead).
+    # Nb=3 == p=3: marginal full-rank case for Wishart.
+    # NOTE: 2048 % 3 != 0, so we use N=2046 (drop 2 samples) for clean blocking.
+    "short_nb3": {"N": 2046, "Nb": 3, "coarse_Nh": None},
+    # short_nb4: N=2048, Nb=4 -> block length 512 -> 256 positive bins.
+    # Nb=4 > p=3: first safely full-rank Wishart configuration.
+    "short_nb4": {"N": 2048, "Nb": 4, "coarse_Nh": None},
+    # short_nb8: N=2048, Nb=8 -> block length 256 -> 128 positive bins.
+    # High DOF per frequency but very few bins; strong smoothing needed.
+    "short_nb8": {"N": 2048, "Nb": 8, "coarse_Nh": None},
     # large: N=16384, Nb=4 with Nh=4 -> effective 512 coarse bins
     "large": {"N": 16 * 1024, "Nb": 4, "coarse_Nh": 4},
 }
@@ -511,17 +523,20 @@ def simulation_study(
     mode: Literal["large", "short"] = "short",
     outdir: str = OUT,
     K: int = 10,
+    wishart_window: str | None = "hann",
 ) -> None:
     cfg = MODE_CONFIG[mode]
     N = int(cfg["N"])
     Nb = int(cfg["Nb"])
     coarse_Nh = cfg["coarse_Nh"]
 
+    window_label = wishart_window if wishart_window is not None else "rect"
     print(
-        f">>>> Running simulation with mode={mode}, N={N}, Nb={Nb}, K={K}, seed={seed} <<<<"
+        f">>>> Running simulation with mode={mode}, N={N}, Nb={Nb}, K={K}, "
+        f"window={window_label}, seed={seed} <<<<"
     )
     _log_var_coefficients()
-    outdir = f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}"
+    outdir = f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}_{window_label}"
     os.makedirs(outdir, exist_ok=True)
 
     spectral_radius = _companion_spectral_radius(VAR_COEFFS)
@@ -583,6 +598,7 @@ def simulation_study(
         vi_psd_max_draws=DEFAULT_VI_PSD_MAX_DRAWS,
         vi_lr=VI_LR,
         Nb=Nb,
+        wishart_window=wishart_window,
         knot_kwargs=dict(method=DEFAULT_KNOT_METHOD),
         coarse_grain_config=coarse_grain_config,
         alpha_delta=DEFAULT_ALPHA_DELTA,
@@ -613,6 +629,134 @@ def simulation_study(
     # _prune_outputs_keep_psd_plot(outdir)
 
 
+def run_nb_coverage_experiment(
+    *,
+    seeds: list[int] | None = None,
+    modes: list[str] | None = None,
+    K: int = 20,
+    outdir: str = OUT,
+) -> None:
+    """Run coverage experiment across Nb values to test rank-deficiency hypothesis.
+
+    For p=3 channels, Nb=2 means the per-frequency Wishart matrix is rank-
+    deficient.  This function runs all requested (seed, mode) combinations,
+    collects coverage by element type, and prints a summary table.
+
+    Parameters
+    ----------
+    seeds : list[int]
+        Random seeds. Defaults to [0, 1, 2, 3, 4].
+    modes : list[str]
+        MODE_CONFIG keys to compare. Defaults to ["short", "short_nb4"].
+    K : int
+        Number of P-spline knots.
+    outdir : str
+        Base output directory.
+    """
+    from log_psplines.diagnostics._utils import (
+        compute_ci_coverage_multivar_detailed,
+    )
+
+    seeds = seeds or [0, 1, 2, 3, 4]
+    modes = modes or ["short", "short_nb4"]
+
+    _print_results: dict[str, list[dict]] = {m: [] for m in modes}
+
+    for mode in modes:
+        cfg = MODE_CONFIG[mode]
+        N = int(cfg["N"])
+        Nb = int(cfg["Nb"])
+        coarse_Nh = cfg["coarse_Nh"]
+        logger.info(f"=== Mode={mode} (N={N}, Nb={Nb}, K={K}) ===")
+
+        for seed in seeds:
+            seed_outdir = f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}"
+            npz_path = os.path.join(seed_outdir, "compact_ci_curves.npz")
+
+            # Load existing results if already computed
+            if os.path.exists(npz_path):
+                logger.info(f"  Loading cached results from {npz_path}")
+                npz = np.load(npz_path)
+                q05_re = npz["psd_real_q05"]
+                q50_re = npz["psd_real_q50"]
+                q95_re = npz["psd_real_q95"]
+                q05_im = npz["psd_imag_q05"]
+                q50_im = npz["psd_imag_q50"]
+                q95_im = npz["psd_imag_q95"]
+                true_psd = npz["true_psd_real"] + 1j * npz["true_psd_imag"]
+                stack = np.stack(
+                    [
+                        q05_re + 1j * q05_im,
+                        q50_re + 1j * q50_im,
+                        q95_re + 1j * q95_im,
+                    ],
+                    axis=0,
+                )
+            else:
+                # Run the full simulation and extract stack from idata
+                simulation_study(seed=seed, mode=mode, outdir=outdir, K=K)
+
+                if not os.path.exists(npz_path):
+                    logger.warning(f"  Could not find {npz_path} after run.")
+                    continue
+
+                npz = np.load(npz_path)
+                q05_re = npz["psd_real_q05"]
+                q50_re = npz["psd_real_q50"]
+                q95_re = npz["psd_real_q95"]
+                q05_im = npz["psd_imag_q05"]
+                q50_im = npz["psd_imag_q50"]
+                q95_im = npz["psd_imag_q95"]
+                true_psd = npz["true_psd_real"] + 1j * npz["true_psd_imag"]
+                stack = np.stack(
+                    [
+                        q05_re + 1j * q05_im,
+                        q50_re + 1j * q50_im,
+                        q95_re + 1j * q95_im,
+                    ],
+                    axis=0,
+                )
+
+            detail = compute_ci_coverage_multivar_detailed(stack, true_psd)
+            _print_results[mode].append({"seed": seed, **detail})
+            logger.info(
+                f"  seed={seed}: overall={detail['overall']:.4f}, "
+                f"diag={detail['diag']:.4f}, "
+                f"offdiag_re={detail['offdiag_re']:.4f}, "
+                f"offdiag_im={detail['offdiag_im']:.4f}"
+            )
+
+    # Print comparison table
+    print("\n" + "=" * 75)
+    print("  Nb Coverage Experiment — Summary")
+    print("=" * 75)
+    print(
+        f"  {'Mode':<16s}  {'Nb':>4s}  {'Overall':>9s}  {'Diag':>7s}  "
+        f"{'ReOff':>7s}  {'ImOff':>7s}  {'N_seeds':>7s}"
+    )
+    print("  " + "-" * 65)
+    for mode in modes:
+        cfg = MODE_CONFIG[mode]
+        nb = int(cfg["Nb"])
+        runs = _print_results[mode]
+        if not runs:
+            continue
+        print(
+            f"  {mode:<16s}  {nb:>4d}  "
+            f"{np.mean([r['overall'] for r in runs]):>9.4f}  "
+            f"{np.mean([r['diag'] for r in runs]):>7.4f}  "
+            f"{np.mean([r['offdiag_re'] for r in runs]):>7.4f}  "
+            f"{np.mean([r['offdiag_im'] for r in runs]):>7.4f}  "
+            f"{len(runs):>7d}"
+        )
+
+    summary_path = os.path.join(HERE, outdir, "nb_coverage_summary.json")
+    os.makedirs(os.path.dirname(summary_path), exist_ok=True)
+    with open(summary_path, "w") as f:
+        json.dump({m: _print_results[m] for m in modes}, f, indent=2)
+    print(f"\n  Summary saved to {summary_path}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
@@ -630,13 +774,61 @@ if __name__ == "__main__":
     parser.add_argument(
         "mode",
         nargs="?",
-        choices=("large", "short"),
+        choices=tuple(MODE_CONFIG.keys()),
         default="short",
-        help="Preset size: short=2K samples with Nb=2 (averaging only), large=16K samples with Nb=4 and Nh=4.",
+        help=(
+            "Preset configuration: 'short' (N=2048, Nb=2), "
+            "'short_nb4' (N=2048, Nb=4), 'short_nb8' (N=2048, Nb=8), "
+            "'large' (N=16384, Nb=4, Nh=4). "
+            "Use 'nb_experiment' to run the Nb comparison."
+        ),
+    )
+    parser.add_argument(
+        "--K",
+        type=int,
+        default=10,
+        help="Number of P-spline knots (default: 10).",
+    )
+    parser.add_argument(
+        "--nb-experiment",
+        action="store_true",
+        help="Run the Nb comparison experiment across modes (ignores seed/mode args).",
+    )
+    parser.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Seeds for --nb-experiment (default: 0 1 2 3 4).",
+    )
+    parser.add_argument(
+        "--window",
+        type=str,
+        default="hann",
+        help=(
+            "Taper applied to each block before FFT. "
+            "Use 'hann' (default) or 'rect' / 'None' for rectangular (no taper)."
+        ),
     )
 
     args = parser.parse_args()
-    simulation_study(
-        seed=args.seed,
-        mode=args.mode,
+
+    # Normalise the window argument: "rect" and "None" both mean no tapering.
+    _raw_window = args.window.strip().lower()
+    wishart_window: str | None = (
+        None if _raw_window in ("rect", "none", "") else args.window
     )
+
+    if args.nb_experiment:
+        run_nb_coverage_experiment(
+            seeds=args.seeds,
+            modes=["short", "short_nb4", "short_nb8"],
+            K=args.K,
+        )
+    else:
+        simulation_study(
+            seed=args.seed,
+            mode=args.mode,
+            K=args.K,
+            wishart_window=wishart_window,
+        )

@@ -7,6 +7,7 @@ from typing import Callable, Dict
 
 import arviz as az
 import numpy as np
+import xarray as xr
 
 from ..arviz_utils.rhat import extract_rhat_values
 from ..logger import logger
@@ -325,10 +326,11 @@ def _select_posterior_subset(idata):
 
     if not subset:
         return None, {}
-    return (
-        posterior.__class__(subset, attrs=posterior.attrs),
-        weight_meta,
-    )
+    # Reconstruct a DataTree-compatible idata with only the subset vars
+    subset_ds = xr.Dataset(subset, attrs=getattr(posterior, "attrs", {}))
+    new_idata = xr.DataTree()
+    new_idata["posterior"] = xr.DataTree(dataset=subset_ds)
+    return new_idata, weight_meta
 
 
 def _compute_divergences(idata) -> Dict[str, float]:
@@ -578,7 +580,8 @@ def _run(
             for block_idx, var_names in sorted(blocks.items()):
                 try:
                     block_ds = posterior[var_names]
-                    block_idata = az.InferenceData(posterior=block_ds)
+                    block_idata = xr.DataTree()
+                    block_idata["posterior"] = xr.DataTree(dataset=block_ds)
                     block_metrics = {}
                     block_metrics.update(
                         _compute_rhat(

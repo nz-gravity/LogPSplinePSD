@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Base class for multivariate PSD samplers.
 """
@@ -103,6 +105,12 @@ class MultivarBaseSampler(BaseSampler):
         self.Nh = int(Nh)
         if self.Nh <= 0:
             raise ValueError("fft_data.Nh must be positive")
+
+        # Equivalent Noise Bandwidth of the analysis window.  Defaults to 1.0
+        # (rectangular window) when the attribute is absent on legacy objects.
+        self.enbw = float(getattr(self.fft_data, "enbw", 1.0))
+        if not np.isfinite(self.enbw) or self.enbw <= 0.0:
+            raise ValueError("fft_data.enbw must be a positive finite float")
 
         if self.config.verbose:
             logger.info(f"Frequency bins used for inference (N): {self.N}")
@@ -434,7 +442,9 @@ class MultivarBaseSampler(BaseSampler):
         }
         if attrs:
             dataset.attrs.update(attrs)
-        idata.add_groups(vi_posterior_psd=dataset)
+        import xarray as _xr
+
+        idata["vi_posterior_psd"] = _xr.DataTree(dataset=dataset)
 
     def _get_lnz(
         self, samples: Dict[str, Any], sample_stats: Dict[str, Any]

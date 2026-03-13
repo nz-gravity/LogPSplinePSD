@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Blocked NUTS sampler for multivariate PSD (Cholesky parameterisation).
 
 This module implements the factorised form of the multivariate Whittle
@@ -71,6 +73,7 @@ def _blocked_channel_model(
     Nh: int,
     design_weights: dict | None = None,
     tau: Optional[float] = None,
+    enbw: float = 1.0,
 ) -> None:
     """NumPyro model for a single Cholesky block (row of ``T``).
 
@@ -96,6 +99,12 @@ def _blocked_channel_model(
         Degrees of freedom (number of averaged blocks) for determinant scaling.
     Nh
         Coarse-bin size multiplier for the determinant term.
+    enbw
+        Equivalent Noise Bandwidth of the analysis window (dimensionless,
+        in units of frequency bins).  The full Whittle log-likelihood is
+        divided by ``enbw`` so that the posterior is correctly calibrated
+        regardless of window choice.  Rectangular window → ``enbw=1.0``
+        (no change).  Hann window → ``enbw≈1.5``.
 
     Notes
     -----
@@ -206,6 +215,17 @@ def _blocked_channel_model(
     duration_scale = jnp.asarray(duration, dtype=log_delta_sq.dtype)
     log_likelihood = sum_log_det - jnp.sum(
         residual_power_sum / (duration_scale * delta_eff_sq)
+    )
+    # ENBW correction: dividing the full log-likelihood by the Equivalent Noise
+    # Bandwidth of the analysis window restores posterior calibration when a
+    # tapered (e.g. Hann) window is used.  Adjacent DFT bins are correlated with
+    # correlation ≈ 1 - 1/enbw, so the Whittle likelihood overstates the
+    # effective Fisher information by a factor of enbw.  Scaling by 1/enbw
+    # keeps the MLE unchanged (both terms scale equally) while widening the
+    # posterior by enbw, recovering the correct frequentist coverage.
+    # For a rectangular window enbw=1.0, so this is a strict no-op.
+    log_likelihood = log_likelihood / jnp.asarray(
+        enbw, dtype=log_delta_sq.dtype
     )
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
@@ -424,6 +444,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             "duration": float(self.duration),
             "Nb": int(self.Nb),
             "Nh": int(self.Nh),
+            "enbw": float(self.enbw),
             "design_weights": self._design_weights,
             "tau": self.config.tau,
         }

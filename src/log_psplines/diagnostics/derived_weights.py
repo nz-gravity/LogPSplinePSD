@@ -112,8 +112,13 @@ def compute_weight_summaries(
             )
 
         try:
-            hdi = az.hdi(var, hdi_prob=hdi_prob)
-            width = hdi.sel(hdi="higher") - hdi.sel(hdi="lower")
+            hdi = az.hdi(var, prob=hdi_prob)
+            # arviz >= 1.0.0 uses ci_bound coord with 'lower'/'upper';
+            # older versions used hdi coord with 'lower'/'higher'.
+            if "ci_bound" in hdi.coords:
+                width = hdi.sel(ci_bound="upper") - hdi.sel(ci_bound="lower")
+            else:
+                width = hdi.sel(hdi="higher") - hdi.sel(hdi="lower")
             vector[f"w_hdi_width__{name}"] = width
         except Exception:
             continue

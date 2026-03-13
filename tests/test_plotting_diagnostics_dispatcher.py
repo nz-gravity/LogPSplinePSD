@@ -1,3 +1,5 @@
+import importlib.util
+
 import arviz as az
 import matplotlib
 
@@ -43,7 +45,9 @@ def _make_nuts_idata():
         "num_steps_channel_0": rng.integers(1, 8, size=(1, 12)),
         "diverging_channel_0": rng.integers(0, 2, size=(1, 12)),
     }
-    idata = az.from_dict(posterior=posterior, sample_stats=sample_stats)
+    idata = az.from_dict(
+        {"posterior": posterior, "sample_stats": sample_stats}
+    )
     idata.attrs["sampler_type"] = "nuts"
     idata.attrs["target_accept_prob"] = 0.8
     return idata
@@ -55,7 +59,9 @@ def _make_acceptance_rate_idata():
     sample_stats = {
         "acceptance_rate": rng.uniform(0.1, 0.4, size=(1, 12)),
     }
-    idata = az.from_dict(posterior=posterior, sample_stats=sample_stats)
+    idata = az.from_dict(
+        {"posterior": posterior, "sample_stats": sample_stats}
+    )
     idata.attrs["sampler_type"] = "nuts"
     idata.attrs["target_accept_prob"] = 0.8
     return idata
@@ -69,7 +75,9 @@ def _make_high_dim_weights_idata():
         "weights": rng.normal(size=(1, 12, 64)),
     }
     sample_stats = {"accept_prob": rng.uniform(0.6, 0.9, size=(1, 12))}
-    idata = az.from_dict(posterior=posterior, sample_stats=sample_stats)
+    idata = az.from_dict(
+        {"posterior": posterior, "sample_stats": sample_stats}
+    )
     idata.attrs["sampler_type"] = "nuts"
     return idata
 
@@ -130,6 +138,11 @@ def test_select_rank_plot_vars_skips_high_dim_weights():
 
 
 def test_create_rank_diagnostics_writes_file(tmp_path):
+    if importlib.util.find_spec("arviz_plots.backend.gwpy") is None:
+        import pytest
+
+        pytest.skip("arviz_plots gwpy backend not available")
+
     idata = _make_nuts_idata()
     config = DiagnosticsConfig(
         figsize=(6, 4), save_rank_plots=True, rank_max_vars=4
@@ -141,6 +154,11 @@ def test_create_rank_diagnostics_writes_file(tmp_path):
 
 
 def test_pair_var_selection_and_plot(tmp_path):
+    if importlib.util.find_spec("arviz_plots.backend.gwpy") is None:
+        import pytest
+
+        pytest.skip("arviz_plots gwpy backend not available")
+
     idata = _make_nuts_idata()
     config = DiagnosticsConfig(
         figsize=(6, 4), save_pair_plots=True, pair_max_vars=3
@@ -156,7 +174,7 @@ def test_pair_var_selection_and_plot(tmp_path):
 def test_truth_psd_frequency_diagnostics_writes_file(tmp_path):
     rng = np.random.default_rng(21)
     posterior = {"weights_0": rng.normal(size=(1, 8, 2))}
-    idata = az.from_dict(posterior=posterior)
+    idata = az.from_dict({"posterior": posterior})
     idata.attrs["data_type"] = "multivar"
 
     freqs = np.array([0.1, 0.2, 0.3, 0.4], dtype=float)
@@ -187,7 +205,7 @@ def test_truth_psd_frequency_diagnostics_writes_file(tmp_path):
             ),
         }
     )
-    idata.add_groups(posterior_psd=psd_ds)
+    idata["posterior_psd"] = xr.DataTree(dataset=psd_ds)
 
     diag_dir = tmp_path / "diagnostics"
     diag_dir.mkdir()

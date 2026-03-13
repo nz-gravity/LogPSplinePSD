@@ -7,8 +7,10 @@
 #SBATCH --mem=4G
 #SBATCH --cpus-per-task=4
 
-module --force purge && ml gcc/12.3.0 python/3.11.3
-source /fred/oz303/avajpeyi/venvs/jax_cpu_venv/bin/activate
+module --force purge
+module load gcc/13.3.0 python/3.12.3
+
+PYTHON_BIN=/fred/oz303/avajpeyi/codes/LogPSplinePSD/.venv/bin/python
 
 SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID:-0}   # fallback for local testing
 
@@ -17,5 +19,5 @@ END_SEED=$((START_SEED + 9))
 
 for SEED in $(seq ${START_SEED} ${END_SEED}); do
     echo "Running seed=${SEED}, window=rect, K=20, mode=short_nb4"
-    python 3d_study.py ${SEED} short_nb4 --K 20 --window rect
+    "${PYTHON_BIN}" 3d_study.py ${SEED} short_nb4 --K 20 --window rect
 done

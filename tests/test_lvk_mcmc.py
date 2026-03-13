@@ -3,10 +3,8 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-from gwpy.timeseries import TimeSeries
 
 from log_psplines.datatypes import Periodogram, Timeseries
-from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.mcmc import (
     DiagnosticsConfig,
     ModelConfig,
@@ -14,6 +12,17 @@ from log_psplines.mcmc import (
     run_mcmc,
 )
 from log_psplines.psplines.knots_locator import init_knots
+
+try:
+    from gwpy.timeseries import TimeSeries
+
+    from log_psplines.example_datasets.lvk_data import LVKData
+
+    _LVK_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - environment dependent
+    TimeSeries = None  # type: ignore[assignment]
+    LVKData = None  # type: ignore[assignment]
+    _LVK_IMPORT_ERROR = exc
 
 
 def mock_gwpy_timeseries_from_simulation(
@@ -27,6 +36,11 @@ def mock_gwpy_timeseries_from_simulation(
 
 
 def test_lvk_knots_from_periodogram():
+    if LVKData is None or TimeSeries is None:
+        pytest.skip(
+            f"LVK dataset dependencies unavailable: {_LVK_IMPORT_ERROR}"
+        )
+
     duration = 1.0
     with patch(
         "gwpy.timeseries.TimeSeries.fetch_open_data",
@@ -57,6 +71,11 @@ def test_lvk_knots_from_periodogram():
 
 @pytest.mark.slow
 def test_lvk_mcmc(outdir, test_mode):
+    if LVKData is None or TimeSeries is None:
+        pytest.skip(
+            f"LVK dataset dependencies unavailable: {_LVK_IMPORT_ERROR}"
+        )
+
     duration = 1.0
     out = os.path.join(outdir, "out_lvk_mcmc")
     os.makedirs(out, exist_ok=True)

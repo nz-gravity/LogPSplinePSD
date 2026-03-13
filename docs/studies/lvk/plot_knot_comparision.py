@@ -2,7 +2,6 @@ import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 
-from log_psplines.arviz_utils import compare_results
 from log_psplines.plotting import plot_pdgrm
 
 f1 = "out_lvk_mcmc/inference_data.nc"
@@ -10,14 +9,6 @@ f2 = "out_lvk_mcmc_more_knots/inference_data.nc"
 
 i1 = az.from_netcdf(f1)
 i2 = az.from_netcdf(f2)
-
-# compare_results(
-#     az.from_netcdf(f1),
-#     az.from_netcdf(f2),
-#     labels=["NUTS 3 knots", "NUTS 5 knots"],
-#     outdir=".",
-#     colors=["blue", "orange"],
-# )
 
 fig, ax = plt.subplots(1, 1, figsize=(4, 3))
 plot_pdgrm(

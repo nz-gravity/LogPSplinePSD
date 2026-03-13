@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import arviz as az
 import matplotlib
 
@@ -35,7 +37,7 @@ def _make_minimal_idata() -> az.InferenceData:
     }
     dims = {"delta": ["param"], "phi": ["param"], "weights": ["weight"]}
     idata = az.from_dict(
-        posterior=posterior, sample_stats=sample_stats, dims=dims
+        {"posterior": posterior, "sample_stats": sample_stats}, dims=dims
     )
     idata.attrs["sampler_type"] = "nuts"
     idata.attrs["target_accept_rate"] = 0.8
@@ -65,7 +67,9 @@ def test_plot_acceptance_blockaware_handles_nonfinite_and_zero_mean():
         "accept_prob": np.full((1, 12), np.nan),
         "accept_prob_channel_0": np.zeros((1, 12)),
     }
-    idata = az.from_dict(posterior=posterior, sample_stats=sample_stats)
+    idata = az.from_dict(
+        {"posterior": posterior, "sample_stats": sample_stats}
+    )
     idata.attrs["sampler_type"] = "nuts"
     idata.attrs["target_accept_rate"] = 0.73
 

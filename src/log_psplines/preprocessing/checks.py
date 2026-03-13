@@ -93,6 +93,7 @@ def _run_preprocessing_checks(
             diag,
             str(out_path),
             warn_threshold=warn_threshold,
+            cholesky_matrix=np.asarray(processed_data.raw_psd),
         )
         if config.diagnostics.verbose:
             logger.info(f"Saved preprocessing eigenvalue plot to {out_path}")

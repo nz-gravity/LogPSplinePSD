@@ -2,11 +2,19 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.lisa_data import LISAData
-from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.example_datasets.varma_data import VARMAData
+
+try:
+    from log_psplines.example_datasets.lvk_data import LVKData
+
+    _LVK_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - environment dependent
+    LVKData = None  # type: ignore[assignment]
+    _LVK_IMPORT_ERROR = exc
 
 OUT = "out_example_datasets"
 
@@ -71,6 +79,11 @@ def test_lisa_data(outdir):
 
 
 def test_lvk_data(outdir, monkeypatch):
+    if LVKData is None:
+        pytest.skip(
+            f"LVK dataset dependencies unavailable: {_LVK_IMPORT_ERROR}"
+        )
+
     outdir = f"{outdir}/{OUT}"
     os.makedirs(outdir, exist_ok=True)
 

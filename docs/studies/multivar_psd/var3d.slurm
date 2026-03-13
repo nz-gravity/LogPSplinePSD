@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=var3_rect
+#SBATCH --job-name=var3_rect_%A_%a
 #SBATCH --output=logs_var3_runs/var3_rect_%A_%a.out
 #SBATCH --error=logs_var3_runs/var3_rect_%A_%a.err
 #SBATCH --array=0-9

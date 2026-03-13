@@ -215,10 +215,26 @@ class MultivarFFT:
         if taper_energy <= 0.0:
             raise ValueError("Window energy must be positive.")
         taper_sum = float(np.sum(taper))
-        # ENBW = Lb * Σw² / (Σw)²  (dimensionless, in units of frequency bins)
-        # Rect → 1.0; Hann → 1.5.  We store this on the object so the sampler
-        # can divide the Whittle log-likelihood by enbw to restore calibration.
-        enbw = float(Lb) * taper_energy / (taper_sum**2)
+        # Whittle likelihood calibration factor:
+        #
+        #   c = Lb · Σ w(t)⁴ / (Σ w(t)²)²
+        #
+        # This equals the sum of squared periodogram autocorrelations
+        #   c = Σ_k |F_{w²}(k) / F_{w²}(0)|²
+        # (by Parseval applied to the squared window w²).  Dividing the
+        # Whittle log-likelihood by c keeps the MLE unchanged while widening
+        # the posterior to account for the correlated periodogram bins
+        # introduced by any taper.
+        #
+        # Rectangular window → c = 1.0 (exact no-op).
+        # Hann window → c ≈ 1.95  (vs the naive ENBW = 1.5).
+        #
+        # The standard ENBW = Lb·Σw²/(Σw)² captures the window *bandwidth*
+        # (DFT of w), whereas the Whittle miscalibration is driven by the
+        # DFT of w², giving a strictly larger correction for all non-rect
+        # windows.  The field is named `enbw` for API compatibility.
+        taper_energy_sq = float(np.sum(taper**4))  # Σ w(t)⁴
+        enbw = float(Lb) * taper_energy_sq / (taper_energy**2)
         blocks = blocks * taper[None, :, None]
 
         block_ffts = np.fft.rfft(blocks, axis=1)

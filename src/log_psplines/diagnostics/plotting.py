@@ -547,26 +547,26 @@ def plot_diagnostics(
 
     if summary_position == "start":
         t_summary = time.perf_counter()
-        logger.info("Diagnostics step: summary text")
+        logger.debug("Diagnostics step: summary text")
         generate_diagnostics_summary(idata, diag_dir, mode=summary_mode)
-        logger.info(
+        logger.debug(
             f"Diagnostics step: summary text done in {time.perf_counter() - t_summary:.2f}s"
         )
 
     t_plots = time.perf_counter()
-    logger.info("Diagnostics step: plots")
+    logger.debug("Diagnostics step: plots")
     _create_diagnostic_plots(
         idata, diag_dir, config, p, N, runtime, model, true_psd
     )
-    logger.info(
+    logger.debug(
         f"Diagnostics step: plots done in {time.perf_counter() - t_plots:.2f}s"
     )
 
     if summary_position == "end":
         t_summary = time.perf_counter()
-        logger.info("Diagnostics step: summary text")
+        logger.debug("Diagnostics step: summary text")
         generate_diagnostics_summary(idata, diag_dir, mode=summary_mode)
-        logger.info(
+        logger.debug(
             f"Diagnostics step: summary text done in {time.perf_counter() - t_summary:.2f}s"
         )
 
@@ -653,33 +653,33 @@ def _create_diagnostic_plots(
         return fig
 
     t = time.perf_counter()
-    logger.info("Diagnostics plot: trace_plots.png starting")
+    logger.debug("Diagnostics plot: trace_plots.png starting")
     ok = create_trace_plots()
-    logger.info(
+    logger.debug(
         f"Diagnostics plot: trace_plots.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
     )
 
     # 2. Rank histogram diagnostics (subsampled variable list)
     t = time.perf_counter()
-    logger.info("Diagnostics plot: rank_plots starting")
+    logger.debug("Diagnostics plot: rank_plots starting")
     _create_rank_diagnostics(idata_plot, diag_dir, config)
-    logger.info(
+    logger.debug(
         f"Diagnostics plots: rank_plots done in {time.perf_counter() - t:.2f}s"
     )
 
     # 3. Optional pair diagnostics for low-dimensional scalar variables
     t = time.perf_counter()
-    logger.info("Diagnostics plot: pair_plots starting")
+    logger.debug("Diagnostics plot: pair_plots starting")
     _create_pair_diagnostics(idata_plot, diag_dir, config)
-    logger.info(
+    logger.debug(
         f"Diagnostics plots: pair_plots done in {time.perf_counter() - t:.2f}s"
     )
 
     if SAVE_ESS_RHAT_PROFILES:
         t = time.perf_counter()
-        logger.info("Diagnostics plot: ess_rhat_profiles starting")
+        logger.debug("Diagnostics plot: ess_rhat_profiles starting")
         _create_ess_rhat_profiles(idata, diag_dir, config, weight_vars)
-        logger.info(
+        logger.debug(
             f"Diagnostics plots: ess_rhat_profiles done in {time.perf_counter() - t:.2f}s"
         )
 
@@ -689,19 +689,19 @@ def _create_diagnostic_plots(
         _plot_summary_dashboard(idata, config, p, N, runtime)
 
     t = time.perf_counter()
-    logger.info("Diagnostics plot: summary_dashboard.png starting")
+    logger.debug("Diagnostics plot: summary_dashboard.png starting")
     ok = plot_summary()
-    logger.info(
+    logger.debug(
         f"Diagnostics plot: summary_dashboard.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
     )
 
     # 5. Truth-aware PSD error diagnostics (multivariate only)
     t = time.perf_counter()
-    logger.info("Diagnostics plot: psd_truth_error_vs_freq.png starting")
+    logger.debug("Diagnostics plot: psd_truth_error_vs_freq.png starting")
     _create_truth_psd_frequency_diagnostics(
         idata, diag_dir, config, true_psd=true_psd
     )
-    logger.info(
+    logger.debug(
         "Diagnostics plot: psd_truth_error_vs_freq.png done in "
         + f"{time.perf_counter() - t:.2f}s"
     )
@@ -714,21 +714,21 @@ def _create_diagnostic_plots(
             _plot_acceptance_diagnostics_blockaware(idata, config)
 
         t = time.perf_counter()
-        logger.info("Diagnostics plot: acceptance_diagnostics.png starting")
+        logger.debug("Diagnostics plot: acceptance_diagnostics.png starting")
         ok = plot_acceptance()
-        logger.info(
+        logger.debug(
             f"Diagnostics plot: acceptance_diagnostics.png {'ok' if ok else 'failed'} in {time.perf_counter() - t:.2f}s"
         )
     else:
-        logger.info(
+        logger.debug(
             "Diagnostics plot: acceptance_diagnostics skipped (disabled)."
         )
 
     # 7. Sampler-specific diagnostics
     t = time.perf_counter()
-    logger.info("Diagnostics plots: sampler-specific starting")
+    logger.debug("Diagnostics plots: sampler-specific starting")
     _create_sampler_diagnostics(idata, diag_dir, config)
-    logger.info(
+    logger.debug(
         f"Diagnostics plots: sampler-specific done in {time.perf_counter() - t:.2f}s"
     )
 
@@ -737,15 +737,15 @@ def _create_diagnostic_plots(
 
 def _create_rank_diagnostics(idata, diag_dir, config):
     if not config.save_rank_plots:
-        logger.info("Diagnostics plot: rank_plots skipped (disabled).")
+        logger.debug("Diagnostics plot: rank_plots skipped (disabled).")
         return
     if idata is None:
-        logger.info("Diagnostics plot: rank_plots skipped (no data).")
+        logger.debug("Diagnostics plot: rank_plots skipped (no data).")
         return
 
     rank_vars = _select_rank_plot_vars(idata, config)
     if not rank_vars:
-        logger.info(
+        logger.debug(
             "Diagnostics plot: rank_plots skipped (no low-dimensional variables)."
         )
         return
@@ -755,7 +755,7 @@ def _create_rank_diagnostics(idata, diag_dir, config):
         az.plot_rank(idata, var_names=rank_vars)
 
     ok = _plot_rank()
-    logger.info(
+    logger.debug(
         "Diagnostics plot: rank_plots.png "
         + f"{'ok' if ok else 'failed'} for {len(rank_vars)} vars"
     )
@@ -763,15 +763,15 @@ def _create_rank_diagnostics(idata, diag_dir, config):
 
 def _create_pair_diagnostics(idata, diag_dir, config):
     if not config.save_pair_plots:
-        logger.info("Diagnostics plot: pair_plots skipped (disabled).")
+        logger.debug("Diagnostics plot: pair_plots skipped (disabled).")
         return
     if idata is None:
-        logger.info("Diagnostics plot: pair_plots skipped (no data).")
+        logger.debug("Diagnostics plot: pair_plots skipped (no data).")
         return
 
     pair_vars = _select_pair_plot_vars(idata, config)
     if len(pair_vars) < 2:
-        logger.info(
+        logger.debug(
             "Diagnostics plot: pair_plots skipped (need >=2 scalar variables)."
         )
         return

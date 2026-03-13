@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Base class for univariate PSD samplers.
 """
@@ -263,4 +265,6 @@ class UnivarBaseSampler(BaseSampler):
             }
         )
 
-        idata.add_groups(vi_posterior_psd=dataset)
+        import xarray as _xr
+
+        idata["vi_posterior_psd"] = _xr.DataTree(dataset=dataset)

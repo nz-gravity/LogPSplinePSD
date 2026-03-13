@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from typing import List, cast
 
@@ -5,8 +7,31 @@ import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-from arviz import convert_to_dataset, ess
-from arviz.utils import _var_names, get_coords
+from arviz import ess
+
+try:
+    from arviz_base import convert_to_datatree as convert_to_dataset
+except ImportError:
+    try:
+        from arviz import convert_to_dataset  # type: ignore[no-redef]
+    except ImportError:
+        convert_to_dataset = None  # type: ignore[assignment]
+
+try:
+    from arviz.utils import _var_names, get_coords
+except ImportError:
+    # arviz >= 1.0.0 removed these helpers; provide simple replacements
+    def get_coords(data, coords):  # type: ignore[misc]
+        if coords:
+            return data.sel(coords)
+        return data
+
+    def _var_names(var_names, data, filter_vars):  # type: ignore[misc]
+        if var_names is not None:
+            return list(var_names)
+        return list(data.data_vars)
+
+
 from numpy.typing import NDArray
 
 from ..logger import logger
@@ -131,8 +156,15 @@ def _get_ess(run: az.InferenceData) -> NDArray[np.float64]:
     """
     Get the effective sample size (ESS) for each variable in the run.
     """
-    ess = az.ess(run)
-    values = ess.to_array().values.flatten()
+    ess_result = az.ess(run)
+    # arviz >= 1.0.0 returns a DataTree; iterate over its data_vars directly
+    all_vals: list[np.ndarray] = []
+    for v in ess_result.data_vars.values():
+        arr = np.asarray(v).flatten()
+        all_vals.append(arr)
+    if not all_vals:
+        return np.array([], dtype=np.float64)
+    values = np.concatenate(all_vals)
     return values[~np.isnan(values)]  # remove NaNs
 
 
@@ -140,7 +172,16 @@ def plot_ess_evolution(
     idata, n_points=50, ess_threshold=400, ax=None, color="tab:blue"
 ):
     coords: dict[str, object] = {}
-    data = get_coords(convert_to_dataset(idata, group="posterior"), coords)
+    # Extract posterior group — works for both old Dataset and new DataTree
+    if hasattr(idata, "posterior"):
+        _posterior = idata.posterior
+    elif hasattr(idata, "data_vars"):
+        _posterior = idata
+    elif hasattr(idata, "children") and "posterior" in idata.children:
+        _posterior = idata["posterior"]
+    else:
+        _posterior = idata
+    data = get_coords(_posterior, coords)
     var_names = _var_names(None, data, None)
     n_draws = data.sizes["draw"]
     n_samples = n_draws * data.sizes["chain"]

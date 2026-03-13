@@ -60,6 +60,13 @@ class MultivarFFT:
     # Coarse-grain multiplicity Nh. For equal-sized bins this is constant
     # across the retained frequency grid. Defaults to 1 (no coarse graining).
     Nh: int = 1
+    # Equivalent Noise Bandwidth of the analysis window, in units of frequency
+    # bins.  For a rectangular window ENBW=1.0; for a Hann window ENBW≈1.5.
+    # Computed automatically by compute_wishart() as
+    #     enbw = Lb * Σ w(t)² / (Σ w(t))²
+    # and used to scale the Whittle log-likelihood by 1/enbw so that the
+    # posterior width is correctly calibrated regardless of window choice.
+    enbw: float = 1.0
 
     def __post_init__(self) -> None:
         self.u_re = np.asarray(self.u_re, dtype=np.float64)
@@ -112,6 +119,10 @@ class MultivarFFT:
         self.Nh = int(self.Nh)
         if self.Nh <= 0:
             raise ValueError("Nh must be a positive integer")
+
+        self.enbw = float(self.enbw)
+        if not np.isfinite(self.enbw) or self.enbw <= 0.0:
+            raise ValueError("enbw must be a positive finite float")
 
         if self.channel_stds is not None:
             self.channel_stds = np.asarray(self.channel_stds, dtype=np.float64)
@@ -203,6 +214,11 @@ class MultivarFFT:
         taper_energy = float(np.sum(taper**2))
         if taper_energy <= 0.0:
             raise ValueError("Window energy must be positive.")
+        taper_sum = float(np.sum(taper))
+        # ENBW = Lb * Σw² / (Σw)²  (dimensionless, in units of frequency bins)
+        # Rect → 1.0; Hann → 1.5.  We store this on the object so the sampler
+        # can divide the Whittle log-likelihood by enbw to restore calibration.
+        enbw = float(Lb) * taper_energy / (taper_sum**2)
         blocks = blocks * taper[None, :, None]
 
         block_ffts = np.fft.rfft(blocks, axis=1)
@@ -272,6 +288,7 @@ class MultivarFFT:
             scaling_factor=scaling_factor,
             fs=fs,
             duration=duration,
+            enbw=enbw,
             channel_stds=(
                 None
                 if channel_stds is None

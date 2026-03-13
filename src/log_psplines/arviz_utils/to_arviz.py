@@ -86,11 +86,29 @@ def _add_chain_dim(
     for k, v in data_dict.items():
         v_array = np.array(v)
         # If the leading dimension already matches the configured number of chains,
-        # keep the array as-is; otherwise, add a singleton chain dimension.
+        # keep the array as-is. Some backends may return (draw, chain, ...)
+        # instead of (chain, draw, ...); normalize those by swapping axes.
         if v_array.ndim >= 2 and v_array.shape[0] == num_chains:
             result[k] = v_array
+        elif (
+            v_array.ndim >= 2
+            and num_chains > 1
+            and v_array.shape[1] == num_chains
+            and v_array.shape[0] != num_chains
+        ):
+            logger.debug(
+                f"_add_chain_dim: transposing '{k}' from (draw, chain, ...) to (chain, draw, ...)"
+            )
+            result[k] = np.swapaxes(v_array, 0, 1)
         elif v_array.ndim == 0:
             result[k] = v_array
+        elif (
+            v_array.ndim == 1
+            and num_chains > 1
+            and v_array.shape[0] == num_chains
+        ):
+            # Treat chain-level vectors as one draw per chain.
+            result[k] = v_array[:, None]
         else:
             result[k] = v_array[None, ...]
     return result

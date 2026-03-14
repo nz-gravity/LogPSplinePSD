@@ -205,6 +205,68 @@ def eigenvalue_separation_diagnostics(
     )
 
 
+def _raw_psd_to_model_components(
+    matrix: np.ndarray,
+    *,
+    cholesky_jitter: float = 1e-12,
+    max_cholesky_jitter: float = 1e-4,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Map raw spectral matrices to model-native components.
+
+    Args:
+        matrix: (N, p, p) complex spectral matrices.
+        cholesky_jitter: Initial diagonal jitter used if Cholesky fails.
+        max_cholesky_jitter: Maximum diagonal jitter before failure.
+
+    Returns:
+        log_delta_sq: (N, p), where log_delta_sq[:, j] = log(delta_j^2).
+        theta: (N, p, p) complex with lower-triangular model terms
+            theta[:, j, l] for j > l and zeros elsewhere.
+    """
+
+    matrix = np.asarray(matrix, dtype=np.complex128)
+    if matrix.ndim != 3 or matrix.shape[-1] != matrix.shape[-2]:
+        raise ValueError("matrix must have shape (N, p, p).")
+
+    if cholesky_jitter < 0.0 or max_cholesky_jitter < 0.0:
+        raise ValueError(
+            "cholesky_jitter and max_cholesky_jitter must be non-negative."
+        )
+    if max_cholesky_jitter < cholesky_jitter:
+        raise ValueError("max_cholesky_jitter must be >= cholesky_jitter.")
+
+    p = int(matrix.shape[-1])
+    herm = 0.5 * (matrix + np.swapaxes(np.conj(matrix), -1, -2))
+    eye = np.eye(p, dtype=np.complex128)[None, :, :]
+
+    jitter = float(cholesky_jitter)
+    last_error: Exception | None = None
+    while True:
+        try:
+            L = np.linalg.cholesky(herm + jitter * eye)
+            break
+        except np.linalg.LinAlgError as err:
+            last_error = err
+            if jitter >= float(max_cholesky_jitter):
+                raise np.linalg.LinAlgError(
+                    "Cholesky decomposition failed for preprocessing plot "
+                    f"up to jitter={max_cholesky_jitter:.3e}."
+                ) from last_error
+            jitter = max(10.0 * jitter, 1e-16)
+
+    diag_L = np.maximum(
+        np.real(L[..., np.arange(p), np.arange(p)]), np.finfo(float).tiny
+    )
+    log_delta_sq = 2.0 * np.log(diag_L)
+
+    T_inv = L / diag_L[:, np.newaxis, :]
+    T = np.linalg.inv(T_inv)
+    theta = np.zeros_like(T)
+    tril = np.tril_indices(p, k=-1)
+    theta[:, tril[0], tril[1]] = -T[:, tril[0], tril[1]]
+    return log_delta_sq, theta
+
+
 def save_eigenvalue_separation_plot(
     diag: EigenvalueSeparationDiagnostics,
     out: str,
@@ -222,7 +284,8 @@ def save_eigenvalue_separation_plot(
         out: Output image path.
         warn_threshold: Horizontal threshold shown on ratio panel.
         cholesky_matrix: Optional spectral matrix with shape (N, p, p) used to
-            plot lower-triangular Cholesky components across frequency.
+            plot model-native components (log-delta and theta) across
+            frequency.
         cholesky_jitter: Initial diagonal regularization used if Cholesky fails.
         max_cholesky_jitter: Maximum diagonal regularization before giving up.
         dpi: Figure DPI for saved image.
@@ -289,66 +352,42 @@ def save_eigenvalue_separation_plot(
         if matrix.shape[-1] != matrix.shape[-2]:
             raise ValueError("cholesky_matrix must be square per frequency.")
 
-        p = int(matrix.shape[-1])
-        herm = 0.5 * (matrix + np.swapaxes(np.conj(matrix), -1, -2))
-
-        if cholesky_jitter < 0.0 or max_cholesky_jitter < 0.0:
-            raise ValueError(
-                "cholesky_jitter and max_cholesky_jitter must be non-negative."
-            )
-        if max_cholesky_jitter < cholesky_jitter:
-            raise ValueError("max_cholesky_jitter must be >= cholesky_jitter.")
-
-        jitter = float(cholesky_jitter)
-        eye = np.eye(p, dtype=np.complex128)[None, :, :]
-        last_error: Exception | None = None
-        while True:
-            try:
-                chol = np.linalg.cholesky(herm + jitter * eye)
-                break
-            except np.linalg.LinAlgError as err:
-                last_error = err
-                if jitter >= float(max_cholesky_jitter):
-                    raise np.linalg.LinAlgError(
-                        "Cholesky decomposition failed for preprocessing plot "
-                        f"up to jitter={max_cholesky_jitter:.3e}."
-                    ) from last_error
-                jitter = max(10.0 * jitter, 1e-16)
+        log_delta_sq, theta = _raw_psd_to_model_components(
+            matrix,
+            cholesky_jitter=cholesky_jitter,
+            max_cholesky_jitter=max_cholesky_jitter,
+        )
+        p = int(log_delta_sq.shape[1])
 
         ax_chol = axes[2]
-        for i in range(p):
-            for j in range(i + 1):
-                comp = chol[:, i, j]
-                label_base = f"L{i+1}{j+1}"
-                if i == j:
-                    y = np.maximum(np.real(comp), 0.0)
-                    if use_log_x:
-                        ax_chol.semilogx(freq, y, label=f"Re({label_base})")
-                    else:
-                        ax_chol.plot(freq, y, label=f"Re({label_base})")
-                    continue
+        for j in range(p):
+            y = log_delta_sq[:, j]
+            label = f"LogDelta{j+1}{j+1}"
+            if use_log_x:
+                ax_chol.semilogx(freq, y, label=label)
+            else:
+                ax_chol.plot(freq, y, label=label)
+
+        for j in range(1, p):
+            for l in range(j):
+                comp = theta[:, j, l]
+                # Matrix-style legend convention:
+                # upper triangle uses Re(Theta_ij), lower uses Im(Theta_ij).
+                re_label = f"Re(Theta{l+1}{j+1})"
+                im_label = f"Im(Theta{j+1}{l+1})"
                 if use_log_x:
+                    ax_chol.semilogx(freq, np.real(comp), label=re_label)
                     ax_chol.semilogx(
-                        freq, np.real(comp), label=f"Re({label_base})"
-                    )
-                    ax_chol.semilogx(
-                        freq,
-                        np.imag(comp),
-                        ls="--",
-                        label=f"Im({label_base})",
+                        freq, np.imag(comp), ls="--", label=im_label
                     )
                 else:
-                    ax_chol.plot(
-                        freq, np.real(comp), label=f"Re({label_base})"
-                    )
-                    ax_chol.plot(
-                        freq, np.imag(comp), ls="--", label=f"Im({label_base})"
-                    )
+                    ax_chol.plot(freq, np.real(comp), label=re_label)
+                    ax_chol.plot(freq, np.imag(comp), ls="--", label=im_label)
 
         ax_chol.set_xlabel("Frequency")
-        ax_chol.set_ylabel("Cholesky components")
+        ax_chol.set_ylabel("Model components")
         ax_chol.grid(True, which="both", alpha=0.2)
-        ax_chol.set_title("Raw periodogram Cholesky components")
+        ax_chol.set_title("Raw periodogram Cholesky-derived components")
         ncol = 2 if p <= 2 else 3
         ax_chol.legend(fontsize=7, ncol=ncol)
 
@@ -359,6 +398,7 @@ def save_eigenvalue_separation_plot(
 
 __all__ = [
     "EigenvalueSeparationDiagnostics",
+    "_raw_psd_to_model_components",
     "eig_ratios",
     "eigenvalue_separation_diagnostics",
     "ordered_eigvals_hermitian",

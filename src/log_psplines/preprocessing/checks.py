@@ -87,12 +87,44 @@ def _run_preprocessing_checks(
             Path(config.diagnostics.outdir)
             / "preprocessing_eigenvalue_ratios.png"
         )
+        nb = int(processed_data.Nb)
+        nh = int(processed_data.Nh)
+        n_coarse_or_retained = int(processed_data.N)
+        n_ell = n_coarse_or_retained * nh
+        fs = float(processed_data.fs)
+        dt = 1.0 / fs
+        lb = int(round(float(processed_data.duration) * fs))
+        n_time = lb * nb
+        total_duration = float(processed_data.duration) * nb
+        n_fft = lb // 2 + 1
+        nc = n_coarse_or_retained if nh > 1 else None
+
+        info_parts = [
+            f"n={n_time}",
+            f"dt={dt:.6g}",
+            f"T={total_duration:.6g}",
+            f"N={n_fft}",
+            f"N_ell={n_ell}",
+            f"p={int(processed_data.p)}",
+            f"Nb={nb}",
+            f"Lb={lb}",
+            f"Nc={nc if nc is not None else 'NA'}",
+            f"Nh={nh}",
+        ]
+        window_name = (
+            "rect"
+            if config.wishart_window is None
+            else str(config.wishart_window)
+        )
+        info_parts.append(f"window={window_name}")
+        info_text = ", ".join(info_parts)
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
         save_eigenvalue_separation_plot(
             diag,
             str(out_path),
             warn_threshold=warn_threshold,
+            info_text=info_text,
             cholesky_matrix=np.asarray(processed_data.raw_psd),
         )
         if config.diagnostics.verbose:

@@ -96,6 +96,20 @@ def test_create_sampler_diagnostics_nuts_writes_files(tmp_path):
     diag_dir.mkdir()
     _create_sampler_diagnostics(idata, str(diag_dir), config)
     assert (diag_dir / "nuts_diagnostics.png").exists()
+    assert (diag_dir / "nuts_block_diagnostics.png").exists()
+    assert not (diag_dir / "nuts_block_0_diagnostics.png").exists()
+
+
+def test_create_sampler_diagnostics_nuts_writes_individual_blocks_when_enabled(
+    tmp_path,
+):
+    idata = _make_nuts_idata()
+    config = DiagnosticsConfig(
+        figsize=(6, 4), save_nuts_block_diagnostics_individual=True
+    )
+    diag_dir = tmp_path / "diagnostics"
+    diag_dir.mkdir()
+    _create_sampler_diagnostics(idata, str(diag_dir), config)
     assert (diag_dir / "nuts_block_0_diagnostics.png").exists()
 
 

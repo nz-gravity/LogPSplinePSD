@@ -289,8 +289,8 @@ def test_plot_psd_matrix_with_varma_coherence(outdir):
         np.abs(true_psd[:, 2, 2]) * np.abs(true_psd[:, 1, 1])
     )
 
-    np.testing.assert_allclose(median_line.get_ydata(), expected_coh)
-    np.testing.assert_allclose(true_line.get_ydata(), true_coh)
+    np.testing.assert_allclose(median_line.get_ydata(), expected_coh[1:-1])
+    np.testing.assert_allclose(true_line.get_ydata(), true_coh[1:-1])
     assert np.any(expected_coh < 1.0)
     assert np.any(expected_coh > 0.0)
 
@@ -370,8 +370,8 @@ def test_plot_psd_matrix_with_lisa(outdir):
         np.abs(true_psd[:, 2, 2]) * np.abs(true_psd[:, 1, 1])
     )
 
-    np.testing.assert_allclose(median_line.get_ydata(), expected_coh)
-    np.testing.assert_allclose(true_line.get_ydata(), true_coh)
+    np.testing.assert_allclose(median_line.get_ydata(), expected_coh[1:-1])
+    np.testing.assert_allclose(true_line.get_ydata(), true_coh[1:-1])
     assert expected_coh.min() >= 0.0
     assert expected_coh.max() <= 1.05
 

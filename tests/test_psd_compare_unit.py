@@ -84,3 +84,24 @@ def test_run_returns_empty_when_missing_inputs():
     idata = az.from_dict({})
     assert psd_compare._run(idata=idata, truth=truth) == {}
     assert psd_compare._run(idata=None, truth=None) == {}
+
+
+def test_run_univariate_ignores_endpoint_outliers():
+    freqs = np.array([0.1, 0.2, 0.3, 0.4, 0.5])
+    truth = np.ones_like(freqs)
+    percentiles = np.array([5.0, 50.0, 95.0])
+    q05 = np.array([100.0, 0.8, 0.8, 0.8, 100.0])
+    q50 = np.array([100.0, 1.0, 1.0, 1.0, 100.0])
+    q95 = np.array([100.0, 1.2, 1.2, 1.2, 100.0])
+    values = np.stack([q05, q50, q95], axis=0)
+    psd_da = xr.DataArray(
+        values,
+        coords={"percentile": percentiles, "freq": freqs},
+        dims=("percentile", "freq"),
+    )
+    idata = az.from_dict({})
+    idata["posterior_psd"] = xr.DataTree(dataset=xr.Dataset({"psd": psd_da}))
+
+    metrics = psd_compare._run(idata=idata, truth=truth)
+    assert metrics["riae"] == pytest.approx(0.0)
+    assert metrics["coverage"] == pytest.approx(1.0)

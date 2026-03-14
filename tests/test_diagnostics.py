@@ -9,7 +9,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from log_psplines.diagnostics import psd_compare, run_all_diagnostics
-from log_psplines.diagnostics._utils import compute_riae
+from log_psplines.diagnostics._utils import (
+    compute_riae,
+    interior_frequency_slice,
+)
 from log_psplines.diagnostics.derived_weights import (
     HDI_PROB,
     compute_weight_summaries,
@@ -53,7 +56,8 @@ def test_psd_compare_matches_manual_riae():
     idata, freqs, psd_values = _build_idata_with_psd(truth)
     result = psd_compare._run(idata=idata, truth=truth)
 
-    expected_riae = compute_riae(psd_values[1], truth, freqs)
+    idx = interior_frequency_slice(freqs.size)
+    expected_riae = compute_riae(psd_values[1][idx], truth[idx], freqs[idx])
     assert np.isclose(result["riae"], expected_riae)
     assert 0.0 < result["coverage"] <= 1.0
 

@@ -66,6 +66,11 @@ def safe_plot(filename: str, dpi: int = 150):
     return decorator
 
 
+def interior_frequency_slice(n_freq: int) -> slice:
+    """Return a slice that drops first/last frequency bins when possible."""
+    return slice(1, -1) if n_freq > 3 else slice(None)
+
+
 def extract_plotting_data(
     idata, weights_key: int | None = None
 ) -> Dict[str, Any]:

@@ -8,6 +8,11 @@ import numpy as np
 from scipy.integrate import simpson
 
 
+def interior_frequency_slice(n_freq: int) -> slice:
+    """Return a slice that drops first/last frequency bins when possible."""
+    return slice(1, -1) if n_freq > 3 else slice(None)
+
+
 def as_scalar(value: Any) -> Optional[float]:
     """Best-effort conversion to a Python float."""
     if value is None:

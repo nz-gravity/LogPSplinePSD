@@ -272,6 +272,7 @@ def save_eigenvalue_separation_plot(
     out: str,
     *,
     warn_threshold: float = 0.8,
+    info_text: str | None = None,
     cholesky_matrix: np.ndarray | None = None,
     cholesky_jitter: float = 1e-12,
     max_cholesky_jitter: float = 1e-4,
@@ -283,6 +284,7 @@ def save_eigenvalue_separation_plot(
         diag: Diagnostics output from :func:`eigenvalue_separation_diagnostics`.
         out: Output image path.
         warn_threshold: Horizontal threshold shown on ratio panel.
+        info_text: Optional metadata line shown at the top of the figure.
         cholesky_matrix: Optional spectral matrix with shape (N, p, p) used to
             plot model-native components (log-delta and theta) across
             frequency.
@@ -419,8 +421,18 @@ def save_eigenvalue_separation_plot(
         ax_eig.set_title(
             f"Eigenvalue scale (component grid: {p}x{p}, {n_pairs} theta pairs)"
         )
+        if info_text is not None and str(info_text).strip():
+            fig.suptitle(
+                f"Preprocessing diagnostics ({info_text})", fontsize=10
+            )
     else:
-        fig.tight_layout()
+        if info_text is not None and str(info_text).strip():
+            fig.suptitle(
+                f"Preprocessing diagnostics ({info_text})", fontsize=10
+            )
+            fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.97))
+        else:
+            fig.tight_layout()
 
     fig.savefig(out, dpi=int(dpi))
     plt.close(fig)

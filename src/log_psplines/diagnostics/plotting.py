@@ -28,8 +28,6 @@ from .run_all import run_all_diagnostics
 # Setup consistent styling for diagnostics plots
 setup_plot_style()
 
-SAVE_ESS_RHAT_PROFILES = True
-
 
 @dataclass
 class DiagnosticsConfig:
@@ -50,6 +48,9 @@ class DiagnosticsConfig:
     rank_max_dims_per_var: int = 6
     save_pair_plots: bool = False
     pair_max_vars: int = 4
+    save_ess_rhat_profiles: bool = True
+    save_ess_rhat_profiles_individual: bool = False
+    save_nuts_block_diagnostics_individual: bool = False
 
 
 def _to_flat_finite_array(obj) -> np.ndarray:
@@ -219,6 +220,7 @@ def _create_ess_rhat_profiles(
         )
         return
 
+    profiles: list[tuple[str, np.ndarray, np.ndarray]] = []
     for name in weight_vars:
         if name not in posterior.data_vars:
             continue
@@ -226,7 +228,6 @@ def _create_ess_rhat_profiles(
         dims = [d for d in var.dims if d not in ("chain", "draw")]
         if not dims:
             continue
-        basis_dim = dims[-1]
         try:
             ess = az.ess(var, method="bulk")
             rhat = az.rhat(var)
@@ -238,10 +239,64 @@ def _create_ess_rhat_profiles(
         if ess_vals.size == 0 or rhat_vals.size == 0:
             continue
 
+        profiles.append((name, ess_vals, rhat_vals))
+
+    if not profiles:
+        logger.info(
+            "Diagnostics plot: ess_rhat_profiles skipped (no finite ESS/R-hat)."
+        )
+        return
+
+    @safe_plot(f"{diag_dir}/ess_rhat_profiles.png", config.dpi)
+    def _plot_combined():
+        n_vars = len(profiles)
+        fig, axes = plt.subplots(
+            n_vars,
+            2,
+            figsize=(14, max(3.0 * n_vars, 3.5)),
+            squeeze=False,
+        )
+        for row, (name, ess_vals, rhat_vals) in enumerate(profiles):
+            ess_ax = axes[row, 0]
+            rhat_ax = axes[row, 1]
+
+            ess_ax.plot(ess_vals, color="C0", linewidth=1.3)
+            ess_ax.axhline(
+                config.ess_threshold,
+                color="red",
+                linestyle="--",
+                linewidth=1,
+            )
+            ess_ax.set_ylabel("ESS (bulk)")
+            ess_ax.set_title(f"{name}: ESS")
+            ess_ax.set_xlabel("Basis index")
+            ess_ax.grid(True, alpha=0.3)
+
+            rhat_ax.plot(rhat_vals, color="C1", linewidth=1.3)
+            rhat_ax.axhline(
+                config.rhat_threshold,
+                color="red",
+                linestyle="--",
+                linewidth=1,
+            )
+            rhat_ax.set_ylabel("R-hat")
+            rhat_ax.set_title(f"{name}: R-hat")
+            rhat_ax.set_xlabel("Basis index")
+            rhat_ax.grid(True, alpha=0.3)
+
+        fig.tight_layout()
+        return fig
+
+    _plot_combined()
+
+    if not config.save_ess_rhat_profiles_individual:
+        return
+
+    for name, ess_vals, rhat_vals in profiles:
         fname = _sanitize_filename(f"ess_rhat_profile_{name}.png")
 
         @safe_plot(f"{diag_dir}/{fname}", config.dpi)
-        def _plot():
+        def _plot_single(name=name, ess_vals=ess_vals, rhat_vals=rhat_vals):
             fig, axes = plt.subplots(2, 1, figsize=(7, 6), sharex=True)
             axes[0].plot(ess_vals, color="C0", linewidth=1.5)
             axes[0].axhline(
@@ -258,10 +313,10 @@ def _create_ess_rhat_profiles(
             axes[1].set_xlabel("Basis index")
             axes[1].set_ylabel("R-hat")
             axes[1].grid(True, alpha=0.3)
-            plt.tight_layout()
+            fig.tight_layout()
             return fig
 
-        _plot()
+        _plot_single()
 
 
 def _is_multivar(idata: az.InferenceData) -> bool:
@@ -675,7 +730,7 @@ def _create_diagnostic_plots(
         f"Diagnostics plots: pair_plots done in {time.perf_counter() - t:.2f}s"
     )
 
-    if SAVE_ESS_RHAT_PROFILES:
+    if config.save_ess_rhat_profiles:
         t = time.perf_counter()
         logger.debug("Diagnostics plot: ess_rhat_profiles starting")
         _create_ess_rhat_profiles(idata, diag_dir, config, weight_vars)
@@ -1906,8 +1961,10 @@ def _plot_nuts_diagnostics_blockaware(idata, config):
     plt.tight_layout()
 
 
-def _plot_single_nuts_block(idata, config, channel_idx: int):
-    """NUTS diagnostics for a single blocked channel."""
+def _plot_single_nuts_block_on_axes(
+    idata, config, channel_idx: int, axes, *, title_prefix: str
+):
+    """Render NUTS diagnostics for one blocked channel onto 4 provided axes."""
 
     def _get(key):
         full_key = f"{key}_channel_{channel_idx}"
@@ -1925,17 +1982,15 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
         attrs = dict(attrs)
     max_tree_depth = _coerce_int(attrs.get("max_tree_depth"))
 
-    fig, axes = plt.subplots(2, 2, figsize=config.figsize)
-
     # Step size trace
-    ax = axes[0, 0]
+    ax = axes[0]
     if step_size is not None:
         ax.plot(step_size, alpha=0.7, lw=1, label="step_size")
     else:
         ax.text(
             0.5, 0.5, "Step size data\nunavailable", ha="center", va="center"
         )
-    ax.set_title(f"Channel {channel_idx} Step Size")
+    ax.set_title(f"{title_prefix} Step Size")
     ax.set_xlabel("Iteration")
     ax.set_ylabel("step_size")
     ax.grid(True, alpha=0.3)
@@ -1943,7 +1998,7 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
         ax.legend(loc="best", fontsize="small")
 
     # Acceptance trace
-    ax = axes[0, 1]
+    ax = axes[1]
     if accept_prob is not None:
         ax.axhspan(0.7, 0.9, alpha=0.1, color="green")
         ax.axhspan(0.0, 0.6, alpha=0.1, color="red")
@@ -1957,12 +2012,12 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
         ax.text(
             0.5, 0.5, "Acceptance data\nunavailable", ha="center", va="center"
         )
-    ax.set_title(f"Channel {channel_idx} Acceptance")
+    ax.set_title(f"{title_prefix} Acceptance")
     ax.set_xlabel("Iteration")
     ax.set_ylabel("accept_prob")
 
     # Steps histogram
-    ax = axes[1, 0]
+    ax = axes[2]
     if num_steps is not None and num_steps.size:
         ax.hist(num_steps, bins=20, alpha=0.7, edgecolor="black")
         ax.set_xlabel("Steps")
@@ -1990,10 +2045,10 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
             )
     else:
         ax.text(0.5, 0.5, "Steps data\nunavailable", ha="center", va="center")
-    ax.set_title(f"Channel {channel_idx} Leapfrog Steps")
+    ax.set_title(f"{title_prefix} Leapfrog Steps")
 
     # Summary stats
-    ax = axes[1, 1]
+    ax = axes[3]
     stats_lines = [f"Channel {channel_idx} summary:"]
     if num_steps is not None:
         stats_lines.append(
@@ -2022,7 +2077,38 @@ def _plot_single_nuts_block(idata, config, channel_idx: int):
     ax.axis("off")
     ax.set_title("Summary")
 
+
+def _plot_single_nuts_block(idata, config, channel_idx: int):
+    """NUTS diagnostics for a single blocked channel."""
+    fig, axes = plt.subplots(2, 2, figsize=config.figsize)
+    _plot_single_nuts_block_on_axes(
+        idata,
+        config,
+        channel_idx,
+        [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]],
+        title_prefix=f"Channel {channel_idx}",
+    )
     plt.tight_layout()
+
+
+def _plot_nuts_blocks_grid(idata, config, channel_indices: list[int]):
+    """NUTS diagnostics with one row per blocked channel."""
+    n_channels = len(channel_indices)
+    fig, axes = plt.subplots(
+        n_channels,
+        4,
+        figsize=(18, max(3.0 * n_channels, 4.5)),
+        squeeze=False,
+    )
+    for row, channel_idx in enumerate(channel_indices):
+        _plot_single_nuts_block_on_axes(
+            idata,
+            config,
+            channel_idx,
+            [axes[row, 0], axes[row, 1], axes[row, 2], axes[row, 3]],
+            title_prefix=f"Channel {channel_idx}",
+        )
+    fig.tight_layout()
 
 
 def _create_sampler_diagnostics(idata, diag_dir, config):
@@ -2071,7 +2157,20 @@ def _create_sampler_diagnostics(idata, diag_dir, config):
             idata.sample_stats, "step_size"
         )
 
-        for channel_idx in sorted(channel_indices):
+        sorted_channel_indices = sorted(channel_indices)
+
+        if sorted_channel_indices:
+
+            @safe_plot(f"{diag_dir}/nuts_block_diagnostics.png", config.dpi)
+            def plot_nuts_blocks_combined():
+                _plot_nuts_blocks_grid(idata, config, sorted_channel_indices)
+
+            plot_nuts_blocks_combined()
+
+        if not config.save_nuts_block_diagnostics_individual:
+            return
+
+        for channel_idx in sorted_channel_indices:
 
             @safe_plot(
                 f"{diag_dir}/nuts_block_{channel_idx}_diagnostics.png",

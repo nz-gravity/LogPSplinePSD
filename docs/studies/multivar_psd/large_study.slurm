@@ -3,8 +3,8 @@
 #SBATCH --output=logs_large_study/large_%A_%a.out
 #SBATCH --error=logs_large_study/large_%A_%a.err
 #SBATCH --array=0-9
-#SBATCH --time=1:30:00
-#SBATCH --mem-per-cpu=1G
+#SBATCH --time=1:00:00
+#SBATCH --mem=2.5G
 #SBATCH --cpus-per-task=4
 module --force purge
 module load gcc/13.3.0 python/3.12.3

@@ -2,30 +2,32 @@
 #SBATCH --job-name=cg_study
 #SBATCH --output=logs_cg_study/cg_%A_%a.out
 #SBATCH --error=logs_cg_study/cg_%A_%a.err
-#SBATCH --array=0-49
-#SBATCH --time=02:00:00
-#SBATCH --mem=8G
+#SBATCH --array=0-9
+#SBATCH --time=2:30:00
+#SBATCH --mem=4G
 #SBATCH --cpus-per-task=4
+module --force purge
+module load gcc/13.3.0 python/3.12.3
+PYTHON_BIN=/fred/oz303/avajpeyi/codes/LogPSplinePSD/.venv/bin/python
+SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID:-0}   # fallback for local testing
 
-module --force purge && ml gcc/12.3.0 python/3.11.3
-source /fred/oz303/avajpeyi/venvs/jax_cpu_venv/bin/activate
-
-SEED=${SLURM_ARRAY_TASK_ID:-0}
-
-cd /fred/oz303/avajpeyi/LogPSplinePSD/docs/studies/multivar_psd
+cd /fred/oz303/avajpeyi/codes/LogPSplinePSD/docs/studies/multivar_psd
 mkdir -p logs_cg_study
 
-# Run all four coarse-graining conditions for this seed:
-#   noNh  = no coarse-graining         (baseline, matches short_nb4 run)
-#   Nh2   = average 2 adjacent bins
-#   Nh4   = average 4 adjacent bins
-#   Nh8   = average 8 adjacent bins
-#
-# mode: short_nb4  (N=2048, Nb=4)
-# K=20, rect window
-# outdir slug: seed_<s>_short_nb4_N2048_K20_rect_<nh_label>
+# 10 array tasks x 5 seeds = 50 seeds total
+# Each task runs 5 seeds through all 4 coarse-graining conditions
+# mode: short_nb4  (N=2048, Nb=4, K=20, rect)
+# Nh=0 → no coarse-graining  (baseline)
+# Nh=2 → average 2 adjacent bins
+# Nh=4 → average 4 adjacent bins
+# Nh=8 → average 8 adjacent bins
 
-for NH in 0 2 4 8; do
-    echo "--- seed=${SEED}  coarse_nh=${NH} ---"
-    python 3d_study.py ${SEED} short_nb4 --K 20 --window rect --coarse-nh ${NH}
+START_SEED=$((SLURM_ARRAY_TASK_ID * 5))
+END_SEED=$((START_SEED + 4))
+
+for SEED in $(seq ${START_SEED} ${END_SEED}); do
+    for NH in 0 2 4 8; do
+        echo "Running seed=${SEED}, coarse_nh=${NH}, K=20, mode=short_nb4, window=rect"
+        "${PYTHON_BIN}" 3d_study.py ${SEED} short_nb4 --K 20 --window rect --coarse-nh ${NH}
+    done
 done

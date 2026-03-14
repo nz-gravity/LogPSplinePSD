@@ -294,7 +294,7 @@ def _log_posterior_summary(stage: str, posterior, weight_meta=None) -> None:
         top = ", ".join(
             f"{name}={size:,}" for name, size in counts["top_vars"]
         )
-        logger.infonfo(f"MCMC diagnostics: top vars by size: {top}")
+        logger.info(f"MCMC diagnostics: top vars by size: {top}")
 
 
 def _select_posterior_subset(idata):

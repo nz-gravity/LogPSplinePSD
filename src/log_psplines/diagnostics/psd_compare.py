@@ -13,6 +13,7 @@ from ._utils import (
     compute_matrix_riae,
     compute_riae,
     extract_percentile,
+    interior_frequency_slice,
 )
 
 
@@ -53,6 +54,10 @@ def _handle_univariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
     psd = psd_ds["psd"]
     freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
     values = np.asarray(psd.values)
+    freq_idx = interior_frequency_slice(freqs.size)
+    freqs = freqs[freq_idx]
+    values = values[..., freq_idx]
+    reference = np.asarray(reference)[freq_idx]
     percentiles = np.asarray(psd.coords.get("percentile", []), dtype=float)
     if percentiles.size == 0:
         percentiles = np.arange(values.shape[0], dtype=float)
@@ -78,11 +83,16 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
         psd_ds["psd_matrix_real"].coords.get("percentile", []), dtype=float
     )
     freqs = np.asarray(psd_ds["psd_matrix_real"].coords.get("freq"))
+    freq_idx = interior_frequency_slice(freqs.size)
+    freqs = freqs[freq_idx]
+    psd_real = psd_real[:, freq_idx, ...]
     psd_imag = None
     if "psd_matrix_imag" in psd_ds:
-        psd_imag = np.asarray(psd_ds["psd_matrix_imag"].values)
+        psd_imag = np.asarray(psd_ds["psd_matrix_imag"].values)[
+            :, freq_idx, ...
+        ]
 
-    true_psd_real = reference
+    true_psd_real = np.asarray(reference)[freq_idx, ...]
 
     metrics: Dict[str, float] = {}
 
@@ -223,6 +233,11 @@ def compute_multivar_riae_diagnostics(
     psd_quantiles: Optional[Dict[str, Dict[str, np.ndarray]]] = None,
 ) -> Dict[str, object]:
     """Legacy multivariate diagnostics used by VI adapters."""
+    freq_idx = interior_frequency_slice(np.asarray(freqs).size)
+    freqs = np.asarray(freqs)[freq_idx]
+    vi_psd = np.asarray(vi_psd)[freq_idx, ...]
+    true_psd_real = np.asarray(true_psd_real)[freq_idx, ...]
+
     diagnostics: Dict[str, object] = {}
     coverage_interval = [5.0, 95.0]
     coverage_level = 0.90
@@ -297,9 +312,12 @@ def compute_multivar_riae_diagnostics(
             and q95_real is not None
             and q50_real is not None
         ):
-            riae_low = compute_matrix_riae(q05_real, true_psd_real, freqs)
-            riae_med = compute_matrix_riae(q50_real, true_psd_real, freqs)
-            riae_high = compute_matrix_riae(q95_real, true_psd_real, freqs)
+            q05_real_arr = np.asarray(q05_real)[freq_idx, ...]
+            q50_real_arr = np.asarray(q50_real)[freq_idx, ...]
+            q95_real_arr = np.asarray(q95_real)[freq_idx, ...]
+            riae_low = compute_matrix_riae(q05_real_arr, true_psd_real, freqs)
+            riae_med = compute_matrix_riae(q50_real_arr, true_psd_real, freqs)
+            riae_high = compute_matrix_riae(q95_real_arr, true_psd_real, freqs)
             diagnostics["riae_matrix_errorbars"] = [
                 float(riae_low),
                 float(riae_low),
@@ -328,13 +346,18 @@ def compute_multivar_riae_diagnostics(
             )
 
             q50_real_array = (
-                np.asarray(q50_real) if q50_real is not None else vi_psd
+                np.asarray(q50_real)[freq_idx, ...]
+                if q50_real is not None
+                else vi_psd
             )
+            q05_im = q05_im[freq_idx, ...]
+            q50_im = q50_im[freq_idx, ...]
+            q95_im = q95_im[freq_idx, ...]
             percentiles_stack = np.stack(
                 [
-                    np.asarray(q05_real) + 1j * q05_im,
+                    np.asarray(q05_real)[freq_idx, ...] + 1j * q05_im,
                     q50_real_array + 1j * q50_im,
-                    np.asarray(q95_real) + 1j * q95_im,
+                    np.asarray(q95_real)[freq_idx, ...] + 1j * q95_im,
                 ],
                 axis=0,
             )

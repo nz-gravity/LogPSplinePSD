@@ -60,12 +60,16 @@ class MultivarFFT:
     # Coarse-grain multiplicity Nh. For equal-sized bins this is constant
     # across the retained frequency grid. Defaults to 1 (no coarse graining).
     Nh: int = 1
-    # Equivalent Noise Bandwidth of the analysis window, in units of frequency
-    # bins.  For a rectangular window ENBW=1.0; for a Hann window ENBW≈1.5.
-    # Computed automatically by compute_wishart() as
-    #     enbw = Lb * Σ w(t)² / (Σ w(t))²
-    # and used to scale the Whittle log-likelihood by 1/enbw so that the
-    # posterior width is correctly calibrated regardless of window choice.
+    # Whittle likelihood calibration factor, computed automatically by
+    # compute_wishart() as
+    #     c = Lb * Σ w(t)⁴ / (Σ w(t)²)²
+    # This equals the sum of squared periodogram autocorrelations and is the
+    # correct factor by which the Whittle likelihood overstates Fisher
+    # information when a tapered window is used.  Dividing the log-likelihood
+    # by c keeps the MLE unchanged while widening the posterior to restore
+    # calibration.  Rectangular window → c=1.0 (no-op); Hann → c≈1.95.
+    # Named 'enbw' for API compatibility (the old ENBW = Lb*Σw²/(Σw)² ≈ 1.5
+    # for Hann was the bandwidth formula and under-corrected by ~11pp).
     enbw: float = 1.0
 
     def __post_init__(self) -> None:

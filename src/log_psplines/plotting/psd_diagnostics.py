@@ -13,6 +13,8 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .base import interior_frequency_slice
+
 
 def _complex_to_real(mat: np.ndarray) -> np.ndarray:
     """Mirror of diagnostics._utils._complex_to_real (avoids circular import).
@@ -105,8 +107,14 @@ def plot_riae_vs_freq(
     freq_idata, q05, q50, q95 = result
     if freq is None:
         freq = freq_idata
+    freq_idx = interior_frequency_slice(len(freq))
+    freq = np.asarray(freq)[freq_idx]
+    q05 = q05[freq_idx, ...]
+    q50 = q50[freq_idx, ...]
+    q95 = q95[freq_idx, ...]
 
     true_arr = np.asarray(true_psd, dtype=np.complex128)
+    true_arr = true_arr[freq_idx, ...]
     N, p, _ = true_arr.shape
 
     # Convert everything to the real representation used by coverage
@@ -188,8 +196,14 @@ def plot_coverage_vs_freq(
     freq_idata, q05, q50, q95 = result
     if freq is None:
         freq = freq_idata
+    freq_idx = interior_frequency_slice(len(freq))
+    freq = np.asarray(freq)[freq_idx]
+    q05 = q05[freq_idx, ...]
+    q50 = q50[freq_idx, ...]
+    q95 = q95[freq_idx, ...]
 
     true_arr = np.asarray(true_psd, dtype=np.complex128)
+    true_arr = true_arr[freq_idx, ...]
     N, p, _ = true_arr.shape
 
     def _c2r_stack(mat: np.ndarray) -> np.ndarray:

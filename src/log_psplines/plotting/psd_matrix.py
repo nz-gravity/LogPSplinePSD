@@ -8,7 +8,11 @@ import numpy as np
 from ..arviz_utils.from_arviz import get_spline_model
 from ..datatypes.multivar import EmpiricalPSD, _get_coherence
 from ..logger import logger
-from .base import extract_plotting_data, setup_plot_style
+from .base import (
+    extract_plotting_data,
+    interior_frequency_slice,
+    setup_plot_style,
+)
 
 # Setup default plot styling
 setup_plot_style()
@@ -411,6 +415,25 @@ def _scale_empirical_psd(
     )
 
 
+def _slice_ci_dict(ci_dict: dict, freq_idx: slice) -> dict:
+    sliced = {key: dict(val) for key, val in ci_dict.items()}
+    for key, panel_dict in ci_dict.items():
+        for ij, quantiles in panel_dict.items():
+            sliced[key][ij] = tuple(np.asarray(q)[freq_idx] for q in quantiles)
+    return sliced
+
+
+def _slice_empirical_psd(
+    empirical_psd: EmpiricalPSD, freq_idx: slice
+) -> EmpiricalPSD:
+    return EmpiricalPSD(
+        freq=np.asarray(empirical_psd.freq)[freq_idx],
+        psd=np.asarray(empirical_psd.psd)[freq_idx, ...],
+        coherence=np.asarray(empirical_psd.coherence)[freq_idx, ...],
+        channels=empirical_psd.channels,
+    )
+
+
 @dataclass(frozen=True)
 class PSDMatrixPlotSpec:
     """Specification object for `plot_psd_matrix` inputs/options."""
@@ -524,6 +547,17 @@ def _prepare_plot_inputs(
             )
             true_psd = None
 
+    freq = np.asarray(freq)
+    freq_idx = interior_frequency_slice(freq.size)
+    freq = freq[freq_idx]
+    ci_dict = _slice_ci_dict(ci_dict, freq_idx)
+    if vi_ci_dict is not None:
+        vi_ci_dict = _slice_ci_dict(vi_ci_dict, freq_idx)
+    if true_psd is not None:
+        true_psd = true_psd[freq_idx, ...]
+    if empirical_psd is not None:
+        empirical_psd = _slice_empirical_psd(empirical_psd, freq_idx)
+
     extra_empirical_psd = spec.extra_empirical_psd or []
     extra_empirical_labels = spec.extra_empirical_labels or []
     extra_empirical_styles = spec.extra_empirical_styles or []
@@ -559,9 +593,15 @@ def _prepare_plot_inputs(
                     scaled_extra.append(extra)
             extra_empirical_psd = scaled_extra
 
+    if extra_empirical_psd:
+        extra_empirical_psd = [
+            _slice_empirical_psd(extra, freq_idx)
+            for extra in extra_empirical_psd
+        ]
+
     return (
         ci_dict,
-        np.asarray(freq),
+        freq,
         empirical_psd,
         extra_empirical_psd,
         extra_empirical_labels,

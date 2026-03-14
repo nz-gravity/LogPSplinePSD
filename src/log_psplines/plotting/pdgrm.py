@@ -8,6 +8,7 @@ from .base import (
     COLORS,
     compute_confidence_intervals,
     extract_plotting_data,
+    interior_frequency_slice,
     setup_plot_style,
     validate_plotting_data,
 )
@@ -122,39 +123,42 @@ def _plt_backend(
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=figsize)
     fig = ax.get_figure()
+    freq_idx = interior_frequency_slice(len(plt_data.freqs))
+    freq = plt_data.freqs[freq_idx]
 
     if plt_data.pdgrm is not None and show_data:
         ax.loglog(
-            plt_data.freqs,
-            plt_data.pdgrm,
+            freq,
+            plt_data.pdgrm[freq_idx],
             color=data_color,
             label=data_label,
             zorder=-10,
         )
 
     if plt_data.model is not None:
+        model = plt_data.model[freq_idx]
         ax.loglog(
-            plt_data.freqs,
-            plt_data.model,
+            freq,
+            model,
             label=model_label,
             color=model_color,
         )
         if plt_data.ci is not None:
             ax.fill_between(
-                plt_data.freqs,
-                plt_data.ci[0],
-                plt_data.ci[-1],
+                freq,
+                plt_data.ci[0][freq_idx],
+                plt_data.ci[-1][freq_idx],
                 color=model_color,
                 alpha=0.25,
                 lw=0,
             )
 
         if show_knots:
-            idx = (spline_model.knots * len(plt_data.freqs)).astype(int)
-            idx = jnp.clip(idx, 0, len(plt_data.freqs) - 1)
+            idx = (spline_model.knots * len(freq)).astype(int)
+            idx = jnp.clip(idx, 0, len(freq) - 1)
             ax.loglog(
-                plt_data.freqs[idx],
-                plt_data.model[idx],
+                freq[idx],
+                model[idx],
                 "o",
                 label="Knots",
                 color=knot_color,
@@ -163,8 +167,8 @@ def _plt_backend(
 
     if show_parametric:
         ax.loglog(
-            plt_data.freqs,
-            spline_model.parametric_model,
+            freq,
+            spline_model.parametric_model[freq_idx],
             label="Parametric",
             color=model_color,
             ls="--",
@@ -173,15 +177,15 @@ def _plt_backend(
     # Plot true PSD if available
     if true_psd is not None:
         ax.loglog(
-            plt_data.freqs,
-            true_psd,
+            freq,
+            true_psd[freq_idx],
             label="True PSD",
             color="k",
             ls="--",
             linewidth=2,
         )
 
-    ax.set_xlim(plt_data.freqs.min(), plt_data.freqs.max())
+    ax.set_xlim(freq.min(), freq.max())
     fig.legend(bbox_to_anchor=(1.05, 1.0), loc="upper left", frameon=False)
     ax.set_xlabel("Frequency [Hz]")
     ax.set_ylabel("PSD [1/Hz]")
@@ -208,6 +212,8 @@ def _plotly_backend(
 
     fig = go.Figure()
     figsize = (10, 7.5) if figsize == (4, 3) else figsize
+    freq_idx = interior_frequency_slice(len(plt_data.freqs))
+    freq = plt_data.freqs[freq_idx]
 
     # format colors to ploty-styled hex
     data_color = mcolors.to_hex(data_color)[0:7]
@@ -217,8 +223,8 @@ def _plotly_backend(
     if plt_data.pdgrm is not None and show_data:
         fig.add_trace(
             go.Scatter(
-                x=plt_data.freqs,
-                y=plt_data.pdgrm,
+                x=freq,
+                y=plt_data.pdgrm[freq_idx],
                 mode="lines",
                 name=data_label,
                 line=dict(color=data_color),
@@ -226,10 +232,11 @@ def _plotly_backend(
         )
 
     if plt_data.model is not None:
+        model = plt_data.model[freq_idx]
         fig.add_trace(
             go.Scatter(
-                x=plt_data.freqs,
-                y=plt_data.model,
+                x=freq,
+                y=model,
                 mode="lines",
                 name=model_label,
                 line=dict(color=model_color),
@@ -238,8 +245,9 @@ def _plotly_backend(
         if plt_data.ci is not None:
             fig.add_trace(
                 go.Scatter(
-                    x=list(plt_data.freqs) + list(plt_data.freqs[::-1]),
-                    y=list(plt_data.ci[0]) + list(plt_data.ci[-1][::-1]),
+                    x=list(freq) + list(freq[::-1]),
+                    y=list(plt_data.ci[0][freq_idx])
+                    + list(plt_data.ci[-1][freq_idx][::-1]),
                     fill="toself",
                     fillcolor=model_color,  # semi-transparent
                     opacity=0.25,
@@ -250,12 +258,12 @@ def _plotly_backend(
             )
 
         if show_knots:
-            idx = (spline_model.knots * len(plt_data.freqs)).astype(int)
-            idx = jnp.clip(idx, 0, len(plt_data.freqs) - 1)
+            idx = (spline_model.knots * len(freq)).astype(int)
+            idx = jnp.clip(idx, 0, len(freq) - 1)
             fig.add_trace(
                 go.Scatter(
-                    x=plt_data.freqs[idx],
-                    y=plt_data.model[idx],
+                    x=freq[idx],
+                    y=model[idx],
                     mode="markers",
                     marker=dict(color=knot_color, size=6, symbol="circle"),
                     name="Knots",
@@ -265,8 +273,8 @@ def _plotly_backend(
     if show_parametric:
         fig.add_trace(
             go.Scatter(
-                x=plt_data.freqs,
-                y=spline_model.parametric_model,
+                x=freq,
+                y=spline_model.parametric_model[freq_idx],
                 mode="lines",
                 line=dict(color=model_color, dash="dash"),
                 name="Parametric",
@@ -277,8 +285,8 @@ def _plotly_backend(
     if true_psd is not None:
         fig.add_trace(
             go.Scatter(
-                x=plt_data.freqs,
-                y=true_psd,
+                x=freq,
+                y=true_psd[freq_idx],
                 mode="lines",
                 name="True PSD",
                 line=dict(color="black", dash="dash", width=3),

@@ -10,6 +10,8 @@
 module --force purge
 module load gcc/13.3.0 python/3.12.3
 
+export XLA_FLAGS="--xla_force_host_platform_device_count=4"
+
 PYTHON_BIN=/fred/oz303/avajpeyi/codes/LogPSplinePSD/.venv/bin/python
 
 SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID:-0}   # fallback for local testing

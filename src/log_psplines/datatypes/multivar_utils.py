@@ -275,9 +275,73 @@ def _get_coherence(
     return coh
 
 
+def psd_to_cholesky_components(
+    matrix: np.ndarray,
+    *,
+    cholesky_jitter: float = 1e-12,
+    max_cholesky_jitter: float = 1e-4,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Map PSD matrices to model-native Cholesky components.
+
+    Decomposes each frequency slice via Cholesky: S = L L^H, then extracts
+    the log-diagonal (LogDelta) and normalised lower-triangle (Theta).
+
+    Args:
+        matrix: (N, p, p) complex Hermitian PSD matrices.
+        cholesky_jitter: Initial diagonal jitter used if Cholesky fails.
+        max_cholesky_jitter: Maximum diagonal jitter before failure.
+
+    Returns:
+        log_delta_sq: (N, p), where log_delta_sq[:, j] = log(delta_j^2).
+        theta: (N, p, p) complex with lower-triangular model terms
+            theta[:, j, l] for j > l and zeros elsewhere.
+    """
+    matrix = np.asarray(matrix, dtype=np.complex128)
+    if matrix.ndim != 3 or matrix.shape[-1] != matrix.shape[-2]:
+        raise ValueError("matrix must have shape (N, p, p).")
+    if cholesky_jitter < 0.0 or max_cholesky_jitter < 0.0:
+        raise ValueError(
+            "cholesky_jitter and max_cholesky_jitter must be non-negative."
+        )
+    if max_cholesky_jitter < cholesky_jitter:
+        raise ValueError("max_cholesky_jitter must be >= cholesky_jitter.")
+
+    p = int(matrix.shape[-1])
+    herm = 0.5 * (matrix + np.swapaxes(np.conj(matrix), -1, -2))
+    eye = np.eye(p, dtype=np.complex128)[None, :, :]
+
+    jitter = float(cholesky_jitter)
+    last_error: Exception | None = None
+    while True:
+        try:
+            L = np.linalg.cholesky(herm + jitter * eye)
+            break
+        except np.linalg.LinAlgError as err:
+            last_error = err
+            if jitter >= float(max_cholesky_jitter):
+                raise np.linalg.LinAlgError(
+                    "Cholesky decomposition failed up to "
+                    f"jitter={max_cholesky_jitter:.3e}."
+                ) from last_error
+            jitter = max(10.0 * jitter, 1e-16)
+
+    diag_L = np.maximum(
+        np.real(L[..., np.arange(p), np.arange(p)]), np.finfo(float).tiny
+    )
+    log_delta_sq = 2.0 * np.log(diag_L)
+
+    T_inv = L / diag_L[:, np.newaxis, :]
+    T = np.linalg.inv(T_inv)
+    theta = np.zeros_like(T)
+    tril = np.tril_indices(p, k=-1)
+    theta[:, tril[0], tril[1]] = -T[:, tril[0], tril[1]]
+    return log_delta_sq, theta
+
+
 __all__ = [
     "interp_matrix",
     "_interp_complex_matrix",
+    "psd_to_cholesky_components",
     "sum_wishart_outer_products",
     "u_re_im_to_U",
     "U_to_Y",

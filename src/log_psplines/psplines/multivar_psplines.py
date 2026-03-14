@@ -8,7 +8,7 @@ import numpy as np
 from ..datatypes import MultivarFFT, Periodogram
 from ..logger import logger
 from .initialisation import init_basis_and_penalty, init_weights
-from .knots_locator import init_knots
+from .knots_locator import init_knots, multivar_psd_knot_scores
 from .psplines import LogPSplines
 
 _MULTIVAR_ALLOWED_KNOT_METHODS = ("uniform", "log", "density")
@@ -227,14 +227,13 @@ class MultivariateLogPSplines:
         Y_np = np.einsum("fkc,fkd->fcd", u_complex_np, np.conj(u_complex_np))
         Nb = max(int(fft_data.Nb), 1)
 
+        diagonal_scores, offdiag_score = multivar_psd_knot_scores(Y_np, Nb, p)
+
         # Create diagonal models (one per channel), each with its own
         # knot placement and basis construction.
         diagonal_models = []
         for i in range(p):
-            score_diag = np.sum(
-                np.square(u_re_np[:, i, :]) + np.square(u_im_np[:, i, :]),
-                axis=1,
-            )
+            score_diag = diagonal_scores[i]
             knots_diag, basis_diag, penalty_diag = (
                 _build_component_knots_basis_penalty(
                     freq=freq,
@@ -283,17 +282,12 @@ class MultivariateLogPSplines:
             # Initialize with small values based on empirical estimates
             small_init = np.log(np.maximum(empirical_csd, 1e-8))
 
-            # Build a dedicated off-diagonal basis from cross-spectral energy.
-            theta_scores = []
-            for i in range(1, p):
-                for j in range(i):
-                    theta_scores.append(np.abs(Y_np[:, i, j]))
-            score_theta = np.mean(np.vstack(theta_scores), axis=0)
+            # Build a dedicated off-diagonal basis from Cholesky theta components.
             knots_theta, basis_theta, penalty_theta = (
                 _build_component_knots_basis_penalty(
                     freq=freq,
                     n_knots=n_knots,
-                    score=score_theta,
+                    score=offdiag_score,
                     degree=degree,
                     n_freq=N,
                     diff_matrix_order=diffMatrixOrder,

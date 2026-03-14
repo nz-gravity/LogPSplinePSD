@@ -43,11 +43,13 @@ class DiagnosticsConfig:
     tree_depth_hit_warn_frac: float = 0.1
     save_acceptance: bool = False
     # Rank/pair plot guards for very high-dimensional posteriors.
-    save_rank_plots: bool = False
+    save_rank_plots: bool = True
     rank_max_vars: int = 6
     rank_max_dims_per_var: int = 6
     save_pair_plots: bool = False
     pair_max_vars: int = 4
+    trace_max_plots: int = 15
+    trace_plot_seed: int = 0
     save_ess_rhat_profiles: bool = True
     save_ess_rhat_profiles_individual: bool = False
     save_nuts_block_diagnostics_individual: bool = False
@@ -129,6 +131,113 @@ def _select_pair_plot_vars(
 
     scalar_vars.sort(key=lambda row: row[0])
     return [name for _, name in scalar_vars[: config.pair_max_vars]]
+
+
+def _unravel_flat_index(
+    flat_idx: int, shape: tuple[int, ...]
+) -> tuple[int, ...]:
+    if not shape:
+        return ()
+    return tuple(int(v) for v in np.unravel_index(flat_idx, shape))
+
+
+def _build_trace_plot_idata(idata_plot, config: DiagnosticsConfig):
+    """Build a reduced trace dataset with at most `trace_max_plots` scalar series."""
+    if idata_plot is None or not hasattr(idata_plot, "posterior"):
+        return idata_plot, 0, 0
+
+    posterior = idata_plot.posterior
+    if posterior is None:
+        return idata_plot, 0, 0
+
+    chain_size = int(posterior.sizes.get("chain", 0) or 0)
+    draw_size = int(posterior.sizes.get("draw", 0) or 0)
+    if chain_size <= 0 or draw_size <= 0:
+        return idata_plot, 0, 0
+
+    candidates: list[tuple[str, int, tuple[int, ...]]] = []
+    for var_name in posterior.data_vars:
+        var = posterior[var_name]
+        if "chain" not in var.dims or "draw" not in var.dims:
+            continue
+        trailing_dims = [d for d in var.dims if d not in ("chain", "draw")]
+        trailing_shape = tuple(int(var.sizes[d]) for d in trailing_dims)
+        flat_dim = int(np.prod(trailing_shape)) if trailing_shape else 1
+        for flat_idx in range(flat_dim):
+            candidates.append((str(var_name), int(flat_idx), trailing_shape))
+
+    total = len(candidates)
+    if total == 0:
+        return idata_plot, 0, 0
+
+    max_plots = max(1, int(config.trace_max_plots))
+    if total > max_plots:
+        rng = np.random.default_rng(int(config.trace_plot_seed))
+        selected_idx = np.sort(
+            rng.choice(total, size=max_plots, replace=False)
+        )
+    else:
+        selected_idx = np.arange(total, dtype=int)
+
+    chain_coords = (
+        posterior.coords["chain"].values
+        if "chain" in posterior.coords
+        else np.arange(chain_size)
+    )
+    draw_coords = (
+        posterior.coords["draw"].values
+        if "draw" in posterior.coords
+        else np.arange(draw_size)
+    )
+
+    trace_vars: dict[str, xr.DataArray] = {}
+    for idx in selected_idx:
+        var_name, flat_idx, trailing_shape = candidates[int(idx)]
+        var = posterior[var_name].transpose(
+            "chain",
+            "draw",
+            *[
+                d
+                for d in posterior[var_name].dims
+                if d not in ("chain", "draw")
+            ],
+        )
+        values = np.asarray(var.values).reshape(chain_size, draw_size, -1)
+        if values.shape[-1] <= int(flat_idx):
+            continue
+        series = values[:, :, int(flat_idx)]
+        if trailing_shape:
+            coords_suffix = ",".join(
+                str(v)
+                for v in _unravel_flat_index(int(flat_idx), trailing_shape)
+            )
+            label = f"{var_name}[{coords_suffix}]"
+        else:
+            label = str(var_name)
+        trace_vars[label] = xr.DataArray(
+            series,
+            dims=("chain", "draw"),
+            coords={"chain": chain_coords, "draw": draw_coords},
+        )
+
+    if not trace_vars:
+        return idata_plot, total, 0
+
+    trace_ds = xr.Dataset(trace_vars)
+    trace_idata = xr.DataTree()
+    trace_idata["posterior"] = xr.DataTree(dataset=trace_ds)
+    if hasattr(idata_plot, "sample_stats"):
+        try:
+            sample_stats = idata_plot.sample_stats
+            sample_stats_ds = (
+                sample_stats.ds
+                if hasattr(sample_stats, "ds")
+                else sample_stats
+            )
+            trace_idata["sample_stats"] = xr.DataTree(dataset=sample_stats_ds)
+        except Exception:
+            pass
+    return trace_idata, total, len(trace_vars)
 
 
 def _build_arviz_plot_data(idata):
@@ -249,41 +358,43 @@ def _create_ess_rhat_profiles(
 
     @safe_plot(f"{diag_dir}/ess_rhat_profiles.png", config.dpi)
     def _plot_combined():
-        n_vars = len(profiles)
-        fig, axes = plt.subplots(
-            n_vars,
-            2,
-            figsize=(14, max(3.0 * n_vars, 3.5)),
-            squeeze=False,
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6), squeeze=False)
+        ess_ax = axes[0, 0]
+        rhat_ax = axes[0, 1]
+
+        for name, ess_vals, rhat_vals in profiles:
+            ess_ax.plot(ess_vals, linewidth=1.3, alpha=0.9, label=str(name))
+            rhat_ax.plot(rhat_vals, linewidth=1.3, alpha=0.9, label=str(name))
+
+        ess_ax.axhline(
+            config.ess_threshold,
+            color="red",
+            linestyle="--",
+            linewidth=1,
+            label=f"threshold={config.ess_threshold}",
         )
-        for row, (name, ess_vals, rhat_vals) in enumerate(profiles):
-            ess_ax = axes[row, 0]
-            rhat_ax = axes[row, 1]
+        ess_ax.set_ylabel("ESS (bulk)")
+        ess_ax.set_title("ESS Profiles")
+        ess_ax.set_xlabel("Basis index")
+        ess_ax.grid(True, alpha=0.3)
 
-            ess_ax.plot(ess_vals, color="C0", linewidth=1.3)
-            ess_ax.axhline(
-                config.ess_threshold,
-                color="red",
-                linestyle="--",
-                linewidth=1,
-            )
-            ess_ax.set_ylabel("ESS (bulk)")
-            ess_ax.set_title(f"{name}: ESS")
-            ess_ax.set_xlabel("Basis index")
-            ess_ax.grid(True, alpha=0.3)
+        rhat_ax.axhline(
+            config.rhat_threshold,
+            color="red",
+            linestyle="--",
+            linewidth=1,
+            label=f"threshold={config.rhat_threshold:.3f}",
+        )
+        rhat_ax.set_ylabel("R-hat")
+        rhat_ax.set_title("R-hat Profiles")
+        rhat_ax.set_xlabel("Basis index")
+        rhat_ax.grid(True, alpha=0.3)
 
-            rhat_ax.plot(rhat_vals, color="C1", linewidth=1.3)
-            rhat_ax.axhline(
-                config.rhat_threshold,
-                color="red",
-                linestyle="--",
-                linewidth=1,
-            )
-            rhat_ax.set_ylabel("R-hat")
-            rhat_ax.set_title(f"{name}: R-hat")
-            rhat_ax.set_xlabel("Basis index")
-            rhat_ax.grid(True, alpha=0.3)
-
+        legend_kwargs = {"fontsize": "small", "framealpha": 0.9}
+        if len(profiles) > 8:
+            legend_kwargs["ncol"] = 2
+        ess_ax.legend(loc="best", **legend_kwargs)
+        rhat_ax.legend(loc="best", **legend_kwargs)
         fig.tight_layout()
         return fig
 
@@ -638,10 +749,19 @@ def _create_diagnostic_plots(
 
     idata_plot, vector_summaries, weight_vars = _build_arviz_plot_data(idata)
 
+    trace_idata, trace_total, trace_selected = _build_trace_plot_idata(
+        idata_plot, config
+    )
+    if trace_total > trace_selected > 0:
+        logger.info(
+            f"Diagnostics trace plots: sampled {trace_selected}/{trace_total} parameters "
+            + f"(seed={config.trace_plot_seed})"
+        )
+
     # 1. ArviZ trace plots (lightweight subset)
     @safe_plot(f"{diag_dir}/trace_plots.png", config.dpi)
     def create_trace_plots():
-        if idata_plot is None:
+        if trace_idata is None or not hasattr(trace_idata, "posterior"):
             fig, ax = plt.subplots(1, 1, figsize=(7, 4))
             ax.text(
                 0.5,
@@ -657,20 +777,20 @@ def _create_diagnostic_plots(
 
         has_divergences = False
         divergences_arg: str | None = None
-        if hasattr(idata_plot, "sample_stats"):
-            sample_stats_vars = list(idata_plot.sample_stats.data_vars)
+        if hasattr(trace_idata, "sample_stats"):
+            sample_stats_vars = list(trace_idata.sample_stats.data_vars)
             has_divergences = "diverging" in sample_stats_vars
             divergences_arg = "diverging" if has_divergences else None
 
         # Calculate number of variables to scale figure size
-        num_vars = len(idata_plot.posterior.data_vars)
+        num_vars = len(trace_idata.posterior.data_vars)
         figsize_height = max(4, num_vars * 1.5)
         figsize = (14, figsize_height)
 
         # Create trace plot with improved layout
         # Use idata_plot which has the filtered posterior + sample_stats
         axes = az.plot_trace(
-            idata_plot,
+            trace_idata,
             combined=False,
             compact=False,
             figsize=figsize,
@@ -681,8 +801,8 @@ def _create_diagnostic_plots(
 
         # Add Rhat values to subplot titles
         try:
-            posterior = idata_plot.posterior
-            for var_name in idata_plot.posterior.data_vars:
+            posterior = trace_idata.posterior
+            for var_name in trace_idata.posterior.data_vars:
                 var_data = posterior[var_name]
                 rhat = az.rhat(var_data)
                 rhat_array = _to_flat_finite_array(rhat)

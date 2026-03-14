@@ -4,7 +4,7 @@
 #SBATCH --error=logs_large_study/large_%A_%a.err
 #SBATCH --array=0-9
 #SBATCH --time=1:00:00
-#SBATCH --mem=2.5G
+#SBATCH --mem=6000M
 #SBATCH --cpus-per-task=4
 module --force purge
 module load gcc/13.3.0 python/3.12.3

@@ -304,11 +304,37 @@ def save_eigenvalue_separation_plot(
 
     use_log_x = bool(freq.size) and np.all(freq > 0)
     show_cholesky = cholesky_matrix is not None
-    nrows = 3 if show_cholesky else 2
-    fig, axes = plt.subplots(
-        nrows, 1, figsize=(10, 8 if show_cholesky else 6), sharex=True
-    )
-    ax_ratio, ax_eig = axes[0], axes[1]
+
+    if show_cholesky:
+        matrix = np.asarray(cholesky_matrix, dtype=np.complex128)
+        if matrix.ndim != 3 or matrix.shape[0] != freq.size:
+            raise ValueError(
+                "cholesky_matrix must have shape (N, p, p) with N=len(freq)."
+            )
+        if matrix.shape[-1] != matrix.shape[-2]:
+            raise ValueError("cholesky_matrix must be square per frequency.")
+
+        log_delta_sq, theta = _raw_psd_to_model_components(
+            matrix,
+            cholesky_jitter=cholesky_jitter,
+            max_cholesky_jitter=max_cholesky_jitter,
+        )
+        p_model = int(log_delta_sq.shape[1])
+
+        fig = plt.figure(
+            figsize=(max(10.0, 3.2 * p_model), 4.0 + 1.8 * p_model),
+            constrained_layout=True,
+        )
+        grid = fig.add_gridspec(
+            nrows=p_model + 2,
+            ncols=p_model,
+            height_ratios=[1.2, 1.2] + [1.0] * p_model,
+        )
+        ax_ratio = fig.add_subplot(grid[0, :])
+        ax_eig = fig.add_subplot(grid[1, :], sharex=ax_ratio)
+    else:
+        fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+        ax_ratio, ax_eig = axes[0], axes[1]
 
     # Ratios
     for key, ratio in ratios.items():
@@ -344,54 +370,58 @@ def save_eigenvalue_separation_plot(
         ax_eig.legend(fontsize=8, ncol=min(3, p))
 
     if show_cholesky:
-        matrix = np.asarray(cholesky_matrix, dtype=np.complex128)
-        if matrix.ndim != 3 or matrix.shape[0] != freq.size:
-            raise ValueError(
-                "cholesky_matrix must have shape (N, p, p) with N=len(freq)."
-            )
-        if matrix.shape[-1] != matrix.shape[-2]:
-            raise ValueError("cholesky_matrix must be square per frequency.")
+        assert cholesky_matrix is not None
+        p = p_model
+        component_axes = []
+        n_pairs = p * (p - 1) // 2
 
-        log_delta_sq, theta = _raw_psd_to_model_components(
-            matrix,
-            cholesky_jitter=cholesky_jitter,
-            max_cholesky_jitter=max_cholesky_jitter,
-        )
-        p = int(log_delta_sq.shape[1])
+        for row in range(p):
+            row_axes = []
+            for col in range(p):
+                ax = fig.add_subplot(grid[row + 2, col], sharex=ax_ratio)
 
-        ax_chol = axes[2]
-        for j in range(p):
-            y = log_delta_sq[:, j]
-            label = f"LogDelta{j+1}{j+1}"
-            if use_log_x:
-                ax_chol.semilogx(freq, y, label=label)
-            else:
-                ax_chol.plot(freq, y, label=label)
-
-        for j in range(1, p):
-            for l in range(j):
-                comp = theta[:, j, l]
-                # Matrix-style legend convention:
-                # upper triangle uses Re(Theta_ij), lower uses Im(Theta_ij).
-                re_label = f"Re(Theta{l+1}{j+1})"
-                im_label = f"Im(Theta{j+1}{l+1})"
-                if use_log_x:
-                    ax_chol.semilogx(freq, np.real(comp), label=re_label)
-                    ax_chol.semilogx(
-                        freq, np.imag(comp), ls="--", label=im_label
-                    )
+                if row == col:
+                    y = log_delta_sq[:, row]
+                    label = f"LogDelta{row+1}{col+1}"
+                    color = f"C{row % 10}"
+                elif row < col:
+                    y = np.real(theta[:, col, row])
+                    label = f"Re(Theta{row+1}{col+1})"
+                    pair_idx = row * (2 * p - row - 1) // 2 + (col - row - 1)
+                    color = f"C{(pair_idx + p) % 10}"
                 else:
-                    ax_chol.plot(freq, np.real(comp), label=re_label)
-                    ax_chol.plot(freq, np.imag(comp), ls="--", label=im_label)
+                    y = np.imag(theta[:, row, col])
+                    label = f"Im(Theta{row+1}{col+1})"
+                    pair_idx = col * (2 * p - col - 1) // 2 + (row - col - 1)
+                    color = f"C{(pair_idx + p) % 10}"
 
-        ax_chol.set_xlabel("Frequency")
-        ax_chol.set_ylabel("Model components")
-        ax_chol.grid(True, which="both", alpha=0.2)
-        ax_chol.set_title("Raw periodogram Cholesky-derived components")
-        ncol = 2 if p <= 2 else 3
-        ax_chol.legend(fontsize=7, ncol=ncol)
+                if use_log_x:
+                    ax.semilogx(freq, y, color=color, lw=1.2)
+                else:
+                    ax.plot(freq, y, color=color, lw=1.2)
+                ax.set_title(label, fontsize=8)
+                ax.grid(True, which="both", alpha=0.2)
 
-    fig.tight_layout()
+                if row < p - 1:
+                    ax.tick_params(labelbottom=False)
+                if col > 0:
+                    ax.tick_params(labelleft=False)
+
+                row_axes.append(ax)
+            component_axes.append(row_axes)
+
+        if p > 0:
+            component_axes[p - 1][0].set_xlabel("Frequency")
+            if p > 1:
+                component_axes[p - 1][p - 1].set_xlabel("Frequency")
+        if p > 0:
+            component_axes[p // 2][0].set_ylabel("Model component value")
+        ax_eig.set_title(
+            f"Eigenvalue scale (component grid: {p}x{p}, {n_pairs} theta pairs)"
+        )
+    else:
+        fig.tight_layout()
+
     fig.savefig(out, dpi=int(dpi))
     plt.close(fig)
 

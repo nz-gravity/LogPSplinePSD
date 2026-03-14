@@ -524,19 +524,23 @@ def simulation_study(
     outdir: str = OUT,
     K: int = 10,
     wishart_window: str | None = "hann",
+    coarse_nh_override: int | None = None,
 ) -> None:
     cfg = MODE_CONFIG[mode]
     N = int(cfg["N"])
     Nb = int(cfg["Nb"])
-    coarse_Nh = cfg["coarse_Nh"]
+    coarse_Nh = cfg["coarse_Nh"] if coarse_nh_override is None else (
+        None if coarse_nh_override == 0 else int(coarse_nh_override)
+    )
 
     window_label = wishart_window if wishart_window is not None else "rect"
+    nh_label = "noNh" if coarse_Nh is None else f"Nh{coarse_Nh}"
     print(
         f">>>> Running simulation with mode={mode}, N={N}, Nb={Nb}, K={K}, "
-        f"window={window_label}, seed={seed} <<<<"
+        f"window={window_label}, coarse_Nh={coarse_Nh}, seed={seed} <<<<"
     )
     _log_var_coefficients()
-    outdir = f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}_{window_label}"
+    outdir = f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}_{window_label}_{nh_label}"
     os.makedirs(outdir, exist_ok=True)
 
     spectral_radius = _companion_spectral_radius(VAR_COEFFS)
@@ -810,6 +814,17 @@ if __name__ == "__main__":
             "Use 'hann' (default) or 'rect' / 'None' for rectangular (no taper)."
         ),
     )
+    parser.add_argument(
+        "--coarse-nh",
+        type=int,
+        default=None,
+        dest="coarse_nh",
+        help=(
+            "Override the mode's coarse-graining factor Nh. "
+            "0 = no coarse-graining; >0 = average Nh adjacent bins. "
+            "Default: use the mode's built-in setting."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -831,4 +846,5 @@ if __name__ == "__main__":
             mode=args.mode,
             K=args.K,
             wishart_window=wishart_window,
+            coarse_nh_override=args.coarse_nh,
         )

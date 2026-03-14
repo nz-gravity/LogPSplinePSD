@@ -51,8 +51,9 @@ def safe_plot(filename: str, dpi: int = 150):
             try:
                 # logger.debug(f"--- plotting: {os.path.basename(filename)}")
                 result = plot_func(*args, **kwargs)
-                plt.savefig(filename, dpi=dpi, bbox_inches="tight")
-                plt.close()
+                fig = result if hasattr(result, "savefig") else plt.gcf()
+                fig.savefig(filename, dpi=dpi, bbox_inches="tight")
+                plt.close(fig)
                 return True
             except Exception as e:
                 logger.warning(

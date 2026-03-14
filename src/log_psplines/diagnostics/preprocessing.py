@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ..datatypes.multivar_utils import psd_to_cholesky_components
+
 
 @dataclass(frozen=True)
 class EigenvalueSeparationDiagnostics:
@@ -213,58 +215,17 @@ def _raw_psd_to_model_components(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Map raw spectral matrices to model-native components.
 
-    Args:
-        matrix: (N, p, p) complex spectral matrices.
-        cholesky_jitter: Initial diagonal jitter used if Cholesky fails.
-        max_cholesky_jitter: Maximum diagonal jitter before failure.
+    Thin wrapper around :func:`~log_psplines.datatypes.multivar_utils.psd_to_cholesky_components`.
 
     Returns:
         log_delta_sq: (N, p), where log_delta_sq[:, j] = log(delta_j^2).
-        theta: (N, p, p) complex with lower-triangular model terms
-            theta[:, j, l] for j > l and zeros elsewhere.
+        theta: (N, p, p) complex lower-triangular model terms.
     """
-
-    matrix = np.asarray(matrix, dtype=np.complex128)
-    if matrix.ndim != 3 or matrix.shape[-1] != matrix.shape[-2]:
-        raise ValueError("matrix must have shape (N, p, p).")
-
-    if cholesky_jitter < 0.0 or max_cholesky_jitter < 0.0:
-        raise ValueError(
-            "cholesky_jitter and max_cholesky_jitter must be non-negative."
-        )
-    if max_cholesky_jitter < cholesky_jitter:
-        raise ValueError("max_cholesky_jitter must be >= cholesky_jitter.")
-
-    p = int(matrix.shape[-1])
-    herm = 0.5 * (matrix + np.swapaxes(np.conj(matrix), -1, -2))
-    eye = np.eye(p, dtype=np.complex128)[None, :, :]
-
-    jitter = float(cholesky_jitter)
-    last_error: Exception | None = None
-    while True:
-        try:
-            L = np.linalg.cholesky(herm + jitter * eye)
-            break
-        except np.linalg.LinAlgError as err:
-            last_error = err
-            if jitter >= float(max_cholesky_jitter):
-                raise np.linalg.LinAlgError(
-                    "Cholesky decomposition failed for preprocessing plot "
-                    f"up to jitter={max_cholesky_jitter:.3e}."
-                ) from last_error
-            jitter = max(10.0 * jitter, 1e-16)
-
-    diag_L = np.maximum(
-        np.real(L[..., np.arange(p), np.arange(p)]), np.finfo(float).tiny
+    return psd_to_cholesky_components(
+        matrix,
+        cholesky_jitter=cholesky_jitter,
+        max_cholesky_jitter=max_cholesky_jitter,
     )
-    log_delta_sq = 2.0 * np.log(diag_L)
-
-    T_inv = L / diag_L[:, np.newaxis, :]
-    T = np.linalg.inv(T_inv)
-    theta = np.zeros_like(T)
-    tril = np.tril_indices(p, k=-1)
-    theta[:, tril[0], tril[1]] = -T[:, tril[0], tril[1]]
-    return log_delta_sq, theta
 
 
 def save_eigenvalue_separation_plot(

@@ -20,7 +20,7 @@ from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
 logger.info(f"JAX devices: {jax.devices()}")
 
-set_level("DEBUG")
+set_level("INFO")
 
 HERE = Path(__file__).resolve().parent
 RESULTS_ROOT = HERE / "results"

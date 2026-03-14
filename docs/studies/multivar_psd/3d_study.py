@@ -21,7 +21,7 @@ from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 
 jax.config.update("jax_enable_x64", True)
 
-set_level("DEBUG")
+set_level("INFO")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join("out_var3")
@@ -529,8 +529,10 @@ def simulation_study(
     cfg = MODE_CONFIG[mode]
     N = int(cfg["N"])
     Nb = int(cfg["Nb"])
-    coarse_Nh = cfg["coarse_Nh"] if coarse_nh_override is None else (
-        None if coarse_nh_override == 0 else int(coarse_nh_override)
+    coarse_Nh = (
+        cfg["coarse_Nh"]
+        if coarse_nh_override is None
+        else (None if coarse_nh_override == 0 else int(coarse_nh_override))
     )
 
     window_label = wishart_window if wishart_window is not None else "rect"

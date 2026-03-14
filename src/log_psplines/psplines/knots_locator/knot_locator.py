@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 
 from ...datatypes import Periodogram
+from ...datatypes.multivar_utils import psd_to_cholesky_components
 from .lvk_knot_allocator import LvkKnotAllocator
 
 _KNOT_TOL = 1e-12
@@ -37,7 +38,9 @@ def _enforce_exact_knot_count(
     if knots.size == 0:
         return np.linspace(0.0, 1.0, target_count)
     if knots[0] != 0.0 or knots[-1] != 1.0:
-        raise ValueError("knots must include endpoints before count enforcement")
+        raise ValueError(
+            "knots must include endpoints before count enforcement"
+        )
 
     while knots.size > target_count:
         # Drop the least informative interior knot in the tightest local region.
@@ -252,3 +255,40 @@ def _quantile_based_knots(
     knots = np.interp(quantiles, cdf_values, freqs)
 
     return knots
+
+
+def multivar_psd_knot_scores(
+    Y_np: np.ndarray,
+    Nb: int,
+    p: int,
+) -> tuple[list[np.ndarray], np.ndarray]:
+    """Compute per-component knot placement scores from an empirical PSD matrix.
+
+    Cholesky-decomposes the empirical PSD (Y_np / Nb) to extract the
+    model-native components (LogDelta, ReTheta, ImTheta) and returns their
+    absolute values as scores for quantile-based knot placement.
+
+    Args:
+        Y_np: (N, p, p) complex Wishart matrix (sum of outer products).
+        Nb: Number of blocks used to form Y_np.
+        p: Number of channels.
+
+    Returns:
+        diagonal_scores: List of p arrays of shape (N,), one per channel.
+            Score for channel i is |log(delta_i^2)| from the Cholesky diagonal.
+        offdiag_score: (N,) array — mean of |theta_ij| over all lower-triangle
+            pairs, used as a shared score for Re/Im off-diagonal components.
+    """
+    log_delta_sq, theta = psd_to_cholesky_components(Y_np / max(int(Nb), 1))
+
+    diagonal_scores = [np.abs(log_delta_sq[:, i]) for i in range(p)]
+
+    if p > 1:
+        pair_scores = [
+            np.abs(theta[:, i, j]) for i in range(1, p) for j in range(i)
+        ]
+        offdiag_score = np.mean(np.vstack(pair_scores), axis=0)
+    else:
+        offdiag_score = np.zeros(Y_np.shape[0], dtype=np.float64)
+
+    return diagonal_scores, offdiag_score

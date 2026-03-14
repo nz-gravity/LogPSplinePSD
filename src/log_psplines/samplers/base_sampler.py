@@ -521,7 +521,13 @@ class BaseSampler(ABC):
             return "sequential"
 
         n_devs = len(jax.devices())
-        if n_devs >= self.config.num_chains:
+        # Only use parallel when we have *at least* as many devices as chains AND
+        # the device count is a small multiple of num_chains.  On some HPC nodes
+        # JAX may see many virtual CPU "devices" (e.g. via
+        # XLA_FLAGS=--xla_force_host_platform_device_count=N); blindly using
+        # chain_method='parallel' in that case can cause NumPyro to launch more
+        # chains than requested, leading to shape mismatches in ArviZ.
+        if n_devs >= self.config.num_chains and n_devs <= 2 * self.config.num_chains:
             logger.info(
                 f"Running {self.config.num_chains} chains in parallel across {n_devs} device(s)."
             )

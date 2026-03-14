@@ -109,6 +109,28 @@ def _add_chain_dim(
         ):
             # Treat chain-level vectors as one draw per chain.
             result[k] = v_array[:, None]
+        elif (
+            v_array.ndim >= 2
+            and num_chains > 1
+            and v_array.shape[0] > num_chains
+            and v_array.shape[0] % num_chains == 0
+        ):
+            # shape[0] is a multiple of num_chains: likely (num_chains * n_draws, ...)
+            # or NumPyro ran more chains than requested (e.g. JAX virtual devices).
+            # Reshape so that the first axis becomes exactly num_chains.
+            logger.warning(
+                f"_add_chain_dim: '{k}' has shape[0]={v_array.shape[0]} but "
+                f"num_chains={num_chains}. Merging extra chains into draws: "
+                f"{v_array.shape} -> "
+                f"({num_chains}, {v_array.shape[0]//num_chains * v_array.shape[1]}"
+                + (f", {v_array.shape[2:]}" if v_array.ndim > 2 else "") + f"). "
+                f"This usually means JAX ran {v_array.shape[0]} chains instead of "
+                f"{num_chains} (check XLA_FLAGS / chain_method config)."
+            )
+            extra = v_array.shape[0] // num_chains
+            result[k] = v_array.reshape(
+                (num_chains, extra * v_array.shape[1]) + v_array.shape[2:]
+            )
         else:
             result[k] = v_array[None, ...]
     return result

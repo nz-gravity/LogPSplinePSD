@@ -302,19 +302,13 @@ def _extract_run_metrics(
 def _save_metrics_summary(
     outdir: str, metrics: dict[str, float | int | str]
 ) -> None:
-    """Persist compact metrics as JSON and single-row CSV."""
+    """Persist compact metrics as JSON."""
     metrics_json = os.path.join(outdir, "metrics_summary.json")
-    metrics_csv = os.path.join(outdir, "metrics_summary.csv")
 
     with open(metrics_json, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2, sort_keys=True)
 
-    with open(metrics_csv, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(metrics.keys()))
-        writer.writeheader()
-        writer.writerow(metrics)
-
-    logger.info(f"Saved compact metrics to {metrics_json} and {metrics_csv}")
+    logger.info(f"Saved compact metrics to {metrics_json}")
 
 
 def _extract_lnz_summary(idata) -> tuple[float, float]:

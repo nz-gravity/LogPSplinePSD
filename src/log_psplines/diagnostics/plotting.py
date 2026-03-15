@@ -11,7 +11,11 @@ import numpy as np
 import xarray as xr
 
 from ..logger import logger
-from ..plotting.base import safe_plot, setup_plot_style
+from ..plotting.base import (
+    composite_images_vertical,
+    safe_plot,
+    setup_plot_style,
+)
 from ._utils import extract_percentile
 from .derived_weights import (
     HDI_PROB,
@@ -788,16 +792,22 @@ def _create_diagnostic_plots(
         figsize = (14, figsize_height)
 
         # Create trace plot with improved layout
-        # Use idata_plot which has the filtered posterior + sample_stats
-        axes = az.plot_trace(
+        # Use trace_idata which has the filtered posterior + sample_stats
+        # ArviZ >= 1.0 removed combined/compact/figsize/divergences kwargs.
+        # figure_kwargs passes figsize to the backend; visuals enables divergence markers.
+        _trace_visuals = {"divergence": True} if has_divergences else None
+        pc = az.plot_trace(
             trace_idata,
-            combined=False,
-            compact=False,
-            figsize=figsize,
-            divergences=divergences_arg,
+            figure_kwargs={"figsize": figsize},
+            **({"visuals": _trace_visuals} if _trace_visuals else {}),
         )
-
-        fig = axes.ravel()[0].figure if hasattr(axes, "ravel") else plt.gcf()
+        # ArviZ 1.0 returns a PlotCollection; earlier versions returned an axes array.
+        if hasattr(pc, "viz") and "figure" in pc.viz:
+            fig = pc.viz["figure"].item()
+        elif hasattr(pc, "ravel"):
+            fig = pc.ravel()[0].figure
+        else:
+            fig = plt.gcf()
 
         # Add Rhat values to subplot titles
         try:
@@ -907,7 +917,23 @@ def _create_diagnostic_plots(
         f"Diagnostics plots: sampler-specific done in {time.perf_counter() - t:.2f}s"
     )
 
-    # 8. Divergences diagnostics now included in summary dashboard.
+    # 8. Composite sampling_diagnostics.png from individual sampling plots
+    t = time.perf_counter()
+    _sampling_diag_sources = [
+        f"{diag_dir}/summary_dashboard.png",
+        f"{diag_dir}/ess_rhat_profiles.png",
+        f"{diag_dir}/nuts_diagnostics.png",
+        f"{diag_dir}/nuts_block_diagnostics.png",
+    ]
+    composite_images_vertical(
+        _sampling_diag_sources,
+        outfile=f"{diag_dir}/sampling_diagnostics.png",
+        dpi=config.dpi,
+        title="Sampling Diagnostics",
+    )
+    logger.debug(
+        f"Diagnostics plot: sampling_diagnostics.png done in {time.perf_counter() - t:.2f}s"
+    )
 
 
 def _create_rank_diagnostics(idata, diag_dir, config):
@@ -3245,13 +3271,13 @@ def generate_vi_diagnostics_summary(
     if outdir:
         try:
             os.makedirs(outdir, exist_ok=True)
-            with open(
-                os.path.join(outdir, "vi_diagnostics_summary.txt"), "w"
-            ) as f:
-                f.write(summary_text)
+            # Append VI section to the shared diagnostics_summary.txt
+            diag_summary_path = os.path.join(outdir, "diagnostics_summary.txt")
+            with open(diag_summary_path, "a") as f:
+                f.write("\n\n" + summary_text)
         except Exception:
             logger.debug(
-                "Could not write VI diagnostics summary to disk.",
+                "Could not append VI diagnostics summary to diagnostics_summary.txt.",
                 exc_info=True,
             )
 

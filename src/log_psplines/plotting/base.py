@@ -67,6 +67,60 @@ def safe_plot(filename: str, dpi: int = 150):
     return decorator
 
 
+def composite_images_vertical(
+    paths: list,
+    outfile: str,
+    dpi: int = 150,
+    title: str = "",
+    remove_sources: bool = False,
+) -> bool:
+    """Load saved PNG files and composite them vertically into one figure.
+
+    Parameters
+    ----------
+    paths:
+        List of PNG file paths to load and stack. Missing files are skipped.
+    outfile:
+        Destination path for the composite PNG.
+    dpi:
+        Output resolution.
+    title:
+        Optional suptitle.
+    remove_sources:
+        If True, delete the source files after a successful composite.
+    """
+    images = [plt.imread(p) for p in paths if os.path.isfile(p)]
+    if not images:
+        return False
+    n = len(images)
+    heights = [img.shape[0] for img in images]
+    widths = [img.shape[1] for img in images]
+    max_w = max(widths)
+    total_h = sum(heights)
+    fig_w = 14.0
+    fig_h = max(fig_w * total_h / max(max_w, 1), 4.0 * n)
+    fig, axes = plt.subplots(n, 1, figsize=(fig_w, fig_h))
+    if n == 1:
+        axes = [axes]
+    for ax, img in zip(axes, images):
+        ax.imshow(img)
+        ax.axis("off")
+    if title:
+        fig.suptitle(title, fontsize=14)
+    fig.tight_layout()
+    os.makedirs(os.path.dirname(os.path.abspath(outfile)), exist_ok=True)
+    fig.savefig(outfile, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    if remove_sources:
+        for p in paths:
+            if os.path.isfile(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+    return True
+
+
 def interior_frequency_slice(n_freq: int) -> slice:
     """Return a slice that drops first/last frequency bins when possible."""
     return slice(1, -1) if n_freq > 3 else slice(None)

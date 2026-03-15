@@ -85,6 +85,7 @@ def _run_preprocessing_checks(
 
         out_path = (
             Path(config.diagnostics.outdir)
+            / "diagnostics"
             / "preprocessing_eigenvalue_ratios.png"
         )
         nb = int(processed_data.Nb)

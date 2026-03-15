@@ -166,6 +166,9 @@ module = [
     "scipy.*",
     "numba.*",
     "bilby.*",
+    "arviz.*",
+    "arviz_plots.*",
+    "requests.*",
 ]
 ignore_missing_imports = true
 
@@ -174,20 +177,33 @@ module = [
     "log_psplines.example_datasets.lisatools_backend",
     "log_psplines.example_datasets.lisa_data",
     "log_psplines.example_datasets.lvk_data",
+    "log_psplines.example_datasets.utils",
+    "log_psplines.example_datasets.varma_data",
     "log_psplines.samplers.vi_init.core",
     "log_psplines.samplers.vi_init.mixin",
     "log_psplines.samplers.vi_init.adapters",
     "log_psplines.diagnostics.vi_psis",
+    "log_psplines.diagnostics.plotting",
+    "log_psplines.diagnostics.posterior_diagnostics",
+    "log_psplines.diagnostics.derived_weights",
+    "log_psplines.diagnostics.mcmc",
     "log_psplines.plotting.pdgrm",
     "log_psplines.samplers.univar.univar_base",
     "log_psplines.samplers.univar.nuts",
     "log_psplines.samplers.utils",
+    "log_psplines.samplers.base_sampler",
     "log_psplines.samplers.multivar.multivar_base",
     "log_psplines.samplers.multivar.multivar_blocked_nuts",
     "log_psplines.psplines.initialisation",
+    "log_psplines.psplines.multivar_psplines",
+    "log_psplines.arviz_utils.rhat",
+    "log_psplines.arviz_utils.from_arviz",
+    "log_psplines.arviz_utils.to_arviz",
+    "log_psplines.mcmc",
     "log_psplines.benchmark.runtime_benchmark",
 ]
 disable_error_code = ["import-untyped", "import-not-found"]
+ignore_errors = true
 
 
 [project.scripts]

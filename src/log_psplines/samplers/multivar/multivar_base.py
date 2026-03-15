@@ -181,19 +181,48 @@ class MultivarBaseSampler(BaseSampler):
                 f"save_plots(multivar): PSD matrix plot done in {time.perf_counter() - t0:.2f}s"
             )
 
-            if true_psd is not None:
+            if true_psd is not None and self.config.outdir is not None:
                 t0 = time.perf_counter()
                 logger.info(
                     "save_plots(multivar): plotting true-PSD diagnostics"
                 )
+                _outdir: str = self.config.outdir
+                _diag_dir = os.path.join(_outdir, "diagnostics")
                 plot_true_psd_diagnostics(
                     idata,
                     true_psd,
                     freq=np.array(self.freq),
-                    outdir=self.config.outdir,
+                    outdir=_diag_dir,
                 )
                 logger.info(
                     f"save_plots(multivar): true-PSD diagnostics done in {time.perf_counter() - t0:.2f}s"
+                )
+
+                # Composite accuracy.png from the three per-frequency diagnostic plots
+                from ...plotting.base import (
+                    composite_images_vertical as _composite,
+                )
+
+                _accuracy_sources = [
+                    os.path.join(
+                        _outdir,
+                        "diagnostics",
+                        "psd_truth_error_vs_freq.png",
+                    ),
+                    os.path.join(_outdir, "diagnostics", "riae_vs_freq.png"),
+                    os.path.join(
+                        _outdir,
+                        "diagnostics",
+                        "coverage_vs_freq.png",
+                    ),
+                ]
+                _composite(
+                    _accuracy_sources,
+                    outfile=os.path.join(
+                        _outdir, "diagnostics", "accuracy.png"
+                    ),
+                    dpi=150,
+                    title="Accuracy Diagnostics",
                 )
 
             t0 = time.perf_counter()

@@ -24,7 +24,7 @@ repos:
     hooks:
       - id: mypy-full-package-local
         name: mypy (full package)
-        entry: python -m mypy --config-file pyproject.toml src/log_psplines
+        entry: .venv/bin/python -m mypy --config-file pyproject.toml src/log_psplines
         language: system
         pass_filenames: false
       - id: vulture-local

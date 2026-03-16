@@ -517,7 +517,7 @@ def simulation_study(
     mode: Literal["large", "short"] = "short",
     outdir: str = OUT,
     K: int = 10,
-    wishart_window: str | None = "hann",
+    wishart_window: str | tuple | None = "hann",
     coarse_nh_override: int | None = None,
 ) -> None:
     cfg = MODE_CONFIG[mode]
@@ -529,7 +529,14 @@ def simulation_study(
         else (None if coarse_nh_override == 0 else int(coarse_nh_override))
     )
 
-    window_label = wishart_window if wishart_window is not None else "rect"
+    if wishart_window is None:
+        window_label = "rect"
+    elif isinstance(wishart_window, tuple):
+        window_label = "_".join(
+            str(v) for v in wishart_window
+        )  # e.g. "tukey_0.1"
+    else:
+        window_label = wishart_window
     nh_label = "noNh" if coarse_Nh is None else f"Nh{coarse_Nh}"
     print(
         f">>>> Running simulation with mode={mode}, N={N}, Nb={Nb}, K={K}, "
@@ -757,6 +764,30 @@ def run_nb_coverage_experiment(
     print(f"\n  Summary saved to {summary_path}")
 
 
+def _parse_window(raw: str) -> str | tuple | None:
+    """Convert a CLI window string to the form expected by compute_wishart.
+
+    Examples
+    --------
+    "rect"       -> None          (rectangular, no taper)
+    "hann"       -> "hann"
+    "tukey_0.1"  -> ('tukey', 0.1)
+    "tukey_0.5"  -> ('tukey', 0.5)
+    """
+    raw = raw.strip().lower()
+    if raw in ("rect", "none", ""):
+        return None
+    if raw.startswith("tukey_"):
+        try:
+            alpha = float(raw.split("_", 1)[1])
+        except ValueError:
+            raise ValueError(
+                f"Cannot parse Tukey alpha from '{raw}'. Use e.g. 'tukey_0.1'."
+            )
+        return ("tukey", alpha)
+    return raw  # e.g. "hann"
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
@@ -807,7 +838,8 @@ if __name__ == "__main__":
         default="hann",
         help=(
             "Taper applied to each block before FFT. "
-            "Use 'hann' (default) or 'rect' / 'None' for rectangular (no taper)."
+            "Use 'hann', 'rect'/'None' for rectangular, or 'tukey_<alpha>' "
+            "e.g. 'tukey_0.1' (default: hann)."
         ),
     )
     parser.add_argument(
@@ -824,11 +856,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Normalise the window argument: "rect" and "None" both mean no tapering.
-    _raw_window = args.window.strip().lower()
-    wishart_window: str | None = (
-        None if _raw_window in ("rect", "none", "") else args.window
-    )
+    # Normalise the window argument: "rect"/"none" → no taper; "tukey_0.1" → tuple.
+    wishart_window: str | tuple | None = _parse_window(args.window)
 
     if args.nb_experiment:
         run_nb_coverage_experiment(

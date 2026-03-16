@@ -836,7 +836,7 @@ def test_whitenoise_dim(
     k: int = 20,
     dims: list[int] | None = None,
     n_seeds: int = 100,
-    wishart_window: str | None = None,  # None = rectangular
+    wishart_window: str | tuple | None = None,  # None = rectangular
     outdir: str = "out_tests/test_whitenoise_dim",
     quick: bool = False,
 ) -> None:
@@ -878,7 +878,14 @@ def test_whitenoise_dim(
     dims = dims or [2, 3]
     n_samples = 500 if quick else 2000
     n_warmup = 500 if quick else 2000
-    window_label = wishart_window if wishart_window is not None else "rect"
+    if wishart_window is None:
+        window_label = "rect"
+    elif isinstance(wishart_window, tuple):
+        window_label = "_".join(
+            str(v) for v in wishart_window
+        )  # e.g. "tukey_0.1"
+    else:
+        window_label = wishart_window
 
     print(
         f"  N={n}, Nb={nb}, K={k}, window={window_label}, "
@@ -1077,6 +1084,30 @@ def quick_diagnostics(
 # ---------------------------------------------------------------------------
 
 
+def _parse_window(raw: str) -> str | tuple | None:
+    """Convert a CLI window string to the form expected by compute_wishart.
+
+    Examples
+    --------
+    "rect"       -> None          (rectangular, no taper)
+    "hann"       -> "hann"
+    "tukey_0.1"  -> ('tukey', 0.1)
+    "tukey_0.5"  -> ('tukey', 0.5)
+    """
+    raw = raw.strip().lower()
+    if raw in ("rect", "none", ""):
+        return None
+    if raw.startswith("tukey_"):
+        try:
+            alpha = float(raw.split("_", 1)[1])
+        except ValueError:
+            raise ValueError(
+                f"Cannot parse Tukey alpha from '{raw}'. Use e.g. 'tukey_0.1'."
+            )
+        return ("tukey", alpha)
+    return raw  # e.g. "hann"
+
+
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description=__doc__,
@@ -1191,8 +1222,7 @@ def main() -> None:
             quick=args.quick,
         )
     if args.test == "whitenoise_dim":
-        _raw = args.window.strip().lower()
-        ww = None if _raw in ("rect", "none", "") else args.window
+        ww = _parse_window(args.window)
         test_whitenoise_dim(
             n=args.n,
             nb=args.nb,

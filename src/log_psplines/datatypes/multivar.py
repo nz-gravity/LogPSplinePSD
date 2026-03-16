@@ -60,16 +60,13 @@ class MultivarFFT:
     # Coarse-grain multiplicity Nh. For equal-sized bins this is constant
     # across the retained frequency grid. Defaults to 1 (no coarse graining).
     Nh: int = 1
-    # Whittle likelihood calibration factor, computed automatically by
-    # compute_wishart() as
-    #     c = Lb * Σ w(t)⁴ / (Σ w(t)²)²
-    # This equals the sum of squared periodogram autocorrelations and is the
-    # correct factor by which the Whittle likelihood overstates Fisher
-    # information when a tapered window is used.  Dividing the log-likelihood
-    # by c keeps the MLE unchanged while widening the posterior to restore
-    # calibration.  Rectangular window → c=1.0 (no-op); Hann → c≈1.95.
-    # Named 'enbw' for API compatibility (the old ENBW = Lb*Σw²/(Σw)² ≈ 1.5
-    # for Hann was the bandwidth formula and under-corrected by ~11pp).
+    # Normalized Equivalent Noise Bandwidth (NENBW) of the analysis window,
+    # in units of frequency bins.  Computed automatically by compute_wishart()
+    # as  NENBW = Lb * Σ w(t)² / (Σ w(t))²  (Heinzel et al. 2002, eq. 21).
+    # Rectangular → 1.0;  Hann → 1.5;  Tukey(0.1) → 1.04.
+    # The Whittle log-likelihood is divided by this factor so that the
+    # posterior width accounts for the reduced effective DOF per frequency
+    # bin when a non-rectangular taper is used.
     enbw: float = 1.0
 
     def __post_init__(self) -> None:
@@ -219,26 +216,11 @@ class MultivarFFT:
         if taper_energy <= 0.0:
             raise ValueError("Window energy must be positive.")
         taper_sum = float(np.sum(taper))
-        # Whittle likelihood calibration factor:
-        #
-        #   c = Lb · Σ w(t)⁴ / (Σ w(t)²)²
-        #
-        # This equals the sum of squared periodogram autocorrelations
-        #   c = Σ_k |F_{w²}(k) / F_{w²}(0)|²
-        # (by Parseval applied to the squared window w²).  Dividing the
-        # Whittle log-likelihood by c keeps the MLE unchanged while widening
-        # the posterior to account for the correlated periodogram bins
-        # introduced by any taper.
-        #
-        # Rectangular window → c = 1.0 (exact no-op).
-        # Hann window → c ≈ 1.95  (vs the naive ENBW = 1.5).
-        #
-        # The standard ENBW = Lb·Σw²/(Σw)² captures the window *bandwidth*
-        # (DFT of w), whereas the Whittle miscalibration is driven by the
-        # DFT of w², giving a strictly larger correction for all non-rect
-        # windows.  The field is named `enbw` for API compatibility.
-        taper_energy_sq = float(np.sum(taper**4))  # Σ w(t)⁴
-        enbw = float(Lb) * taper_energy_sq / (taper_energy**2)
+        # NENBW = Lb * Σw² / (Σw)²  (Heinzel et al. 2002, eq. 21)
+        # Rect → 1.0;  Hann → 1.5;  Tukey(0.1) → 1.04.
+        # The sampler divides the Whittle log-likelihood by this factor to
+        # account for the reduced effective DOF per frequency bin.
+        enbw = float(Lb) * taper_energy / (taper_sum**2)
         blocks = blocks * taper[None, :, None]
 
         block_ffts = np.fft.rfft(blocks, axis=1)

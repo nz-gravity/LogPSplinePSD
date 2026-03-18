@@ -110,10 +110,11 @@ class RunMCMCConfig:
     coarse_grain_config: Optional[CoarseGrainConfig | dict] = None
     Nb: int = 1
     # Window applied to each block before the Wishart (likelihood) FFT.
-    # Set to None for a rectangular window (no tapering).  Defaults to "hann"
-    # which reduces spectral leakage at the cost of ~1.5× equivalent noise
-    # bandwidth (ENBW).  Changing this affects the likelihood, not just plots.
-    wishart_window: Optional[str | tuple] = "hann"
+    # Defaults to None for a rectangular window (no tapering).
+    # Tapered windows like "hann" reduce spectral leakage at the cost of
+    # larger equivalent noise bandwidth (ENBW). Changing this affects the
+    # likelihood, not just plots.
+    wishart_window: Optional[str | tuple] = None
     welch_nperseg: int | None = None
     welch_noverlap: int | None = None
     welch_window: str = "hann"

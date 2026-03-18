@@ -520,6 +520,7 @@ def simulation_study(
     wishart_window: str | tuple | None = "hann",
     coarse_nh_override: int | None = None,
     label: str = "",
+    tau: float | None = None,
 ) -> None:
     cfg = MODE_CONFIG[mode]
     N = int(cfg["N"])
@@ -589,7 +590,7 @@ def simulation_study(
             Nh=coarse_Nh,
         )
 
-    idata = run_mcmc(
+    run_mcmc_kwargs: dict = dict(
         data=ts,
         n_knots=K,
         degree=2,
@@ -616,6 +617,11 @@ def simulation_study(
         true_psd=(freq_true_hz, true_psd),
         max_save_bytes=20_000_000,
     )
+    if tau is not None:
+        # Use the true PSD as design target with the given shrinkage scale.
+        run_mcmc_kwargs["design_psd"] = (freq_true_hz, true_psd)
+        run_mcmc_kwargs["tau"] = tau
+    idata = run_mcmc(**run_mcmc_kwargs)
     metrics = _extract_run_metrics(
         idata,
         seed=seed,
@@ -874,6 +880,16 @@ if __name__ == "__main__":
             "Useful for distinguishing basis/penalty variants."
         ),
     )
+    parser.add_argument(
+        "--tau",
+        type=float,
+        default=None,
+        help=(
+            "Isotropic Gaussian shrinkage scale for the design-PSD prior "
+            "(e.g. 1.0). When set, the true PSD is used as the design target. "
+            "None (default) means no shrinkage."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -895,4 +911,5 @@ if __name__ == "__main__":
             wishart_window=wishart_window,
             coarse_nh_override=args.coarse_nh,
             label=args.label,
+            tau=args.tau,
         )

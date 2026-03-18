@@ -141,7 +141,7 @@ class MultivarFFT:
         fmax: Optional[float] = None,
         scaling_factor: Optional[float] = 1.0,
         channel_stds: Optional[np.ndarray] = None,
-        window: Optional[str | tuple] = "hann",
+        window: Optional[str | tuple] = None,
     ) -> "MultivarFFT":
         """Compute FFT and Wishart replicates with a single (full-length) block."""
         return cls.compute_wishart(
@@ -165,7 +165,7 @@ class MultivarFFT:
         fmax: Optional[float] = None,
         scaling_factor: Optional[float] = 1.0,
         channel_stds: Optional[np.ndarray] = None,
-        window: Optional[str | tuple] = "hann",
+        window: Optional[str | tuple] = None,
     ) -> "MultivarFFT":
         """
         Compute block-averaged (Wishart) FFT statistics for multivariate series.
@@ -183,8 +183,8 @@ class MultivarFFT:
         scaling_factor : float, optional
             PSD scaling factor carried through sampling.
         window : str or tuple, optional
-            Taper applied to each block before the FFT. Defaults to Hann.
-            Set to ``None`` to recover the previous rectangular-window behavior.
+            Taper applied to each block before the FFT. Defaults to
+            ``None`` (rectangular window).
         """
         if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):
             raise TypeError("Nb must be a positive integer.")
@@ -445,7 +445,7 @@ class MultivariateTimeseries:
         Nb: int,
         fmin: Optional[float] = None,
         fmax: Optional[float] = None,
-        window: Optional[str | tuple] = "hann",
+        window: Optional[str | tuple] = None,
     ) -> "MultivarFFT":
         n = self.y.shape[0]
         if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):

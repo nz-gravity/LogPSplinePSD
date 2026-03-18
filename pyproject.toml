@@ -23,7 +23,6 @@ classifiers = [
     "Programming Language :: Python :: 3.8",
 ]
 dependencies = [
-    "scikit-fda",
     "jax",
     "optax",
     "numpy",

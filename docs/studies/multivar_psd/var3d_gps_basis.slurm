@@ -18,6 +18,6 @@ START_SEED=$((SLURM_ARRAY_TASK_ID * 10))
 END_SEED=$((START_SEED + 9))
 
 for SEED in $(seq ${START_SEED} ${END_SEED}); do
-    echo "Running seed=${SEED}, window=hann (c correction), K=20, mode=short_nb4, basis=GPS penalty"
-    "${PYTHON_BIN}" 3d_study.py ${SEED} short_nb4 --K 20 --window hann
+    echo "Running seed=${SEED}, window=hann, K=20, mode=short_nb4, basis=GPS penalty"
+    "${PYTHON_BIN}" 3d_study.py ${SEED} short_nb4 --K 20 --window hann --outdir out_var3_gps_basis
 done

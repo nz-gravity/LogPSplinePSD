@@ -123,7 +123,8 @@ def _add_chain_dim(
                 f"num_chains={num_chains}. Merging extra chains into draws: "
                 f"{v_array.shape} -> "
                 f"({num_chains}, {v_array.shape[0]//num_chains * v_array.shape[1]}"
-                + (f", {v_array.shape[2:]}" if v_array.ndim > 2 else "") + f"). "
+                + (f", {v_array.shape[2:]}" if v_array.ndim > 2 else "")
+                + f"). "
                 f"This usually means JAX ran {v_array.shape[0]} chains instead of "
                 f"{num_chains} (check XLA_FLAGS / chain_method config)."
             )

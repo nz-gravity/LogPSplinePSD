@@ -197,11 +197,11 @@ class TestBuildGeneralDifferenceMatrix:
 
     def test_null_space_contains_linear(self):
         """Linear function lies in null space of D_m for m >= 2.
-        Uses phantom knot vector (same as build_bspline_basis_scipy) for consistency.
+        Uses clamped knot vector (same as build_bspline_basis_scipy) for consistency.
         """
         degree = 3
         knots = np.linspace(0, 1, 9)
-        t = _build_knot_vector(knots, degree)
+        t = _build_full_knot_vector(knots, degree)
         grid = np.linspace(0.0, 1.0, 500)
         B = build_bspline_basis_scipy(knots, degree, grid)
         w, *_ = np.linalg.lstsq(B, grid, rcond=None)  # fit y = x
@@ -279,45 +279,22 @@ class TestBuildBsplineBasisScipy:
         B = build_bspline_basis_scipy(knots, 3, grid)
         assert not np.any(np.isnan(B))
 
-    def test_endpoint_basis_not_pinned_to_one(self):
+    def test_endpoint_basis_pinned_to_one(self):
         """
-        With phantom knots, the first basis function at x=0 is NOT pinned to 1.
-        With clamped knots, B_0(0) = 1 (boundary pinning).
-        Phantom knots remove this structural asymmetry.
+        With clamped knots (degree+1 boundary multiplicity), B_0(0) = 1 and
+        B_{n-1}(1) = 1 — the standard B-spline interpolation property at
+        endpoints.
         """
         knots = np.linspace(0, 1, 10)
         degree = 3
-        # Evaluate at exactly x=0 and x=1
-        B_phantom = build_bspline_basis_scipy(
-            knots, degree, np.array([0.0, 1.0])
-        )
+        B = build_bspline_basis_scipy(knots, degree, np.array([0.0, 1.0]))
 
-        # Build clamped basis for comparison
-        t_clamped = _build_full_knot_vector(knots, degree)
-        n_basis = len(t_clamped) - degree - 1
-        B_clamped = np.zeros((2, n_basis))
-        for i in range(n_basis):
-            c = np.zeros(n_basis)
-            c[i] = 1.0
-            spl = BSpline(t_clamped, c, degree, extrapolate=False)
-            vals = spl(np.array([0.0, 1.0]))
-            B_clamped[:, i] = np.where(np.isnan(vals), 0.0, vals)
-
-        # Clamped: first basis == 1 at x=0, last basis == 1 at x=1
-        assert B_clamped[0, 0] == pytest.approx(
+        assert B[0, 0] == pytest.approx(
             1.0, abs=1e-10
-        ), "Clamped: B_0(0) should be 1"
-        assert B_clamped[1, -1] == pytest.approx(
+        ), f"Clamped: B_0(0)={B[0, 0]:.6f} should be 1"
+        assert B[1, -1] == pytest.approx(
             1.0, abs=1e-10
-        ), "Clamped: B_{n-1}(1) should be 1"
-
-        # Phantom: first/last basis significantly less than 1 at boundaries
-        assert (
-            B_phantom[0, 0] < 0.8
-        ), f"Phantom: B_0(0)={B_phantom[0, 0]:.4f} should be < 0.8 (not pinned)"
-        assert (
-            B_phantom[1, -1] < 0.8
-        ), f"Phantom: B_{{n-1}}(1)={B_phantom[1, -1]:.4f} should be < 0.8 (not pinned)"
+        ), f"Clamped: B_{{n-1}}(1)={B[1, -1]:.6f} should be 1"
 
 
 # ---------------------------------------------------------------------------

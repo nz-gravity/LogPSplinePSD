@@ -1,52 +1,7 @@
-import sys
-import types
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import xarray as xr
-
-
-def _install_skfda_stub() -> None:
-    """Provide a minimal stub for scikit-fda so imports succeed in tests."""
-    if "skfda" in sys.modules:
-        return
-
-    def _dummy(*args, **kwargs):
-        return None
-
-    skfda = types.ModuleType("skfda")
-
-    misc = types.ModuleType("skfda.misc")
-    operators = types.ModuleType("skfda.misc.operators")
-    operators.LinearDifferentialOperator = _dummy
-    reg = types.ModuleType("skfda.misc.regularization")
-    reg.L2Regularization = _dummy
-    misc.operators = operators
-    misc.regularization = reg
-
-    representation = types.ModuleType("skfda.representation")
-    basis = types.ModuleType("skfda.representation.basis")
-
-    class _Basis:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    basis.BSplineBasis = _Basis
-    representation.basis = basis
-
-    skfda.misc = misc
-    skfda.representation = representation
-
-    sys.modules["skfda"] = skfda
-    sys.modules["skfda.misc"] = misc
-    sys.modules["skfda.misc.operators"] = operators
-    sys.modules["skfda.misc.regularization"] = reg
-    sys.modules["skfda.representation"] = representation
-    sys.modules["skfda.representation.basis"] = basis
-
-
-_install_skfda_stub()
 
 import log_psplines.arviz_utils as arviz_utils  # noqa: E402
 from log_psplines.plotting import base as plotting_base  # noqa: E402

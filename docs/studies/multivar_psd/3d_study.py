@@ -519,6 +519,7 @@ def simulation_study(
     K: int = 10,
     wishart_window: str | tuple | None = "hann",
     coarse_nh_override: int | None = None,
+    label: str = "",
 ) -> None:
     cfg = MODE_CONFIG[mode]
     N = int(cfg["N"])
@@ -538,12 +539,13 @@ def simulation_study(
     else:
         window_label = wishart_window
     nh_label = "noNh" if coarse_Nh is None else f"Nh{coarse_Nh}"
+    label_suffix = f"_{label}" if label else ""
     print(
         f">>>> Running simulation with mode={mode}, N={N}, Nb={Nb}, K={K}, "
-        f"window={window_label}, coarse_Nh={coarse_Nh}, seed={seed} <<<<"
+        f"window={window_label}, coarse_Nh={coarse_Nh}, seed={seed}, label={label!r} <<<<"
     )
     _log_var_coefficients()
-    outdir = f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}_{window_label}_{nh_label}"
+    outdir = f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}_{window_label}_{nh_label}{label_suffix}"
     os.makedirs(outdir, exist_ok=True)
 
     spectral_radius = _companion_spectral_radius(VAR_COEFFS)
@@ -862,6 +864,16 @@ if __name__ == "__main__":
             "Use a different name to avoid collisions between study variants."
         ),
     )
+    parser.add_argument(
+        "--label",
+        type=str,
+        default="",
+        help=(
+            "Short tag appended to each per-seed output folder name "
+            "(e.g. 'gps' → seed_0_..._gps/). "
+            "Useful for distinguishing basis/penalty variants."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -882,4 +894,5 @@ if __name__ == "__main__":
             K=args.K,
             wishart_window=wishart_window,
             coarse_nh_override=args.coarse_nh,
+            label=args.label,
         )

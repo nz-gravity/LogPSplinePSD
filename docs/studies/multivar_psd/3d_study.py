@@ -853,6 +853,15 @@ if __name__ == "__main__":
             "Default: use the mode's built-in setting."
         ),
     )
+    parser.add_argument(
+        "--outdir",
+        type=str,
+        default=OUT,
+        help=(
+            f"Root output directory for results (default: '{OUT}'). "
+            "Use a different name to avoid collisions between study variants."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -869,6 +878,7 @@ if __name__ == "__main__":
         simulation_study(
             seed=args.seed,
             mode=args.mode,
+            outdir=args.outdir,
             K=args.K,
             wishart_window=wishart_window,
             coarse_nh_override=args.coarse_nh,

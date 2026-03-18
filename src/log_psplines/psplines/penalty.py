@@ -16,9 +16,9 @@ Glossary (paper notation vs code):
     K   = total knots in the full knot vector = k + 2*d
     m   = diff_order  (penalty order)
 
-All basis functions use a phantom knot vector so that endpoint functions
-have the same bell shape as interior ones, removing the clamped-boundary
-bias that causes undercoverage in posterior credible intervals.
+Both the basis and penalty use a clamped knot vector (degree+1 boundary
+multiplicity), matching the scikit-fda convention and keeping the φ prior
+calibration that produced good coverage in the VAR3 simulation study.
 
 Public API
 ----------
@@ -239,8 +239,8 @@ def build_bspline_basis_scipy(
     """
     Evaluate the B-spline basis matrix using scipy.interpolate.BSpline.
 
-    Uses phantom knots so all basis functions — including endpoint ones —
-    have the same bell shape.
+    Uses a clamped knot vector (degree+1 boundary multiplicity), matching
+    the scikit-fda convention.
 
     Parameters
     ----------
@@ -266,7 +266,7 @@ def build_bspline_basis_scipy(
     """
     from scipy.interpolate import BSpline
 
-    t = _build_knot_vector(np.asarray(knots, dtype=np.float64), degree)
+    t = _build_full_knot_vector(np.asarray(knots, dtype=np.float64), degree)
     n_basis = len(t) - degree - 1
 
     x = np.clip(np.asarray(grid_points, dtype=np.float64), 0.0, 1.0)
@@ -297,8 +297,8 @@ def build_gps_penalty(
     """
     Build the General P-Spline penalty matrix P = D_m^T D_m.
 
-    Uses phantom knots (same as ``build_bspline_basis_scipy``) so that
-    basis and penalty are always mathematically consistent.
+    Uses a clamped knot vector (same as ``build_bspline_basis_scipy``) so
+    that basis and penalty are always mathematically consistent.
 
     The penalty is normalised so that max(|P|) = 1, matching the convention
     used by scikit-fda's L2Regularization.  A small ridge term (epsilon × I)
@@ -328,7 +328,7 @@ def build_gps_penalty(
     if diff_order == 0:
         return epsilon * np.eye(n_basis, dtype=np.float64)
 
-    t = _build_knot_vector(knots, degree)
+    t = _build_full_knot_vector(knots, degree)
     D = build_general_difference_matrix(t, degree, diff_order)
     P = D.T @ D  # shape (n_basis, n_basis), symmetric PSD
 

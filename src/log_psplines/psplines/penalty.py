@@ -300,7 +300,10 @@ def build_gps_penalty(
     Uses phantom knots (same as ``build_bspline_basis_scipy``) so that
     basis and penalty are always mathematically consistent.
 
-    Normalised so max(|P|) = 1, then ridge-regularised with epsilon * I.
+    The raw penalty is returned without normalization so that the natural
+    knot-spacing geometry is preserved; τ controls overall smoothing strength.
+    A small ridge term (epsilon × max(diag(P)) × I) is added for strict
+    positive definiteness.
 
     Parameters
     ----------
@@ -330,8 +333,11 @@ def build_gps_penalty(
     D = build_general_difference_matrix(t, degree, diff_order)
     P = D.T @ D  # shape (n_basis, n_basis), symmetric PSD
 
-    max_val = float(np.max(np.abs(P)))
-    if max_val > 0.0:
-        P = P / max_val
-
-    return P + epsilon * np.eye(n_basis, dtype=np.float64)
+    # Ridge scaled to the penalty magnitude so regularisation is effective
+    # regardless of knot spacing.  No max(|P|) normalization — the raw
+    # penalty preserves the natural knot-spacing geometry; τ controls the
+    # overall smoothing strength.
+    ridge_scale = float(np.max(np.diag(P)))
+    if ridge_scale <= 0.0:
+        ridge_scale = 1.0
+    return P + epsilon * ridge_scale * np.eye(n_basis, dtype=np.float64)

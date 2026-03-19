@@ -18,11 +18,13 @@ All results are from 3-channel VAR(2) simulation studies using `scikit-fda`
 O-spline basis/penalty (degree 2, diff order 2) with density-based knot
 placement. Coverage is pointwise 90% CI. Window is rect unless noted.
 
-### Main study (N=2048, Nb=4, rect window, density knots)
+### Main study (N=2048, Nb=4, rect window, density knots, spectral scoring)
 
-| Label | K | Coarse | Window | Seeds | Coverage | RIAE | ESS |
+| Label | K | Knot scoring | Window | Seeds | Coverage | RIAE | ESS |
 | --- | ---: | :---: | :---: | ---: | ---: | ---: | ---: |
-| **Baseline (scikit-fda, rect)** | 20 | OFF | rect | ~100 | **0.873 ± 0.041** | 0.150 ± 0.015 | ~11k |
+| **Baseline (scikit-fda, rect, spectral)** | 20 | spectral | rect | ~92 | **0.872 ± 0.046** | 0.157 ± 0.015 | ~10k |
+| density + cholesky scoring | 20 | cholesky | rect | 100 | 0.816 ± 0.061 | 0.151 ± 0.015 | ~7.8k |
+| uniform knots | 20 | uniform | rect | 99 | 0.813 ± 0.054 | 0.151 ± 0.015 | ~7.4k |
 
 ### Earlier exploratory runs (Hann window, various configs)
 
@@ -133,6 +135,30 @@ be interpreted as approximate rather than exact probability statements,
 particularly at large `N`. A principled fix would require replacing the Whittle
 likelihood with a bias-corrected version (e.g. the debiased Whittle likelihood
 of Sykulski et al. 2019), which is left for future work.
+
+## Knot Scoring Investigation (March 2026)
+
+A refactor in commit `246d57b` changed the density-based knot placement scoring
+from raw spectral energy ("spectral") to Cholesky-decomposed components
+("cholesky"). This caused a reproducible ~5.5pp coverage drop:
+
+| Scoring | Seeds | Coverage | RIAE | ESS |
+|---|---:|---:|---:|---:|
+| **spectral** (raw energy) | 92 | **0.872 ± 0.046** | 0.157 | ~10k |
+| cholesky | 100 | 0.816 ± 0.061 | 0.151 | ~7.8k |
+| uniform (no scoring) | 99 | 0.813 ± 0.054 | 0.151 | ~7.4k |
+
+**Why spectral scoring wins:** The spectral energy score `Σ(u_re² + u_im²)` per
+frequency directly measures where the PSD has the most power and curvature.
+Density-based knots concentrate in those regions, giving the spline more
+flexibility where it is needed most and producing wider, better-calibrated CIs.
+
+The Cholesky score `|log(δ²)|` is model-native but does not correlate well with
+PSD curvature for a VAR process. Knots end up in less informative regions,
+effectively equivalent to uniform placement (0.816 vs 0.813).
+
+**Resolution:** Default scoring reverted to `"spectral"` (commit `ecc9f7e`+).
+Both options remain available via `--knot-scoring spectral|cholesky`.
 
 ## GPS Penalty Experiment — Abandoned (March 2026)
 

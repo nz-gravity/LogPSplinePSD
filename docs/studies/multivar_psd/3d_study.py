@@ -521,7 +521,7 @@ def simulation_study(
     coarse_nh_override: int | None = None,
     label: str = "",
     tau: float | None = None,
-    knot_scoring: str = "cholesky",
+    knot_scoring: str = "spectral",
     knot_method: str = "density",
 ) -> None:
     cfg = MODE_CONFIG[mode]
@@ -845,11 +845,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--window",
         type=str,
-        default="hann",
+        default="rect",
         help=(
             "Taper applied to each block before FFT. "
             "Use 'hann', 'rect'/'None' for rectangular, or 'tukey_<alpha>' "
-            "e.g. 'tukey_0.1' (default: hann)."
+            "e.g. 'tukey_0.1' (default: rect)."
         ),
     )
     parser.add_argument(
@@ -905,12 +905,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--knot-scoring",
         type=str,
-        default="cholesky",
+        default="spectral",
         dest="knot_scoring",
         help=(
             "Scoring method for density-based knot placement. "
-            "'cholesky' uses Cholesky-decomposed components (default), "
-            "'spectral' uses raw spectral energy (pre-refactor method). "
+            "'spectral' uses raw spectral energy (default), "
+            "'cholesky' uses Cholesky-decomposed components. "
             "Ignored when knot method is 'uniform'."
         ),
     )

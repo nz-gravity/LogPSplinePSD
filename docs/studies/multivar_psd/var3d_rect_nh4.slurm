@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=var3_tukey01_nh4
-#SBATCH --output=logs_var3_runs/var3_tukey01_nh4_%A_%a.out
-#SBATCH --error=logs_var3_runs/var3_tukey01_nh4_%A_%a.err
+#SBATCH --job-name=var3_rect_nh4
+#SBATCH --output=logs_var3_runs/var3_rect_nh4_%A_%a.out
+#SBATCH --error=logs_var3_runs/var3_rect_nh4_%A_%a.err
 #SBATCH --array=0-9
 #SBATCH --time=1:00:00
 #SBATCH --mem=6000M
@@ -18,6 +18,6 @@ START_SEED=$((SLURM_ARRAY_TASK_ID * 10))
 END_SEED=$((START_SEED + 9))
 
 for SEED in $(seq ${START_SEED} ${END_SEED}); do
-    echo "Running seed=${SEED}, window=tukey_0.1, K=20, Nh=4, mode=short_nb4"
-    "${PYTHON_BIN}" 3d_study.py ${SEED} short_nb4 --K 20 --window tukey_0.1 --coarse-nh 4
+    echo "Running seed=${SEED}, window=rect, K=20, Nh=4, mode=short_nb4"
+    "${PYTHON_BIN}" 3d_study.py ${SEED} short_nb4 --K 20 --window rect --coarse-nh 4
 done

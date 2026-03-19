@@ -521,6 +521,8 @@ def simulation_study(
     coarse_nh_override: int | None = None,
     label: str = "",
     tau: float | None = None,
+    knot_scoring: str = "cholesky",
+    knot_method: str = "density",
 ) -> None:
     cfg = MODE_CONFIG[mode]
     N = int(cfg["N"])
@@ -609,7 +611,7 @@ def simulation_study(
         vi_lr=VI_LR,
         Nb=Nb,
         wishart_window=wishart_window,
-        knot_kwargs=dict(method=DEFAULT_KNOT_METHOD),
+        knot_kwargs=dict(method=knot_method, scoring=knot_scoring),
         coarse_grain_config=coarse_grain_config,
         alpha_delta=DEFAULT_ALPHA_DELTA,
         beta_delta=DEFAULT_BETA_DELTA,
@@ -890,6 +892,28 @@ if __name__ == "__main__":
             "None (default) means no shrinkage."
         ),
     )
+    parser.add_argument(
+        "--knot-method",
+        type=str,
+        default=DEFAULT_KNOT_METHOD,
+        dest="knot_method",
+        help=(
+            "Knot placement method: 'density' (quantile-based, default), "
+            "'uniform' (equidistant), or 'log' (log-spaced)."
+        ),
+    )
+    parser.add_argument(
+        "--knot-scoring",
+        type=str,
+        default="cholesky",
+        dest="knot_scoring",
+        help=(
+            "Scoring method for density-based knot placement. "
+            "'cholesky' uses Cholesky-decomposed components (default), "
+            "'spectral' uses raw spectral energy (pre-refactor method). "
+            "Ignored when knot method is 'uniform'."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -912,4 +936,6 @@ if __name__ == "__main__":
             coarse_nh_override=args.coarse_nh,
             label=args.label,
             tau=args.tau,
+            knot_scoring=args.knot_scoring,
+            knot_method=args.knot_method,
         )

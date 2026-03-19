@@ -12,6 +12,7 @@ from log_psplines.datatypes import MultivarFFT, Periodogram, Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
+from log_psplines.psplines.initialisation import init_weights
 from log_psplines.samplers.univar.univar_base import log_likelihood
 
 
@@ -82,6 +83,33 @@ def test_spline_basis(mock_pdgrm: Periodogram, outdir):
         ax2.plot(mock_pdgrm.freqs, b, alpha=0.5, lw=0.5, marker=".")
     plt.tight_layout()
     fig.savefig(f"{out}/test_spline_basis.png")
+
+
+def test_closed_form_weight_initialiser_improves_likelihood(mock_pdgrm):
+    spline_model = LogPSplines.from_periodogram(
+        mock_pdgrm,
+        n_knots=10,
+        degree=3,
+        diffMatrixOrder=2,
+    )
+
+    zero_weights = jnp.zeros_like(spline_model.weights)
+    ls_weights = init_weights(
+        jnp.log(mock_pdgrm.power),
+        spline_model,
+        num_steps=0,
+    )
+    lnl_args = (
+        jnp.log(mock_pdgrm.power),
+        spline_model.basis,
+        spline_model.log_parametric_model,
+        1,
+    )
+
+    lnl_zero = log_likelihood(zero_weights, *lnl_args)
+    lnl_ls = log_likelihood(ls_weights, *lnl_args)
+
+    assert lnl_ls > lnl_zero
 
 
 def test_basis_log_vs_linear(mock_pdgrm: Periodogram, outdir):

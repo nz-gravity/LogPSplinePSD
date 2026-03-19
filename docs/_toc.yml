@@ -14,8 +14,6 @@ chapters:
       - file: coarse_grain_mwe.ipynb
       - file: animations.rst
       - file: multivar_blocked_nuts.rst
-      - file: multivar_implementation_notes.rst
-      - file: phi_prior_approx.rst
 
   - file: studies/lvk/lvk_demo.ipynb
     title: Examples and Studies

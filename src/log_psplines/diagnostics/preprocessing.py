@@ -120,11 +120,19 @@ def ratio_summary_string(
     ratio = ratio[np.isfinite(ratio)]
     if ratio.size == 0:
         return f"{name}: (no finite values)"
-    p05, p50, p95 = np.percentile(ratio, [5.0, 50.0, 95.0])
     frac = float(np.mean(ratio > float(warn_threshold)))
+    rmin = float(ratio.min())
+    rmax = float(ratio.max())
+    if np.isclose(rmin, rmax):
+        return (
+            f"{name}: constant={rmin:.3f}, "
+            f"frac(>{warn_threshold:.2f})={frac*100:.1f}%"
+        )
+
+    p05, p50, p95 = np.percentile(ratio, [5.0, 50.0, 95.0])
     return (
-        f"{name}: p05={p05:.3f}, p50={p50:.3f}, p95={p95:.3f}, "
-        f"min={ratio.min():.3f}, max={ratio.max():.3f}, "
+        f"{name}: q05/50/95={p05:.3f}/{p50:.3f}/{p95:.3f}, "
+        f"range={rmin:.3f}-{rmax:.3f}, "
         f"frac(>{warn_threshold:.2f})={frac*100:.1f}%"
     )
 

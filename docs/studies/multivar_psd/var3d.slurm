@@ -20,6 +20,6 @@ START_SEED=$((SLURM_ARRAY_TASK_ID * 10))
 END_SEED=$((START_SEED + 9))
 
 for SEED in $(seq ${START_SEED} ${END_SEED}); do
-    echo "Running seed=${SEED}, window=rect, K=20, mode=short_nb4"
-    "${PYTHON_BIN}" 3d_study.py ${SEED} short_nb4 --K 20 --window rect
+    echo "Running seed=${SEED}, window=rect, K=20, mode=short_nb4, baseline sanity check"
+    "${PYTHON_BIN}" 3d_study.py ${SEED} short_nb4 --K 20 --window rect --outdir out_var3_sanity
 done

@@ -4,7 +4,7 @@ import numpyro
 import numpyro.distributions as dist
 import pytest
 
-from log_psplines.samplers.utils import build_log_density_fn
+from log_psplines.samplers.pspline_block import build_log_density_fn
 
 
 def _branching_model(flag: int, scale: jnp.ndarray) -> None:

@@ -12,7 +12,7 @@ from numpyro.infer.util import init_to_value
 
 from ...diagnostics.psd_compare import compute_multivar_riae_diagnostics
 from ...logger import logger
-from ..utils import pspline_hyperparameter_initials
+from ..pspline_block import pspline_hyperparameter_initials
 from .core import fit_vi
 from .defaults import (
     default_init_values_multivar,

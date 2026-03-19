@@ -261,34 +261,78 @@ def multivar_psd_knot_scores(
     Y_np: np.ndarray,
     Nb: int,
     p: int,
+    *,
+    scoring: str = "cholesky",
+    u_re: np.ndarray | None = None,
+    u_im: np.ndarray | None = None,
 ) -> tuple[list[np.ndarray], np.ndarray]:
     """Compute per-component knot placement scores from an empirical PSD matrix.
 
-    Cholesky-decomposes the empirical PSD (Y_np / Nb) to extract the
-    model-native components (LogDelta, ReTheta, ImTheta) and returns their
-    absolute values as scores for quantile-based knot placement.
+    Two scoring strategies are available:
+
+    ``"cholesky"`` (default)
+        Cholesky-decomposes the empirical PSD (Y_np / Nb) to extract the
+        model-native components (LogDelta, ReTheta, ImTheta) and returns their
+        absolute values as scores for quantile-based knot placement.
+
+    ``"spectral"``
+        Uses raw spectral energy: diagonal score is the sum of squared Fourier
+        coefficients per channel, off-diagonal score is the mean absolute
+        cross-spectral magnitude.  This was the original scoring before the
+        Cholesky refactor.
 
     Args:
         Y_np: (N, p, p) complex Wishart matrix (sum of outer products).
         Nb: Number of blocks used to form Y_np.
         p: Number of channels.
+        scoring: ``"cholesky"`` or ``"spectral"``.
+        u_re: (N, Nb, p) real DFT coefficients — required for ``"spectral"``.
+        u_im: (N, Nb, p) imaginary DFT coefficients — required for ``"spectral"``.
 
     Returns:
         diagonal_scores: List of p arrays of shape (N,), one per channel.
-            Score for channel i is |log(delta_i^2)| from the Cholesky diagonal.
-        offdiag_score: (N,) array — mean of |theta_ij| over all lower-triangle
-            pairs, used as a shared score for Re/Im off-diagonal components.
+        offdiag_score: (N,) array — shared score for off-diagonal components.
     """
-    log_delta_sq, theta = psd_to_cholesky_components(Y_np / max(int(Nb), 1))
+    scoring = scoring.strip().lower()
 
-    diagonal_scores = [np.abs(log_delta_sq[:, i]) for i in range(p)]
+    if scoring == "cholesky":
+        log_delta_sq, theta = psd_to_cholesky_components(
+            Y_np / max(int(Nb), 1)
+        )
+        diagonal_scores = [np.abs(log_delta_sq[:, i]) for i in range(p)]
+        if p > 1:
+            pair_scores = [
+                np.abs(theta[:, i, j]) for i in range(1, p) for j in range(i)
+            ]
+            offdiag_score = np.mean(np.vstack(pair_scores), axis=0)
+        else:
+            offdiag_score = np.zeros(Y_np.shape[0], dtype=np.float64)
 
-    if p > 1:
-        pair_scores = [
-            np.abs(theta[:, i, j]) for i in range(1, p) for j in range(i)
+    elif scoring == "spectral":
+        if u_re is None or u_im is None:
+            raise ValueError(
+                "u_re and u_im are required for scoring='spectral'"
+            )
+        u_re_np = np.asarray(u_re, dtype=np.float64)
+        u_im_np = np.asarray(u_im, dtype=np.float64)
+        diagonal_scores = [
+            np.sum(
+                np.square(u_re_np[:, :, i]) + np.square(u_im_np[:, :, i]),
+                axis=1,
+            )
+            for i in range(p)
         ]
-        offdiag_score = np.mean(np.vstack(pair_scores), axis=0)
+        if p > 1:
+            theta_scores = [
+                np.abs(Y_np[:, i, j]) for i in range(1, p) for j in range(i)
+            ]
+            offdiag_score = np.mean(np.vstack(theta_scores), axis=0)
+        else:
+            offdiag_score = np.zeros(Y_np.shape[0], dtype=np.float64)
+
     else:
-        offdiag_score = np.zeros(Y_np.shape[0], dtype=np.float64)
+        raise ValueError(
+            f"Unknown knot scoring '{scoring}'. Use 'cholesky' or 'spectral'."
+        )
 
     return diagonal_scores, offdiag_score

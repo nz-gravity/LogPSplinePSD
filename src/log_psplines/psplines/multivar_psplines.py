@@ -227,7 +227,17 @@ class MultivariateLogPSplines:
         Y_np = np.einsum("fkc,fkd->fcd", u_complex_np, np.conj(u_complex_np))
         Nb = max(int(fft_data.Nb), 1)
 
-        diagonal_scores, offdiag_score = multivar_psd_knot_scores(Y_np, Nb, p)
+        knot_scoring = (
+            str(knot_kwargs.get("scoring", "cholesky")).strip().lower()
+        )
+        diagonal_scores, offdiag_score = multivar_psd_knot_scores(
+            Y_np,
+            Nb,
+            p,
+            scoring=knot_scoring,
+            u_re=u_re_np if knot_scoring == "spectral" else None,
+            u_im=u_im_np if knot_scoring == "spectral" else None,
+        )
 
         # Create diagonal models (one per channel), each with its own
         # knot placement and basis construction.

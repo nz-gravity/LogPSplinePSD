@@ -85,35 +85,33 @@ def sample_pspline_block(
     """
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
     delta = numpyro.sample(delta_name, delta_dist)
-    log_prior_delta = delta_dist.log_prob(delta)
 
-    # Moment-match the original Gamma prior with a log-normal and sample log(phi)
-    # to reduce the funnel geometry seen by NUTS.
-    # NOTE: spoke to Renate about this in ~Sept 2025, she thinks its fine
-    sigma_sq = jnp.log1p(1.0 / alpha_phi)
-    sigma = jnp.sqrt(sigma_sq)
-    # Guard against delta underflow to 0.0 in float32 which makes log(delta)
-    # diverge and can produce inf/NaN loc parameters during VI/NUTS init.
+    # We sample eta = log(phi) for geometry, but the model prior is on
+    # phi | delta ~ Gamma(alpha_phi, delta * beta_phi). The factor below
+    # converts the simple base density on eta into that exact transformed prior.
     delta_safe = jnp.maximum(delta, jnp.asarray(1e-12, dtype=delta.dtype))
-    mu = (
-        jnp.log(alpha_phi)
-        - jnp.log(beta_phi)
-        - jnp.log(delta_safe)
-        - 0.5 * sigma_sq
-    )
-    phi_normal = dist.Normal(loc=mu, scale=sigma)
-    log_phi = numpyro.sample(
-        phi_name,
-        phi_normal,
-    )
+    log_phi_base = dist.Normal(0.0, 1.0)
+    log_phi = numpyro.sample(phi_name, log_phi_base)
     phi = jnp.exp(log_phi)
-    log_prior_phi = phi_normal.log_prob(log_phi) - log_phi
+    phi_rate = jnp.asarray(beta_phi, dtype=delta.dtype) * delta_safe
+    phi_dist = dist.Gamma(
+        concentration=jnp.asarray(alpha_phi, dtype=delta.dtype),
+        rate=phi_rate,
+    )
+    log_prior_phi = phi_dist.log_prob(phi) + log_phi
+    numpyro.factor(
+        f"{phi_name}_prior",
+        log_prior_phi - log_phi_base.log_prob(log_phi),
+    )
 
     k = penalty_matrix.shape[0]
+    # weights ~ N(0, I) is only a reference density. The factor below replaces
+    # it with the intended P-spline Gaussian prior induced by phi and P.
     base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
     weights = numpyro.sample(weights_name, base_normal)
 
     residual = weights if w_design is None else weights - w_design
+    # here we do prior(w|phi)~ N(0, phi^-1 P^-1)
     wPw = jnp.dot(residual, jnp.dot(penalty_matrix, residual))
     log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
     if tau is not None and w_design is not None:

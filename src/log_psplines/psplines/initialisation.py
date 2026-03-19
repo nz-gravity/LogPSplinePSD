@@ -18,6 +18,27 @@ if TYPE_CHECKING:
     from .psplines import LogPSplines
 
 
+def _least_squares_weight_initialiser(
+    log_pdgrm: jnp.ndarray,
+    log_psplines: "LogPSplines",
+) -> jnp.ndarray:
+    """Return a stabilized least-squares fit for the spline weights."""
+    basis = jnp.asarray(log_psplines.basis)
+    target = jnp.asarray(log_pdgrm) - jnp.asarray(
+        log_psplines.log_parametric_model
+    )
+    gram = basis.T @ basis
+    rhs = basis.T @ target
+
+    n_basis = int(gram.shape[0])
+    trace_scale = jnp.trace(gram) / max(n_basis, 1)
+    ridge = jnp.asarray(1e-6, dtype=gram.dtype) * jnp.maximum(
+        trace_scale, jnp.asarray(1.0, dtype=gram.dtype)
+    )
+    system = gram + ridge * jnp.eye(n_basis, dtype=gram.dtype)
+    return jnp.linalg.solve(system, rhs)
+
+
 def init_weights(
     log_pdgrm: jnp.ndarray,
     log_psplines: "LogPSplines",
@@ -35,9 +56,10 @@ def init_weights(
     log_psplines : LogPSplines
         The log P-splines model object
     init_weights : jnp.ndarray, optional
-        Initial weights. If None, uses zeros.
+        Initial weights to refine. If None, starts from a stabilized least-
+        squares spline fit to the observed log spectrum before refinement.
     num_steps : int, default=5000
-        Number of optimization steps
+        Number of optimization steps used to refine the initial weights.
 
     Returns
     -------
@@ -45,7 +67,12 @@ def init_weights(
         Optimized weights
     """
     if init_weights is None:
-        init_weights = jnp.zeros(log_psplines.n_basis)
+        init_weights = _least_squares_weight_initialiser(
+            log_pdgrm, log_psplines
+        )
+
+    if num_steps <= 0:
+        return jnp.asarray(init_weights)
 
     optimizer = optax.adam(learning_rate=1e-2)
     opt_state = optimizer.init(init_weights)

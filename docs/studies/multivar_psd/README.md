@@ -14,17 +14,32 @@ about 72,000 elements, so it is not a useful summary.
 
 ## Full Results Table
 
-| Setting | N | K | Coarse | Shrinkage | RIAE | Coverage | CIW diag | ESS |
-| --- | ---: | ---: | :---: | :---: | ---: | ---: | ---: | ---: |
-| small (100 runs avg) | ~2048 | 20 | OFF | No | 0.192 | 0.671 | 0.210 | ~13k |
-| small | ~2048 | 20 | ON | No | 0.160 | 0.651 | 0.192 | ~7k |
-| small | ~2048 | 20 | ON | Yes | 0.137 | 0.736 | 0.155 | ~2.8k |
-| large (100 runs avg) | 16384 | 4 | OFF | No | 0.056 | 0.474 | 0.066 | - |
-| large | 16384 | 10 | OFF | No | 0.132 | 0.604 | 0.067 | ~17k |
-| large | 16384 | 10 | ON | No | 0.133 | 0.589 | 0.069 | ~19k |
-| large | 16384 | 20 | ON | Yes | 0.109 | 0.734 | 0.059 | ~831 |
-| large | 16384 | 50 | ON | No | 0.131 | 0.675 | 0.092 | ~14k |
-| large | 16384 | 50 | ON | Yes | 0.112 | 0.741 | 0.059 | ~1.9k |
+All results are from 3-channel VAR(2) simulation studies using `scikit-fda`
+O-spline basis/penalty (degree 2, diff order 2) with density-based knot
+placement. Coverage is pointwise 90% CI. Window is rect unless noted.
+
+### Main study (N=2048, Nb=4, rect window, density knots)
+
+| Label | K | Coarse | Window | Seeds | Coverage | RIAE | ESS |
+| --- | ---: | :---: | :---: | ---: | ---: | ---: | ---: |
+| **Baseline (scikit-fda, rect)** | 20 | OFF | rect | ~100 | **0.873 ± 0.041** | 0.150 ± 0.015 | ~11k |
+
+### Earlier exploratory runs (Hann window, various configs)
+
+| Label | N | K | Coarse (Nh) | Shrinkage | Seeds | Coverage | RIAE | CIW diag | ESS |
+| --- | ---: | ---: | :---: | :---: | ---: | ---: | ---: | ---: | ---: |
+| small | ~2048 | 20 | OFF | No | 100 | 0.671 | 0.192 | 0.210 | ~13k |
+| small | ~2048 | 20 | ON (4) | No | - | 0.651 | 0.160 | 0.192 | ~7k |
+| small | ~2048 | 20 | ON (4) | Yes | - | 0.736 | 0.137 | 0.155 | ~2.8k |
+| large | 16384 | 4 | OFF | No | 100 | 0.474 | 0.056 | 0.066 | - |
+| large | 16384 | 10 | OFF | No | - | 0.604 | 0.132 | 0.067 | ~17k |
+| large | 16384 | 10 | ON (4) | No | - | 0.589 | 0.133 | 0.069 | ~19k |
+| large | 16384 | 20 | ON (4) | Yes | - | 0.734 | 0.109 | 0.059 | ~831 |
+| large | 16384 | 50 | ON (4) | No | - | 0.675 | 0.131 | 0.092 | ~14k |
+| large | 16384 | 50 | ON (4) | Yes | - | 0.741 | 0.112 | 0.059 | ~1.9k |
+
+Note: "small" runs used Hann window; the Hann taper inflates coverage by
+smoothing the periodogram. The rect-window baseline (0.873) supersedes these.
 
 ## What Each Experiment Revealed
 

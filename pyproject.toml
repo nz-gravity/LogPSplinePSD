@@ -34,7 +34,8 @@ dependencies = [
     "ipywidgets",
     "plotly",
     "morphz",
-    "loguru"
+    "loguru",
+    "scikit-fda"
 ]
 
 [project.optional-dependencies]

@@ -1,5 +1,6 @@
 import os
 import shutil
+import argparse
 from pathlib import Path
 
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
@@ -37,7 +38,7 @@ FULL_N_WARMUP = 1500
 FULL_NUM_CHAINS = 4
 
 RUN_VI_ONLY = False
-INIT_FROM_VI_FULL = True
+INIT_FROM_VI_FULL = False
 REUSE_EXISTING = False  # set True to skip sampling when results already exist
 USE_LISATOOLS_SYNTH = True
 
@@ -45,12 +46,13 @@ USE_LISATOOLS_SYNTH = True
 ALPHA_DELTA = 3.0
 BETA_DELTA = 3.0
 N_KNOTS = 20
+KNOT_METHOD = "density"  # one of: density, log, uniform
+DIFF_MATRIX_ORDER = 2
 TARGET_ACCEPT = 0.7
 MAX_TREE_DEPTH = 10
 TARGET_ACCEPT_BY_CHANNEL: list[float] | None = None
-DESIGN_PSD_TAU: float | None = (
-    1.0  # tau for soft shrinkage toward true PSD; None = disabled
-)
+DESIGN_PSD_TAU: float | None = None  # None disables soft shrinkage toward true PSD
+COMPUTE_LNZ = False
 # Avoid raising max_tree_depth unless you have to: if a channel already hits the
 # max steps, increasing max_tree_depth can dramatically increase walltime.
 MAX_TREE_DEPTH_BY_CHANNEL: list[int] | None = [10, 10, 10]
@@ -67,10 +69,15 @@ MAX_MONTHS = 0.0
 WELCH_NPERSEG = 0
 WELCH_OVERLAP_FRAC = 0.5
 WELCH_WINDOW = "hann"
+WELCH_TUKEY_ALPHA = 0.1
 WELCH_BLOCK_AVG = True
+WISHART_WINDOW = "none"  # one of: none, hann, tukey
+WISHART_TUKEY_ALPHA = 0.1
 ENABLE_COARSE_GRAIN = True
 COARSE_GRAIN_FACTOR = 0
-TARGET_COARSE_BINS = 2048
+TARGET_COARSE_BINS = 8192
+FMIN = 10**-4
+FMAX = 10**-1
 
 C_LIGHT = 299_792_458.0  # m / s
 L_ARM = 2.5e9  # m
@@ -78,6 +85,189 @@ LASER_FREQ = 2.81e14  # Hz
 METRICS_MIN_PCT = 5.0
 METRICS_LOG_EPS = 1e-60
 PLOT_PSD_UNITS = "freq"  # "freq" -> Hz^2/Hz, "strain" -> 1/Hz
+
+
+def _parse_cli() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run LISA multivariate LogPSplinePSD experiment."
+    )
+    parser.add_argument("--n-knots", type=int, default=None)
+    parser.add_argument(
+        "--diff-order",
+        type=int,
+        choices=(1, 2),
+        default=None,
+        help="P-spline difference penalty order.",
+    )
+    parser.add_argument(
+        "--knot-method",
+        type=str,
+        choices=("density", "log", "uniform", "linear"),
+        default=None,
+        help="Knot placement method. 'linear' maps to 'uniform'.",
+    )
+    parser.add_argument("--fmin", type=float, default=None)
+    parser.add_argument("--fmax", type=float, default=None)
+    parser.add_argument("--target-coarse-bins", type=int, default=None)
+    parser.add_argument("--coarse-grain-factor", type=int, default=None)
+    parser.add_argument(
+        "--enable-coarse-grain",
+        dest="enable_coarse_grain",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--disable-coarse-grain",
+        dest="enable_coarse_grain",
+        action="store_false",
+    )
+    parser.set_defaults(enable_coarse_grain=None)
+    parser.add_argument(
+        "--init-from-vi", dest="init_from_vi", action="store_true"
+    )
+    parser.add_argument(
+        "--no-init-from-vi", dest="init_from_vi", action="store_false"
+    )
+    parser.set_defaults(init_from_vi=None)
+    parser.add_argument("--compute-lnz", dest="compute_lnz", action="store_true")
+    parser.add_argument(
+        "--no-compute-lnz", dest="compute_lnz", action="store_false"
+    )
+    parser.set_defaults(compute_lnz=None)
+    parser.add_argument(
+        "--tau",
+        type=float,
+        default=None,
+        help="Enable design PSD shrinkage with this tau value.",
+    )
+    parser.add_argument(
+        "--tau-off", action="store_true", help="Disable design PSD shrinkage."
+    )
+    parser.add_argument("--n-samples", type=int, default=None)
+    parser.add_argument("--n-warmup", type=int, default=None)
+    parser.add_argument("--num-chains", type=int, default=None)
+    parser.add_argument("--target-accept", type=float, default=None)
+    parser.add_argument("--max-tree-depth", type=int, default=None)
+    parser.add_argument("--block-days", type=float, default=None)
+    parser.add_argument(
+        "--wishart-window",
+        type=str,
+        choices=("none", "hann", "tukey"),
+        default=None,
+    )
+    parser.add_argument("--wishart-tukey-alpha", type=float, default=None)
+    parser.add_argument(
+        "--welch-window",
+        type=str,
+        choices=("none", "hann", "tukey"),
+        default=None,
+    )
+    parser.add_argument("--welch-tukey-alpha", type=float, default=None)
+    parser.add_argument(
+        "--reuse-existing", dest="reuse_existing", action="store_true"
+    )
+    parser.add_argument(
+        "--no-reuse-existing", dest="reuse_existing", action="store_false"
+    )
+    parser.set_defaults(reuse_existing=None)
+    return parser.parse_args()
+
+
+args = _parse_cli()
+if args.n_knots is not None:
+    N_KNOTS = int(args.n_knots)
+if args.diff_order is not None:
+    DIFF_MATRIX_ORDER = int(args.diff_order)
+if args.knot_method is not None:
+    KNOT_METHOD = (
+        "uniform" if args.knot_method.strip().lower() == "linear" else args.knot_method.strip().lower()
+    )
+if args.fmin is not None:
+    FMIN = float(args.fmin)
+if args.fmax is not None:
+    FMAX = float(args.fmax)
+if FMIN <= 0.0 or FMAX <= 0.0 or FMAX <= FMIN:
+    raise ValueError(f"Require 0 < fmin < fmax, got fmin={FMIN}, fmax={FMAX}.")
+if args.target_coarse_bins is not None:
+    TARGET_COARSE_BINS = int(args.target_coarse_bins)
+if args.coarse_grain_factor is not None:
+    COARSE_GRAIN_FACTOR = int(args.coarse_grain_factor)
+if args.enable_coarse_grain is not None:
+    ENABLE_COARSE_GRAIN = bool(args.enable_coarse_grain)
+if args.init_from_vi is not None:
+    INIT_FROM_VI_FULL = bool(args.init_from_vi)
+if args.compute_lnz is not None:
+    COMPUTE_LNZ = bool(args.compute_lnz)
+if args.tau_off and args.tau is not None:
+    raise ValueError("Pass either --tau or --tau-off, not both.")
+if args.tau_off:
+    DESIGN_PSD_TAU = None
+elif args.tau is not None:
+    DESIGN_PSD_TAU = float(args.tau)
+if args.n_samples is not None:
+    FULL_N_SAMPLES = int(args.n_samples)
+if args.n_warmup is not None:
+    FULL_N_WARMUP = int(args.n_warmup)
+if args.num_chains is not None:
+    FULL_NUM_CHAINS = int(args.num_chains)
+if args.target_accept is not None:
+    TARGET_ACCEPT = float(args.target_accept)
+if args.max_tree_depth is not None:
+    MAX_TREE_DEPTH = int(args.max_tree_depth)
+if args.block_days is not None:
+    BLOCK_DAYS = float(args.block_days)
+if args.wishart_window is not None:
+    WISHART_WINDOW = str(args.wishart_window).strip().lower()
+if args.wishart_tukey_alpha is not None:
+    WISHART_TUKEY_ALPHA = float(args.wishart_tukey_alpha)
+if args.welch_window is not None:
+    WELCH_WINDOW = str(args.welch_window).strip().lower()
+if args.welch_tukey_alpha is not None:
+    WELCH_TUKEY_ALPHA = float(args.welch_tukey_alpha)
+if args.reuse_existing is not None:
+    REUSE_EXISTING = bool(args.reuse_existing)
+
+
+def _window_spec(
+    name: str, *, tukey_alpha: float
+) -> str | tuple[str, float] | None:
+    key = str(name).strip().lower()
+    if key in ("none", "rect", "rectangular"):
+        return None
+    if key == "hann":
+        return "hann"
+    if key == "tukey":
+        if not (0.0 <= float(tukey_alpha) <= 1.0):
+            raise ValueError(
+                f"Tukey alpha must be in [0, 1], got {tukey_alpha}."
+            )
+        return ("tukey", float(tukey_alpha))
+    raise ValueError(f"Unsupported window name: {name}")
+
+
+WISHART_WINDOW_SPEC = _window_spec(
+    WISHART_WINDOW, tukey_alpha=WISHART_TUKEY_ALPHA
+)
+WELCH_WINDOW_SPEC = _window_spec(WELCH_WINDOW, tukey_alpha=WELCH_TUKEY_ALPHA)
+
+
+def _window_slug(window_spec: str | tuple[str, float] | None) -> str:
+    if window_spec is None:
+        return "rect"
+    if isinstance(window_spec, tuple):
+        name, alpha = window_spec
+        alpha_slug = _format_decimal_slug(float(alpha))
+        return f"{str(name)}{alpha_slug}"
+    return str(window_spec)
+
+
+def _welch_window_arg(
+    window_spec: str | tuple[str, float] | None,
+) -> str | tuple[str, float]:
+    # scipy.signal.welch does not accept None as a valid window argument.
+    # "boxcar" is the rectangular/no-taper equivalent.
+    if window_spec is None:
+        return "boxcar"
+    return window_spec
 
 Nb_hint: int | None = None
 Lb_hint: int | None = None
@@ -240,8 +430,7 @@ logger.info(
 )
 
 
-# Pilot stability band: reduce extreme high-frequency geometry while tuning.
-FMIN, FMAX = 10**-4, 10**-1
+# Pilot stability band is set via globals FMIN/FMAX (CLI-overridable).
 
 analysis_freq = np.fft.rfftfreq(Lb, d=dt)[1:]
 analysis_mask = (analysis_freq >= FMIN) & (analysis_freq <= FMAX)
@@ -333,6 +522,10 @@ def _build_run_slug() -> str:
         f"lb{Lb}",
         _coarse_slug(coarse_cfg),
         f"k{N_KNOTS}",
+        f"d{DIFF_MATRIX_ORDER}",
+        f"km{KNOT_METHOD}",
+        f"ww{_window_slug(WISHART_WINDOW_SPEC)}",
+        f"ew{_window_slug(WELCH_WINDOW_SPEC)}",
         f"f{_format_freq_slug(FMIN)}-{_format_freq_slug(FMAX)}",
         f"ta{_format_decimal_slug(TARGET_ACCEPT)}",
         f"td{MAX_TREE_DEPTH}",
@@ -340,6 +533,7 @@ def _build_run_slug() -> str:
         f"nutsW{FULL_N_WARMUP}S{FULL_N_SAMPLES}",
         f"steps{total_nuts_steps}",
         "viOn" if vi_enabled else "viOff",
+        "lnzOn" if COMPUTE_LNZ else "lnzOff",
         (
             f"tau{_format_decimal_slug(DESIGN_PSD_TAU)}"
             if DESIGN_PSD_TAU is not None
@@ -352,6 +546,13 @@ def _build_run_slug() -> str:
 RUN_SLUG = _build_run_slug()
 RUN_DIR = RESULTS_ROOT / RUN_SLUG
 RUN_DIR.mkdir(parents=True, exist_ok=True)
+logger.info(
+    "Run config: "
+    f"knot_method={KNOT_METHOD}, n_knots={N_KNOTS}, diff_order={DIFF_MATRIX_ORDER}, "
+    f"f=[{FMIN:.3g}, {FMAX:.3g}], coarse={_coarse_slug(coarse_cfg)}, "
+    f"wishart_window={WISHART_WINDOW_SPEC}, welch_window={WELCH_WINDOW_SPEC}, "
+    f"vi_init={INIT_FROM_VI_FULL}, lnz={COMPUTE_LNZ}, tau={DESIGN_PSD_TAU}"
+)
 
 if USE_LISATOOLS_SYNTH:
     run_npz = RUN_DIR / "lisa_data.npz"
@@ -395,11 +596,12 @@ def _run_full_hypothesis(
         num_chains=FULL_NUM_CHAINS,
         n_knots=N_KNOTS,
         degree=2,
-        diffMatrixOrder=2,
-        knot_kwargs=dict(strategy="log"),
+        diffMatrixOrder=DIFF_MATRIX_ORDER,
+        knot_kwargs=dict(method=KNOT_METHOD),
         outdir=str(full_outdir),
         verbose=True,
         coarse_grain_config=coarse_cfg,
+        wishart_window=WISHART_WINDOW_SPEC,
         Nb=Nb,
         fmin=FMIN,
         fmax=FMAX,
@@ -418,7 +620,7 @@ def _run_full_hypothesis(
         max_tree_depth_by_channel=MAX_TREE_DEPTH_BY_CHANNEL,
         dense_mass=DENSE_MASS,
         true_psd=true_psd_source,
-        compute_lnz=True,
+        compute_lnz=COMPUTE_LNZ,
         design_psd=true_psd_source if DESIGN_PSD_TAU is not None else None,
         tau=DESIGN_PSD_TAU,
     )
@@ -428,10 +630,22 @@ def _run_full_hypothesis(
 
 idata, full_result_path = _run_full_hypothesis(full_outdir=RUN_DIR)
 logger.info(f"Full-hypothesis results saved at {full_result_path}")
-full_lnz, full_lnz_err, full_valid = extract_lnz(idata)
-logger.info(f"Full: lnz={full_lnz} lnz_err={full_lnz_err} valid={full_valid}")
+if COMPUTE_LNZ:
+    full_lnz, full_lnz_err, full_valid = extract_lnz(idata)
+    logger.info(f"Full: lnz={full_lnz} lnz_err={full_lnz_err} valid={full_valid}")
+else:
+    logger.info("Full: lnz disabled (COMPUTE_LNZ=False).")
 
-logger.info(idata)
+posterior_ds = idata["posterior"]
+posterior_var_count = len(posterior_ds.data_vars)
+posterior_param_count = 0
+for var in posterior_ds.data_vars.values():
+    n_elements = int(np.prod(var.shape[2:])) if var.ndim >= 2 else int(np.prod(var.shape))
+    posterior_param_count += n_elements
+logger.info(
+    f"InferenceData summary: posterior vars={posterior_var_count}, "
+    f"approx scalar params/draw={posterior_param_count}"
+)
 
 freq_plot = np.asarray(idata["posterior_psd"]["freq"].values)
 
@@ -458,7 +672,7 @@ logger.info(
     "Welch settings: "
     f"nperseg={welch_nperseg} ({welch_nperseg * dt:.0f} s), "
     f"noverlap={welch_noverlap} ({welch_noverlap * dt:.0f} s), "
-    f"window={WELCH_WINDOW!r}, df={welch_df:.3g} Hz."
+    f"window={WELCH_WINDOW_SPEC!r}, df={welch_df:.3g} Hz."
 )
 
 
@@ -495,7 +709,7 @@ def _blocked_welch(
     Lb: int,
     nperseg: int,
     noverlap: int,
-    window: str,
+    window: str | tuple[str, float] | None,
     detrend: str | bool,
 ) -> EmpiricalPSD:
     n, p = data.shape
@@ -557,7 +771,7 @@ if WELCH_BLOCK_AVG and Lb is not None:
         Lb=Lb,
         nperseg=welch_nperseg,
         noverlap=welch_noverlap,
-        window=WELCH_WINDOW,
+        window=_welch_window_arg(WELCH_WINDOW_SPEC),
         detrend=False,
     )
 else:
@@ -566,7 +780,7 @@ else:
         fs=fs,
         nperseg=welch_nperseg,
         noverlap=welch_noverlap,
-        window=WELCH_WINDOW,
+        window=_welch_window_arg(WELCH_WINDOW_SPEC),
         detrend=False,
     )
 empirical_welch = _drop_dc(empirical_welch)

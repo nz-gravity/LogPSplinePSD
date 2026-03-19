@@ -137,10 +137,10 @@ class MultivarBaseSampler(BaseSampler):
         """Save multivariate-specific plots."""
         try:
             t0 = time.perf_counter()
-            logger.info("save_plots(multivar): computing empirical PSD")
+            logger.debug("save_plots(multivar): computing empirical PSD")
             # Create empirical PSD matrix for comparison
             empirical_psd = self._compute_empirical_psd()
-            logger.info(
+            logger.debug(
                 f"save_plots(multivar): empirical PSD computed in {time.perf_counter() - t0:.2f}s"
             )
 
@@ -164,7 +164,7 @@ class MultivarBaseSampler(BaseSampler):
             )
 
             t0 = time.perf_counter()
-            logger.info("save_plots(multivar): plotting PSD matrix")
+            logger.debug("save_plots(multivar): plotting PSD matrix")
             spec = PSDMatrixPlotSpec(
                 idata=idata,
                 freq=np.array(self.freq),
@@ -177,13 +177,13 @@ class MultivarBaseSampler(BaseSampler):
                 outdir=self.config.outdir,
             )
             plot_psd_matrix(spec)
-            logger.info(
+            logger.debug(
                 f"save_plots(multivar): PSD matrix plot done in {time.perf_counter() - t0:.2f}s"
             )
 
             if true_psd is not None and self.config.outdir is not None:
                 t0 = time.perf_counter()
-                logger.info(
+                logger.debug(
                     "save_plots(multivar): plotting true-PSD diagnostics"
                 )
                 _outdir: str = self.config.outdir
@@ -194,7 +194,7 @@ class MultivarBaseSampler(BaseSampler):
                     freq=np.array(self.freq),
                     outdir=_diag_dir,
                 )
-                logger.info(
+                logger.debug(
                     f"save_plots(multivar): true-PSD diagnostics done in {time.perf_counter() - t0:.2f}s"
                 )
 
@@ -226,11 +226,11 @@ class MultivarBaseSampler(BaseSampler):
                 )
 
             t0 = time.perf_counter()
-            logger.info("save_plots(multivar): saving VI diagnostics")
+            logger.debug("save_plots(multivar): saving VI diagnostics")
             self._save_vi_diagnostics(
                 empirical_psd=empirical_psd, log_summary=False
             )
-            logger.info(
+            logger.debug(
                 f"save_plots(multivar): VI diagnostics done in {time.perf_counter() - t0:.2f}s"
             )
         except Exception as e:

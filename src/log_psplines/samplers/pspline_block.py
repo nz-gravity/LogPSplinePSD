@@ -4,7 +4,6 @@ from typing import Any, Optional
 
 import jax
 import jax.numpy as jnp
-import jax.scipy as jsp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
@@ -87,29 +86,32 @@ def sample_pspline_block(
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
     delta = numpyro.sample(delta_name, delta_dist)
 
-    # Sample on the log scale but score against the exact transformed-Gamma
-    # prior induced by phi | delta ~ Gamma(alpha_phi, delta * beta_phi).
+    # We sample eta = log(phi) for geometry, but the model prior is on
+    # phi | delta ~ Gamma(alpha_phi, delta * beta_phi). The factor below
+    # converts the simple base density on eta into that exact transformed prior.
     delta_safe = jnp.maximum(delta, jnp.asarray(1e-12, dtype=delta.dtype))
     log_phi_base = dist.Normal(0.0, 1.0)
     log_phi = numpyro.sample(phi_name, log_phi_base)
     phi = jnp.exp(log_phi)
     phi_rate = jnp.asarray(beta_phi, dtype=delta.dtype) * delta_safe
-    log_prior_phi = (
-        jnp.asarray(alpha_phi, dtype=delta.dtype) * log_phi
-        - phi_rate * phi
-        + jnp.asarray(alpha_phi, dtype=delta.dtype) * jnp.log(phi_rate)
-        - jsp.special.gammaln(jnp.asarray(alpha_phi, dtype=delta.dtype))
+    phi_dist = dist.Gamma(
+        concentration=jnp.asarray(alpha_phi, dtype=delta.dtype),
+        rate=phi_rate,
     )
+    log_prior_phi = phi_dist.log_prob(phi) + log_phi
     numpyro.factor(
         f"{phi_name}_prior",
         log_prior_phi - log_phi_base.log_prob(log_phi),
     )
 
     k = penalty_matrix.shape[0]
+    # weights ~ N(0, I) is only a reference density. The factor below replaces
+    # it with the intended P-spline Gaussian prior induced by phi and P.
     base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
     weights = numpyro.sample(weights_name, base_normal)
 
     residual = weights if w_design is None else weights - w_design
+    # here we do prior(w|phi)~ N(0, phi^-1 P^-1)
     wPw = jnp.dot(residual, jnp.dot(penalty_matrix, residual))
     log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
     if tau is not None and w_design is not None:

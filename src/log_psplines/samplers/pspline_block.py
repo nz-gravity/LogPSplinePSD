@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 import jax
 import jax.numpy as jnp
+import jax.scipy as jsp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
@@ -85,29 +86,24 @@ def sample_pspline_block(
     """
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
     delta = numpyro.sample(delta_name, delta_dist)
-    log_prior_delta = delta_dist.log_prob(delta)
 
-    # Moment-match the original Gamma prior with a log-normal and sample log(phi)
-    # to reduce the funnel geometry seen by NUTS.
-    # NOTE: spoke to Renate about this in ~Sept 2025, she thinks its fine
-    sigma_sq = jnp.log1p(1.0 / alpha_phi)
-    sigma = jnp.sqrt(sigma_sq)
-    # Guard against delta underflow to 0.0 in float32 which makes log(delta)
-    # diverge and can produce inf/NaN loc parameters during VI/NUTS init.
+    # Sample on the log scale but score against the exact transformed-Gamma
+    # prior induced by phi | delta ~ Gamma(alpha_phi, delta * beta_phi).
     delta_safe = jnp.maximum(delta, jnp.asarray(1e-12, dtype=delta.dtype))
-    mu = (
-        jnp.log(alpha_phi)
-        - jnp.log(beta_phi)
-        - jnp.log(delta_safe)
-        - 0.5 * sigma_sq
-    )
-    phi_normal = dist.Normal(loc=mu, scale=sigma)
-    log_phi = numpyro.sample(
-        phi_name,
-        phi_normal,
-    )
+    log_phi_base = dist.Normal(0.0, 1.0)
+    log_phi = numpyro.sample(phi_name, log_phi_base)
     phi = jnp.exp(log_phi)
-    log_prior_phi = phi_normal.log_prob(log_phi) - log_phi
+    phi_rate = jnp.asarray(beta_phi, dtype=delta.dtype) * delta_safe
+    log_prior_phi = (
+        jnp.asarray(alpha_phi, dtype=delta.dtype) * log_phi
+        - phi_rate * phi
+        + jnp.asarray(alpha_phi, dtype=delta.dtype) * jnp.log(phi_rate)
+        - jsp.special.gammaln(jnp.asarray(alpha_phi, dtype=delta.dtype))
+    )
+    numpyro.factor(
+        f"{phi_name}_prior",
+        log_prior_phi - log_phi_base.log_prob(log_phi),
+    )
 
     k = penalty_matrix.shape[0]
     base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)

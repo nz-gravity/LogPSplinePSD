@@ -301,3 +301,8 @@ cython_debug/
 *docs/paper_draft.tex
 
 *.json
+
+
+*.err
+*.out
+logs_*

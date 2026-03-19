@@ -71,7 +71,7 @@ def sample_pspline_block(
 ) -> dict[str, Any]:
     """Draw hierarchical Gamma-Normal P-spline weights and record log priors.
 
-    Parameters
+    Optional Parameters
     ----------
     w_design:
         Reference weights to shrink toward instead of zero. When provided,
@@ -89,6 +89,7 @@ def sample_pspline_block(
 
     # Moment-match the original Gamma prior with a log-normal and sample log(phi)
     # to reduce the funnel geometry seen by NUTS.
+    # NOTE: spoke to Renate about this in ~Sept 2025, she thinks its fine
     sigma_sq = jnp.log1p(1.0 / alpha_phi)
     sigma = jnp.sqrt(sigma_sq)
     # Guard against delta underflow to 0.0 in float32 which makes log(delta)
@@ -116,6 +117,9 @@ def sample_pspline_block(
     wPw = jnp.dot(residual, jnp.dot(penalty_matrix, residual))
     log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
     if tau is not None and w_design is not None:
+        # DEFAULT IS OFF
+        # this additional prior is not part of the original model but can help regularise
+        # the posterior around the design and improve NUTS exploration when the design is informative
         log_prior_w += -0.5 * jnp.sum(residual**2) / tau**2
     base_log_prob = base_normal.log_prob(weights)
     log_prior_adjustment = log_prior_w - base_log_prob
@@ -124,7 +128,9 @@ def sample_pspline_block(
         factor_name = f"weights_prior_{weights_name}"
     numpyro.factor(factor_name, log_prior_adjustment)
 
-    log_prior_total = log_prior_delta + log_prior_phi + log_prior_adjustment
+    # NOTE: no need to 'factor' in prior from delta and phi since they
+    # are explicitly sampled as part of the model and will be included
+    # in the log posterior automatically via Numpyro.
 
     return {
         "weights": weights,

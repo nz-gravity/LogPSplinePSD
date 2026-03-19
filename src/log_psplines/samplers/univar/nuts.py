@@ -17,7 +17,7 @@ from numpyro.infer.util import init_to_value
 
 from ...logger import logger
 from ..base_sampler import SamplerConfig
-from ..utils import (
+from ..pspline_block import (
     build_log_density_fn,
     evaluate_log_density_batch,
     sample_pspline_block,

@@ -20,7 +20,7 @@ from numpyro.infer.util import log_density
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
-from log_psplines.samplers.utils import sample_pspline_block
+from log_psplines.samplers.pspline_block import sample_pspline_block
 
 # ---------------------------------------------------------------------------
 # Helpers shared across tests

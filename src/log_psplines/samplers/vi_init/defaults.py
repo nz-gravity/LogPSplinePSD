@@ -6,7 +6,7 @@ from typing import Dict
 
 import jax.numpy as jnp
 
-from ..utils import pspline_hyperparameter_initials
+from ..pspline_block import pspline_hyperparameter_initials
 
 
 def default_init_values_univar(

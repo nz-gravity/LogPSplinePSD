@@ -5,10 +5,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from skfda.misc.operators import LinearDifferentialOperator
+from skfda.misc.regularization import L2Regularization
+from skfda.representation.basis import BSplineBasis
 
 from ..datatypes import Periodogram
 from .knots_locator import init_knots
-from .penalty import build_bspline_basis_scipy, build_gps_penalty
 
 __all__ = ["init_weights", "init_basis_and_penalty", "init_knots"]
 
@@ -79,54 +81,56 @@ def init_basis_and_penalty(
     grid_points: np.ndarray | None = None,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
-    Generate B-spline basis matrix and GPS penalty matrix.
-
-    Uses scipy.interpolate.BSpline with phantom knots for the basis and the
-    General P-Spline difference penalty (Li & Cao 2022) for the penalty.
-    Both use the same phantom knot vector for mathematical consistency.
+    Generate B-spline basis matrix and penalty matrix.
 
     Parameters
     ----------
     knots : np.ndarray
-        Array of knots in [0, 1], including the boundary values 0.0 and 1.0.
+        Array of knots (values between 0 and 1)
     degree : int
-        Polynomial degree of the B-spline.
+        Degree of the B-spline
     n_grid_points : int
-        Number of evaluation points.  Ignored when ``grid_points`` is given.
+        Number of grid points. Ignored if `grid_points` is provided.
     diff_matrix_order : int
-        Penalty order m (0 = pure ridge, 1 = first differences, 2 = second
-        differences, ...).  Must satisfy m < degree + 1.
-    epsilon : float, default 1e-6
-        Ridge regularisation added to the penalty diagonal.
+        Order of the differential operator for regularization
+    epsilon : float, default=1e-6
+        Small constant for numerical stability
     grid_points : np.ndarray, optional
-        Explicit 1-D evaluation grid in [0, 1].  When provided,
-        ``n_grid_points`` is still checked for length consistency.
+        Locations in [0, 1] at which to evaluate the basis. If None,
+        uses a uniform grid of length `n_grid_points`.
 
     Returns
     -------
-    basis_matrix : jnp.ndarray, shape (n_grid_points, n_basis)
-        B-spline design matrix.  Entry [i, j] = B_j(grid_points[i]).
-    penalty_matrix : jnp.ndarray, shape (n_basis, n_basis)
-        Symmetric positive definite penalty P = D_m^T D_m + epsilon * I,
-        normalised so max(|P|) = 1 before adding the ridge term.
+    Tuple[jnp.ndarray, jnp.ndarray]
+        (basis_matrix, penalty_matrix) as JAX arrays
     """
+    order = degree + 1
+    basis = BSplineBasis(
+        domain_range=[0, 1], order=order, knots=np.asarray(knots).tolist()
+    )
     if grid_points is None:
-        grid_points = np.linspace(0.0, 1.0, n_grid_points)
+        grid_points = np.linspace(0, 1, n_grid_points)
     else:
         grid_points = np.asarray(grid_points, dtype=float)
         if grid_points.ndim != 1:
             raise ValueError("grid_points must be 1-D if provided")
         if grid_points.size != n_grid_points:
             raise ValueError("grid_points length must match n_grid_points")
+        # Clip to [0,1] for numerical safety
         grid_points = np.clip(grid_points, 0.0, 1.0)
 
-    # --- Basis matrix, shape (n_grid_points, n_basis) ---
-    basis_matrix_np = build_bspline_basis_scipy(knots, degree, grid_points)
+    # Compute basis matrix and keep it explicitly 2-D (n_grid, n_basis)
+    basis_eval = basis.to_basis().to_grid(grid_points).data_matrix
+    basis_eval = np.asarray(basis_eval, dtype=np.float64)
+    basis_matrix_np = np.squeeze(basis_eval, axis=-1).T
     basis_matrix = jnp.asarray(basis_matrix_np)
 
-    # --- GPS penalty matrix, shape (n_basis, n_basis) ---
-    penalty_matrix_np = build_gps_penalty(
-        knots, degree, diff_matrix_order, epsilon=epsilon
+    # Compute penalty matrix using L2 regularization
+    regularization = L2Regularization(
+        LinearDifferentialOperator(diff_matrix_order)
     )
+    penalty_matrix = regularization.penalty_matrix(basis)
+    penalty_matrix = penalty_matrix / np.max(penalty_matrix)
+    penalty_matrix = penalty_matrix + epsilon * np.eye(penalty_matrix.shape[1])
 
-    return basis_matrix, jnp.asarray(penalty_matrix_np)
+    return basis_matrix, jnp.asarray(penalty_matrix)

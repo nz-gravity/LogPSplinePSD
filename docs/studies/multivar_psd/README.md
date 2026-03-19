@@ -119,48 +119,22 @@ particularly at large `N`. A principled fix would require replacing the Whittle
 likelihood with a bias-corrected version (e.g. the debiased Whittle likelihood
 of Sykulski et al. 2019), which is left for future work.
 
-## GPS Penalty + Phantom Knots (March 2026)
+## GPS Penalty Experiment — Abandoned (March 2026)
 
-Replaced `scikit-fda` O-spline basis with `scipy.BSpline` + phantom knot vector
-and the Li & Cao (2022) `D_m^T D_m` general difference penalty. This fixes
-the endpoint-pinning bias of clamped B-splines (`B_0(0) = 1`) which was
-responsible for systematic undercoverage at low and high frequencies.
+A replacement for `scikit-fda` using `scipy.BSpline` + phantom knots + the
+Li & Cao (2022) `D_m^T D_m` general difference penalty was trialled and
+**reverted** after a 100-seed study showed consistent coverage regression.
+See `gps_penalty_postmortem.md` (repo root) for the full post-mortem.
 
-### Knot Sensitivity Probe (10 seeds, N=2048, short_nb4, rect window)
+Summary of results (N=2048, Nb=4, K=20, rect window, 99–100 seeds):
 
-| K  | Coverage      | RIAE          | Notes               |
-|----|---------------|---------------|---------------------|
-| 10 | 0.630 ± 0.080 | 0.170 ± 0.015 | Underfitting        |
-| 20 | 0.711 ± 0.055 | 0.185 ± 0.021 | **Sweet spot**      |
-| 30 | 0.713 ± 0.073 | 0.196 ± 0.023 | Diminishing returns |
-| 50 | 0.729 ± 0.046 | 0.216 ± 0.029 | RIAE rises          |
+| Configuration                          | Coverage       | RIAE           |
+|----------------------------------------|----------------|----------------|
+| **scikit-fda baseline (rect)**         | **0.873 ± 0.041** | 0.150 ± 0.015 |
+| GPS + phantom knots                    | 0.811 ± 0.059  | 0.150 ± 0.015  |
+| GPS + clamped knots                    | 0.819 ± 0.059  | 0.151 ± 0.015  |
 
-Coverage jumps from K=10 to K=20 (+0.08) then plateaus. RIAE rises with K
-(overfitting). K=20 is the operational default.
-
-### 100-Seed Study: GPS Basis vs Hann Baseline
-
-Full study (N=2048, Nb=4, K=20, 100 seeds each):
-
-| Variant                          | Coverage       | RIAE           | ESS   |
-|----------------------------------|----------------|----------------|-------|
-| Old basis (scikit-fda) + Hann    | 0.8732 ± 0.041 | 0.1568 ± 0.016 | 11242 |
-| GPS basis (phantom knots) + Rect | 0.8107 ± 0.059 | 0.1503 ± 0.015 | 7282  |
-
-Note: the two runs differ on basis **and** window simultaneously. Hann taper
-inflates coverage by smoothing the periodogram; the ~0.06 gap is partly the
-window effect. The GPS+Rect result (0.81) is the operationally correct
-configuration — it is a large improvement over the 0.47 seen at N=16384 with
-the old basis.
-
-RIAE improves slightly (0.1503 vs 0.1568) despite the rect window. ESS is
-lower (7282 vs 11242) — the GPS penalty changes posterior geometry, requiring
-more NUTS steps per effective sample, but remains well above 1000 per chain.
-
-### Next Step: GPS + Rect + Light Shrinkage
-
-Script: `var3d_gps_basis_shrink.slurm` (100 seeds, `--tau 1.0`, rect window).
-Based on previous shrinkage experiments, this is expected to improve RIAE
-further. Coverage impact is uncertain — shrinkage previously narrowed intervals
-(hurting coverage), but that was with the old over-concentrated basis; with GPS
-phantom knots the intervals are already better calibrated.
+Root cause: GPS `D^T D` is a ≤1.5% approximation of scikit-fda's exact integral
+`∫ B_i''B_j'' dx` for non-uniform (density-based) knots. This is sufficient to
+shift posterior φ and systematically narrow credible intervals. Reverted in
+commit `6fe73b8`.

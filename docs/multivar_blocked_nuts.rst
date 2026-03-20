@@ -26,12 +26,12 @@ Code pointers
 
 The links below point to the current repository layout:
 
-- `Wishart FFT construction (MultivarFFT.compute_wishart) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py>`_
-- `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py>`_
-- `Shared P-spline prior block (sample_pspline_block) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/pspline_block.py>`_
-- `Coarse graining (apply_coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/preprocessing/coarse_grain.py>`_
-- `PSD reconstruction (reconstruct_psd_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py>`_
-- `Wishart and PSD helpers (U_to_Y, Y_to_S, Y_to_U) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar_utils.py>`_
+- `Wishart FFT construction (MultivarFFT.compute_wishart) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L159-L299>`_
+- `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L55-L239>`_
+- `Shared P-spline prior block (sample_pspline_block) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/pspline_block.py#L59-L137>`_
+- `Coarse graining (apply_coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/preprocessing/coarse_grain.py#L288-L343>`_
+- `PSD reconstruction (reconstruct_psd_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py#L531-L580>`_
+- `Wishart and PSD helpers (U_to_Y, Y_to_S, Y_to_U) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar_utils.py#L141-L224>`_
 - `ArviZ export for multivariate samples <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/arviz_utils/to_arviz.py>`_
 
 Notation and sufficient statistics
@@ -57,9 +57,6 @@ where the columns of :math:`U(f_k)` are the eigenvector-weighted components
 :math:`\sqrt{\lambda_\ell^{(k)}} v_\ell^{(k)}`. These are exposed as
 ``u_re`` and ``u_im`` on
 :class:`log_psplines.datatypes.multivar.MultivarFFT`.
-
-.. ADD LINK TO CODE
-
 
 Data to Wishart statistics
 --------------------------
@@ -144,7 +141,20 @@ and each off-diagonal coefficient has its own real and imaginary spline field
 The implemented blocked sampler samples distinct weight vectors for every
 :math:`\theta_{jl}` within row :math:`j`.
 
-.. PROVIDE CODE LINKS, EXPLAIN EINSUM NOTATION THAT WE USE FOR THIS
+Relevant code:
+
+- diagonal P-spline block construction:
+  `delta block in _blocked_channel_model <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L122-L139>`_
+- off-diagonal real and imaginary blocks:
+  `theta blocks in _blocked_channel_model <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L145-L188>`_
+
+The Einstein-summation calls in the implementation are just compact matrix
+algebra:
+
+- ``jnp.einsum("nk,k->n", basis_delta, weights)`` evaluates a spline basis on
+  the frequency grid,
+- ``jnp.einsum("fl,flr->fr", theta_re, u_re_prev)`` and its companions compute
+  the lower-triangular row regressions used to form the residuals.
 
 Per-row factorisation of the likelihood
 ---------------------------------------
@@ -177,7 +187,9 @@ Key mappings:
 - ``u_re`` and ``u_im`` store the rows of :math:`U(f_k)`.
 
 This is implemented in ``_blocked_channel_model`` inside
-:mod:`log_psplines.samplers.multivar.multivar_blocked_nuts`.
+:mod:`log_psplines.samplers.multivar.multivar_blocked_nuts`; the custom
+log-likelihood contribution is added via
+``numpyro.factor("likelihood_channel_*", log_likelihood)``.
 
 Coarse graining
 ---------------
@@ -230,7 +242,7 @@ observed data are stored as periodogram-like spectral matrices derived from the
 Wishart factors, rather than as retained mean FFT components.
 
 Prior on :math:`\phi`: implementation versus theory
-----------------------------------------------------
+---------------------------------------------------
 
 The draft math writes the hierarchical P-spline prior as
 
@@ -246,11 +258,11 @@ with hyperpriors
    \qquad
    \delta_j \sim \mathrm{Gamma}(\alpha_\delta, \beta_\delta).
 
-In the implementation, ``delta`` is sampled from that Gamma prior using the
-NumPyro rate parameterisation, but :math:`\phi \mid \delta` is *not* sampled
-from the exact Gamma distribution. Instead,
-:func:`log_psplines.samplers.pspline_block.sample_pspline_block` samples
-:math:`\log \phi` from a Normal distribution chosen to moment-match the Gamma.
+In the implementation, ``delta`` is sampled directly from that Gamma prior
+using the NumPyro rate parameterisation. For :math:`\phi \mid \delta`, the
+sampled variable is
+:math:`\eta = \log \phi`, but the prior is still the *exact* Gamma prior on
+:math:`\phi`, expressed on the log scale through a change of variables.
 
 For
 
@@ -258,59 +270,56 @@ For
 
    \phi \mid \delta \sim \mathrm{Gamma}(\alpha_\phi, \mathrm{rate}=\beta_\phi \delta),
 
-this gives the log-normal approximation
+write :math:`\eta = \log \phi`, so :math:`\phi = e^\eta`. Then the induced
+log-density for :math:`\eta` is
 
 .. math::
 
-   \log \phi \mid \delta \sim \mathcal{N}(\mu, \sigma^2)
+   \log p(\eta \mid \delta)
+   =
+   \log p_\Gamma(e^\eta \mid \delta) + \eta.
 
-with
+That final ``+ eta`` term is the Jacobian from the transformation
+:math:`\phi = e^\eta`.
 
-.. math::
+In code, :func:`log_psplines.samplers.pspline_block.sample_pspline_block`
+implements this by:
 
-   \sigma^2 = \log\left(1 + \frac{1}{\alpha_\phi}\right),
-   \qquad
-   \mu = \log\left(\frac{\alpha_\phi}{\beta_\phi \delta}\right) - \frac{\sigma^2}{2}.
+- sampling ``log_phi`` from a simple reference distribution,
+- setting ``phi = exp(log_phi)``,
+- evaluating the exact Gamma log-density at ``phi``,
+- adding the Jacobian term ``+ log_phi``,
+- correcting the reference density with ``numpyro.factor``.
 
-Why use the approximation?
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+This means the sampler keeps the geometry benefits of working on the log scale
+without changing the prior itself.
 
-The practical reason is posterior geometry. Large or tiny values of
-:math:`\phi` interact strongly with the spline weights through the quadratic
-penalty, and the exact hierarchical model can be awkward for VI-based
-initialisation and NUTS warmup. The moment-matched log-normal prior is a
-pragmatic regularisation of that geometry.
+Why we do not need an explicit likelihood object
+------------------------------------------------
 
-Why not just use the original prior?
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NumPyro models do not require a separate ``Likelihood(...)`` object. Instead,
+the model defines the joint log density by accumulating contributions from:
 
-You *can*. The main trade-off is between theoretical fidelity and numerical
-robustness.
+- ``numpyro.sample(name, distribution)`` for variables with a named
+  probability distribution,
+- ``numpyro.factor(name, log_term)`` for custom log-density terms that are
+  easier to write directly than as a built-in distribution.
 
-Reasons to prefer the original Gamma prior:
+In this codebase:
 
-- it matches the written model exactly,
-- it preserves the intended tail behaviour,
-- it avoids changing the implied shrinkage when posterior inference on
-  :math:`\phi` matters substantively.
+- the exact transformed-Gamma prior on ``log_phi`` is implemented by
+  ``numpyro.sample`` plus a correcting ``numpyro.factor`` in
+  ``sample_pspline_block``,
+- the P-spline Gaussian penalty on the weights is also imposed through
+  ``numpyro.factor`` in ``sample_pspline_block``,
+- the blocked Whittle/Wishart likelihood is imposed through
+  ``numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)`` in
+  ``_blocked_channel_model``.
 
-Reasons the implementation currently does not use it directly:
-
-- direct sampling of :math:`\phi` tended to produce brittle warmup and more
-  difficult curvature for the existing centred spline-weight parameterisation,
-- the current sampler path relies heavily on stable VI initialisation,
-- the approximation was an expedient way to make the blocked sampler usable on
-  realistic multivariate runs.
-
-The more precise statement is that the current code does *not* merely
-reparameterise the exact Gamma prior; it changes the prior to a log-normal
-approximation with matching first two moments.
-
-If exact prior fidelity becomes important, a better first step would be to keep
-sampling on the log scale but use the *exact transformed Gamma density* for
-``log_phi`` rather than the moment-matched Normal. That would preserve the
-original prior while still avoiding a hard positivity constraint in the sampler.
-Whether that is stable enough in practice is an empirical question.
+So the likelihood is still there mathematically. It is just expressed directly
+as a log-density contribution, rather than wrapped in a separate explicit
+likelihood class. NumPyro then combines all ``sample`` and ``factor`` terms
+into the full posterior that NUTS sees.
 
 Symbol to code mapping
 ----------------------

@@ -466,6 +466,10 @@ class PSDMatrixPlotSpec:
     vi_color: Optional[str] = "tab:orange"
     vi_label: str = "VI median"
     vi_alpha: float = 0.2
+    overlay_prior: bool = False
+    prior_color: Optional[str] = "tab:green"
+    prior_label: str = "Prior"
+    prior_alpha: float = 0.15
     freq_range: Optional[tuple[float, float]] = None
     psd_scale: (
         np.ndarray | float | Callable[[np.ndarray], np.ndarray] | None
@@ -484,6 +488,7 @@ def _prepare_plot_inputs(
     list[dict],
     np.ndarray | None,
     dict | None,
+    dict | None,
 ]:
     """Extract plotting inputs and normalise idata/spec variants."""
     if spec.show_coherence and spec.show_csd_magnitude:
@@ -496,11 +501,13 @@ def _prepare_plot_inputs(
     empirical_psd = spec.empirical_psd
     true_psd = spec.true_psd
     vi_ci_dict = None
+    prior_ci_dict = None
 
     if spec.idata is not None:
         extracted = extract_plotting_data(spec.idata)
         quantiles = extracted.get("posterior_psd_matrix_quantiles")
         vi_quantiles = extracted.get("vi_psd_matrix_quantiles")
+        prior_quantiles = extracted.get("prior_psd_matrix_quantiles")
 
         using_vi_only = False
         if quantiles is None:
@@ -533,6 +540,16 @@ def _prepare_plot_inputs(
             logger.warning(
                 "overlay_vi requested but VI quantiles unavailable; ignoring."
             )
+        if spec.overlay_prior and prior_quantiles is not None:
+            prior_ci_dict = _quantiles_to_ci_dict(
+                prior_quantiles,
+                show_coherence=spec.show_coherence,
+                show_csd_magnitude=spec.show_csd_magnitude,
+            )
+        elif spec.overlay_prior and prior_quantiles is None:
+            logger.warning(
+                "overlay_prior requested but prior quantiles unavailable; ignoring."
+            )
     elif ci_dict is None:
         raise ValueError("Provide either `idata` or `ci_dict`.")
 
@@ -553,6 +570,8 @@ def _prepare_plot_inputs(
     ci_dict = _slice_ci_dict(ci_dict, freq_idx)
     if vi_ci_dict is not None:
         vi_ci_dict = _slice_ci_dict(vi_ci_dict, freq_idx)
+    if prior_ci_dict is not None:
+        prior_ci_dict = _slice_ci_dict(prior_ci_dict, freq_idx)
     if true_psd is not None:
         true_psd = true_psd[freq_idx, ...]
     if empirical_psd is not None:
@@ -567,6 +586,8 @@ def _prepare_plot_inputs(
         ci_dict = _scale_ci_dict(ci_dict, scale_main)
         if vi_ci_dict is not None:
             vi_ci_dict = _scale_ci_dict(vi_ci_dict, scale_main)
+        if prior_ci_dict is not None:
+            prior_ci_dict = _scale_ci_dict(prior_ci_dict, scale_main)
         if true_psd is not None:
             true_psd = true_psd * scale_main[:, None, None]
         if empirical_psd is not None:
@@ -608,6 +629,7 @@ def _prepare_plot_inputs(
         extra_empirical_styles,
         true_psd,
         vi_ci_dict,
+        prior_ci_dict,
     )
 
 
@@ -671,8 +693,26 @@ def _render_diag_panel(
     vi_ci_dict: dict | None,
     vi_label_added: bool,
     knots: Optional[np.ndarray] = None,
-) -> bool:
+    prior_ci_dict: dict | None = None,
+    prior_label_added: bool = False,
+) -> tuple[bool, bool]:
     q05, q50, q95 = ci_dict["psd"][(i, i)]
+    # Prior band first (background layer)
+    if prior_ci_dict and (i, i) in prior_ci_dict.get("psd", {}):
+        pr_q05, pr_q50, pr_q95 = prior_ci_dict["psd"][(i, i)]
+        _plot_ci_band(
+            ax,
+            freq,
+            pr_q05,
+            pr_q50,
+            pr_q95,
+            color=spec.prior_color,
+            label=spec.prior_label if not prior_label_added else None,
+            alpha=spec.prior_alpha,
+            lw=1.0,
+            ls=":",
+        )
+        prior_label_added = True
     _plot_empirical_overlays(
         ax,
         lambda emp: emp.psd[:, i, i].real,
@@ -719,7 +759,7 @@ def _render_diag_panel(
     ax.set_yscale(spec.diag_yscale)
     if i == 0 and j == 0:
         ax.legend(frameon=False, fontsize=9)
-    return vi_label_added
+    return vi_label_added, prior_label_added
 
 
 def _render_coherence_panel(
@@ -737,10 +777,32 @@ def _render_coherence_panel(
     vi_ci_dict: dict | None,
     vi_label_added: bool,
     knots: Optional[np.ndarray] = None,
-) -> bool:
+    prior_ci_dict: dict | None = None,
+    prior_label_added: bool = False,
+) -> tuple[bool, bool]:
     if "coh" not in ci_dict or (i, j) not in ci_dict["coh"]:
         raise ValueError("ci_dict missing coherence (i,j)={i,j}")
     q05, q50, q95 = ci_dict["coh"][(i, j)]
+    # Prior coherence band (if available)
+    if (
+        prior_ci_dict
+        and "coh" in prior_ci_dict
+        and (i, j) in prior_ci_dict["coh"]
+    ):
+        pr_q05, pr_q50, pr_q95 = prior_ci_dict["coh"][(i, j)]
+        _plot_ci_band(
+            ax,
+            freq,
+            pr_q05,
+            pr_q50,
+            pr_q95,
+            color=spec.prior_color,
+            label=spec.prior_label if not prior_label_added else None,
+            alpha=spec.prior_alpha,
+            lw=1.0,
+            ls=":",
+        )
+        prior_label_added = True
     _plot_empirical_overlays(
         ax,
         lambda emp: emp.coherence[:, i, j],
@@ -784,7 +846,7 @@ def _render_coherence_panel(
         )
         vi_label_added = True
     ax.set_yscale(spec.offdiag_yscale)
-    return vi_label_added
+    return vi_label_added, prior_label_added
 
 
 def _render_magnitude_panel(
@@ -802,12 +864,33 @@ def _render_magnitude_panel(
     vi_ci_dict: dict | None,
     vi_label_added: bool,
     knots: Optional[np.ndarray] = None,
-) -> bool:
+    prior_ci_dict: dict | None = None,
+    prior_label_added: bool = False,
+) -> tuple[bool, bool]:
     if "mag" not in ci_dict or (i, j) not in ci_dict["mag"]:
         raise ValueError(
             f"ci_dict missing |CSD| quantiles for (i,j)=({i},{j})"
         )
     q05, q50, q95 = ci_dict["mag"][(i, j)]
+    if (
+        prior_ci_dict
+        and "mag" in prior_ci_dict
+        and (i, j) in prior_ci_dict["mag"]
+    ):
+        pr_q05, pr_q50, pr_q95 = prior_ci_dict["mag"][(i, j)]
+        _plot_ci_band(
+            ax,
+            freq,
+            pr_q05,
+            pr_q50,
+            pr_q95,
+            color=spec.prior_color,
+            label=spec.prior_label if not prior_label_added else None,
+            alpha=spec.prior_alpha,
+            lw=1.0,
+            ls=":",
+        )
+        prior_label_added = True
     _plot_ci_band(
         ax,
         freq,
@@ -847,7 +930,7 @@ def _render_magnitude_panel(
         )
         vi_label_added = True
     ax.set_yscale(spec.offdiag_yscale)
-    return vi_label_added
+    return vi_label_added, prior_label_added
 
 
 def _render_re_panel(
@@ -865,8 +948,25 @@ def _render_re_panel(
     vi_ci_dict: dict | None,
     vi_label_added: bool,
     knots: Optional[np.ndarray] = None,
-) -> bool:
+    prior_ci_dict: dict | None = None,
+    prior_label_added: bool = False,
+) -> tuple[bool, bool]:
     q05, q50, q95 = ci_dict["re"][(i, j)]
+    if prior_ci_dict and "re" in prior_ci_dict and (i, j) in prior_ci_dict["re"]:
+        pr_q05, pr_q50, pr_q95 = prior_ci_dict["re"][(i, j)]
+        _plot_ci_band(
+            ax,
+            freq,
+            pr_q05,
+            pr_q50,
+            pr_q95,
+            color=spec.prior_color,
+            label=spec.prior_label if not prior_label_added else None,
+            alpha=spec.prior_alpha,
+            lw=1.0,
+            ls=":",
+        )
+        prior_label_added = True
     _plot_ci_band(
         ax,
         freq,
@@ -906,7 +1006,7 @@ def _render_re_panel(
         )
         vi_label_added = True
     ax.set_yscale(spec.offdiag_yscale)
-    return vi_label_added
+    return vi_label_added, prior_label_added
 
 
 def _render_im_panel(
@@ -924,8 +1024,25 @@ def _render_im_panel(
     vi_ci_dict: dict | None,
     vi_label_added: bool,
     knots: Optional[np.ndarray] = None,
-) -> bool:
+    prior_ci_dict: dict | None = None,
+    prior_label_added: bool = False,
+) -> tuple[bool, bool]:
     q05, q50, q95 = ci_dict["im"][(i, j)]
+    if prior_ci_dict and "im" in prior_ci_dict and (i, j) in prior_ci_dict["im"]:
+        pr_q05, pr_q50, pr_q95 = prior_ci_dict["im"][(i, j)]
+        _plot_ci_band(
+            ax,
+            freq,
+            pr_q05,
+            pr_q50,
+            pr_q95,
+            color=spec.prior_color,
+            label=spec.prior_label if not prior_label_added else None,
+            alpha=spec.prior_alpha,
+            lw=1.0,
+            ls=":",
+        )
+        prior_label_added = True
     _plot_ci_band(
         ax,
         freq,
@@ -965,7 +1082,7 @@ def _render_im_panel(
         )
         vi_label_added = True
     ax.set_yscale(spec.offdiag_yscale)
-    return vi_label_added
+    return vi_label_added, prior_label_added
 
 
 def _finalize_psd_matrix_figure(
@@ -1070,6 +1187,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
         extra_empirical_styles,
         true_psd,
         vi_ci_dict,
+        prior_ci_dict,
     ) = _prepare_plot_inputs(spec)
 
     # Extract knots if show_knots is enabled
@@ -1109,6 +1227,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
     axes = np.asarray(axes_arr)
 
     vi_label_added = False
+    prior_label_added = False
     for i in range(p):
         for j in range(p):
             axis = axes[i, j]
@@ -1126,7 +1245,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
 
             if i == j:
                 panel_knots = diag_knots.get(i, fallback_knots)
-                vi_label_added = _render_diag_panel(
+                vi_label_added, prior_label_added = _render_diag_panel(
                     axis,
                     i,
                     j,
@@ -1141,6 +1260,8 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     vi_ci_dict,
                     vi_label_added,
                     panel_knots,
+                    prior_ci_dict=prior_ci_dict,
+                    prior_label_added=prior_label_added,
                 )
             elif i > j and spec.show_coherence:
                 panel_knots = (
@@ -1148,7 +1269,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     if offdiag_knots is not None
                     else fallback_knots
                 )
-                vi_label_added = _render_coherence_panel(
+                vi_label_added, prior_label_added = _render_coherence_panel(
                     axis,
                     i,
                     j,
@@ -1163,6 +1284,8 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     vi_ci_dict,
                     vi_label_added,
                     panel_knots,
+                    prior_ci_dict=prior_ci_dict,
+                    prior_label_added=prior_label_added,
                 )
             elif i > j and spec.show_csd_magnitude:
                 panel_knots = (
@@ -1170,7 +1293,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     if offdiag_knots is not None
                     else fallback_knots
                 )
-                vi_label_added = _render_magnitude_panel(
+                vi_label_added, prior_label_added = _render_magnitude_panel(
                     axis,
                     i,
                     j,
@@ -1185,6 +1308,8 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     vi_ci_dict,
                     vi_label_added,
                     panel_knots,
+                    prior_ci_dict=prior_ci_dict,
+                    prior_label_added=prior_label_added,
                 )
             elif i > j:
                 panel_knots = (
@@ -1192,7 +1317,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     if offdiag_knots is not None
                     else fallback_knots
                 )
-                vi_label_added = _render_re_panel(
+                vi_label_added, prior_label_added = _render_re_panel(
                     axis,
                     i,
                     j,
@@ -1207,6 +1332,8 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     vi_ci_dict,
                     vi_label_added,
                     panel_knots,
+                    prior_ci_dict=prior_ci_dict,
+                    prior_label_added=prior_label_added,
                 )
             elif i < j:
                 panel_knots = (
@@ -1214,7 +1341,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     if offdiag_knots is not None
                     else fallback_knots
                 )
-                vi_label_added = _render_im_panel(
+                vi_label_added, prior_label_added = _render_im_panel(
                     axis,
                     i,
                     j,
@@ -1229,6 +1356,8 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     vi_ci_dict,
                     vi_label_added,
                     panel_knots,
+                    prior_ci_dict=prior_ci_dict,
+                    prior_label_added=prior_label_added,
                 )
 
             ylab = _ylabel_for(

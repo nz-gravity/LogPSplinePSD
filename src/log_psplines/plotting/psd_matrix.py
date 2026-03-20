@@ -952,7 +952,11 @@ def _render_re_panel(
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
     q05, q50, q95 = ci_dict["re"][(i, j)]
-    if prior_ci_dict and "re" in prior_ci_dict and (i, j) in prior_ci_dict["re"]:
+    if (
+        prior_ci_dict
+        and "re" in prior_ci_dict
+        and (i, j) in prior_ci_dict["re"]
+    ):
         pr_q05, pr_q50, pr_q95 = prior_ci_dict["re"][(i, j)]
         _plot_ci_band(
             ax,
@@ -1028,7 +1032,11 @@ def _render_im_panel(
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
     q05, q50, q95 = ci_dict["im"][(i, j)]
-    if prior_ci_dict and "im" in prior_ci_dict and (i, j) in prior_ci_dict["im"]:
+    if (
+        prior_ci_dict
+        and "im" in prior_ci_dict
+        and (i, j) in prior_ci_dict["im"]
+    ):
         pr_q05, pr_q50, pr_q95 = prior_ci_dict["im"][(i, j)]
         _plot_ci_band(
             ax,

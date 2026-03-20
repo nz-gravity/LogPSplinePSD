@@ -966,9 +966,7 @@ def _compute_prior_predictive_multivar(
                 scale=1.0 / (beta_phi * max(delta, 1e-12)),
             )
 
-            w_d = np.asarray(
-                design_weights.get(f"delta_{j}", np.zeros(k))
-            )
+            w_d = np.asarray(design_weights.get(f"delta_{j}", np.zeros(k)))
             precision = phi * penalty + 1e-6 * np.eye(k)
             if tau is not None and f"delta_{j}" in design_weights:
                 precision += np.eye(k) / tau**2
@@ -996,16 +994,13 @@ def _compute_prior_predictive_multivar(
                         )
                         phi_t = rng.gamma(
                             shape=alpha_phi,
-                            scale=1.0
-                            / (beta_phi * max(delta_t, 1e-12)),
+                            scale=1.0 / (beta_phi * max(delta_t, 1e-12)),
                         )
                         key = f"theta_{part}_{j_ch}_{l_ch}"
                         w_d_t = np.asarray(
                             design_weights.get(key, np.zeros(k_theta))
                         )
-                        prec_t = (
-                            phi_t * theta_penalty + 1e-6 * np.eye(k_theta)
-                        )
+                        prec_t = phi_t * theta_penalty + 1e-6 * np.eye(k_theta)
                         if tau is not None and key in design_weights:
                             prec_t += np.eye(k_theta) / tau**2
                         cov_t = np.linalg.inv(prec_t)

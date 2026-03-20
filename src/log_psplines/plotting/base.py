@@ -215,6 +215,8 @@ def extract_plotting_data(
         _maybe_set_psd_quantiles(idata.posterior_psd, "posterior")
     if hasattr(idata, "vi_posterior_psd"):
         _maybe_set_psd_quantiles(idata.vi_posterior_psd, "vi")
+    if hasattr(idata, "prior_psd"):
+        _maybe_set_psd_quantiles(idata.prior_psd, "prior")
 
     idata_attrs = getattr(idata, "attrs", {}) or {}
     only_vi_mode = bool(idata_attrs.get("only_vi"))

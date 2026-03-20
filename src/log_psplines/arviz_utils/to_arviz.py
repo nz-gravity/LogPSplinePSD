@@ -669,6 +669,45 @@ def _create_multivar_inference_data(
         dataset=Dataset(posterior_psd_vars, coords=coords)
     )
 
+    # Prior predictive PSD quantiles (only when shrinkage tau is set)
+    tau = getattr(config, "tau", None)
+    design_psd_cfg = getattr(config, "design_psd", None)
+    if tau is not None and design_psd_cfg is not None:
+        prior_real_q, prior_imag_q = _compute_prior_predictive_multivar(
+            spline_model,
+            fft_data,
+            config,
+        )
+        if factor_matrix is not None:
+            factor_4d = factor_matrix[None, None, :, :]
+            prior_real_q = prior_real_q * factor_4d
+            prior_imag_q = prior_imag_q * factor_4d
+        prior_psd_vars = {
+            "psd_matrix_real": DataArray(
+                prior_real_q,
+                dims=["percentile", "freq", "channels", "channels2"],
+                coords={
+                    "percentile": coords["percentile"],
+                    "freq": coords["freq"],
+                    "channels": coords["channels"],
+                    "channels2": coords["channels"],
+                },
+            ),
+            "psd_matrix_imag": DataArray(
+                prior_imag_q,
+                dims=["percentile", "freq", "channels", "channels2"],
+                coords={
+                    "percentile": coords["percentile"],
+                    "freq": coords["freq"],
+                    "channels": coords["channels"],
+                    "channels2": coords["channels"],
+                },
+            ),
+        }
+        idata["prior_psd"] = _xr.DataTree(
+            dataset=Dataset(prior_psd_vars, coords=coords)
+        )
+
     idata["spline_model"] = _xr.DataTree(
         dataset=_pack_spline_model_multivar(spline_model)
     )
@@ -838,6 +877,156 @@ def _compute_posterior_predictive_multivar(
         compute_coherence=compute_coh,
     )
     return percentiles, psd_real_q, psd_imag_q, coh_q
+
+
+def _compute_prior_predictive_multivar(
+    spline_model: "MultivariateLogPSplines",
+    fft_data: MultivarFFT,
+    config: "SamplerConfig",
+    n_prior_draws: int = 500,
+    seed: int = 42,
+    log_delta_sq_clip: float = 20.0,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Draw PSD matrices from the shrinkage prior and return quantiles.
+
+    This mirrors the posterior predictive computation but samples weights
+    from the P-spline prior (with design weights and tau shrinkage)
+    instead of using MCMC draws.
+
+    Returns
+    -------
+    psd_real_q, psd_imag_q : np.ndarray
+        Shape ``(3, N, p, p)`` — the 5/50/95% quantiles in the
+        **standardized** (channel-whitened) parameterization.
+    """
+    rng = np.random.default_rng(seed)
+    all_bases, all_penalties = spline_model.get_all_bases_and_penalties()
+    N = spline_model.N
+    p = spline_model.p
+
+    # Resolve design weights from config
+    design_weights: dict = {}
+    design_psd_raw = getattr(config, "design_psd", None)
+    if design_psd_raw is not None:
+        # Re-compute design weights at model frequencies.
+        # The sampler already did this, but we don't have a handle on its
+        # internal _design_weights dict, so recompute cheaply here.
+        if isinstance(design_psd_raw, tuple):
+            src_freq, src_psd = design_psd_raw
+            src_freq = np.asarray(src_freq)
+            src_psd = np.asarray(src_psd, dtype=np.complex128)
+            model_freq = np.asarray(fft_data.freq)
+            aligned = np.stack(
+                [
+                    [
+                        np.interp(model_freq, src_freq, src_psd[:, j, l].real)
+                        + 1j
+                        * np.interp(
+                            model_freq, src_freq, src_psd[:, j, l].imag
+                        )
+                        for l in range(p)
+                    ]
+                    for j in range(p)
+                ],
+                axis=0,
+            )
+            design_psd = np.moveaxis(aligned, [0, 1, 2], [1, 2, 0])
+        else:
+            design_psd = np.asarray(design_psd_raw, dtype=np.complex128)
+
+        # Apply channel standardization (the model works on standardized data)
+        channel_stds = getattr(config, "channel_stds", None)
+        if channel_stds is not None:
+            stds = np.asarray(channel_stds, dtype=np.float64)
+            scale_matrix = np.outer(stds, stds)
+            design_psd = design_psd / scale_matrix[np.newaxis, :, :]
+
+        design_weights = spline_model.compute_design_weights(design_psd)
+
+    tau = getattr(config, "tau", None)
+    alpha_phi = float(getattr(config, "alpha_phi", 1.0))
+    beta_phi = float(getattr(config, "beta_phi", 1e-4))
+    alpha_delta = float(getattr(config, "alpha_delta", 1.0))
+    beta_delta = float(getattr(config, "beta_delta", 1.0))
+
+    log_delta_sq_all = np.zeros((n_prior_draws, N, p))
+    n_theta = p * (p - 1) // 2
+    theta_re_all = np.zeros((n_prior_draws, N, n_theta))
+    theta_im_all = np.zeros((n_prior_draws, N, n_theta))
+
+    for draw_idx in range(n_prior_draws):
+        for j in range(p):
+            basis = np.asarray(all_bases[j])
+            penalty = np.asarray(all_penalties[j])
+            k = basis.shape[1]
+
+            delta = rng.gamma(shape=alpha_delta, scale=1.0 / beta_delta)
+            phi = rng.gamma(
+                shape=alpha_phi,
+                scale=1.0 / (beta_phi * max(delta, 1e-12)),
+            )
+
+            w_d = np.asarray(
+                design_weights.get(f"delta_{j}", np.zeros(k))
+            )
+            precision = phi * penalty + 1e-6 * np.eye(k)
+            if tau is not None and f"delta_{j}" in design_weights:
+                precision += np.eye(k) / tau**2
+            cov = np.linalg.inv(precision)
+            cov = 0.5 * (cov + cov.T)
+            weights = rng.multivariate_normal(w_d, cov)
+            log_delta_sq_all[draw_idx, :, j] = np.clip(
+                basis @ weights, -log_delta_sq_clip, log_delta_sq_clip
+            )
+
+        if p > 1:
+            theta_basis = np.asarray(all_bases[p])
+            theta_penalty = np.asarray(all_penalties[p])
+            k_theta = theta_basis.shape[1]
+
+            theta_idx = 0
+            for j_ch in range(1, p):
+                for l_ch in range(j_ch):
+                    for part, arr in [
+                        ("re", theta_re_all),
+                        ("im", theta_im_all),
+                    ]:
+                        delta_t = rng.gamma(
+                            shape=alpha_delta, scale=1.0 / beta_delta
+                        )
+                        phi_t = rng.gamma(
+                            shape=alpha_phi,
+                            scale=1.0
+                            / (beta_phi * max(delta_t, 1e-12)),
+                        )
+                        key = f"theta_{part}_{j_ch}_{l_ch}"
+                        w_d_t = np.asarray(
+                            design_weights.get(key, np.zeros(k_theta))
+                        )
+                        prec_t = (
+                            phi_t * theta_penalty + 1e-6 * np.eye(k_theta)
+                        )
+                        if tau is not None and key in design_weights:
+                            prec_t += np.eye(k_theta) / tau**2
+                        cov_t = np.linalg.inv(prec_t)
+                        cov_t = 0.5 * (cov_t + cov_t.T)
+                        w_t = rng.multivariate_normal(w_d_t, cov_t)
+                        arr[draw_idx, :, theta_idx] = theta_basis @ w_t
+                    theta_idx += 1
+
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
+    psd_real_q, psd_imag_q, _ = spline_model.compute_psd_quantiles(
+        log_delta_sq_all,
+        theta_re_all,
+        theta_im_all,
+        percentiles=percentiles,
+        n_samples_max=n_prior_draws,
+        compute_coherence=False,
+    )
+    return (
+        np.asarray(psd_real_q, dtype=np.float64),
+        np.asarray(psd_imag_q, dtype=np.float64),
+    )
 
 
 def _reconstruct_log_delta_sq(

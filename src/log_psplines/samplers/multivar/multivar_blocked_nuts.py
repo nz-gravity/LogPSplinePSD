@@ -48,7 +48,7 @@ from ..pspline_block import (
     evaluate_log_density_batch,
     sample_pspline_block,
 )
-from ..vi_init.adapters import prepare_block_vi
+from ..vi_init.adapters import prepare_block_vi, prepare_coarse_block_vi
 from .multivar_base import MultivarBaseSampler
 
 
@@ -265,6 +265,8 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     vi_guide: Optional[str] = None
     vi_posterior_draws: int = 256
     vi_progress_bar: Optional[bool] = None
+    coarse_vi_fine_refine_steps: int = 75
+    coarse_vi_fine_refine_guide: Optional[str] = "diag"
 
     # Optional separate hyperparameters for off-diagonal theta P-spline blocks.
     # When left as ``None`` they default to the diagonal hyperparameters
@@ -506,12 +508,33 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         total_runtime = 0.0
 
         vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
-        vi_setup = prepare_block_vi(
-            self,
-            rng_key=cast(jax.Array, self.rng_key),
-            block_model=_blocked_channel_model,
-        )
+        coarse_sampler = getattr(self, "_coarse_vi_sampler", None)
+        if coarse_sampler is not None and not vi_only_mode:
+            vi_setup = prepare_coarse_block_vi(
+                self,
+                coarse_sampler=coarse_sampler,
+                block_model=_blocked_channel_model,
+            )
+        else:
+            vi_setup = prepare_block_vi(
+                self,
+                rng_key=cast(jax.Array, self.rng_key),
+                block_model=_blocked_channel_model,
+            )
         self._vi_diagnostics = vi_setup.diagnostics
+        vi_diag = self._vi_diagnostics or {}
+        self._extra_idata_attrs = {
+            key: vi_diag[key]
+            for key in (
+                "coarse_vi_attempted",
+                "coarse_vi_success",
+                "coarse_vi_mode",
+                "coarse_vi_full_nfreq",
+                "coarse_vi_nfreq",
+                "coarse_vi_target_nfreq",
+            )
+            if key in vi_diag
+        }
         if self._vi_diagnostics:
             empirical_psd = (
                 self._compute_empirical_psd()

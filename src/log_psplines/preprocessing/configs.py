@@ -74,6 +74,13 @@ class VIConfig:
     vi_posterior_draws: int = 256
     vi_progress_bar: Optional[bool] = None
     vi_psd_max_draws: int = 64
+    coarse_grain_config_vi: Optional[CoarseGrainConfig | dict] = None
+    auto_coarse_vi: bool = False
+    auto_coarse_vi_target_nfreq: int = 192
+    auto_coarse_vi_min_full_nfreq: int = 512
+    use_coarse_vi_for_init: bool = True
+    coarse_vi_fine_refine_steps: int = 75
+    coarse_vi_fine_refine_guide: Optional[str] = "diag"
 
 
 @dataclass(frozen=True)

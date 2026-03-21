@@ -83,6 +83,32 @@ def run_mcmc(
         config=sampler_inputs,
     )
 
+    if preproc_input.coarse_vi_context is not None:
+        coarse_model = _build_model_from_data(
+            preproc_input.coarse_vi_context.processed_data,
+            preproc_input.run_config.model,
+        )
+        coarse_sampler_inputs = _build_sampler_inputs(
+            preproc_input.coarse_vi_context.processed_data,
+            preproc_input.run_config,
+            preproc_input.coarse_vi_context.sampler_type,
+            preproc_input.coarse_vi_context.scaled_true_psd,
+            None,
+            None,
+            None,
+        )
+        coarse_sampler_obj = _create_sampler(
+            data=preproc_input.coarse_vi_context.processed_data,
+            model=coarse_model,
+            config=coarse_sampler_inputs,
+        )
+        setattr(sampler_obj, "_coarse_vi_sampler", coarse_sampler_obj)
+        setattr(
+            sampler_obj,
+            "_coarse_vi_metadata",
+            dict(preproc_input.coarse_vi_context.metadata),
+        )
+
     # Finally, run MCMC and return results
     return sampler_obj.sample(
         n_samples=preproc_input.run_config.n_samples,

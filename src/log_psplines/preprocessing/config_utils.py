@@ -60,6 +60,13 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "vi_posterior_draws",
         "only_vi",
         "vi_progress_bar",
+        "coarse_grain_config_vi",
+        "auto_coarse_vi",
+        "auto_coarse_vi_target_nfreq",
+        "auto_coarse_vi_min_full_nfreq",
+        "use_coarse_vi_for_init",
+        "coarse_vi_fine_refine_steps",
+        "coarse_vi_fine_refine_guide",
     }
     diagnostics_fields = {
         "verbose",

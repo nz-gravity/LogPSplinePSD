@@ -79,6 +79,7 @@ class VIConfig:
     auto_coarse_vi_target_nfreq: int = 192
     auto_coarse_vi_min_full_nfreq: int = 512
     use_coarse_vi_for_init: bool = True
+    vi_coarse_only: bool = False
 
 
 @dataclass(frozen=True)

@@ -449,6 +449,30 @@ def compute_coarse_vi_artifacts_univar(
         transferred_init = dict(_univar_default_init(sampler))
         transferred_init["weights"] = jnp.asarray(fine_weights)
 
+        coarse_only = bool(getattr(sampler.config, "vi_coarse_only", False))
+
+        if coarse_only:
+            # Skip fine-grid VI — use transferred weights directly.
+            diagnostics = _mark_coarse_vi(
+                coarse_diag,
+                metadata,
+                attempted=True,
+                success=True,
+            )
+            diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
+            diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
+            diagnostics["coarse_vi_psd"] = np.asarray(coarse_psd)
+            coarse_losses = coarse_diag.get("losses")
+            if coarse_losses is not None:
+                diagnostics["coarse_losses"] = np.asarray(coarse_losses)
+            return VIInitialisationArtifacts(
+                init_strategy=None,
+                rng_key=coarse_artifacts.rng_key,
+                diagnostics=diagnostics,
+                means=coarse_artifacts.means,
+                posterior_draws=coarse_artifacts.posterior_draws,
+            )
+
         # Run fine-grid VI warm-started from transferred weights.
         fine_artifacts = compute_vi_artifacts_univar(
             sampler,
@@ -1268,10 +1292,15 @@ def prepare_block_vi(
     guide_cfg = getattr(sampler.config, "vi_guide", None) or "auto(block)"
     steps = int(getattr(sampler.config, "vi_steps", 0) or 0)
     draws = int(getattr(sampler.config, "vi_posterior_draws", 0) or 0)
-    logger.info(
-        "Running VI initialisation per block "
-        f"(p={sampler.p}, guide={guide_cfg}, steps={steps}, Lr={sampler.config.vi_lr}, posterior_draws={draws})..."
-    )
+    if sampler.config.init_from_vi:
+        logger.info(
+            "Running VI initialisation per block "
+            f"(p={sampler.p}, guide={guide_cfg}, steps={steps}, Lr={sampler.config.vi_lr}, posterior_draws={draws})..."
+        )
+    else:
+        logger.info(
+            f"Skipping VI initialisation per block (p={sampler.p}); using default NUTS initialisation."
+        )
     p = sampler.p
     init_strategies: List[Optional[Callable[[Any], Any]]] = [None] * p
     mcmc_keys: List[jax.Array] = [jax.random.PRNGKey(0)] * p
@@ -1511,6 +1540,32 @@ def prepare_coarse_block_vi(
                 default_init_values=default_vals,
             )
             init_overrides[channel_index] = transferred
+
+        coarse_only = bool(getattr(sampler.config, "vi_coarse_only", False))
+
+        if coarse_only:
+            # Skip fine-grid VI — use coarse diagnostics directly.
+            coarse_diag = coarse_setup.diagnostics or {}
+            merged_diagnostics = dict(coarse_diag)
+            merged_diagnostics.update(metadata)
+            merged_diagnostics["coarse_vi_attempted"] = 1
+            merged_diagnostics["coarse_vi_success"] = 1
+            merged_diagnostics["psd_matrix_complex"] = fine_design
+            merged_diagnostics["psd_matrix"] = np.real(fine_design)
+            merged_diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
+            merged_diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
+            merged_diagnostics["coarse_vi_psd"] = np.real(
+                np.asarray(coarse_design, dtype=np.complex128)
+            )
+            coarse_losses = coarse_diag.get("losses")
+            if coarse_losses is not None:
+                merged_diagnostics["coarse_losses"] = np.asarray(coarse_losses)
+            return BlockVIArtifacts(
+                init_strategies=[None] * sampler.p,
+                mcmc_keys=coarse_setup.mcmc_keys,
+                rng_key=coarse_setup.rng_key,
+                diagnostics=merged_diagnostics,
+            )
 
         # Run standard blocked VI on the fine sampler, seeded from the
         # transferred coarse values.

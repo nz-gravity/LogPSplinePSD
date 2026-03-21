@@ -27,6 +27,7 @@ from .derived_weights import (
     find_weight_vars,
     select_rep_indices,
 )
+from .psd_compare import _run as _run_psd_compare
 from .run_all import run_all_diagnostics
 
 # Setup consistent styling for diagnostics plots
@@ -2594,6 +2595,13 @@ def generate_diagnostics_summary(
             return None
         return fval if np.isfinite(fval) else None
 
+    def _pick_scalar(*values) -> Optional[float]:
+        for value in values:
+            fval = _as_float(value)
+            if fval is not None:
+                return fval
+        return None
+
     n_samples = idata.posterior.sizes.get("draw", 0)
     n_chains = idata.posterior.sizes.get("chain", 1)
     n_params = len(list(idata.posterior.data_vars))
@@ -2972,6 +2980,8 @@ def generate_diagnostics_summary(
         "riae",
         "riae_matrix",
         "coverage",
+        "ci_width",
+        "ci_width_diag_mean",
         "coherence_riae",
         "riae_diag_mean",
         "riae_diag_max",
@@ -2994,6 +3004,13 @@ def generate_diagnostics_summary(
         coverage_value = _as_float(psd_diag.get("coverage"))
         if coverage_value is not None and np.isfinite(coverage_value):
             psd_lines.append(f"  Coverage: {coverage_value*100:.1f}%")
+
+        ci_width_value = _pick_scalar(
+            psd_diag.get("ci_width"),
+            psd_diag.get("ci_width_diag_mean"),
+        )
+        if ci_width_value is not None:
+            psd_lines.append(f"  CI width: {ci_width_value:.3g}")
 
     psd_band_lines = []
     var_med = _as_float(attrs.get("psd_bands_variance_median"))
@@ -3018,6 +3035,94 @@ def generate_diagnostics_summary(
     if psd_band_lines:
         summary.append("\nPSD band summaries:")
         summary.extend(psd_band_lines)
+
+    vi_metrics = {}
+    have_vi_psd = hasattr(idata, "vi_posterior_psd")
+    if have_vi_psd:
+        vi_metrics["riae"] = _pick_scalar(
+            attrs.get("vi_riae_vs_truth"),
+            attrs.get("vi_riae"),
+        )
+        vi_metrics["coverage"] = _pick_scalar(
+            attrs.get("vi_coverage_vs_truth"),
+            attrs.get("vi_coverage"),
+        )
+        vi_metrics["ci_width"] = _pick_scalar(
+            attrs.get("vi_ci_width_vs_truth"),
+            attrs.get("vi_ci_width"),
+            attrs.get("vi_ci_width_diag_mean"),
+        )
+        if not any(value is not None for value in vi_metrics.values()):
+            vi_psd_metrics = _run_psd_compare(
+                idata=None,
+                idata_vi=idata,
+                truth=attrs.get("true_psd"),
+                psd_ref=attrs.get("true_psd"),
+            )
+            vi_metrics["riae"] = _pick_scalar(
+                vi_psd_metrics.get("riae"),
+                vi_psd_metrics.get("riae_matrix"),
+            )
+            vi_metrics["coverage"] = _pick_scalar(
+                vi_psd_metrics.get("coverage")
+            )
+            vi_metrics["ci_width"] = _pick_scalar(
+                vi_psd_metrics.get("ci_width"),
+                vi_psd_metrics.get("ci_width_diag_mean"),
+            )
+
+    nuts_metrics = {
+        "riae": _pick_scalar(attrs.get("riae"), attrs.get("riae_matrix")),
+        "coverage": _pick_scalar(attrs.get("coverage")),
+        "ci_width": _pick_scalar(
+            attrs.get("ci_width"),
+            attrs.get("ci_width_diag_mean"),
+            attrs.get("psd_compare_ci_width"),
+            attrs.get("psd_compare_ci_width_diag_mean"),
+        ),
+    }
+
+    if (
+        have_vi_psd
+        and any(value is not None for value in nuts_metrics.values())
+        and any(value is not None for value in vi_metrics.values())
+    ):
+        summary.append("\nVI vs NUTS PSD accuracy:")
+        vi_riae = vi_metrics.get("riae")
+        nuts_riae = nuts_metrics.get("riae")
+        if vi_riae is not None or nuts_riae is not None:
+            if vi_riae is not None and nuts_riae is not None:
+                summary.append(
+                    f"  RIAE: VI={vi_riae:.3f} | NUTS={nuts_riae:.3f}"
+                )
+            else:
+                summary.append("  RIAE: unavailable")
+
+        vi_cov = vi_metrics.get("coverage")
+        nuts_cov = nuts_metrics.get("coverage")
+        if vi_cov is not None or nuts_cov is not None:
+            if vi_cov is not None and nuts_cov is not None:
+                summary.append(
+                    f"  Coverage: VI={vi_cov*100:.1f}% | NUTS={nuts_cov*100:.1f}%"
+                )
+            else:
+                summary.append("  Coverage: unavailable")
+
+        vi_ci_width = vi_metrics.get("ci_width")
+        nuts_ci_width = nuts_metrics.get("ci_width")
+        if vi_ci_width is not None or nuts_ci_width is not None:
+            if vi_ci_width is not None and nuts_ci_width is not None:
+                summary.append(
+                    f"  CI width: VI={vi_ci_width:.3g} | NUTS={nuts_ci_width:.3g}"
+                )
+            elif vi_ci_width is not None:
+                summary.append(
+                    f"  CI width: VI={vi_ci_width:.3g} | NUTS=unavailable"
+                )
+            else:
+                summary.append(
+                    f"  CI width: VI=unavailable | NUTS={nuts_ci_width:.3g}"
+                )
 
     # Overall assessment (best-effort)
     summary.append("\nOverall Convergence Assessment:")

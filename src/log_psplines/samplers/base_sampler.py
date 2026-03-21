@@ -241,10 +241,12 @@ class BaseSampler(ABC):
             "riae",
             "riae_matrix",
             "coverage",
+            "ci_width",
             "coherence_riae",
             "riae_diag_mean",
             "riae_diag_max",
             "riae_offdiag",
+            "ci_width_diag_mean",
         }
 
         for module, metrics in (results or {}).items():
@@ -531,7 +533,10 @@ class BaseSampler(ABC):
         # XLA_FLAGS=--xla_force_host_platform_device_count=N); blindly using
         # chain_method='parallel' in that case can cause NumPyro to launch more
         # chains than requested, leading to shape mismatches in ArviZ.
-        if n_devs >= self.config.num_chains and n_devs <= 2 * self.config.num_chains:
+        if (
+            n_devs >= self.config.num_chains
+            and n_devs <= 2 * self.config.num_chains
+        ):
             logger.info(
                 f"Running {self.config.num_chains} chains in parallel across {n_devs} device(s)."
             )

@@ -158,6 +158,8 @@ def _run(
     if psd_metrics:
         if "coverage" in psd_metrics:
             metrics["coverage_vs_truth"] = psd_metrics["coverage"]
+        if "ci_width" in psd_metrics:
+            metrics["ci_width_vs_truth"] = psd_metrics["ci_width"]
         if "riae" in psd_metrics:
             metrics["riae_vs_truth"] = psd_metrics["riae"]
         if "riae_matrix" in psd_metrics:

@@ -65,6 +65,7 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "auto_coarse_vi_target_nfreq",
         "auto_coarse_vi_min_full_nfreq",
         "use_coarse_vi_for_init",
+        "vi_coarse_only",
     }
     diagnostics_fields = {
         "verbose",

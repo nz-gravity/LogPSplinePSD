@@ -24,10 +24,10 @@ from ..pspline_block import (
 )
 from ..vi_init import VIInitialisationMixin
 from ..vi_init.adapters import (
-    _make_chainwise_init_strategy,
-    _pick_from_draws_or_means,
+    _median_vi_values,
     compute_coarse_vi_artifacts_univar,
     compute_vi_artifacts_univar,
+    select_vi_or_default_init,
 )
 from ..vi_init.defaults import default_init_values_univar
 from ..vi_init.mixin import VIInitialisationArtifacts
@@ -138,45 +138,27 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             vi_artifacts = compute_vi_artifacts_univar(
                 self, model=bayesian_model
             )
-        init_strategy = vi_artifacts.init_strategy
-        if coarse_sampler is None and not vi_only_mode:
-            raw_draws = {
-                name: jnp.asarray(value)
-                for name, value in (vi_artifacts.posterior_draws or {}).items()
-            }
 
-            def _log_posterior(values: Dict[str, jnp.ndarray]) -> float:
-                params = {
-                    "weights": jnp.asarray(values["weights"]),
-                    "phi": jnp.asarray(values["phi"]),
-                    "delta": jnp.asarray(values["delta"]),
-                }
-                return float(self._logpost_fn(params))
-
+        # Use median VI draw if it beats the deterministic default.
+        init_strategy = None
+        if not vi_only_mode:
             _univar_sites = ("weights", "phi", "delta")
-            _vi_means = {
-                name: jnp.asarray(value)
-                for name, value in (vi_artifacts.means or {}).items()
-                if name in _univar_sites
-            }
-
-            def _build_candidate(rng_key):
-                return _pick_from_draws_or_means(
-                    rng_key,
-                    draws=raw_draws,
-                    means=_vi_means,
-                    num_chains=int(self.config.num_chains),
-                    anchor_name="weights",
-                    site_names=_univar_sites,
-                )
-
-            init_strategy = _make_chainwise_init_strategy(
-                first_site_name="delta",
-                default_values=default_values,
-                build_candidate=_build_candidate,
-                log_posterior_fn=_log_posterior,
-                log_prefix="Univariate VI init",
+            vi_median = _median_vi_values(
+                draws={
+                    name: jnp.asarray(value)
+                    for name, value in (vi_artifacts.posterior_draws or {}).items()
+                },
+                site_names=_univar_sites,
             )
+            if vi_median:
+                init_strategy = select_vi_or_default_init(
+                    vi_values=vi_median,
+                    default_values=default_values,
+                    log_posterior_fn=lambda vals: float(self._logpost_fn(
+                        {k: jnp.asarray(v) for k, v in vals.items()}
+                    )),
+                    log_prefix="Univariate VI init",
+                )
 
         init_strategy = init_strategy or init_to_value(values=default_values)
         self.rng_key = vi_artifacts.rng_key

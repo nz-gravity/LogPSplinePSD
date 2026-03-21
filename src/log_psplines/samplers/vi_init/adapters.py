@@ -9,13 +9,12 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 import jax
 import jax.numpy as jnp
 import numpy as np
-import numpyro
-from numpyro.infer.util import init_to_uniform, init_to_value
+from numpyro.infer.util import init_to_value
 
 from ...datatypes.multivar_utils import _interp_complex_matrix
 from ...diagnostics.psd_compare import compute_multivar_riae_diagnostics
 from ...logger import logger
-from ...psplines.initialisation import init_weights
+from .bridge import transfer_block_init_values, transfer_univar_weights
 from ..pspline_block import (
     build_log_density_fn,
     pspline_hyperparameter_initials,
@@ -36,14 +35,6 @@ from .mixin import (
     _interpret_khat,
 )
 
-
-
-def _coarse_vi_refine_steps(config) -> int:
-    return max(0, int(getattr(config, "coarse_vi_fine_refine_steps", 0) or 0))
-
-
-def _coarse_vi_refine_guide(config) -> str:
-    return str(getattr(config, "coarse_vi_fine_refine_guide", None) or "diag")
 
 
 # ---------------------------------------------------------------------------
@@ -151,14 +142,16 @@ def _reconstruct_psd_quantiles_from_draws(
     return psd_quantiles, coherence_quantiles, psd_quantiles["real"]["q50"]
 
 
-def _extract_vi_samples_np(vi_result) -> Dict[str, np.ndarray]:
-    """Convert a ``VIResult.samples`` dict to NumPy arrays on host."""
-    if vi_result.samples is None:
+def _to_np(x) -> np.ndarray:
+    """Move a JAX array to host as a NumPy array."""
+    return np.asarray(jax.device_get(x))
+
+
+def _to_np_dict(d: Optional[Dict[str, Any]]) -> Dict[str, np.ndarray]:
+    """Convert a dict of JAX arrays to NumPy arrays on host."""
+    if not d:
         return {}
-    return {
-        name: np.asarray(jax.device_get(value))
-        for name, value in vi_result.samples.items()
-    }
+    return {name: _to_np(value) for name, value in d.items()}
 
 
 def _extract_true_psd(
@@ -168,58 +161,10 @@ def _extract_true_psd(
     """Return the true PSD from config, optionally rescaled."""
     if sampler.config.true_psd is None:
         return None
-    psd = np.asarray(jax.device_get(sampler.config.true_psd))
+    psd = _to_np(sampler.config.true_psd)
     if rescale_fn is not None:
         psd = rescale_fn(psd)
     return psd
-
-
-def _maybe_refine_vi_locally(
-    *,
-    sampler,
-    model: Callable[..., Any],
-    model_args: tuple[Any, ...],
-    init_values: Dict[str, jnp.ndarray],
-    rng_key: jax.Array,
-    log_prefix: str,
-) -> tuple[Optional[Any], jax.Array]:
-    """Run a short local VI polish from a transferred coarse init."""
-    refine_steps = _coarse_vi_refine_steps(sampler.config)
-    if refine_steps <= 0:
-        return None, rng_key
-
-    refine_guide = _coarse_vi_refine_guide(sampler.config)
-    progress_cfg = getattr(sampler.config, "vi_progress_bar", None)
-    progress_bar = (
-        bool(getattr(sampler.config, "verbose", False))
-        if progress_cfg is None
-        else bool(progress_cfg)
-    )
-    key_refine, key_out = jax.random.split(rng_key)
-    try:
-        logger.info(
-            f"{log_prefix}: refining transferred init on fine model "
-            f"(steps={refine_steps}, guide={refine_guide})."
-        )
-        vi_result = fit_vi(
-            model=model,
-            rng_key=key_refine,
-            vi_steps=refine_steps,
-            optimizer_lr=float(getattr(sampler.config, "vi_lr", 1e-2)),
-            model_args=model_args,
-            guide=refine_guide,
-            posterior_draws=int(
-                getattr(sampler.config, "vi_posterior_draws", 0) or 0
-            ),
-            progress_bar=progress_bar,
-            init_values=init_values,
-        )
-        return vi_result, key_out
-    except Exception as exc:
-        logger.warning(
-            f"{log_prefix}: fine-grid VI refinement failed ({exc}); using transferred coarse init."
-        )
-        return None, key_out
 
 
 def _coarse_vi_metadata(sampler) -> Dict[str, Any]:
@@ -257,133 +202,41 @@ def _strip_coarse_vi_plot_arrays(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _median_sample_tree(
-    sample_tree: Dict[str, Any],
-    names: Optional[Sequence[str]] = None,
-) -> Dict[str, jnp.ndarray]:
-    """Return elementwise medians for the requested VI sample sites."""
-    if not sample_tree:
-        return {}
-    if names is None:
-        names = sample_tree.keys()
+def _median_vi_values(
+    draws: Dict[str, jnp.ndarray],
+    site_names: Optional[Sequence[str]] = None,
+) -> Optional[Dict[str, jnp.ndarray]]:
+    """Return elementwise median across VI posterior draws."""
+    if not draws:
+        return None
     out: Dict[str, jnp.ndarray] = {}
-    for name in names:
-        value = sample_tree.get(name)
-        if value is None:
+    for name, value in draws.items():
+        if site_names is not None and name not in site_names:
             continue
         arr = jnp.asarray(value)
-        if arr.ndim == 0:
-            out[name] = arr
-        else:
-            out[name] = jnp.median(arr, axis=0)
-    return out
+        out[name] = jnp.median(arr, axis=0) if arr.ndim >= 1 else arr
+    return out or None
 
 
-def _pick_from_draws_or_means(
-    rng_key: Optional[jax.Array],
+def select_vi_or_default_init(
     *,
-    draws: Dict[str, jnp.ndarray],
-    means: Dict[str, jnp.ndarray],
-    num_chains: int,
-    anchor_name: str,
-    site_names: Optional[Sequence[str]] = None,
-) -> tuple[Optional[Dict[str, jnp.ndarray]], str]:
-    """Pick a single candidate init from VI draws or means.
-
-    For multi-chain: selects a random draw.  For single-chain: elementwise
-    median.  Falls back to *means* when draws are unavailable.
-    """
-    if draws and anchor_name in draws:
-        n_draws = int(jnp.asarray(draws[anchor_name]).shape[0])
-        if num_chains > 1:
-            idx = _select_vi_sample_index(rng_key, n_draws)
-            selected = {
-                name: jnp.asarray(value)[idx]
-                for name, value in draws.items()
-                if site_names is None or name in site_names
-            }
-            return selected, f"draw {idx}"
-        return (
-            _median_sample_tree(draws, names=site_names),
-            "median",
-        )
-    if means:
-        return means, "mean"
-    return None, "unavailable"
-
-
-def _select_vi_sample_index(rng_key: Optional[jax.Array], n_draws: int) -> int:
-    if rng_key is None or n_draws <= 1:
-        return 0
-    idx = jax.random.randint(rng_key, (), 0, n_draws)
-    return int(jax.device_get(idx))
-
-
-def _extract_refined_artifacts(
-    refined_vi_result: Optional[Any],
-    site_filter: Optional[set[str]] = None,
-) -> tuple[Dict[str, jnp.ndarray], Dict[str, jnp.ndarray]]:
-    """Extract draws and means as JAX arrays from a refined VI result."""
-    if refined_vi_result is None:
-        return {}, {}
-
-    def _filter(items):
-        return {
-            name: jnp.asarray(value)
-            for name, value in (items or {}).items()
-            if site_filter is None or name in site_filter
-        }
-
-    return _filter(refined_vi_result.samples), _filter(refined_vi_result.means)
-
-
-def _make_chainwise_init_strategy(
-    *,
-    first_site_name: str,
+    vi_values: Optional[Dict[str, jnp.ndarray]],
     default_values: Dict[str, jnp.ndarray],
-    build_candidate: Callable[[Optional[jax.Array]], tuple[Optional[Dict[str, jnp.ndarray]], str]],
-    log_posterior_fn: Optional[Callable[[Dict[str, jnp.ndarray]], float]] = None,
-    log_prefix: str,
-) -> Callable[[Any], Any]:
-    """Create a per-chain init strategy with VI-vs-deterministic gating."""
+    log_posterior_fn: Callable[[Dict[str, jnp.ndarray]], float],
+    log_prefix: str = "VI init",
+):
+    """Compare median VI init vs deterministic default; return the better one."""
+    if vi_values is None:
+        return init_to_value(values=default_values)
 
-    active_values: Optional[Dict[str, jnp.ndarray]] = None
-
-    def _strategy(site=None):
-        nonlocal active_values
-
-        if site is None:
-            return partial(_strategy)
-
-        if site["type"] != "sample" or site["is_observed"]:
-            return None
-
-        if active_values is None or site["name"] == first_site_name:
-            rng_key = site["kwargs"].get("rng_key")
-            candidate_values, label = build_candidate(rng_key)
-            selected_values = default_values
-
-            if candidate_values is not None:
-                use_candidate = True
-                if log_posterior_fn is not None:
-                    with numpyro.handlers.block():
-                        det_log_post = float(log_posterior_fn(default_values))
-                        vi_log_post = float(log_posterior_fn(candidate_values))
-                    logger.info(
-                        f"{log_prefix}: deterministic init log posterior={det_log_post:.3f}, "
-                        f"VI init log posterior={vi_log_post:.3f} [{label}]"
-                    )
-                    use_candidate = (
-                        np.isfinite(vi_log_post) and vi_log_post > det_log_post
-                    )
-                selected_values = candidate_values if use_candidate else default_values
-            active_values = selected_values
-
-        if site["name"] in active_values:
-            return active_values[site["name"]]
-        return init_to_uniform(site)
-
-    return _strategy
+    vi_lp = float(log_posterior_fn(vi_values))
+    det_lp = float(log_posterior_fn(default_values))
+    logger.info(
+        f"{log_prefix}: VI log-post={vi_lp:.3f}, default log-post={det_lp:.3f}"
+    )
+    if np.isfinite(vi_lp) and vi_lp > det_lp:
+        return init_to_value(values=vi_values)
+    return init_to_value(values=default_values)
 
 
 def _validate_positive_finite_psd(psd: np.ndarray) -> bool:
@@ -473,9 +326,9 @@ def _build_univar_vi_diagnostics(sampler, vi_result) -> Dict[str, Any]:
     psd_quantiles = None
 
     if weights is not None:
-        weights_np = np.asarray(jax.device_get(weights))
+        weights_np = _to_np(weights)
         ln_psd = sampler.spline_model(vi_result.means["weights"])
-        vi_psd = np.asarray(jax.device_get(jnp.exp(ln_psd))) * scaling
+        vi_psd = _to_np(jnp.exp(ln_psd)) * scaling
 
     if vi_result.samples is not None:
         weights_draws = vi_result.samples.get("weights")
@@ -498,7 +351,7 @@ def _build_univar_vi_diagnostics(sampler, vi_result) -> Dict[str, Any]:
     }
     if psd_quantiles is not None:
         diagnostics["psd_quantiles"] = psd_quantiles
-    vi_samples = _extract_vi_samples_np(vi_result)
+    vi_samples = _to_np_dict(vi_result.samples)
     if vi_samples:
         diagnostics["vi_samples"] = vi_samples
     return diagnostics
@@ -508,6 +361,7 @@ def compute_vi_artifacts_univar(
     sampler,
     *,
     model: Callable[..., Any],
+    init_values: Optional[Dict[str, jnp.ndarray]] = None,
 ) -> VIInitialisationArtifacts:
     """Run VI for univariate samplers and return initialisation artifacts."""
 
@@ -516,17 +370,17 @@ def compute_vi_artifacts_univar(
     )
 
     def _postprocess(vi_result):
-        init_values = {
+        means = {
             name: jnp.asarray(v) for name, v in vi_result.means.items()
         }
         diagnostics = _build_univar_vi_diagnostics(sampler, vi_result)
-        return init_values, diagnostics
+        return means, diagnostics
 
     return sampler._run_vi_initialisation(
         model=model,
         model_args=_univar_model_args(sampler),
         guide=guide_spec,
-        init_values=_univar_default_init(sampler),
+        init_values=init_values or _univar_default_init(sampler),
         postprocess=_postprocess,
     )
 
@@ -537,185 +391,98 @@ def compute_coarse_vi_artifacts_univar(
     coarse_sampler,
     model: Callable[..., Any],
 ) -> VIInitialisationArtifacts:
-    """Run VI on a coarse grid and transfer the PSD shape to fine-grid init."""
+    """VI-coarse → transfer → VI-fine for univariate models.
 
+    1. Run standard VI on the coarse grid.
+    2. Transfer the coarse PSD shape to fine-grid spline weights.
+    3. Run standard VI on the fine grid, warm-started from the transfer.
+    """
     metadata = _coarse_vi_metadata(sampler)
     coarse_artifacts = compute_vi_artifacts_univar(coarse_sampler, model=model)
-    diagnostics = _mark_coarse_vi(
-        coarse_artifacts.diagnostics,
-        metadata,
-        attempted=True,
-        success=False,
-    )
+    coarse_diag = coarse_artifacts.diagnostics or {}
 
-    coarse_psd = diagnostics.get("psd")
+    coarse_psd = coarse_diag.get("psd")
     if coarse_psd is None:
-        psd_quantiles = diagnostics.get("psd_quantiles") or {}
-        coarse_psd = psd_quantiles.get("q50")
+        coarse_psd = (coarse_diag.get("psd_quantiles") or {}).get("q50")
+
     if coarse_psd is None or not _validate_positive_finite_psd(coarse_psd):
         logger.warning(
-            "Coarse-grid VI did not produce a valid PSD warm start; using default init."
+            "Coarse-grid VI did not produce a valid PSD; "
+            "falling back to standard fine-grid VI."
+        )
+        fine_artifacts = compute_vi_artifacts_univar(sampler, model=model)
+        diagnostics = _mark_coarse_vi(
+            fine_artifacts.diagnostics, metadata,
+            attempted=True, success=False,
         )
         return VIInitialisationArtifacts(
-            None,
-            coarse_artifacts.rng_key,
+            fine_artifacts.init_strategy,
+            fine_artifacts.rng_key,
             _strip_coarse_vi_plot_arrays(diagnostics),
+            means=fine_artifacts.means,
+            posterior_draws=fine_artifacts.posterior_draws,
         )
 
     try:
         coarse_freq = np.asarray(coarse_sampler.periodogram.freqs, dtype=float)
         fine_freq = np.asarray(sampler.periodogram.freqs, dtype=float)
-        fine_scaling = _get_scaling_factor(sampler.periodogram, sampler.config)
-        default_values = _univar_default_init(sampler)
 
-        raw_draws = coarse_artifacts.posterior_draws or {}
-        transformed_cache: Dict[str, Dict[str, jnp.ndarray]] = {}
+        coarse_means = coarse_artifacts.means or {}
+        if "weights" not in coarse_means:
+            raise ValueError("Coarse VI did not produce mean weights")
 
-        def _transform_candidate(draw_values: Dict[str, jnp.ndarray]):
-            coarse_weights = np.asarray(
-                jax.device_get(jnp.asarray(draw_values["weights"]))
-            )
-            coarse_psd_draw = np.exp(
-                np.asarray(
-                    jax.device_get(coarse_sampler.spline_model(jnp.asarray(coarse_weights)))
-                )
-            )
-            coarse_psd_draw *= _get_scaling_factor(
+        fine_weights = transfer_univar_weights(
+            coarse_weights=np.asarray(
+                jax.device_get(coarse_means["weights"])
+            ),
+            coarse_spline_model=coarse_sampler.spline_model,
+            coarse_freq=coarse_freq,
+            coarse_scaling=_get_scaling_factor(
                 coarse_sampler.periodogram, coarse_sampler.config
-            )
-            interp_psd = np.interp(fine_freq, coarse_freq, coarse_psd_draw)
-            interp_model_psd = np.maximum(interp_psd / fine_scaling, 1e-12)
-            fine_weights = init_weights(
-                jnp.asarray(np.array(np.log(interp_model_psd), copy=True)),
-                sampler.spline_model,
-            )
-            candidate = dict(default_values)
-            candidate["weights"] = jnp.asarray(fine_weights)
-            return candidate
+            ),
+            fine_spline_model=sampler.spline_model,
+            fine_freq=fine_freq,
+            fine_scaling=_get_scaling_factor(
+                sampler.periodogram, sampler.config
+            ),
+        )
+        transferred_init = dict(_univar_default_init(sampler))
+        transferred_init["weights"] = jnp.asarray(fine_weights)
 
-        def _build_transferred_candidate(rng_key: Optional[jax.Array]):
-            if raw_draws and "weights" in raw_draws:
-                n_draws = int(jnp.asarray(raw_draws["weights"]).shape[0])
-                if int(sampler.config.num_chains) > 1:
-                    idx = _select_vi_sample_index(rng_key, n_draws)
-                    label = f"draw {idx}"
-                else:
-                    idx = -1
-                    label = "median"
-                cache_key = str(idx)
-                if cache_key not in transformed_cache:
-                    if idx >= 0:
-                        draw_values = {
-                            name: jnp.asarray(value)[idx]
-                            for name, value in raw_draws.items()
-                            if name == "weights"
-                        }
-                    else:
-                        draw_values = _median_sample_tree(raw_draws, names=("weights",))
-                    transformed_cache[cache_key] = _transform_candidate(
-                        draw_values
-                    )
-                return transformed_cache[cache_key], label
-
-            means = coarse_artifacts.means or {}
-            if "weights" not in means:
-                return None, "unavailable"
-            return (
-                _transform_candidate(
-                    {
-                        "weights": jnp.asarray(means["weights"]),
-                    }
-                ),
-                "mean",
-            )
-
-        seed_candidate, seed_label = _build_transferred_candidate(None)
-        refined_vi_result = None
-        next_rng_key = coarse_artifacts.rng_key
-        if seed_candidate is not None:
-            refined_vi_result, next_rng_key = _maybe_refine_vi_locally(
-                sampler=sampler,
-                model=model,
-                model_args=_univar_model_args(sampler),
-                init_values=seed_candidate,
-                rng_key=coarse_artifacts.rng_key,
-                log_prefix="Univariate coarse-VI init",
-            )
-
-        _univar_sites = {"weights", "phi", "delta"}
-        refined_draws, refined_means = _extract_refined_artifacts(
-            refined_vi_result, site_filter=_univar_sites
+        # Run fine-grid VI warm-started from transferred weights.
+        fine_artifacts = compute_vi_artifacts_univar(
+            sampler, model=model, init_values=transferred_init,
         )
 
-        def _build_candidate(rng_key: Optional[jax.Array]):
-            result, label = _pick_from_draws_or_means(
-                rng_key,
-                draws=refined_draws,
-                means=refined_means,
-                num_chains=int(sampler.config.num_chains),
-                anchor_name="weights",
-                site_names=_univar_sites,
-            )
-            if result is not None:
-                return result, f"refined {label}"
-            return _build_transferred_candidate(rng_key)
-
-        def _log_posterior(values: Dict[str, jnp.ndarray]) -> float:
-            params = {
-                "weights": jnp.asarray(values["weights"]),
-                "phi": jnp.asarray(values["phi"]),
-                "delta": jnp.asarray(values["delta"]),
-            }
-            return float(sampler._logpost_fn(params))
-
-        init_strategy = _make_chainwise_init_strategy(
-            first_site_name="delta",
-            default_values=default_values,
-            build_candidate=_build_candidate,
-            log_posterior_fn=_log_posterior,
-            log_prefix="Univariate coarse-VI init",
+        diagnostics = _mark_coarse_vi(
+            fine_artifacts.diagnostics, metadata,
+            attempted=True, success=True,
         )
-        candidate_preview, _ = _build_candidate(None)
-        fine_psd = None
-        if candidate_preview is not None:
-            fine_psd = np.array(
-                jax.device_get(
-                    jnp.exp(sampler.spline_model(candidate_preview["weights"]))
-                ),
-                copy=True,
-            )
-            fine_psd *= fine_scaling
-
-        diagnostics = dict(diagnostics)
-        if candidate_preview is not None:
-            diagnostics["weights"] = np.asarray(
-                jax.device_get(candidate_preview["weights"])
-            )
-            diagnostics["psd"] = fine_psd
-            diagnostics["coarse_vi_success"] = 1
-        if refined_vi_result is not None:
-            diagnostics["coarse_vi_fine_refine_steps"] = _coarse_vi_refine_steps(
-                sampler.config
-            )
-            diagnostics["coarse_vi_fine_refine_guide"] = (
-                refined_vi_result.guide_name
-            )
-        diagnostics.pop("psd_quantiles", None)
         diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
+
         return VIInitialisationArtifacts(
-            init_strategy,
-            next_rng_key,
+            fine_artifacts.init_strategy,
+            fine_artifacts.rng_key,
             diagnostics,
-            means=candidate_preview,
+            means=fine_artifacts.means,
+            posterior_draws=fine_artifacts.posterior_draws,
         )
     except Exception as exc:
         logger.warning(
-            f"Could not transfer coarse-grid VI warm start to full grid: {exc}"
+            f"Coarse-to-fine transfer failed ({exc}); "
+            f"falling back to standard fine-grid VI."
+        )
+        fine_artifacts = compute_vi_artifacts_univar(sampler, model=model)
+        diagnostics = _mark_coarse_vi(
+            fine_artifacts.diagnostics, metadata,
+            attempted=True, success=False,
         )
         return VIInitialisationArtifacts(
-            None,
-            coarse_artifacts.rng_key,
+            fine_artifacts.init_strategy,
+            fine_artifacts.rng_key,
             _strip_coarse_vi_plot_arrays(diagnostics),
+            means=fine_artifacts.means,
+            posterior_draws=fine_artifacts.posterior_draws,
         )
 
 
@@ -847,7 +614,7 @@ def _build_multivar_vi_diagnostics(sampler, vi_result) -> Dict[str, Any]:
         diagnostics["psd_quantiles"] = psd_quantiles
     if coherence_quantiles is not None:
         diagnostics["coherence_quantiles"] = coherence_quantiles
-    vi_samples = _extract_vi_samples_np(vi_result)
+    vi_samples = _to_np_dict(vi_result.samples)
     if vi_samples:
         diagnostics["vi_samples"] = vi_samples
     if true_psd is not None and vi_psd_np is not None:
@@ -971,15 +738,6 @@ def _prepare_block_accum(sampler) -> Dict[str, Any]:
     }
 
 
-def _blocked_channel_log_posterior_from_values(
-    *,
-    log_posterior_fn: Callable[[Dict[str, jnp.ndarray]], jnp.ndarray],
-    values: Dict[str, jnp.ndarray],
-) -> float:
-    """Evaluate the blocked-channel NumPyro log posterior at a candidate init point."""
-    params = {name: jnp.asarray(value) for name, value in values.items()}
-    return float(log_posterior_fn(params))
-
 
 def _aggregate_psis_diagnostics(
     diagnostics: Dict[str, Any],
@@ -1023,21 +781,24 @@ def _aggregate_psis_diagnostics(
             psis_moment_summary["hyperparameters"] = psis_hyper_entries
         if psis_weight_blocks:
             psis_moment_summary["weights_by_block"] = psis_weight_blocks
-
-            def _agg(key, fn=np.nanmedian):
-                return float(fn([e.get(key, np.nan) for e in psis_weight_blocks]))
-
-            psis_moment_summary["weights"] = {
-                "var_ratio_min": _agg("var_ratio_min", np.nanmin),
-                "var_ratio_median": _agg("var_ratio_median"),
-                "var_ratio_max": _agg("var_ratio_max", np.nanmax),
-                "frac_outside": _agg("frac_outside", np.nanmax),
-                "bias_median_abs": _agg("bias_median_abs"),
-                "bias_max_abs": _agg("bias_max_abs", np.nanmax),
-                "bias_abs_median": _agg("bias_abs_median"),
-                "bias_abs_max": _agg("bias_abs_max", np.nanmax),
-                "n_weights": int(np.sum([e.get("n_weights", 0) for e in psis_weight_blocks])),
+            _AGG_SPECS = {
+                "var_ratio_min": np.nanmin,
+                "var_ratio_median": np.nanmedian,
+                "var_ratio_max": np.nanmax,
+                "frac_outside": np.nanmax,
+                "bias_median_abs": np.nanmedian,
+                "bias_max_abs": np.nanmax,
+                "bias_abs_median": np.nanmedian,
+                "bias_abs_max": np.nanmax,
             }
+            weights_agg = {
+                k: float(fn([e.get(k, np.nan) for e in psis_weight_blocks]))
+                for k, fn in _AGG_SPECS.items()
+            }
+            weights_agg["n_weights"] = int(
+                np.sum([e.get("n_weights", 0) for e in psis_weight_blocks])
+            )
+            psis_moment_summary["weights"] = weights_agg
         if psis_thresholds:
             psis_moment_summary["thresholds"] = psis_thresholds
         if psis_moment_summary:
@@ -1147,7 +908,7 @@ def _run_single_block_vi(
         progress_bar=progress_bar,
         init_values=init_values,
     )
-    losses_arr = np.asarray(jax.device_get(vi_result.losses))
+    losses_arr = _to_np(vi_result.losses)
     if not (losses_arr.size and not np.isfinite(losses_arr[-1])):
         return vi_result, losses_arr
 
@@ -1165,7 +926,7 @@ def _run_single_block_vi(
         progress_bar=progress_bar,
         init_values=init_values,
     )
-    losses_arr = np.asarray(jax.device_get(vi_result.losses))
+    losses_arr = _to_np(vi_result.losses)
     return vi_result, losses_arr
 
 
@@ -1186,10 +947,10 @@ def _accumulate_block_vi_diagnostics(
     Collects: losses, guide name, VI samples, PSIS k-hat, log-delta means,
     theta means, draw buffers.
     """
-    losses_arr = np.asarray(jax.device_get(vi_result.losses))
+    losses_arr = _to_np(vi_result.losses)
     accum["vi_losses_blocks"].append(losses_arr)
     accum["vi_guides"].append(vi_result.guide_name)
-    accum["vi_samples"].update(_extract_vi_samples_np(vi_result))
+    accum["vi_samples"].update(_to_np_dict(vi_result.samples))
 
     # PSIS diagnostics
     psis_diag = _compute_psis_khat(
@@ -1228,112 +989,73 @@ def _accumulate_block_vi_diagnostics(
     weights_delta = vi_result.means.get(weights_delta_name)
     if weights_delta is not None:
         log_delta_vi = jnp.einsum("nk,k->n", delta_basis, weights_delta)
-        accum["vi_log_delta_means"].append(
-            np.asarray(jax.device_get(log_delta_vi))
-        )
+        accum["vi_log_delta_means"].append(_to_np(log_delta_vi))
 
     # Theta means
     if sampler.n_theta > 0 and theta_count > 0:
-        if accum["vi_theta_re_mean"] is None:
-            accum["vi_theta_re_mean"] = np.zeros(
-                (sampler.N, sampler.n_theta), dtype=np.float32
-            )
-            accum["vi_theta_im_mean"] = np.zeros(
-                (sampler.N, sampler.n_theta), dtype=np.float32
-            )
+        for key in ("vi_theta_re_mean", "vi_theta_im_mean"):
+            if accum[key] is None:
+                accum[key] = np.zeros(
+                    (sampler.N, sampler.n_theta), dtype=np.float32
+                )
 
-        theta_re_components: List[np.ndarray] = []
-        theta_im_components: List[np.ndarray] = []
-        for theta_idx in range(theta_count):
-            prefix = f"{channel_index}_{theta_idx}"
-            w_re = vi_result.means.get(f"weights_theta_re_{prefix}")
-            w_im = vi_result.means.get(f"weights_theta_im_{prefix}")
-            if w_re is None or w_im is None:
-                raise KeyError(f"theta weights {prefix}")
-            theta_re_components.append(
-                np.asarray(
-                    jax.device_get(
-                        jnp.einsum("nk,k->n", sampler._theta_basis, w_re)
-                    )
-                )
-            )
-            theta_im_components.append(
-                np.asarray(
-                    jax.device_get(
-                        jnp.einsum("nk,k->n", sampler._theta_basis, w_im)
-                    )
-                )
-            )
-        if theta_re_components:
-            theta_re_block = np.stack(theta_re_components, axis=1)
-            theta_im_block = np.stack(theta_im_components, axis=1)
-        else:
-            theta_re_block = np.zeros((sampler.N, theta_count))
-            theta_im_block = np.zeros((sampler.N, theta_count))
         theta_slice = slice(theta_start, theta_start + theta_count)
-        accum["vi_theta_re_mean"][:, theta_slice] = theta_re_block
-        accum["vi_theta_im_mean"][:, theta_slice] = theta_im_block
+        for part, accum_key in (
+            ("re", "vi_theta_re_mean"),
+            ("im", "vi_theta_im_mean"),
+        ):
+            components = []
+            for theta_idx in range(theta_count):
+                w = vi_result.means.get(
+                    f"weights_theta_{part}_{channel_index}_{theta_idx}"
+                )
+                if w is None:
+                    raise KeyError(f"theta weights {part} {channel_index}_{theta_idx}")
+                components.append(
+                    _to_np(jnp.einsum("nk,k->n", sampler._theta_basis, w))
+                )
+            if components:
+                accum[accum_key][:, theta_slice] = np.stack(components, axis=1)
 
     # Fill draw buffers
-    store_draws = accum["store_draws"]
-    posterior_draws = accum["posterior_draws"]
-    if store_draws and vi_result.samples is not None:
-        weights_delta_samples = vi_result.samples.get(weights_delta_name)
-        log_delta_draws = accum["log_delta_draws"]
-        if weights_delta_samples is not None:
-            weights_delta_samples = jnp.asarray(weights_delta_samples)
-            draw_count = min(posterior_draws, weights_delta_samples.shape[0])
-            accum["draws_recorded"] = (
-                draw_count
-                if accum["draws_recorded"] == 0
-                else min(accum["draws_recorded"], draw_count)
-            )
-            delta_basis_jnp = jnp.asarray(
-                delta_basis, dtype=weights_delta_samples.dtype
-            )
-            log_delta_samples = (
-                weights_delta_samples[:draw_count] @ delta_basis_jnp.T
-            )
-            log_delta_draws[:draw_count, :, channel_index] = np.asarray(
-                jax.device_get(log_delta_samples)
-            )
-        else:
-            accum["draws_missing"] = True
+    if not accum["store_draws"] or vi_result.samples is None:
+        return
 
-        theta_re_draws = accum["theta_re_draws"]
-        if (
-            sampler.n_theta > 0
-            and theta_count > 0
-            and theta_re_draws is not None
-        ):
-            theta_basis_jnp = jnp.asarray(
-                sampler._theta_basis, dtype=jnp.float32
-            )
-            theta_im_draws = accum["theta_im_draws"]
-            for theta_idx in range(theta_count):
-                prefix = f"{channel_index}_{theta_idx}"
-                w_re_s = vi_result.samples.get(f"weights_theta_re_{prefix}")
-                w_im_s = vi_result.samples.get(f"weights_theta_im_{prefix}")
-                if w_re_s is None or w_im_s is None:
-                    accum["draws_missing"] = True
-                    continue
-                w_re_s = jnp.asarray(w_re_s)
-                w_im_s = jnp.asarray(w_im_s)
-                theta_basis_jnp = jnp.asarray(
-                    sampler._theta_basis, dtype=w_re_s.dtype
-                )
-                draw_count = min(posterior_draws, w_re_s.shape[0])
-                accum["draws_recorded"] = (
-                    draw_count
-                    if accum["draws_recorded"] == 0
-                    else min(accum["draws_recorded"], draw_count)
-                )
-                column = theta_start + theta_idx
-                theta_re_draws[:draw_count, :, column] = np.asarray(
-                    jax.device_get(w_re_s[:draw_count] @ theta_basis_jnp.T)
-                )
-                theta_im_draws[:draw_count, :, column] = np.asarray(
-                    jax.device_get(w_im_s[:draw_count] @ theta_basis_jnp.T)
+    max_draws = accum["posterior_draws"]
+
+    def _record_draws(weights_samples, basis, target_buf, col):
+        """Project weight samples through basis and store in target buffer."""
+        if weights_samples is None:
+            accum["draws_missing"] = True
+            return
+        weights_samples = jnp.asarray(weights_samples)
+        n = min(max_draws, weights_samples.shape[0])
+        accum["draws_recorded"] = (
+            n if accum["draws_recorded"] == 0
+            else min(accum["draws_recorded"], n)
+        )
+        basis_jnp = jnp.asarray(basis, dtype=weights_samples.dtype)
+        target_buf[:n, :, col] = _to_np(
+            weights_samples[:n] @ basis_jnp.T
+        )
+
+    _record_draws(
+        vi_result.samples.get(weights_delta_name),
+        delta_basis,
+        accum["log_delta_draws"],
+        channel_index,
+    )
+
+    if sampler.n_theta > 0 and theta_count > 0 and accum["theta_re_draws"] is not None:
+        for theta_idx in range(theta_count):
+            prefix = f"{channel_index}_{theta_idx}"
+            column = theta_start + theta_idx
+            for part, buf_key in (("re", "theta_re_draws"), ("im", "theta_im_draws")):
+                _record_draws(
+                    vi_result.samples.get(f"weights_theta_{part}_{prefix}"),
+                    sampler._theta_basis,
+                    accum[buf_key],
+                    column,
                 )
 
 
@@ -1345,27 +1067,10 @@ def _assemble_blocked_vi_diagnostics(
 ) -> Optional[Dict[str, Any]]:
     """Assemble final blocked-VI diagnostics from accumulated per-block data."""
     p = sampler.p
-    vi_log_delta_means = accum["vi_log_delta_means"]
-    vi_theta_re_mean = accum["vi_theta_re_mean"]
-    vi_theta_im_mean = accum["vi_theta_im_mean"]
-    vi_losses_blocks = accum["vi_losses_blocks"]
-    vi_guides = accum["vi_guides"]
-    vi_samples = accum["vi_samples"]
-    store_draws = accum["store_draws"]
-    draws_missing = accum["draws_missing"]
-    draws_recorded = accum["draws_recorded"]
-    posterior_draws = accum["posterior_draws"]
-    log_delta_draws = accum["log_delta_draws"]
-    theta_re_draws = accum["theta_re_draws"]
-    theta_im_draws = accum["theta_im_draws"]
-    psis_khat_values = accum["psis_khat_values"]
-    psis_hyper_entries = accum["psis_hyper_entries"]
-    psis_weight_blocks = accum["psis_weight_blocks"]
-    psis_corr_summary = accum["psis_corr_summary"]
-    psis_thresholds = accum["psis_thresholds"]
     diagnostics = None
 
-    if sampler.config.init_from_vi and vi_log_delta_means:
+    if sampler.config.init_from_vi and accum["vi_log_delta_means"]:
+        vi_log_delta_means = accum["vi_log_delta_means"]
         log_delta_vi_np = (
             np.stack(vi_log_delta_means, axis=1)
             if len(vi_log_delta_means) == p
@@ -1375,41 +1080,35 @@ def _assemble_blocked_vi_diagnostics(
         vi_psd_np = None
         vi_psd = None
         if log_delta_vi_np is not None:
+            theta_re_vi = accum["vi_theta_re_mean"]
+            theta_im_vi = accum["vi_theta_im_mean"]
             if sampler.n_theta > 0:
-                assert vi_theta_re_mean is not None and vi_theta_im_mean is not None
-                theta_re_vi_np = vi_theta_re_mean
-                theta_im_vi_np = vi_theta_im_mean
+                assert theta_re_vi is not None and theta_im_vi is not None
             else:
-                theta_re_vi_np = np.zeros((sampler.N, 0), dtype=np.float32)
-                theta_im_vi_np = np.zeros((sampler.N, 0), dtype=np.float32)
+                theta_re_vi = np.zeros((sampler.N, 0), dtype=np.float32)
+                theta_im_vi = np.zeros((sampler.N, 0), dtype=np.float32)
             vi_psd = sampler.spline_model.reconstruct_psd_matrix(
                 jnp.asarray(log_delta_vi_np)[None, ...],
-                jnp.asarray(theta_re_vi_np)[None, ...],
-                jnp.asarray(theta_im_vi_np)[None, ...],
+                jnp.asarray(theta_re_vi)[None, ...],
+                jnp.asarray(theta_im_vi)[None, ...],
                 n_samples_max=1,
             )[0]
             vi_psd_np = _rescale_psd(np.asarray(vi_psd))
 
         psd_quantiles = None
         coherence_quantiles = None
-        if store_draws and not draws_missing and log_delta_draws is not None:
-            desired = draws_recorded or posterior_draws
+        log_delta_draws = accum["log_delta_draws"]
+        if accum["store_draws"] and not accum["draws_missing"] and log_delta_draws is not None:
+            desired = accum["draws_recorded"] or accum["posterior_draws"]
             available = min(desired, log_delta_draws.shape[0])
             if available > 0:
-                ld_s = jnp.asarray(
-                    log_delta_draws[:available], dtype=jnp.float32
-                )
+                ld_s = jnp.asarray(log_delta_draws[:available], dtype=jnp.float32)
+                theta_re_draws = accum["theta_re_draws"]
                 if sampler.n_theta > 0 and theta_re_draws is not None:
-                    tr_s = jnp.asarray(
-                        theta_re_draws[:available], dtype=jnp.float32
-                    )
-                    ti_s = jnp.asarray(
-                        theta_im_draws[:available], dtype=jnp.float32
-                    )
+                    tr_s = jnp.asarray(theta_re_draws[:available], dtype=jnp.float32)
+                    ti_s = jnp.asarray(accum["theta_im_draws"][:available], dtype=jnp.float32)
                 else:
-                    tr_s = jnp.zeros(
-                        (available, sampler.N, 0), dtype=jnp.float32
-                    )
+                    tr_s = jnp.zeros((available, sampler.N, 0), dtype=jnp.float32)
                     ti_s = jnp.zeros_like(tr_s)
                 logger.debug("Reconstructing PSD samples from VI draws...")
                 psd_quantiles, coherence_quantiles, vi_psd_np = (
@@ -1425,8 +1124,7 @@ def _assemble_blocked_vi_diagnostics(
                 )
 
         valid_losses = [
-            arr
-            for arr in vi_losses_blocks
+            arr for arr in accum["vi_losses_blocks"]
             if arr.size and np.all(np.isfinite(arr))
         ]
         losses_mean = None
@@ -1439,6 +1137,7 @@ def _assemble_blocked_vi_diagnostics(
                 )
                 losses_mean = losses_stack.mean(axis=0)
 
+        vi_guides = accum["vi_guides"]
         guide_label = ",".join(sorted(set(vi_guides))) if vi_guides else "vi"
         diagnostics = {
             "losses": losses_mean if losses_mean is not None else np.asarray([]),
@@ -1457,20 +1156,21 @@ def _assemble_blocked_vi_diagnostics(
         if coherence_quantiles is not None:
             diagnostics["coherence_quantiles"] = coherence_quantiles
 
-    if vi_samples:
+    if accum["vi_samples"]:
         diagnostics = diagnostics or {}
-        diagnostics["vi_samples"] = vi_samples
+        diagnostics["vi_samples"] = accum["vi_samples"]
 
     if diagnostics is not None and (
-        psis_khat_values or psis_hyper_entries or psis_weight_blocks or psis_corr_summary
+        accum["psis_khat_values"] or accum["psis_hyper_entries"]
+        or accum["psis_weight_blocks"] or accum["psis_corr_summary"]
     ):
         _aggregate_psis_diagnostics(
             diagnostics,
-            psis_khat_values=psis_khat_values,
-            psis_hyper_entries=psis_hyper_entries,
-            psis_weight_blocks=psis_weight_blocks,
-            psis_corr_summary=psis_corr_summary,
-            psis_thresholds=psis_thresholds,
+            psis_khat_values=accum["psis_khat_values"],
+            psis_hyper_entries=accum["psis_hyper_entries"],
+            psis_weight_blocks=accum["psis_weight_blocks"],
+            psis_corr_summary=accum["psis_corr_summary"],
+            psis_thresholds=accum["psis_thresholds"],
             verbose=sampler.config.verbose,
         )
 
@@ -1483,7 +1183,7 @@ def _vi_means_are_usable(means: Dict[str, Any]) -> bool:
         return False
     for name, value in means.items():
         try:
-            arr = np.asarray(jax.device_get(value))
+            arr = _to_np(value)
         except Exception:
             return False
         if arr.size and not np.all(np.isfinite(arr)):
@@ -1493,13 +1193,32 @@ def _vi_means_are_usable(means: Dict[str, Any]) -> bool:
     return True
 
 
+def _block_site_names(channel_index: int) -> list[str]:
+    """Return the VI sample site names for a single blocked channel."""
+    names = [f"weights_delta_{channel_index}"]
+    for theta_idx in range(channel_index):
+        for prefix in ("theta_re", "theta_im"):
+            names.append(f"weights_{prefix}_{channel_index}_{theta_idx}")
+    return names
+
+
 def prepare_block_vi(
     sampler,
     *,
     rng_key: jax.Array,
     block_model: Callable[..., Any],
+    init_overrides: Optional[Dict[int, Dict[str, jnp.ndarray]]] = None,
 ) -> BlockVIArtifacts:
-    """Run VI per block for blocked multivariate samplers."""
+    """Run VI per block for blocked multivariate samplers.
+
+    Parameters
+    ----------
+    init_overrides:
+        Optional mapping ``{channel_index: {site_name: value}}`` providing
+        warm-start values for VI.  When supplied, these are merged into the
+        default init values so that VI starts from the transferred position
+        (e.g. from a coarse-grid run).
+    """
 
     guide_cfg = getattr(sampler.config, "vi_guide", None) or "auto(block)"
     steps = int(getattr(sampler.config, "vi_steps", 0) or 0)
@@ -1564,6 +1283,8 @@ def prepare_block_vi(
                 alpha_phi_theta=alpha_phi_theta,
                 beta_phi_theta=beta_phi_theta,
             )
+            if init_overrides and channel_index in init_overrides:
+                init_values.update(init_overrides[channel_index])
 
             model_args = _build_block_model_args(
                 sampler, channel_index, alpha_phi_theta, beta_phi_theta
@@ -1599,34 +1320,18 @@ def prepare_block_vi(
                     f"(guide={vi_result.guide_name}); skipping VI-based init."
                 )
             else:
-                draw_tree = {
-                    name: jnp.asarray(value)
-                    for name, value in (vi_result.samples or {}).items()
-                }
-
-                def _build_candidate(
-                    rng_key: Optional[jax.Array],
-                    *,
-                    draw_values: Dict[str, jax.Array] = draw_tree,
-                    means_values: Dict[str, jax.Array] = vi_means,
-                    anchor: str = f"weights_delta_{channel_index}",
-                ):
-                    return _pick_from_draws_or_means(
-                        rng_key,
-                        draws=draw_values,
-                        means=means_values,
-                        num_chains=int(sampler.config.num_chains),
-                        anchor_name=anchor,
-                    )
-
-                init_strategies[channel_index] = _make_chainwise_init_strategy(
-                    first_site_name=f"delta_{channel_index}",
+                vi_median = _median_vi_values(
+                    draws={
+                        name: jnp.asarray(value)
+                        for name, value in (vi_result.samples or {}).items()
+                    },
+                )
+                init_strategies[channel_index] = select_vi_or_default_init(
+                    vi_values=vi_median,
                     default_values=default_init_values,
-                    build_candidate=_build_candidate,
-                    log_posterior_fn=lambda vals, logpost_fn=block_log_posterior_fn: _blocked_channel_log_posterior_from_values(
-                        log_posterior_fn=logpost_fn,
-                        values=vals,
-                    ),
+                    log_posterior_fn=lambda vals, fn=block_log_posterior_fn: float(fn(
+                        {k: jnp.asarray(v) for k, v in vals.items()}
+                    )),
                     log_prefix=f"Blocked VI init channel {channel_index}",
                 )
 
@@ -1668,8 +1373,13 @@ def prepare_coarse_block_vi(
     coarse_sampler,
     block_model: Callable[..., Any],
 ) -> BlockVIArtifacts:
-    """Run blocked VI on a coarse grid and transfer design weights to fine init."""
+    """Run blocked VI on a coarse grid, transfer to fine, then run standard VI.
 
+    1. Standard ``prepare_block_vi`` on the coarse sampler.
+    2. Transfer coarse VI means per channel to the fine grid via the bridge.
+    3. Standard ``prepare_block_vi`` on the fine sampler, warm-started from
+       the transferred values.
+    """
     metadata = _coarse_vi_metadata(sampler)
     coarse_setup = prepare_block_vi(
         coarse_sampler,
@@ -1686,7 +1396,8 @@ def prepare_coarse_block_vi(
     coarse_design = _extract_multivar_design_psd(diagnostics)
     if coarse_design is None:
         logger.warning(
-            "Coarse blocked VI did not produce a valid PSD matrix warm start; using default init."
+            "Coarse blocked VI did not produce a valid PSD matrix warm "
+            "start; using default init."
         )
         return BlockVIArtifacts(
             init_strategies=[None] * sampler.p,
@@ -1698,6 +1409,8 @@ def prepare_coarse_block_vi(
     try:
         fine_freq = np.asarray(sampler.freq, dtype=np.float64)
         coarse_freq = np.asarray(coarse_sampler.freq, dtype=np.float64)
+
+        # Interpolate the full design PSD for diagnostics.
         fine_design = _interp_complex_matrix(
             coarse_freq,
             fine_freq,
@@ -1705,203 +1418,83 @@ def prepare_coarse_block_vi(
         )
         fine_design = _ensure_positive_definite_psd(fine_design)
 
-        diagnostics = dict(diagnostics)
-        diagnostics["psd_matrix_complex"] = fine_design
-        diagnostics["psd_matrix"] = np.real(fine_design)
-        diagnostics.pop("psd_quantiles", None)
-        diagnostics.pop("coherence_quantiles", None)
-        diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
-        diagnostics["coarse_vi_success"] = 1
-
-        coarse_draws = {
-            name: jnp.asarray(value)
-            for name, value in ((coarse_setup.diagnostics or {}).get("vi_samples") or {}).items()
-        }
-        init_strategies: List[Optional[Callable[[Any], Any]]] = [None] * sampler.p
-        refine_rng_key = coarse_setup.rng_key
-
+        # Transfer coarse VI means per channel to fine-grid init values.
+        coarse_vi_samples = (
+            (coarse_setup.diagnostics or {}).get("vi_samples") or {}
+        )
+        init_overrides: Dict[int, Dict[str, jnp.ndarray]] = {}
         for channel_index in range(sampler.p):
-            theta_count = channel_index
-            alpha_phi_theta = getattr(
-                sampler.config,
-                "alpha_phi_theta",
-                sampler.config.alpha_phi,
+            key = f"weights_delta_{channel_index}"
+            if key not in coarse_vi_samples:
+                continue
+            coarse_means = _median_vi_values(
+                draws={
+                    name: jnp.asarray(value)
+                    for name, value in coarse_vi_samples.items()
+                },
+                site_names=_block_site_names(channel_index),
             )
-            beta_phi_theta = getattr(
-                sampler.config,
-                "beta_phi_theta",
-                sampler.config.beta_phi,
-            )
-            default_init_values = _build_block_init_values(
+            if not coarse_means:
+                continue
+            default_vals = _build_block_init_values(
                 sampler=sampler,
                 channel_index=channel_index,
-                theta_count=theta_count,
+                theta_count=channel_index,
                 delta_weights_init=jnp.asarray(
-                    sampler.spline_model.diagonal_models[channel_index].weights
+                    sampler.spline_model.diagonal_models[
+                        channel_index
+                    ].weights
                 ),
-                alpha_phi_theta=alpha_phi_theta,
-                beta_phi_theta=beta_phi_theta,
-            )
-            block_model_args = _build_block_model_args(
-                sampler, channel_index, alpha_phi_theta, beta_phi_theta
-            )
-            block_log_posterior_fn = build_log_density_fn(
-                partial(block_model, *block_model_args),
-                {},
-            )
-
-            transform_cache: Dict[str, Dict[str, jnp.ndarray]] = {}
-            site_names = [
-                f"weights_delta_{channel_index}",
-            ]
-            for theta_idx in range(channel_index):
-                for prefix in ("theta_re", "theta_im"):
-                    site_names.extend(
-                        [
-                            f"weights_{prefix}_{channel_index}_{theta_idx}",
-                        ]
-                    )
-
-            def _transform_candidate(
-                draw_values: Dict[str, jnp.ndarray],
-                *,
-                ch: int = channel_index,
-                default_vals: Dict[str, jnp.ndarray] = default_init_values,
-            ) -> Dict[str, jnp.ndarray]:
-                candidate = dict(default_vals)
-                fine_diag_model = sampler.spline_model.diagonal_models[ch]
-                log_delta_coarse = np.asarray(
-                    jax.device_get(
-                        jnp.einsum(
-                            "nk,k->n",
-                            coarse_sampler.all_bases[ch],
-                            jnp.asarray(draw_values[f"weights_delta_{ch}"]),
-                        )
-                    )
-                )
-                log_delta_fine = np.interp(fine_freq, coarse_freq, log_delta_coarse)
-                candidate[f"weights_delta_{ch}"] = init_weights(
-                    jnp.asarray(np.array(log_delta_fine, copy=True)),
-                    fine_diag_model,
-                )
-
-                if ch > 0:
-                    for theta_idx in range(ch):
-                        for prefix, fine_model in (
-                            ("theta_re", sampler.spline_model.offdiag_re_model),
-                            ("theta_im", sampler.spline_model.offdiag_im_model),
-                        ):
-                            w_key = f"weights_{prefix}_{ch}_{theta_idx}"
-                            eval_coarse = np.asarray(
-                                jax.device_get(
-                                    jnp.einsum(
-                                        "nk,k->n",
-                                        coarse_sampler._theta_basis,
-                                        jnp.asarray(draw_values[w_key]),
-                                    )
-                                )
-                            )
-                            eval_fine = np.interp(
-                                fine_freq, coarse_freq, eval_coarse
-                            )
-                            candidate[w_key] = init_weights(
-                                jnp.asarray(np.array(eval_fine, copy=True)),
-                                fine_model,
-                            )
-                return candidate
-
-            def _build_candidate(
-                rng_key: Optional[jax.Array],
-                *,
-                ch: int = channel_index,
-                names: list[str] = list(site_names),
-                cache: Dict[str, Dict[str, jnp.ndarray]] = transform_cache,
-                default_vals: Dict[str, jnp.ndarray] = default_init_values,
-            ):
-                if coarse_draws and f"weights_delta_{ch}" in coarse_draws:
-                    n_draws = int(coarse_draws[f"weights_delta_{ch}"].shape[0])
-                    if int(sampler.config.num_chains) > 1:
-                        idx = _select_vi_sample_index(rng_key, n_draws)
-                        label = f"draw {idx}"
-                    else:
-                        idx = -1
-                        label = "median"
-                    cache_key = f"{ch}:{idx}"
-                    if cache_key not in cache:
-                        if idx >= 0:
-                            raw = {
-                                name: coarse_draws[name][idx]
-                                for name in names
-                                if name in coarse_draws
-                            }
-                        else:
-                            raw = _median_sample_tree(coarse_draws, names=names)
-                        cache[cache_key] = _transform_candidate(raw, ch=ch, default_vals=default_vals)
-                    return cache[cache_key], label
-                return None, "unavailable"
-
-            transferred_seed, transferred_label = _build_candidate(None)
-            refined_vi_result = None
-            if transferred_seed is not None:
-                refine_rng_key = jax.random.fold_in(refine_rng_key, channel_index)
-                refined_vi_result, _ = _maybe_refine_vi_locally(
-                    sampler=sampler,
-                    model=block_model,
-                    model_args=block_model_args,
-                    init_values=transferred_seed,
-                    rng_key=refine_rng_key,
-                    log_prefix=f"Blocked coarse-VI init channel {channel_index}",
-                )
-            refined_draws, refined_means = _extract_refined_artifacts(
-                refined_vi_result
-            )
-
-            _anchor = f"weights_delta_{channel_index}"
-
-            def _build_effective_candidate(
-                rng_key: Optional[jax.Array],
-                *,
-                refined_draw_values: Dict[str, jnp.ndarray] = refined_draws,
-                refined_mean_values: Dict[str, jnp.ndarray] = refined_means,
-            ):
-                result, label = _pick_from_draws_or_means(
-                    rng_key,
-                    draws=refined_draw_values,
-                    means=refined_mean_values,
-                    num_chains=int(sampler.config.num_chains),
-                    anchor_name=_anchor,
-                )
-                if result is not None:
-                    return result, f"refined {label}"
-                return _build_candidate(rng_key)
-
-            init_strategies[channel_index] = _make_chainwise_init_strategy(
-                first_site_name=f"delta_{channel_index}",
-                default_values=default_init_values,
-                build_candidate=_build_effective_candidate,
-                log_posterior_fn=lambda vals, logpost_fn=block_log_posterior_fn: _blocked_channel_log_posterior_from_values(
-                    log_posterior_fn=logpost_fn,
-                    values=vals,
+                alpha_phi_theta=getattr(
+                    sampler.config,
+                    "alpha_phi_theta",
+                    sampler.config.alpha_phi,
                 ),
-                log_prefix=f"Blocked coarse-VI init channel {channel_index}",
+                beta_phi_theta=getattr(
+                    sampler.config,
+                    "beta_phi_theta",
+                    sampler.config.beta_phi,
+                ),
             )
-            if refined_vi_result is not None:
-                diagnostics[
-                    f"coarse_vi_fine_refine_guide_channel_{channel_index}"
-                ] = refined_vi_result.guide_name
-                diagnostics[
-                    f"coarse_vi_fine_refine_steps_channel_{channel_index}"
-                ] = _coarse_vi_refine_steps(sampler.config)
+            transferred = transfer_block_init_values(
+                draw_values=coarse_means,
+                channel_index=channel_index,
+                coarse_sampler=coarse_sampler,
+                fine_sampler=sampler,
+                coarse_freq=coarse_freq,
+                fine_freq=fine_freq,
+                default_init_values=default_vals,
+            )
+            init_overrides[channel_index] = transferred
+
+        # Run standard blocked VI on the fine sampler, seeded from the
+        # transferred coarse values.
+        fine_setup = prepare_block_vi(
+            sampler,
+            rng_key=coarse_setup.rng_key,
+            block_model=block_model,
+            init_overrides=init_overrides or None,
+        )
+
+        # Merge coarse diagnostics into the fine result.
+        merged_diagnostics = dict(fine_setup.diagnostics or {})
+        merged_diagnostics.update(metadata)
+        merged_diagnostics["coarse_vi_attempted"] = 1
+        merged_diagnostics["coarse_vi_success"] = 1
+        merged_diagnostics["psd_matrix_complex"] = fine_design
+        merged_diagnostics["psd_matrix"] = np.real(fine_design)
+        merged_diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
 
         return BlockVIArtifacts(
-            init_strategies=init_strategies,
-            mcmc_keys=coarse_setup.mcmc_keys,
-            rng_key=coarse_setup.rng_key,
-            diagnostics=diagnostics,
+            init_strategies=fine_setup.init_strategies,
+            mcmc_keys=fine_setup.mcmc_keys,
+            rng_key=fine_setup.rng_key,
+            diagnostics=merged_diagnostics,
         )
     except Exception as exc:
         logger.warning(
-            f"Could not transfer coarse blocked VI warm start to full grid: {exc}"
+            f"Could not transfer coarse blocked VI warm start to full "
+            f"grid: {exc}"
         )
         return BlockVIArtifacts(
             init_strategies=[None] * sampler.p,

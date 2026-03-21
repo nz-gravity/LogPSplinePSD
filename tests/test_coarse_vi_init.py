@@ -74,13 +74,15 @@ def test_preprocess_builds_auto_coarse_vi_context():
     assert preproc.coarse_vi_context is not None
     assert preproc.coarse_vi_context.metadata["coarse_vi_mode"] == "auto"
     full_nfreq = len(preproc.processed_data.freqs)
-    assert preproc.coarse_vi_context.metadata["coarse_vi_full_nfreq"] == full_nfreq
-    assert preproc.coarse_vi_context.metadata["coarse_vi_target_nfreq"] == (
-        full_nfreq // 2
+    assert (
+        preproc.coarse_vi_context.metadata["coarse_vi_full_nfreq"]
+        == full_nfreq
     )
-    assert preproc.coarse_vi_context.metadata["coarse_vi_nfreq"] == (
-        full_nfreq // 2
-    )
+    target = preproc.coarse_vi_context.metadata["coarse_vi_target_nfreq"]
+    assert target <= cfg.vi.auto_coarse_vi_target_nfreq
+    coarse_nfreq = preproc.coarse_vi_context.metadata["coarse_vi_nfreq"]
+    assert coarse_nfreq < full_nfreq
+    assert coarse_nfreq <= target + 1  # rounding tolerance
 
 
 def test_preprocess_skips_auto_coarse_vi_below_20k_threshold():
@@ -118,7 +120,6 @@ def test_univariate_coarse_vi_warm_start_keeps_full_grid():
             vi_steps=20,
             vi_lr=5e-2,
             vi_posterior_draws=8,
-            coarse_vi_fine_refine_steps=5,
             coarse_grain_config_vi=CoarseGrainConfig(
                 enabled=True, Nh=4, Nc=None
             ),
@@ -171,7 +172,11 @@ def test_univariate_coarse_vi_fallback_to_default_init(monkeypatch):
 
     idata = run_mcmc(ts, config=cfg)
 
-    groups = idata.groups() if callable(getattr(idata, "groups", None)) else idata.groups
+    groups = (
+        idata.groups()
+        if callable(getattr(idata, "groups", None))
+        else idata.groups
+    )
     assert "/posterior" in groups
     assert int(idata.attrs.get("coarse_vi_attempted", 0)) == 1
     assert int(idata.attrs.get("coarse_vi_success", 0)) == 0
@@ -202,7 +207,6 @@ def test_multivariate_var2_3d_coarse_vi_warm_start_invariants():
             vi_steps=20,
             vi_lr=1e-2,
             vi_posterior_draws=8,
-            coarse_vi_fine_refine_steps=5,
             coarse_grain_config_vi=CoarseGrainConfig(
                 enabled=True, Nh=4, Nc=None
             ),

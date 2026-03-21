@@ -42,14 +42,12 @@ def _simulate_var2_3d(n: int, *, seed: int) -> np.ndarray:
     return x[burn:]
 
 
-def _base_vi_config(refine_steps: int) -> VIConfig:
+def _base_vi_config() -> VIConfig:
     return VIConfig(
         vi_steps=40,
         vi_lr=1e-2,
         vi_posterior_draws=16,
         coarse_grain_config_vi=CoarseGrainConfig(enabled=True, Nh=4, Nc=None),
-        coarse_vi_fine_refine_steps=refine_steps,
-        coarse_vi_fine_refine_guide="diag",
     )
 
 
@@ -62,7 +60,7 @@ def _run_worker(scenario: str, refine_steps: int) -> dict[str, Any]:
             num_chains=1,
             model=ModelConfig(n_knots=5),
             diagnostics=DiagnosticsConfig(verbose=False, compute_lnz=False),
-            vi=_base_vi_config(refine_steps),
+            vi=_base_vi_config(),
         )
     elif scenario == "multivar":
         n = 128
@@ -77,7 +75,7 @@ def _run_worker(scenario: str, refine_steps: int) -> dict[str, Any]:
             Nb=2,
             model=ModelConfig(n_knots=5),
             diagnostics=DiagnosticsConfig(verbose=False, compute_lnz=False),
-            vi=_base_vi_config(refine_steps),
+            vi=_base_vi_config(),
         )
     else:
         raise ValueError(f"Unknown scenario: {scenario}")
@@ -144,7 +142,9 @@ def _run_case_subprocess(
 
 def _summarise_case(results: list[dict[str, Any]]) -> dict[str, Any]:
     failed_runs = [entry for entry in results if bool(entry.get("failed"))]
-    successful_runs = [entry for entry in results if not bool(entry.get("failed"))]
+    successful_runs = [
+        entry for entry in results if not bool(entry.get("failed"))
+    ]
     if not successful_runs:
         return {
             "n_runs": int(len(results)),
@@ -227,8 +227,10 @@ def main() -> None:
         "refine_steps": refine_steps_values,
         "results": {},
     }
-    module_path = Path(__file__).resolve().relative_to(
-        Path(__file__).resolve().parents[2]
+    module_path = (
+        Path(__file__)
+        .resolve()
+        .relative_to(Path(__file__).resolve().parents[2])
     )
 
     for scenario in scenarios:

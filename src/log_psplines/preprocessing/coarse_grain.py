@@ -43,6 +43,17 @@ def _closest_divisor(n: int, target: int) -> int:
     return min(divisors, key=lambda d: (abs(d - target), d))
 
 
+def _smallest_divisor_geq(n: int, min_val: int) -> int | None:
+    """Return the smallest divisor of *n* that is >= *min_val*, or None."""
+    divisors = sorted(
+        k for i in range(1, isqrt(n) + 1) if n % i == 0 for k in (i, n // i)
+    )
+    for d in divisors:
+        if d >= min_val:
+            return d
+    return None
+
+
 @dataclass(slots=True)
 class CoarseGrainConfig:
     """Configuration for frequency-domain coarse graining with equal-sized bins.

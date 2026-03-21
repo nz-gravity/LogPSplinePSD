@@ -22,18 +22,26 @@ def plot_vi_elbo(
     guide_name: str,
     outfile: str,
     loss_components: Optional[Dict[str, np.ndarray]] = None,
+    coarse_losses: Optional[np.ndarray] = None,
 ) -> None:
     """Plot the ELBO trace recorded during SVI optimisation.
 
     Args:
-        losses: Main ELBO loss values
-        guide_name: Name of the VI guide
-        outfile: Output file path
-        loss_components: Optional dictionary of loss component names to arrays
-                        (useful for multivariate VI with multiple loss terms)
+        losses: Main ELBO loss values (fine-grid VI).
+        guide_name: Name of the VI guide.
+        outfile: Output file path.
+        loss_components: Optional per-block loss traces.
+        coarse_losses: Optional ELBO trace from the preceding coarse-grid VI.
+            When provided, the coarse and fine traces are concatenated and a
+            vertical line marks the transition.
     """
     if losses.size == 0:
         return
+
+    coarse_n = 0
+    if coarse_losses is not None and coarse_losses.size > 0:
+        coarse_n = coarse_losses.size
+        losses = np.concatenate([coarse_losses, losses])
 
     # Use consistent styling - larger figure for multiple components
     fig_width = 8.0 if loss_components else 6.0
@@ -51,6 +59,11 @@ def plot_vi_elbo(
 
     # Shift so minimum is slightly above zero for log scale
     shift_value = min_loss - 0.1 * np.abs(min_loss) if min_loss != 0 else -1.0
+
+    # Plot main ELBO trace
+    ax.plot(
+        steps, losses - shift_value, color="k", lw=2, alpha=0.9, label="ELBO"
+    )
 
     # Plot loss components if provided (useful for multivariate VI)
     if loss_components:
@@ -74,7 +87,28 @@ def plot_vi_elbo(
                     label=f"{comp_name}",
                 )
 
-    ax.set_xlabel("SVI Step", fontsize=config.labelsize)
+    if coarse_n > 0:
+        ax.axvline(coarse_n, color="gray", ls="--", lw=1, alpha=0.7)
+        ax.text(
+            coarse_n,
+            ax.get_ylim()[1],
+            " fine",
+            va="top",
+            ha="left",
+            fontsize=8,
+            color="gray",
+        )
+        ax.text(
+            coarse_n,
+            ax.get_ylim()[1],
+            "coarse ",
+            va="top",
+            ha="right",
+            fontsize=8,
+            color="gray",
+        )
+
+    ax.set_xlabel("VI Evaluation", fontsize=config.labelsize)
     ax.set_ylabel("ELBO (relative)", fontsize=config.labelsize)
     ax.set_yscale("log")
     ax.set_title(f"VI Convergence: {guide_name}", fontsize=config.titlesize)
@@ -114,6 +148,8 @@ def plot_vi_initial_psd_univariate(
     weights: np.ndarray,
     true_psd: Optional[np.ndarray] = None,
     psd_quantiles: Optional[Dict[str, np.ndarray]] = None,
+    coarse_vi_freq: Optional[np.ndarray] = None,
+    coarse_vi_psd: Optional[np.ndarray] = None,
 ) -> None:
     """Plot the PSD implied by the VI mean weights for the univariate model."""
     # Validate inputs
@@ -155,6 +191,18 @@ def plot_vi_initial_psd_univariate(
         ),
     )
 
+    if coarse_vi_freq is not None and coarse_vi_psd is not None:
+        ax.plot(
+            coarse_vi_freq,
+            coarse_vi_psd,
+            color="tab:orange",
+            ls="--",
+            lw=1.5,
+            alpha=0.8,
+            label="Coarse VI",
+        )
+        ax.legend(loc="best", frameon=False)
+
     # Customize title and styling for VI context
     ax.set_title(
         "Variational Inference: Initial PSD Estimate",
@@ -189,6 +237,8 @@ def plot_vi_initial_psd_matrix(
     coherence_quantiles: Optional[Dict[str, np.ndarray]] = None,
     show_coherence: bool = True,
     show_csd_magnitude: bool = False,
+    coarse_vi_freq: Optional[np.ndarray] = None,
+    coarse_vi_psd: Optional[np.ndarray] = None,
     **plot_kwargs,
 ) -> None:
     """Plot diagonal auto-spectra implied by VI means for multivariate models."""
@@ -206,12 +256,31 @@ def plot_vi_initial_psd_matrix(
         show_csd_magnitude=show_csd_magnitude,
     )
 
+    extra_psd: list[EmpiricalPSD] | None = None
+    extra_labels: list[str] | None = None
+    extra_styles: list[dict] | None = None
+    if coarse_vi_freq is not None and coarse_vi_psd is not None:
+        n_coarse, p, _ = coarse_vi_psd.shape
+        coarse_empirical = EmpiricalPSD(
+            freq=np.asarray(coarse_vi_freq),
+            psd=np.asarray(coarse_vi_psd, dtype=np.complex128),
+            coherence=np.zeros((n_coarse, p, p)),
+        )
+        extra_psd = [coarse_empirical]
+        extra_labels = ["Coarse VI"]
+        extra_styles = [
+            {"color": "tab:orange", "ls": "--", "lw": 1.5, "alpha": 0.8}
+        ]
+
     # Use the shared plotting function with VI-specific styling
     spec = PSDMatrixPlotSpec(
         outdir=os.path.dirname(outfile),
         filename=os.path.basename(outfile),
         freq=freq,
         empirical_psd=empirical_psd,
+        extra_empirical_psd=extra_psd,
+        extra_empirical_labels=extra_labels,
+        extra_empirical_styles=extra_styles,
         true_psd=true_psd,
         ci_dict=ci_dict,
         show_coherence=show_coherence,
@@ -342,10 +411,14 @@ def save_vi_diagnostics_univariate(
             losses_arr = losses_arr.mean(axis=0)
         if losses_arr.size:
             guide_name = str(diagnostics.get("guide", "vi"))
+            coarse = diagnostics.get("coarse_losses")
             plot_vi_elbo(
                 losses=losses_arr,
                 guide_name=guide_name,
                 outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
+                coarse_losses=(
+                    np.asarray(coarse) if coarse is not None else None
+                ),
             )
 
     weights = diagnostics.get("weights")
@@ -363,6 +436,8 @@ def save_vi_diagnostics_univariate(
             weights=weights,
             true_psd=diagnostics.get("true_psd"),
             psd_quantiles=psd_quantiles,
+            coarse_vi_freq=diagnostics.get("coarse_vi_freq"),
+            coarse_vi_psd=diagnostics.get("coarse_vi_psd"),
         )
 
 
@@ -383,6 +458,8 @@ def save_vi_diagnostics_multivariate(
 
     losses = diagnostics.get("losses")
     loss_components = diagnostics.get("losses_per_block")
+    coarse_raw = diagnostics.get("coarse_losses")
+    coarse_arr = np.asarray(coarse_raw) if coarse_raw is not None else None
 
     component_dict: Optional[Dict[str, np.ndarray]] = None
     component_source = None
@@ -404,19 +481,13 @@ def save_vi_diagnostics_multivariate(
         if losses_arr.ndim == 1 and losses_arr.size:
             guide_name = str(diagnostics.get("guide", "vi"))
             outfile = os.path.join(diagnostics_dir, "vi_elbo_trace.png")
-            if component_dict:
-                plot_vi_elbo(
-                    losses=losses_arr,
-                    guide_name=guide_name,
-                    outfile=outfile,
-                    loss_components=component_dict,
-                )
-            else:
-                plot_vi_elbo(
-                    losses=losses_arr,
-                    guide_name=guide_name,
-                    outfile=outfile,
-                )
+            plot_vi_elbo(
+                losses=losses_arr,
+                guide_name=guide_name,
+                outfile=outfile,
+                loss_components=component_dict,
+                coarse_losses=coarse_arr,
+            )
         elif losses_arr.ndim > 1 and losses_arr.shape[1] > 0:
             mean_loss = losses_arr.mean(axis=0)
             components = {
@@ -431,6 +502,7 @@ def save_vi_diagnostics_multivariate(
                 guide_name=guide_name,
                 outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
                 loss_components=components if components else None,
+                coarse_losses=coarse_arr,
             )
     elif component_dict:
         # No aggregate losses stored; fall back to plotting components only
@@ -441,6 +513,7 @@ def save_vi_diagnostics_multivariate(
             guide_name=guide_name,
             outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
             loss_components=component_dict,
+            coarse_losses=coarse_arr,
         )
 
     psd_quantiles_val = diagnostics.get("psd_quantiles")
@@ -459,4 +532,6 @@ def save_vi_diagnostics_multivariate(
             ),
             show_coherence=True,
             show_csd_magnitude=False,
+            coarse_vi_freq=diagnostics.get("coarse_vi_freq"),
+            coarse_vi_psd=diagnostics.get("coarse_vi_psd"),
         )

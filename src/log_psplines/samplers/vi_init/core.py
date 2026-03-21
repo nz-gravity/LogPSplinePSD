@@ -122,6 +122,78 @@ def _reduce_tree(
     }
 
 
+def _run_svi_with_early_stop(
+    svi: SVI,
+    rng_key: jax.Array,
+    vi_steps: int,
+    model_args: tuple,
+    model_kwargs: dict,
+    *,
+    progress_bar: bool = False,
+    chunk_size: int = 100,
+    patience: int = 3,
+    rtol: float = 1e-4,
+):
+    """Run SVI in chunks, stopping early when ELBO converges.
+
+    Convergence: the relative ELBO improvement over the last ``chunk_size``
+    steps is below ``rtol`` for ``patience`` consecutive chunks.
+    """
+    if vi_steps <= chunk_size:
+        result = svi.run(
+            rng_key,
+            vi_steps,
+            *model_args,
+            progress_bar=progress_bar,
+            **model_kwargs,
+        )
+        return result.params, jnp.asarray(result.losses), result.state
+
+    state = svi.init(rng_key, *model_args, **model_kwargs)
+    all_losses: list[float] = []
+    stale_count = 0
+    step = 0
+
+    def _run_chunk(state, n):
+        def body(_, s):
+            s, loss = svi.update(s, *model_args, **model_kwargs)
+            return s
+
+        return jax.lax.fori_loop(0, n, body, state)
+
+    _run_full_chunk = jax.jit(lambda s: _run_chunk(s, chunk_size))
+
+    @jax.jit
+    def _evaluate(state):
+        return svi.evaluate(state, *model_args, **model_kwargs)
+
+    while step < vi_steps:
+        n = min(chunk_size, vi_steps - step)
+        if n == chunk_size:
+            state = _run_full_chunk(state)
+        else:
+            state = jax.jit(lambda s, m=n: _run_chunk(s, m))(state)
+        step += n
+
+        loss_val = float(_evaluate(state))
+        all_losses.append(loss_val)
+
+        if len(all_losses) >= 2:
+            prev = all_losses[-2]
+            curr = all_losses[-1]
+            denom = max(abs(prev), 1.0)
+            if abs(prev - curr) / denom < rtol:
+                stale_count += 1
+            else:
+                stale_count = 0
+            if stale_count >= patience:
+                break
+
+    params = svi.get_params(state)
+    losses = jnp.array(all_losses)
+    return params, losses, state
+
+
 def fit_vi(
     model: Callable[..., Any],
     *,
@@ -158,17 +230,16 @@ def fit_vi(
     )
     svi = SVI(model, guide_obj, optimizer, loss=Trace_ELBO())
 
-    run_result = svi.run(
+    params, losses, final_state = _run_svi_with_early_stop(
+        svi,
         rng_key,
         vi_steps,
-        *model_args,
+        model_args=tuple(model_args),
+        model_kwargs=model_kwargs,
         progress_bar=progress_bar,
-        **model_kwargs,
     )
-    params = run_result.params
-    losses = jnp.asarray(run_result.losses)
 
-    state_key = getattr(run_result.state, "rng_key", rng_key)
+    state_key = getattr(final_state, "rng_key", rng_key)
     if posterior_draws and posterior_draws > 0:
         sample_key, _ = jax.random.split(state_key)
         posterior_dist = guide_obj.get_posterior(params)

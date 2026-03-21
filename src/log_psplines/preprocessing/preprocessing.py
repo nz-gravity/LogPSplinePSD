@@ -9,6 +9,7 @@ import numpy as np
 from ..datatypes import Periodogram
 from ..datatypes.multivar import EmpiricalPSD, MultivarFFT
 from .checks import _run_preprocessing_checks
+from .coarse_grain import _smallest_divisor_geq
 from .config_utils import _build_config_from_kwargs, _normalize_run_config
 from .configs import RunMCMCConfig, SamplerName
 from .data_prep import (
@@ -93,7 +94,9 @@ def _derive_vi_coarse_grain_config(
     full_nfreq = _get_frequency_count(processed_data)
     k_basis = int(run_config.model.n_knots + run_config.model.degree - 1)
 
-    explicit_cfg = _normalize_coarse_grain_config(vi_cfg.coarse_grain_config_vi)
+    explicit_cfg = _normalize_coarse_grain_config(
+        vi_cfg.coarse_grain_config_vi
+    )
     if explicit_cfg.enabled:
         return explicit_cfg, {
             "coarse_vi_mode": "config",
@@ -108,10 +111,14 @@ def _derive_vi_coarse_grain_config(
     if full_nfreq < min_required_nfreq:
         return None, None
 
-    target_nfreq = max(1, full_nfreq // 2)
-    nh = max(2, int(ceil(full_nfreq / float(target_nfreq))))
-    if nh <= 1:
+    target_nfreq = max(
+        1, min(vi_cfg.auto_coarse_vi_target_nfreq, full_nfreq - 1)
+    )
+    min_nh = max(2, int(ceil(full_nfreq / float(target_nfreq))))
+    nh = _smallest_divisor_geq(full_nfreq, min_nh)
+    if nh is None or nh <= 1:
         return None, None
+    target_nfreq = full_nfreq // nh
 
     return _normalize_coarse_grain_config(
         {
@@ -149,7 +156,9 @@ def _preprocess_with_run_config(
         _normalize_coarse_grain_config(run_config.coarse_grain_config),
         scaled_true_psd,
     )
-    assert fft_data_cg is not None, "Coarse graining should preserve non-None fft_data"
+    assert (
+        fft_data_cg is not None
+    ), "Coarse graining should preserve non-None fft_data"
     fft_data = fft_data_cg
 
     if include_overlays:

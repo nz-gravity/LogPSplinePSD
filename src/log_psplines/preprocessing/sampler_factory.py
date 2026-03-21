@@ -170,8 +170,6 @@ def _build_univar_sampler(
         vi_guide=run.vi.vi_guide,
         vi_posterior_draws=run.vi.vi_posterior_draws,
         vi_progress_bar=run.vi.vi_progress_bar,
-        coarse_vi_fine_refine_steps=run.vi.coarse_vi_fine_refine_steps,
-        coarse_vi_fine_refine_guide=run.vi.coarse_vi_fine_refine_guide,
         **nuts_extra_kwargs,
     )
     return NUTSSampler(data, model, nuts_config)
@@ -200,8 +198,6 @@ def _build_multivar_blocked_sampler(
         vi_guide=run.vi.vi_guide,
         vi_posterior_draws=run.vi.vi_posterior_draws,
         vi_progress_bar=run.vi.vi_progress_bar,
-        coarse_vi_fine_refine_steps=run.vi.coarse_vi_fine_refine_steps,
-        coarse_vi_fine_refine_guide=run.vi.coarse_vi_fine_refine_guide,
         alpha_phi_theta=run.nuts.alpha_phi_theta,
         beta_phi_theta=run.nuts.beta_phi_theta,
         **blocked_extra_kwargs,

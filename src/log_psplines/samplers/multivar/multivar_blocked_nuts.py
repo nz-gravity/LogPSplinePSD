@@ -265,8 +265,6 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     vi_guide: Optional[str] = None
     vi_posterior_draws: int = 256
     vi_progress_bar: Optional[bool] = None
-    coarse_vi_fine_refine_steps: int = 75
-    coarse_vi_fine_refine_guide: Optional[str] = "diag"
 
     # Optional separate hyperparameters for off-diagonal theta P-spline blocks.
     # When left as ``None`` they default to the diagonal hyperparameters

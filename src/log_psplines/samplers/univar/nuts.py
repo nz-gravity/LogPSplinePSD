@@ -46,8 +46,6 @@ class NUTSConfig(SamplerConfig):
     vi_guide: Optional[str] = None
     vi_posterior_draws: int = 256
     vi_progress_bar: Optional[bool] = None
-    coarse_vi_fine_refine_steps: int = 75
-    coarse_vi_fine_refine_guide: Optional[str] = "diag"
 
 
 def bayesian_model(
@@ -146,7 +144,9 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             vi_median = _median_vi_values(
                 draws={
                     name: jnp.asarray(value)
-                    for name, value in (vi_artifacts.posterior_draws or {}).items()
+                    for name, value in (
+                        vi_artifacts.posterior_draws or {}
+                    ).items()
                 },
                 site_names=_univar_sites,
             )
@@ -154,9 +154,11 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
                 init_strategy = select_vi_or_default_init(
                     vi_values=vi_median,
                     default_values=default_values,
-                    log_posterior_fn=lambda vals: float(self._logpost_fn(
-                        {k: jnp.asarray(v) for k, v in vals.items()}
-                    )),
+                    log_posterior_fn=lambda vals: float(
+                        self._logpost_fn(
+                            {k: jnp.asarray(v) for k, v in vals.items()}
+                        )
+                    ),
                     log_prefix="Univariate VI init",
                 )
 

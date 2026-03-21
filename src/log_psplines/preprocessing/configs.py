@@ -79,8 +79,6 @@ class VIConfig:
     auto_coarse_vi_target_nfreq: int = 192
     auto_coarse_vi_min_full_nfreq: int = 512
     use_coarse_vi_for_init: bool = True
-    coarse_vi_fine_refine_steps: int = 75
-    coarse_vi_fine_refine_guide: Optional[str] = "diag"
 
 
 @dataclass(frozen=True)

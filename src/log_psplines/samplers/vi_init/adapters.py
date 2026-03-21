@@ -14,11 +14,11 @@ from numpyro.infer.util import init_to_value
 from ...datatypes.multivar_utils import _interp_complex_matrix
 from ...diagnostics.psd_compare import compute_multivar_riae_diagnostics
 from ...logger import logger
-from .bridge import transfer_block_init_values, transfer_univar_weights
 from ..pspline_block import (
     build_log_density_fn,
     pspline_hyperparameter_initials,
 )
+from .bridge import transfer_block_init_values, transfer_univar_weights
 from .core import fit_vi
 from .defaults import (
     default_init_values_multivar,
@@ -34,8 +34,6 @@ from .mixin import (
     _compute_psis_khat,
     _interpret_khat,
 )
-
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers (Phase 1 – small pure utilities)
@@ -106,7 +104,9 @@ def _reconstruct_psd_quantiles_from_draws(
     theta_im_samples: jnp.ndarray,
     p: int,
     rescale_fn: Callable[[np.ndarray], np.ndarray],
-) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[np.ndarray]]:
+) -> tuple[
+    Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[np.ndarray]
+]:
     """Cap draws, compute PSD quantiles, rescale, and build quantile dicts.
 
     Returns ``(psd_quantiles, coherence_quantiles, median_psd_real)``.
@@ -188,7 +188,9 @@ def _mark_coarse_vi(
     return out
 
 
-def _strip_coarse_vi_plot_arrays(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+def _strip_coarse_vi_plot_arrays(
+    diagnostics: Dict[str, Any],
+) -> Dict[str, Any]:
     out = dict(diagnostics)
     for key in (
         "psd",
@@ -281,7 +283,9 @@ def _ensure_positive_definite_psd(
     for idx in range(n_freq):
         vals = np.linalg.eigvalsh(arr[idx]).real
         if not np.all(np.isfinite(vals)):
-            raise ValueError("Encountered non-finite eigenvalues in PSD matrix")
+            raise ValueError(
+                "Encountered non-finite eigenvalues in PSD matrix"
+            )
         min_eig = float(vals.min(initial=np.inf))
         if min_eig < eps:
             arr[idx] += (eps - min_eig + eps) * eye
@@ -336,12 +340,10 @@ def _build_univar_vi_diagnostics(sampler, vi_result) -> Dict[str, Any]:
             ln_psd_draws = jax.vmap(sampler.spline_model)(
                 jnp.asarray(weights_draws)
             )
-            psd_draws_np = np.asarray(
-                jax.device_get(jnp.exp(ln_psd_draws))
-            ) * scaling
-            q05, q50, q95 = np.percentile(
-                psd_draws_np, [5, 50, 95], axis=0
+            psd_draws_np = (
+                np.asarray(jax.device_get(jnp.exp(ln_psd_draws))) * scaling
             )
+            q05, q50, q95 = np.percentile(psd_draws_np, [5, 50, 95], axis=0)
             psd_quantiles = {"q05": q05, "q50": q50, "q95": q95}
 
     diagnostics: Dict[str, Any] = {
@@ -370,9 +372,7 @@ def compute_vi_artifacts_univar(
     )
 
     def _postprocess(vi_result):
-        means = {
-            name: jnp.asarray(v) for name, v in vi_result.means.items()
-        }
+        means = {name: jnp.asarray(v) for name, v in vi_result.means.items()}
         diagnostics = _build_univar_vi_diagnostics(sampler, vi_result)
         return means, diagnostics
 
@@ -412,8 +412,10 @@ def compute_coarse_vi_artifacts_univar(
         )
         fine_artifacts = compute_vi_artifacts_univar(sampler, model=model)
         diagnostics = _mark_coarse_vi(
-            fine_artifacts.diagnostics, metadata,
-            attempted=True, success=False,
+            fine_artifacts.diagnostics,
+            metadata,
+            attempted=True,
+            success=False,
         )
         return VIInitialisationArtifacts(
             fine_artifacts.init_strategy,
@@ -432,9 +434,7 @@ def compute_coarse_vi_artifacts_univar(
             raise ValueError("Coarse VI did not produce mean weights")
 
         fine_weights = transfer_univar_weights(
-            coarse_weights=np.asarray(
-                jax.device_get(coarse_means["weights"])
-            ),
+            coarse_weights=np.asarray(jax.device_get(coarse_means["weights"])),
             coarse_spline_model=coarse_sampler.spline_model,
             coarse_freq=coarse_freq,
             coarse_scaling=_get_scaling_factor(
@@ -451,14 +451,23 @@ def compute_coarse_vi_artifacts_univar(
 
         # Run fine-grid VI warm-started from transferred weights.
         fine_artifacts = compute_vi_artifacts_univar(
-            sampler, model=model, init_values=transferred_init,
+            sampler,
+            model=model,
+            init_values=transferred_init,
         )
 
         diagnostics = _mark_coarse_vi(
-            fine_artifacts.diagnostics, metadata,
-            attempted=True, success=True,
+            fine_artifacts.diagnostics,
+            metadata,
+            attempted=True,
+            success=True,
         )
         diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
+        diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
+        diagnostics["coarse_vi_psd"] = np.asarray(coarse_psd)
+        coarse_losses = coarse_diag.get("losses")
+        if coarse_losses is not None:
+            diagnostics["coarse_losses"] = np.asarray(coarse_losses)
 
         return VIInitialisationArtifacts(
             fine_artifacts.init_strategy,
@@ -474,8 +483,10 @@ def compute_coarse_vi_artifacts_univar(
         )
         fine_artifacts = compute_vi_artifacts_univar(sampler, model=model)
         diagnostics = _mark_coarse_vi(
-            fine_artifacts.diagnostics, metadata,
-            attempted=True, success=False,
+            fine_artifacts.diagnostics,
+            metadata,
+            attempted=True,
+            success=False,
         )
         return VIInitialisationArtifacts(
             fine_artifacts.init_strategy,
@@ -484,7 +495,6 @@ def compute_coarse_vi_artifacts_univar(
             means=fine_artifacts.means,
             posterior_draws=fine_artifacts.posterior_draws,
         )
-
 
 
 def _add_theta_init_values(
@@ -575,10 +585,15 @@ def _build_multivar_vi_diagnostics(sampler, vi_result) -> Dict[str, Any]:
 
     try:
         log_delta_sq, theta_re, theta_im = _vi_weights_to_log_delta_theta(
-            vi_result.means, sampler, is_batch=False,
+            vi_result.means,
+            sampler,
+            is_batch=False,
         )
         vi_psd = sampler.spline_model.reconstruct_psd_matrix(
-            log_delta_sq, theta_re, theta_im, n_samples_max=1,
+            log_delta_sq,
+            theta_re,
+            theta_im,
+            n_samples_max=1,
         )[0]
         vi_psd_np = _rescale_psd(np.asarray(vi_psd))
 
@@ -588,7 +603,9 @@ def _build_multivar_vi_diagnostics(sampler, vi_result) -> Dict[str, Any]:
         )
         if samples_tree and has_delta_draws:
             ld_s, tr_s, ti_s = _vi_weights_to_log_delta_theta(
-                samples_tree, sampler, is_batch=True,
+                samples_tree,
+                sampler,
+                is_batch=True,
             )
             psd_quantiles, coherence_quantiles, vi_psd_np = (
                 _reconstruct_psd_quantiles_from_draws(
@@ -636,7 +653,9 @@ def compute_vi_artifacts_multivar(
 ) -> VIInitialisationArtifacts:
     """Run VI for fully coupled multivariate samplers."""
 
-    total_latents = sum(m.n_basis + 2 for m in sampler.spline_model.diagonal_models)
+    total_latents = sum(
+        m.n_basis + 2 for m in sampler.spline_model.diagonal_models
+    )
     if sampler.n_theta > 0:
         total_latents += sampler.spline_model.offdiag_re_model.n_basis + 2
         total_latents += sampler.spline_model.offdiag_im_model.n_basis + 2
@@ -706,11 +725,13 @@ def _prepare_block_accum(sampler) -> Dict[str, Any]:
     theta_im_draws = None
     if store_draws:
         log_delta_draws = np.zeros(
-            (posterior_draws, sampler.N, sampler.p), dtype=np.float32,
+            (posterior_draws, sampler.N, sampler.p),
+            dtype=np.float32,
         )
         if sampler.n_theta > 0:
             theta_re_draws = np.zeros(
-                (posterior_draws, sampler.N, sampler.n_theta), dtype=np.float32,
+                (posterior_draws, sampler.N, sampler.n_theta),
+                dtype=np.float32,
             )
             theta_im_draws = np.zeros_like(theta_re_draws)
 
@@ -736,7 +757,6 @@ def _prepare_block_accum(sampler) -> Dict[str, Any]:
         "psis_corr_summary": {},
         "psis_thresholds": None,
     }
-
 
 
 def _aggregate_psis_diagnostics(
@@ -1010,7 +1030,9 @@ def _accumulate_block_vi_diagnostics(
                     f"weights_theta_{part}_{channel_index}_{theta_idx}"
                 )
                 if w is None:
-                    raise KeyError(f"theta weights {part} {channel_index}_{theta_idx}")
+                    raise KeyError(
+                        f"theta weights {part} {channel_index}_{theta_idx}"
+                    )
                 components.append(
                     _to_np(jnp.einsum("nk,k->n", sampler._theta_basis, w))
                 )
@@ -1031,13 +1053,12 @@ def _accumulate_block_vi_diagnostics(
         weights_samples = jnp.asarray(weights_samples)
         n = min(max_draws, weights_samples.shape[0])
         accum["draws_recorded"] = (
-            n if accum["draws_recorded"] == 0
+            n
+            if accum["draws_recorded"] == 0
             else min(accum["draws_recorded"], n)
         )
         basis_jnp = jnp.asarray(basis, dtype=weights_samples.dtype)
-        target_buf[:n, :, col] = _to_np(
-            weights_samples[:n] @ basis_jnp.T
-        )
+        target_buf[:n, :, col] = _to_np(weights_samples[:n] @ basis_jnp.T)
 
     _record_draws(
         vi_result.samples.get(weights_delta_name),
@@ -1046,11 +1067,18 @@ def _accumulate_block_vi_diagnostics(
         channel_index,
     )
 
-    if sampler.n_theta > 0 and theta_count > 0 and accum["theta_re_draws"] is not None:
+    if (
+        sampler.n_theta > 0
+        and theta_count > 0
+        and accum["theta_re_draws"] is not None
+    ):
         for theta_idx in range(theta_count):
             prefix = f"{channel_index}_{theta_idx}"
             column = theta_start + theta_idx
-            for part, buf_key in (("re", "theta_re_draws"), ("im", "theta_im_draws")):
+            for part, buf_key in (
+                ("re", "theta_re_draws"),
+                ("im", "theta_im_draws"),
+            ):
                 _record_draws(
                     vi_result.samples.get(f"weights_theta_{part}_{prefix}"),
                     sampler._theta_basis,
@@ -1098,17 +1126,29 @@ def _assemble_blocked_vi_diagnostics(
         psd_quantiles = None
         coherence_quantiles = None
         log_delta_draws = accum["log_delta_draws"]
-        if accum["store_draws"] and not accum["draws_missing"] and log_delta_draws is not None:
+        if (
+            accum["store_draws"]
+            and not accum["draws_missing"]
+            and log_delta_draws is not None
+        ):
             desired = accum["draws_recorded"] or accum["posterior_draws"]
             available = min(desired, log_delta_draws.shape[0])
             if available > 0:
-                ld_s = jnp.asarray(log_delta_draws[:available], dtype=jnp.float32)
+                ld_s = jnp.asarray(
+                    log_delta_draws[:available], dtype=jnp.float32
+                )
                 theta_re_draws = accum["theta_re_draws"]
                 if sampler.n_theta > 0 and theta_re_draws is not None:
-                    tr_s = jnp.asarray(theta_re_draws[:available], dtype=jnp.float32)
-                    ti_s = jnp.asarray(accum["theta_im_draws"][:available], dtype=jnp.float32)
+                    tr_s = jnp.asarray(
+                        theta_re_draws[:available], dtype=jnp.float32
+                    )
+                    ti_s = jnp.asarray(
+                        accum["theta_im_draws"][:available], dtype=jnp.float32
+                    )
                 else:
-                    tr_s = jnp.zeros((available, sampler.N, 0), dtype=jnp.float32)
+                    tr_s = jnp.zeros(
+                        (available, sampler.N, 0), dtype=jnp.float32
+                    )
                     ti_s = jnp.zeros_like(tr_s)
                 logger.debug("Reconstructing PSD samples from VI draws...")
                 psd_quantiles, coherence_quantiles, vi_psd_np = (
@@ -1124,7 +1164,8 @@ def _assemble_blocked_vi_diagnostics(
                 )
 
         valid_losses = [
-            arr for arr in accum["vi_losses_blocks"]
+            arr
+            for arr in accum["vi_losses_blocks"]
             if arr.size and np.all(np.isfinite(arr))
         ]
         losses_mean = None
@@ -1140,7 +1181,9 @@ def _assemble_blocked_vi_diagnostics(
         vi_guides = accum["vi_guides"]
         guide_label = ",".join(sorted(set(vi_guides))) if vi_guides else "vi"
         diagnostics = {
-            "losses": losses_mean if losses_mean is not None else np.asarray([]),
+            "losses": (
+                losses_mean if losses_mean is not None else np.asarray([])
+            ),
             "losses_per_block": losses_stack,
             "guide": guide_label,
             "psd_matrix": vi_psd_np,
@@ -1161,8 +1204,10 @@ def _assemble_blocked_vi_diagnostics(
         diagnostics["vi_samples"] = accum["vi_samples"]
 
     if diagnostics is not None and (
-        accum["psis_khat_values"] or accum["psis_hyper_entries"]
-        or accum["psis_weight_blocks"] or accum["psis_corr_summary"]
+        accum["psis_khat_values"]
+        or accum["psis_hyper_entries"]
+        or accum["psis_weight_blocks"]
+        or accum["psis_corr_summary"]
     ):
         _aggregate_psis_diagnostics(
             diagnostics,
@@ -1329,9 +1374,9 @@ def prepare_block_vi(
                 init_strategies[channel_index] = select_vi_or_default_init(
                     vi_values=vi_median,
                     default_values=default_init_values,
-                    log_posterior_fn=lambda vals, fn=block_log_posterior_fn: float(fn(
-                        {k: jnp.asarray(v) for k, v in vals.items()}
-                    )),
+                    log_posterior_fn=lambda vals, fn=block_log_posterior_fn: float(
+                        fn({k: jnp.asarray(v) for k, v in vals.items()})
+                    ),
                     log_prefix=f"Blocked VI init channel {channel_index}",
                 )
 
@@ -1356,7 +1401,9 @@ def prepare_block_vi(
                 accum["draws_missing"] = True
 
     diagnostics = _assemble_blocked_vi_diagnostics(
-        sampler=sampler, accum=accum, _rescale_psd=_rescale_psd,
+        sampler=sampler,
+        accum=accum,
+        _rescale_psd=_rescale_psd,
     )
 
     return BlockVIArtifacts(
@@ -1419,9 +1466,9 @@ def prepare_coarse_block_vi(
         fine_design = _ensure_positive_definite_psd(fine_design)
 
         # Transfer coarse VI means per channel to fine-grid init values.
-        coarse_vi_samples = (
-            (coarse_setup.diagnostics or {}).get("vi_samples") or {}
-        )
+        coarse_vi_samples = (coarse_setup.diagnostics or {}).get(
+            "vi_samples"
+        ) or {}
         init_overrides: Dict[int, Dict[str, jnp.ndarray]] = {}
         for channel_index in range(sampler.p):
             key = f"weights_delta_{channel_index}"
@@ -1441,9 +1488,7 @@ def prepare_coarse_block_vi(
                 channel_index=channel_index,
                 theta_count=channel_index,
                 delta_weights_init=jnp.asarray(
-                    sampler.spline_model.diagonal_models[
-                        channel_index
-                    ].weights
+                    sampler.spline_model.diagonal_models[channel_index].weights
                 ),
                 alpha_phi_theta=getattr(
                     sampler.config,
@@ -1484,6 +1529,19 @@ def prepare_coarse_block_vi(
         merged_diagnostics["psd_matrix_complex"] = fine_design
         merged_diagnostics["psd_matrix"] = np.real(fine_design)
         merged_diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
+        merged_diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
+        merged_diagnostics["coarse_vi_psd"] = np.real(
+            np.asarray(coarse_design, dtype=np.complex128)
+        )
+        coarse_diag = coarse_setup.diagnostics or {}
+        coarse_losses = coarse_diag.get("losses")
+        if coarse_losses is not None:
+            merged_diagnostics["coarse_losses"] = np.asarray(coarse_losses)
+        coarse_per_block = coarse_diag.get("losses_per_block")
+        if coarse_per_block is not None:
+            merged_diagnostics["coarse_losses_per_block"] = np.asarray(
+                coarse_per_block
+            )
 
         return BlockVIArtifacts(
             init_strategies=fine_setup.init_strategies,

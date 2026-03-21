@@ -392,20 +392,24 @@ class BaseSampler(ABC):
         lnz_err: float,
     ) -> az.InferenceData:
         """Create InferenceData object for both univar and multivar cases."""
+        attributes_dict = dict(
+            device=str(self.device),
+            runtime=self.runtime,
+            lnz=lnz,
+            lnz_err=lnz_err,
+            sampler_type=self.sampler_type,
+            data_type=self.data_type,
+        )
+        extra_attrs = getattr(self, "_extra_idata_attrs", None)
+        if extra_attrs:
+            attributes_dict.update(dict(extra_attrs))
         return results_to_arviz(
             samples=dict(samples),
             sample_stats=sample_stats,
             data=self.data,
             model=self.model,
             config=self.config,
-            attributes=dict(
-                device=str(self.device),
-                runtime=self.runtime,
-                lnz=lnz,
-                lnz_err=lnz_err,
-                sampler_type=self.sampler_type,
-                data_type=self.data_type,
-            ),
+            attributes=attributes_dict,
         )
 
     def _save_results(self, idata: az.InferenceData) -> None:

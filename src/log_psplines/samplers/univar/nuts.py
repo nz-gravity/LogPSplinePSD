@@ -23,10 +23,15 @@ from ..pspline_block import (
     sample_pspline_block,
 )
 from ..vi_init import VIInitialisationMixin
-from ..vi_init.adapters import compute_vi_artifacts_univar
+from ..vi_init.adapters import (
+    _make_chainwise_init_strategy,
+    _pick_from_draws_or_means,
+    compute_coarse_vi_artifacts_univar,
+    compute_vi_artifacts_univar,
+)
 from ..vi_init.defaults import default_init_values_univar
 from ..vi_init.mixin import VIInitialisationArtifacts
-from .univar_base import UnivarBaseSampler, log_likelihood  # Updated import
+from .univar_base import UnivarBaseSampler, log_likelihood
 
 
 @dataclass
@@ -41,6 +46,8 @@ class NUTSConfig(SamplerConfig):
     vi_guide: Optional[str] = None
     vi_posterior_draws: int = 256
     vi_progress_bar: Optional[bool] = None
+    coarse_vi_fine_refine_steps: int = 75
+    coarse_vi_fine_refine_guide: Optional[str] = "diag"
 
 
 def bayesian_model(
@@ -112,15 +119,83 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         **kwargs,
     ) -> az.InferenceData:
         """Run NUTS sampling."""
-        vi_artifacts = compute_vi_artifacts_univar(self, model=bayesian_model)
-        init_strategy = (
-            vi_artifacts.init_strategy or self._default_init_strategy()
+        vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
+        coarse_sampler = getattr(self, "_coarse_vi_sampler", None)
+        default_values = default_init_values_univar(
+            self.spline_model,
+            alpha_phi=self.config.alpha_phi,
+            beta_phi=self.config.beta_phi,
+            alpha_delta=self.config.alpha_delta,
+            beta_delta=self.config.beta_delta,
         )
+        if coarse_sampler is not None and not vi_only_mode:
+            vi_artifacts = compute_coarse_vi_artifacts_univar(
+                self,
+                coarse_sampler=coarse_sampler,
+                model=bayesian_model,
+            )
+        else:
+            vi_artifacts = compute_vi_artifacts_univar(
+                self, model=bayesian_model
+            )
+        init_strategy = vi_artifacts.init_strategy
+        if coarse_sampler is None and not vi_only_mode:
+            raw_draws = {
+                name: jnp.asarray(value)
+                for name, value in (vi_artifacts.posterior_draws or {}).items()
+            }
+
+            def _log_posterior(values: Dict[str, jnp.ndarray]) -> float:
+                params = {
+                    "weights": jnp.asarray(values["weights"]),
+                    "phi": jnp.asarray(values["phi"]),
+                    "delta": jnp.asarray(values["delta"]),
+                }
+                return float(self._logpost_fn(params))
+
+            _univar_sites = ("weights", "phi", "delta")
+            _vi_means = {
+                name: jnp.asarray(value)
+                for name, value in (vi_artifacts.means or {}).items()
+                if name in _univar_sites
+            }
+
+            def _build_candidate(rng_key):
+                return _pick_from_draws_or_means(
+                    rng_key,
+                    draws=raw_draws,
+                    means=_vi_means,
+                    num_chains=int(self.config.num_chains),
+                    anchor_name="weights",
+                    site_names=_univar_sites,
+                )
+
+            init_strategy = _make_chainwise_init_strategy(
+                first_site_name="delta",
+                default_values=default_values,
+                build_candidate=_build_candidate,
+                log_posterior_fn=_log_posterior,
+                log_prefix="Univariate VI init",
+            )
+
+        init_strategy = init_strategy or init_to_value(values=default_values)
         self.rng_key = vi_artifacts.rng_key
         self._vi_diagnostics = vi_artifacts.diagnostics
+        vi_diag = self._vi_diagnostics or {}
+        self._extra_idata_attrs = {
+            key: vi_diag[key]
+            for key in (
+                "coarse_vi_attempted",
+                "coarse_vi_success",
+                "coarse_vi_mode",
+                "coarse_vi_full_nfreq",
+                "coarse_vi_nfreq",
+                "coarse_vi_target_nfreq",
+            )
+            if key in vi_diag
+        }
         self._save_vi_diagnostics()
 
-        vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
         if vi_only_mode:
             return self._vi_only_inference_data(vi_artifacts)
 

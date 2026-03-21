@@ -28,6 +28,31 @@ def _make_min_idata() -> az.InferenceData:
     return idata
 
 
+def _attach_vi_psd(idata: az.InferenceData) -> az.InferenceData:
+    freq = np.array([0.1, 0.2, 0.3], dtype=float)
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=float)
+    values = np.array(
+        [
+            [0.8, 0.9, 1.0],
+            [1.0, 1.1, 1.2],
+            [1.4, 1.5, 1.6],
+        ]
+    )
+    import xarray as xr
+
+    dataset = xr.Dataset(
+        {
+            "psd": xr.DataArray(
+                values,
+                dims=("percentile", "freq"),
+                coords={"percentile": percentiles, "freq": freq},
+            )
+        }
+    )
+    idata["vi_posterior_psd"] = xr.DataTree(dataset=dataset)
+    return idata
+
+
 def test_generate_diagnostics_summary_light_skips_expensive(
     monkeypatch, tmp_path
 ):
@@ -130,3 +155,40 @@ def test_generate_diagnostics_summary_full_uses_cached_attrs(
     assert "PSIS k-hat" in text
     assert "E-BFMI" in text
     assert (tmp_path / "diagnostics_summary.txt").exists()
+
+
+def test_generate_diagnostics_summary_includes_vi_vs_nuts_block(tmp_path):
+    import log_psplines.diagnostics.plotting as diag_mod
+
+    idata = _attach_vi_psd(_make_min_idata())
+    idata.attrs["riae"] = 0.11
+    idata.attrs["coverage"] = 0.92
+    idata.attrs["ci_width"] = 0.4
+    idata.attrs["vi_riae_vs_truth"] = 0.18
+    idata.attrs["vi_coverage_vs_truth"] = 0.87
+    idata.attrs["vi_ci_width_vs_truth"] = 0.6
+
+    text = diag_mod.generate_diagnostics_summary(
+        idata, str(tmp_path), mode="light"
+    )
+    assert "VI vs NUTS PSD accuracy:" in text
+    assert "RIAE: VI=0.180 | NUTS=0.110" in text
+    assert "Coverage: VI=87.0% | NUTS=92.0%" in text
+    assert "CI width: VI=0.6 | NUTS=0.4" in text
+
+
+def test_generate_diagnostics_summary_ci_width_survives_missing_truth(
+    tmp_path,
+):
+    import log_psplines.diagnostics.plotting as diag_mod
+
+    idata = _attach_vi_psd(_make_min_idata())
+    idata.attrs["ci_width"] = 0.25
+
+    text = diag_mod.generate_diagnostics_summary(
+        idata, str(tmp_path), mode="light"
+    )
+    assert "VI vs NUTS PSD accuracy:" in text
+    assert "CI width:" in text
+    assert "RIAE: unavailable" not in text
+    assert "Coverage: unavailable" not in text

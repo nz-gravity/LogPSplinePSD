@@ -75,6 +75,7 @@ def test_run_all_orchestrates_modules():
             "hyperparameters": [{"bias_pct": 12.0, "var_ratio": 0.9}],
             "weights": {"var_ratio_median": 1.1},
         },
+        "vi_posterior_psd": xr.DataTree(dataset=idata.posterior_psd.dataset),
     }
 
     result = run_all_diagnostics(
@@ -95,6 +96,7 @@ def test_run_all_orchestrates_modules():
     for module_metrics in result.values():
         assert isinstance(module_metrics, dict)
         assert all(isinstance(v, float) for v in module_metrics.values())
+    assert result["vi"]["ci_width_vs_truth"] > 0.0
 
 
 def test_run_all_ignores_energy_channel_metrics():

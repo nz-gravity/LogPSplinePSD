@@ -24,6 +24,7 @@ def test_run_univariate_identity_metrics():
     metrics = psd_compare._run(idata=idata, truth=truth)
     assert metrics["riae"] == pytest.approx(0.0)
     assert metrics["coverage"] == pytest.approx(1.0)
+    assert metrics["ci_width"] == pytest.approx(0.4 * truth.mean())
     assert metrics["riae_p05"] > 0.0
     assert metrics["riae_p95"] > 0.0
 
@@ -76,6 +77,8 @@ def test_run_multivariate_identity_metrics():
     assert metrics["riae_diag_mean"] == pytest.approx(0.0)
     assert metrics["riae_diag_max"] == pytest.approx(0.0)
     assert metrics["coverage"] == pytest.approx(1.0)
+    assert metrics["ci_width"] == pytest.approx(0.3)
+    assert metrics["ci_width_diag_mean"] == pytest.approx(0.3)
 
 
 def test_run_returns_empty_when_missing_inputs():
@@ -105,3 +108,26 @@ def test_run_univariate_ignores_endpoint_outliers():
     metrics = psd_compare._run(idata=idata, truth=truth)
     assert metrics["riae"] == pytest.approx(0.0)
     assert metrics["coverage"] == pytest.approx(1.0)
+    assert metrics["ci_width"] == pytest.approx(0.4)
+
+
+def test_run_ci_width_available_without_truth():
+    freqs = np.array([0.1, 0.2, 0.3])
+    percentiles = np.array([5.0, 50.0, 95.0])
+    values = np.array(
+        [
+            [1.0, 2.0, 3.0],
+            [1.1, 2.1, 3.1],
+            [1.4, 2.4, 3.4],
+        ]
+    )
+    psd_da = xr.DataArray(
+        values,
+        coords={"percentile": percentiles, "freq": freqs},
+        dims=("percentile", "freq"),
+    )
+    idata = az.from_dict({})
+    idata["posterior_psd"] = xr.DataTree(dataset=xr.Dataset({"psd": psd_da}))
+
+    metrics = psd_compare._run(idata=idata, truth=None)
+    assert metrics == {"ci_width": pytest.approx(0.4)}

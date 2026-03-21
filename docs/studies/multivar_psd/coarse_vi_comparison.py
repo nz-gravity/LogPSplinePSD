@@ -1,15 +1,16 @@
 #!/usr/bin/env python
-"""Compare 2-stage coarse VI vs fine-only VI (no NUTS).
+"""Compare three VI strategies (no NUTS).
 
-Runs the 3-channel VAR(2) simulation 10 times under two conditions:
-  A) coarse+fine: VI-coarse → transfer → VI-fine  (auto_coarse_vi=True)
-  B) fine-only:   VI-fine                          (auto_coarse_vi=False)
+Runs the 3-channel VAR(2) simulation 10 times under three conditions:
+  A) coarse_only:  VI-coarse → transfer weights (skip fine VI)
+  B) coarse+fine:  VI-coarse → transfer → VI-fine
+  C) fine_only:    VI-fine on full grid
 
 Reports RIAE, coverage, and wall time for each seed.
 
 Usage:
     python coarse_vi_comparison.py          # run all 10 seeds
-    python coarse_vi_comparison.py --seed 0 # run a single seed (both modes)
+    python coarse_vi_comparison.py --seed 0 # run a single seed (all modes)
 """
 
 from __future__ import annotations
@@ -59,7 +60,6 @@ SIGMA = np.array(
 
 # ─── Study parameters ────────────────────────────────────────────────────────
 
-N = 4096
 NB = 4
 N_SEEDS = 10
 K = 10
@@ -102,14 +102,23 @@ def _true_psd(freqs_hz: np.ndarray):
     return psd
 
 
-def _run_one(seed: int, auto_coarse: bool, outdir: str) -> dict:
-    t, data = _simulate_var(N, seed)
+MODES = [
+    # (label, auto_coarse_vi, vi_coarse_only)
+    ("coarse_only", True, True),
+    ("coarse+fine", True, False),
+    ("fine_only", False, False),
+]
+
+
+def _run_one(seed: int, mode: tuple, outdir: str, *, n: int) -> dict:
+    label, auto_coarse, coarse_only = mode
+
+    t, data = _simulate_var(n, seed)
     ts = MultivariateTimeseries(t=t, y=data)
 
-    freqs = np.fft.rfftfreq(N, d=1.0 / FS)[1:]
+    freqs = np.fft.rfftfreq(n, d=1.0 / FS)[1:]
     true = _true_psd(freqs)
 
-    label = "coarse+fine" if auto_coarse else "fine_only"
     run_dir = os.path.join(outdir, f"seed_{seed}", label)
 
     cfg = RunMCMCConfig(
@@ -129,6 +138,7 @@ def _run_one(seed: int, auto_coarse: bool, outdir: str) -> dict:
             vi_steps=VI_STEPS,
             vi_lr=VI_LR,
             auto_coarse_vi=auto_coarse,
+            vi_coarse_only=coarse_only,
         ),
         extra_kwargs={"compute_coherence_quantiles": True},
     )
@@ -145,6 +155,8 @@ def _run_one(seed: int, auto_coarse: bool, outdir: str) -> dict:
     return {
         "seed": seed,
         "mode": label,
+        "auto_coarse": int(auto_coarse),
+        "coarse_only": int(coarse_only),
         "riae": float(
             attrs.get(
                 "riae_matrix",
@@ -169,7 +181,14 @@ def main():
         "--seed",
         type=int,
         default=None,
-        help="Run a single seed (both modes). If omitted, run all 10.",
+        help="Run a single seed (all modes). If omitted, run all 10.",
+    )
+    parser.add_argument(
+        "--N",
+        type=int,
+        default=None,
+        nargs="+",
+        help="Dataset size(s) to sweep (default: 4096 16384 65536).",
     )
     parser.add_argument(
         "--outdir",
@@ -180,38 +199,44 @@ def main():
     args = parser.parse_args()
 
     seeds = list(range(N_SEEDS)) if args.seed is None else [args.seed]
+    n_values = args.N if args.N else [4096, 16384, 65536]
     outdir = args.outdir
     os.makedirs(outdir, exist_ok=True)
 
     results = []
-    for seed in seeds:
-        for auto_coarse in [True, False]:
-            label = "coarse+fine" if auto_coarse else "fine_only"
-            print(f"\n{'='*60}")
-            print(f"  Seed {seed} | mode={label}")
-            print(f"{'='*60}\n")
-            try:
-                row = _run_one(seed, auto_coarse, outdir)
-                results.append(row)
-                print(
-                    f"\n  -> RIAE={row['riae']:.4f}  coverage={row['coverage']:.4f}  "
-                    f"wall={row['wall_time']}s"
-                )
-            except Exception as e:
-                import traceback
+    for n in n_values:
+        for seed in seeds:
+            for mode in MODES:
+                label = mode[0]
+                print(f"\n{'='*60}")
+                print(f"  N={n} | Seed {seed} | mode={label}")
+                print(f"{'='*60}\n")
+                try:
+                    row = _run_one(seed, mode, outdir, n=n)
+                    row["N"] = n
+                    results.append(row)
+                    print(
+                        f"\n  -> RIAE={row['riae']:.4f}  coverage={row['coverage']:.4f}  "
+                        f"wall={row['wall_time']}s"
+                    )
+                except Exception as e:
+                    import traceback
 
-                traceback.print_exc()
-                results.append(
-                    {
-                        "seed": seed,
-                        "mode": label,
-                        "riae": np.nan,
-                        "coverage": np.nan,
-                        "wall_time": np.nan,
-                        "coarse_vi_attempted": 0,
-                        "coarse_vi_success": 0,
-                    }
-                )
+                    traceback.print_exc()
+                    results.append(
+                        {
+                            "N": n,
+                            "seed": seed,
+                            "mode": label,
+                            "auto_coarse": int(mode[1]),
+                            "coarse_only": int(mode[2]),
+                            "riae": np.nan,
+                            "coverage": np.nan,
+                            "wall_time": np.nan,
+                            "coarse_vi_attempted": 0,
+                            "coarse_vi_success": 0,
+                        }
+                    )
 
     # ─── Summary ──────────────────────────────────────────────────────────
     df = pd.DataFrame(results)
@@ -222,19 +247,19 @@ def main():
     print("\n" + "=" * 60)
     print("  SUMMARY")
     print("=" * 60)
-    for mode in ["coarse+fine", "fine_only"]:
-        sub = df[df["mode"] == mode]
-        if sub.empty:
-            continue
-        print(f"\n  {mode.upper()} (n={len(sub)}):")
-        for col in ["riae", "coverage", "wall_time"]:
-            vals = sub[col].dropna()
-            if vals.empty:
+    for n in sorted(df["N"].unique()):
+        print(f"\n  N={n}")
+        for mode in ["coarse_only", "coarse+fine", "fine_only"]:
+            sub = df[(df["N"] == n) & (df["mode"] == mode)]
+            if sub.empty:
                 continue
-            print(
-                f"    {col:12s}:  mean={vals.mean():.4f}  std={vals.std():.4f}  "
-                f"median={vals.median():.4f}"
-            )
+            parts = []
+            for col in ["riae", "coverage", "wall_time"]:
+                vals = sub[col].dropna()
+                if vals.empty:
+                    continue
+                parts.append(f"{col}={vals.mean():.4f}±{vals.std():.4f}")
+            print(f"    {mode:12s}:  {' | '.join(parts)}")
     print()
 
 

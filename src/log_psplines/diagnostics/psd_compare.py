@@ -23,7 +23,11 @@ def _get_psd_dataset(idata, idata_vi):
         if source is None:
             continue
         for name in ("posterior_psd", "vi_posterior_psd"):
-            dataset = getattr(source, name, None)
+            dataset = (
+                source.get(name)
+                if isinstance(source, dict)
+                else getattr(source, name, None)
+            )
             if dataset is not None:
                 return dataset
     return None
@@ -73,7 +77,26 @@ def _handle_univariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
         metrics["riae_p05"] = compute_riae(q05, reference, freqs)
         metrics["riae_p95"] = compute_riae(q95, reference, freqs)
         metrics["coverage"] = compute_ci_coverage_univar(values, reference)
+        metrics["ci_width"] = float(np.mean(q95 - q05))
 
+    return metrics
+
+
+def _handle_univariate_no_truth(psd_ds) -> Dict[str, float]:
+    psd = psd_ds["psd"]
+    freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
+    values = np.asarray(psd.values)
+    freq_idx = interior_frequency_slice(freqs.size)
+    values = values[..., freq_idx]
+    percentiles = np.asarray(psd.coords.get("percentile", []), dtype=float)
+    if percentiles.size == 0:
+        percentiles = np.arange(values.shape[0], dtype=float)
+
+    metrics: Dict[str, float] = {}
+    if percentiles.size >= 3:
+        q05 = extract_percentile(values, percentiles, 5.0)
+        q95 = extract_percentile(values, percentiles, 95.0)
+        metrics["ci_width"] = float(np.mean(q95 - q05))
     return metrics
 
 
@@ -133,6 +156,10 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
         metrics["riae_matrix_p95"] = compute_matrix_riae(
             q95_real, true_psd_real, freqs
         )
+        diag_mask = np.eye(true_psd_real.shape[1], dtype=bool)
+        diag_width = (q95_real - q05_real)[:, diag_mask]
+        metrics["ci_width_diag_mean"] = float(np.mean(diag_width))
+        metrics["ci_width"] = metrics["ci_width_diag_mean"]
 
     # Coherence diagnostics on off-diagonal structure
     coherence_est = _coherence(q50_real)
@@ -193,6 +220,26 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
     return metrics
 
 
+def _handle_multivariate_no_truth(psd_ds) -> Dict[str, float]:
+    psd_real = np.asarray(psd_ds["psd_matrix_real"].values)
+    percentiles = np.asarray(
+        psd_ds["psd_matrix_real"].coords.get("percentile", []), dtype=float
+    )
+    freqs = np.asarray(psd_ds["psd_matrix_real"].coords.get("freq"))
+    freq_idx = interior_frequency_slice(freqs.size)
+    psd_real = psd_real[:, freq_idx, ...]
+
+    metrics: Dict[str, float] = {}
+    if percentiles.size >= 3:
+        q05_real = extract_percentile(psd_real, percentiles, 5.0)
+        q95_real = extract_percentile(psd_real, percentiles, 95.0)
+        diag_mask = np.eye(q05_real.shape[1], dtype=bool)
+        diag_width = (q95_real - q05_real)[:, diag_mask]
+        metrics["ci_width_diag_mean"] = float(np.mean(diag_width))
+        metrics["ci_width"] = metrics["ci_width_diag_mean"]
+    return metrics
+
+
 def _run(
     *,
     idata=None,
@@ -205,19 +252,22 @@ def _run(
     """Compute PSD comparison metrics against a reference spectrum."""
 
     reference = _parse_reference(truth if truth is not None else psd_ref)
-    if reference is None:
-        return {}
-
     psd_ds = _get_psd_dataset(idata, idata_vi)
     if psd_ds is None:
         return {}
 
     metrics: Dict[str, float] = {}
 
-    if "psd" in psd_ds:
-        metrics.update(_handle_univariate(psd_ds, reference))
-    elif "psd_matrix_real" in psd_ds:
-        metrics.update(_handle_multivariate(psd_ds, reference))
+    if reference is None:
+        if "psd" in psd_ds:
+            metrics.update(_handle_univariate_no_truth(psd_ds))
+        elif "psd_matrix_real" in psd_ds:
+            metrics.update(_handle_multivariate_no_truth(psd_ds))
+    else:
+        if "psd" in psd_ds:
+            metrics.update(_handle_univariate(psd_ds, reference))
+        elif "psd_matrix_real" in psd_ds:
+            metrics.update(_handle_multivariate(psd_ds, reference))
 
     return {
         key: float(val)

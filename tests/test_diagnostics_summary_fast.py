@@ -162,6 +162,7 @@ def test_generate_diagnostics_summary_includes_vi_vs_nuts_block(tmp_path):
 
     idata = _attach_vi_psd(_make_min_idata())
     idata.attrs["riae"] = 0.11
+    idata.attrs["l2_matrix"] = 0.22
     idata.attrs["coverage"] = 0.92
     idata.attrs["ci_width"] = 0.4
     idata.attrs["vi_riae_vs_truth"] = 0.18
@@ -172,9 +173,31 @@ def test_generate_diagnostics_summary_includes_vi_vs_nuts_block(tmp_path):
         idata, str(tmp_path), mode="light"
     )
     assert "VI vs NUTS PSD accuracy:" in text
+    assert "L2 (matrix): 0.220" in text
     assert "RIAE: VI=0.180 | NUTS=0.110" in text
     assert "Coverage: VI=87.0% | NUTS=92.0%" in text
     assert "CI width: VI=0.6 | NUTS=0.4" in text
+
+
+def test_generate_diagnostics_summary_reads_vi_metrics_from_group_attrs(
+    tmp_path,
+):
+    import log_psplines.diagnostics.plotting as diag_mod
+
+    idata = _attach_vi_psd(_make_min_idata())
+    idata.attrs["riae_matrix"] = 0.11
+    idata.attrs["coverage"] = 0.92
+    idata.attrs["ci_width"] = 0.4
+    idata.vi_posterior_psd.attrs["riae_matrix"] = 0.18
+    idata.vi_posterior_psd.attrs["coverage"] = 0.87
+
+    text = diag_mod.generate_diagnostics_summary(
+        idata, str(tmp_path), mode="light"
+    )
+    assert "VI vs NUTS PSD accuracy:" in text
+    assert "RIAE: VI=0.180 | NUTS=0.110" in text
+    assert "Coverage: VI=87.0% | NUTS=92.0%" in text
+    assert "CI width: VI=unavailable | NUTS=0.4" in text
 
 
 def test_generate_diagnostics_summary_ci_width_survives_missing_truth(

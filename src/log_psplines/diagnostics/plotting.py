@@ -2602,6 +2602,23 @@ def generate_diagnostics_summary(
                 return fval
         return None
 
+    def _attrs_like(obj) -> dict:
+        if obj is None:
+            return {}
+        merged: dict = {}
+        obj_attrs = getattr(obj, "attrs", None)
+        if hasattr(obj_attrs, "items"):
+            merged.update(dict(obj_attrs))
+        ds = getattr(obj, "ds", None)
+        ds_attrs = getattr(ds, "attrs", None)
+        if hasattr(ds_attrs, "items"):
+            merged.update(dict(ds_attrs))
+        dataset = getattr(obj, "dataset", None)
+        dataset_attrs = getattr(dataset, "attrs", None)
+        if hasattr(dataset_attrs, "items"):
+            merged.update(dict(dataset_attrs))
+        return merged
+
     n_samples = idata.posterior.sizes.get("draw", 0)
     n_chains = idata.posterior.sizes.get("chain", 1)
     n_params = len(list(idata.posterior.data_vars))
@@ -2979,6 +2996,7 @@ def generate_diagnostics_summary(
     cached_psd_keys = [
         "riae",
         "riae_matrix",
+        "l2_matrix",
         "coverage",
         "ci_width",
         "ci_width_diag_mean",
@@ -3000,6 +3018,10 @@ def generate_diagnostics_summary(
         riae_matrix_value = _as_float(psd_diag.get("riae_matrix"))
         if riae_matrix_value is not None and np.isfinite(riae_matrix_value):
             psd_lines.append(f"  RIAE (matrix): {riae_matrix_value:.3f}")
+
+        l2_matrix_value = _as_float(psd_diag.get("l2_matrix"))
+        if l2_matrix_value is not None and np.isfinite(l2_matrix_value):
+            psd_lines.append(f"  L2 (matrix): {l2_matrix_value:.3f}")
 
         coverage_value = _as_float(psd_diag.get("coverage"))
         if coverage_value is not None and np.isfinite(coverage_value):
@@ -3039,13 +3061,18 @@ def generate_diagnostics_summary(
     vi_metrics = {}
     have_vi_psd = hasattr(idata, "vi_posterior_psd")
     if have_vi_psd:
+        vi_psd_attrs = _attrs_like(getattr(idata, "vi_posterior_psd", None))
         vi_metrics["riae"] = _pick_scalar(
             attrs.get("vi_riae_vs_truth"),
             attrs.get("vi_riae"),
+            vi_psd_attrs.get("riae"),
+            vi_psd_attrs.get("riae_matrix"),
         )
         vi_metrics["coverage"] = _pick_scalar(
             attrs.get("vi_coverage_vs_truth"),
             attrs.get("vi_coverage"),
+            vi_psd_attrs.get("coverage"),
+            vi_psd_attrs.get("ci_coverage"),
         )
         vi_metrics["ci_width"] = _pick_scalar(
             attrs.get("vi_ci_width_vs_truth"),
@@ -3053,9 +3080,14 @@ def generate_diagnostics_summary(
             attrs.get("vi_ci_width_diag_mean"),
         )
         if not any(value is not None for value in vi_metrics.values()):
+
+            class _VIOnlyIDATA:
+                def __init__(self, vi_posterior_psd):
+                    self.vi_posterior_psd = vi_posterior_psd
+
             vi_psd_metrics = _run_psd_compare(
                 idata=None,
-                idata_vi=idata,
+                idata_vi=_VIOnlyIDATA(getattr(idata, "vi_posterior_psd")),
                 truth=attrs.get("true_psd"),
                 psd_ref=attrs.get("true_psd"),
             )

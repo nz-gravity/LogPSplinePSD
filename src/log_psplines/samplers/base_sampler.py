@@ -240,6 +240,7 @@ class BaseSampler(ABC):
         canonical_keys = {
             "riae",
             "riae_matrix",
+            "l2_matrix",
             "coverage",
             "ci_width",
             "coherence_riae",

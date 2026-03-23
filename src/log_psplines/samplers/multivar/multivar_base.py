@@ -459,6 +459,7 @@ class MultivarBaseSampler(BaseSampler):
         dataset = Dataset(data_vars)
         attr_keys = [
             "riae_matrix",
+            "l2_matrix",
             "riae_per_channel",
             "riae_offdiag",
             "coherence_riae",

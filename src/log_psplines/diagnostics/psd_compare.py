@@ -10,6 +10,7 @@ from scipy.integrate import simpson
 from ._utils import (
     compute_ci_coverage_multivar,
     compute_ci_coverage_univar,
+    compute_matrix_l2,
     compute_matrix_riae,
     compute_riae,
     extract_percentile,
@@ -123,6 +124,7 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
     metrics["riae_matrix"] = compute_matrix_riae(
         q50_real, true_psd_real, freqs
     )
+    metrics["l2_matrix"] = compute_matrix_l2(q50_real, true_psd_real, freqs)
 
     diag_riae = []
     for channel in range(true_psd_real.shape[1]):

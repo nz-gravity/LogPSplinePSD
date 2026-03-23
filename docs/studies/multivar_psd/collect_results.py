@@ -58,7 +58,7 @@ def collect(pattern: str = "*") -> pd.DataFrame:
 # Aggregation
 # ---------------------------------------------------------------------------
 
-KEY_METRICS = ["coverage", "riae_matrix", "ess_median", "runtime"]
+KEY_METRICS = ["coverage", "riae_matrix", "l2_matrix", "ess_median", "runtime"]
 GROUP_COLS = ["mode", "N", "Nb", "Nh"]
 
 
@@ -100,9 +100,9 @@ def print_table(summary: pd.DataFrame) -> None:
     print("=" * 72)
     print(
         f"  {'Mode':<12} {'N':>6} {'Nb':>4} {'Nh':>5} {'Seeds':>6}  "
-        f"{'Coverage':>10}  {'RIAE':>10}  {'ESS':>8}"
+        f"{'Coverage':>10}  {'RIAE':>10}  {'L2':>10}  {'ESS':>8}"
     )
-    print("  " + "-" * 68)
+    print("  " + "-" * 80)
 
     for _, row in summary.iterrows():
         nh = str(row.get("Nh", "?"))
@@ -110,6 +110,8 @@ def print_table(summary: pd.DataFrame) -> None:
         cov_s = row.get("coverage_std", float("nan"))
         riae = row.get("riae_matrix_mean", float("nan"))
         riae_s = row.get("riae_matrix_std", float("nan"))
+        l2 = row.get("l2_matrix_mean", float("nan"))
+        l2_s = row.get("l2_matrix_std", float("nan"))
         ess = row.get("ess_median_mean", float("nan"))
         n_s = int(row.get("n_seeds", 0))
 
@@ -121,6 +123,7 @@ def print_table(summary: pd.DataFrame) -> None:
             f"{n_s:>6}  "
             f"{cov:>8.4f}±{cov_s:.3f}  "
             f"{riae:>8.4f}±{riae_s:.3f}  "
+            f"{l2:>8.4f}±{l2_s:.3f}  "
             f"{ess:>8.0f}"
         )
 

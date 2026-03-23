@@ -291,6 +291,7 @@ def _extract_run_metrics(
         "riae_matrix": float(
             attrs.get("riae_matrix", attrs.get("riae", np.nan))
         ),
+        "l2_matrix": float(attrs.get("l2_matrix", np.nan)),
         "coverage": float(attrs.get("coverage", np.nan)),
         "runtime": float(attrs.get("runtime", np.nan)),
         "ess_median": ess_median,

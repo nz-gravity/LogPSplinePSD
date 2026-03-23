@@ -76,6 +76,37 @@ def compute_matrix_riae(
     return float(numerator / denominator) if denominator != 0 else float("nan")
 
 
+def compute_matrix_l2(
+    median_psd_matrix: np.ndarray,
+    true_psd_matrix: np.ndarray,
+    freqs: Iterable[float],
+) -> float:
+    """Relative integrated L2 error for multivariate PSD matrices.
+
+    Computed as::
+
+        sqrt( integral ||S_hat(f) - S_true(f)||_F^2 df )
+        / sqrt( integral ||S_true(f)||_F^2 df )
+    """
+    freqs_arr = np.asarray(freqs, dtype=float)
+    diff_sq = np.array(
+        [
+            np.linalg.norm(median_psd_matrix[k] - true_psd_matrix[k], "fro")
+            ** 2
+            for k in range(len(freqs_arr))
+        ]
+    )
+    true_sq = np.array(
+        [
+            np.linalg.norm(true_psd_matrix[k], "fro") ** 2
+            for k in range(len(freqs_arr))
+        ]
+    )
+    numerator = float(np.sqrt(max(simpson(diff_sq, x=freqs_arr), 0.0)))
+    denominator = float(np.sqrt(max(simpson(true_sq, x=freqs_arr), 0.0)))
+    return float(numerator / denominator) if denominator != 0 else float("nan")
+
+
 def compute_riae_errorbars(
     psd_samples: np.ndarray, true_psd: np.ndarray, freqs: Iterable[float]
 ) -> dict:

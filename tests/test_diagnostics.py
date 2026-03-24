@@ -97,6 +97,50 @@ def test_run_all_orchestrates_modules():
         assert isinstance(module_metrics, dict)
         assert all(isinstance(v, float) for v in module_metrics.values())
     assert result["vi"]["ci_width_vs_truth"] > 0.0
+    assert result["vi"]["riae_vs_truth"] >= 0.0
+
+
+def test_run_all_multivar_vi_exports_l2_metric():
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=float)
+    freqs = np.array([0.1, 0.2, 0.3], dtype=float)
+    true_psd = np.zeros((3, 2, 2), dtype=float)
+    true_psd[:, 0, 0] = 1.0
+    true_psd[:, 1, 1] = 2.0
+
+    q05 = true_psd * 0.9
+    q50 = true_psd * 1.05
+    q95 = true_psd * 1.2
+    psd_real = np.stack([q05, q50, q95], axis=0)
+    psd_imag = np.zeros_like(psd_real)
+    vi_psd = xr.Dataset(
+        {
+            "psd_matrix_real": DataArray(
+                psd_real,
+                dims=["percentile", "freq", "channel", "channel2"],
+                coords={"percentile": percentiles, "freq": freqs},
+            ),
+            "psd_matrix_imag": DataArray(
+                psd_imag,
+                dims=["percentile", "freq", "channel", "channel2"],
+                coords={"percentile": percentiles, "freq": freqs},
+            ),
+        }
+    )
+
+    idata = az.from_dict({"posterior": {"x": np.random.randn(1, 4)}})
+    vi_diag = {
+        "losses": np.array([0.0, -0.5, -0.7]),
+        "vi_posterior_psd": xr.DataTree(dataset=vi_psd),
+    }
+
+    result = run_all_diagnostics(
+        idata=idata,
+        truth=true_psd,
+        idata_vi=vi_diag,
+    )
+
+    assert result["vi"]["l2_matrix_vs_truth"] >= 0.0
+    assert result["vi"]["riae_matrix_vs_truth"] >= 0.0
 
 
 def test_run_all_ignores_energy_channel_metrics():

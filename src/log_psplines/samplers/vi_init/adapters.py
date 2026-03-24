@@ -233,8 +233,15 @@ def select_vi_or_default_init(
 
     vi_lp = float(log_posterior_fn(vi_values))
     det_lp = float(log_posterior_fn(default_values))
+    delta_lp = vi_lp - det_lp
+    delta_label = (
+        f"improved by {delta_lp:.3f}"
+        if np.isfinite(delta_lp) and delta_lp >= 0.0
+        else f"worse by {abs(delta_lp):.3f}"
+    )
     logger.info(
-        f"{log_prefix}: VI log-post={vi_lp:.3f}, default log-post={det_lp:.3f}"
+        f"{log_prefix}: VI log-post={vi_lp:.3f}, default log-post={det_lp:.3f} "
+        f"({delta_label})"
     )
     if np.isfinite(vi_lp) and vi_lp > det_lp:
         return init_to_value(values=vi_values)

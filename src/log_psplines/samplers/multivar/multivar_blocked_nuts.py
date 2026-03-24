@@ -48,7 +48,11 @@ from ..pspline_block import (
     evaluate_log_density_batch,
     sample_pspline_block,
 )
-from ..vi_init.adapters import prepare_block_vi, prepare_coarse_block_vi
+from ..vi_init.adapters import (
+    _extract_multivar_design_psd,
+    prepare_block_vi,
+    prepare_coarse_block_vi,
+)
 from .multivar_base import MultivarBaseSampler
 
 
@@ -280,6 +284,8 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     # additional L2 term beyond the smoothness penalty.
     design_psd: Optional[np.ndarray] = None
     tau: Optional[float] = None
+    design_from_vi: bool = False
+    design_from_vi_tau: float = 10.0
 
     def __post_init__(self):
         super().__post_init__()
@@ -390,6 +396,24 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             design_psd = design_psd / scale_matrix[np.newaxis, :, :]
 
         return design_psd
+
+    def _set_design_weights_from_vi(self) -> None:
+        """Use VI posterior mean PSD as the design prior."""
+        vi_psd = _extract_multivar_design_psd(self._vi_diagnostics)
+        if vi_psd is None:
+            logger.warning(
+                "design_from_vi enabled but VI did not produce a valid PSD; "
+                "falling back to no design prior."
+            )
+            return
+
+        self._design_weights = self.spline_model.compute_design_weights(vi_psd)
+        if self.config.tau is None:
+            self.config.tau = self.config.design_from_vi_tau
+        logger.info(
+            "design_from_vi: using VI posterior mean as design prior (tau=%.2f).",
+            self.config.tau,
+        )
 
     @property
     def sampler_type(self) -> str:
@@ -543,6 +567,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         self.rng_key = vi_setup.rng_key
         init_strategies = vi_setup.init_strategies
         mcmc_keys = vi_setup.mcmc_keys
+
+        if self.config.design_from_vi and not self._design_weights:
+            self._set_design_weights_from_vi()
 
         if vi_only_mode:
             return self._vi_only_inference_data(vi_setup.diagnostics)

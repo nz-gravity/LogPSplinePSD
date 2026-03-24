@@ -91,6 +91,8 @@ class NUTSConfigOverride:
     dense_mass: bool = True
     alpha_phi_theta: Optional[float] = None
     beta_phi_theta: Optional[float] = None
+    design_from_vi: bool = False
+    design_from_vi_tau: float = 10.0
 
 
 @dataclass(frozen=True)

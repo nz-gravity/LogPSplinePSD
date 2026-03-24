@@ -58,7 +58,16 @@ def collect(pattern: str = "*") -> pd.DataFrame:
 # Aggregation
 # ---------------------------------------------------------------------------
 
-KEY_METRICS = ["coverage", "riae_matrix", "l2_matrix", "ess_median", "runtime"]
+KEY_METRICS = [
+    "coverage",
+    "riae_matrix",
+    "l2_matrix",
+    "vi_coverage",
+    "vi_riae_matrix",
+    "vi_l2_matrix",
+    "ess_median",
+    "runtime",
+]
 GROUP_COLS = ["mode", "N", "Nb", "Nh"]
 
 
@@ -94,15 +103,27 @@ def summarise(df: pd.DataFrame) -> pd.DataFrame:
 def print_table(summary: pd.DataFrame) -> None:
     if summary.empty:
         return
+    has_vi = any(
+        col in summary.columns
+        for col in (
+            "vi_coverage_mean",
+            "vi_riae_matrix_mean",
+            "vi_l2_matrix_mean",
+        )
+    )
 
     print("\n" + "=" * 72)
     print("  RESULTS SUMMARY")
     print("=" * 72)
-    print(
+    header = (
         f"  {'Mode':<12} {'N':>6} {'Nb':>4} {'Nh':>5} {'Seeds':>6}  "
-        f"{'Coverage':>10}  {'RIAE':>10}  {'L2':>10}  {'ESS':>8}"
+        f"{'Coverage':>10}  {'RIAE':>10}  {'L2':>10}"
     )
-    print("  " + "-" * 80)
+    if has_vi:
+        header += f"  {'VI Cov':>10}  {'VI RIAE':>10}  {'VI L2':>10}"
+    header += f"  {'ESS':>8}"
+    print(header)
+    print("  " + "-" * (116 if has_vi else 80))
 
     for _, row in summary.iterrows():
         nh = str(row.get("Nh", "?"))
@@ -112,10 +133,16 @@ def print_table(summary: pd.DataFrame) -> None:
         riae_s = row.get("riae_matrix_std", float("nan"))
         l2 = row.get("l2_matrix_mean", float("nan"))
         l2_s = row.get("l2_matrix_std", float("nan"))
+        vi_cov = row.get("vi_coverage_mean", float("nan"))
+        vi_cov_s = row.get("vi_coverage_std", float("nan"))
+        vi_riae = row.get("vi_riae_matrix_mean", float("nan"))
+        vi_riae_s = row.get("vi_riae_matrix_std", float("nan"))
+        vi_l2 = row.get("vi_l2_matrix_mean", float("nan"))
+        vi_l2_s = row.get("vi_l2_matrix_std", float("nan"))
         ess = row.get("ess_median_mean", float("nan"))
         n_s = int(row.get("n_seeds", 0))
 
-        print(
+        line = (
             f"  {str(row.get('mode','?')):<12} "
             f"{int(row.get('N', 0)):>6} "
             f"{int(row.get('Nb', 0)):>4} "
@@ -123,9 +150,16 @@ def print_table(summary: pd.DataFrame) -> None:
             f"{n_s:>6}  "
             f"{cov:>8.4f}±{cov_s:.3f}  "
             f"{riae:>8.4f}±{riae_s:.3f}  "
-            f"{l2:>8.4f}±{l2_s:.3f}  "
-            f"{ess:>8.0f}"
+            f"{l2:>8.4f}±{l2_s:.3f}"
         )
+        if has_vi:
+            line += (
+                f"  {vi_cov:>8.4f}±{vi_cov_s:.3f}  "
+                f"{vi_riae:>8.4f}±{vi_riae_s:.3f}  "
+                f"{vi_l2:>8.4f}±{vi_l2_s:.3f}"
+            )
+        line += f"  {ess:>8.0f}"
+        print(line)
 
     print("=" * 72 + "\n")
 

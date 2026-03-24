@@ -164,6 +164,9 @@ def _run(
             metrics["riae_vs_truth"] = psd_metrics["riae"]
         if "riae_matrix" in psd_metrics:
             metrics["riae_vs_truth"] = psd_metrics["riae_matrix"]
+            metrics["riae_matrix_vs_truth"] = psd_metrics["riae_matrix"]
+        if "l2_matrix" in psd_metrics:
+            metrics["l2_matrix_vs_truth"] = psd_metrics["l2_matrix"]
 
     return {
         key: float(val)

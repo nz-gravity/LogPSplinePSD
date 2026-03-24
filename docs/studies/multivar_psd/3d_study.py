@@ -278,6 +278,8 @@ def _extract_run_metrics(
 ) -> dict[str, float | int | str]:
     """Extract compact run-level metrics for downstream aggregation."""
     attrs = idata.attrs
+    vi_psd = getattr(idata, "vi_posterior_psd", None)
+    vi_attrs = getattr(vi_psd, "attrs", {})
     ess_raw = attrs.get("ess", np.nan)
     ess_arr = np.asarray(ess_raw, dtype=float)
     ess_median = float(np.nanmedian(ess_arr)) if ess_arr.size else float("nan")
@@ -295,6 +297,33 @@ def _extract_run_metrics(
         "coverage": float(attrs.get("coverage", np.nan)),
         "runtime": float(attrs.get("runtime", np.nan)),
         "ess_median": ess_median,
+        "vi_riae_matrix": float(
+            attrs.get(
+                "vi_riae_matrix_vs_truth",
+                attrs.get(
+                    "vi_riae_vs_truth",
+                    vi_attrs.get("riae_matrix", np.nan),
+                ),
+            )
+        ),
+        "vi_l2_matrix": float(
+            attrs.get(
+                "vi_l2_matrix_vs_truth",
+                vi_attrs.get("l2_matrix", np.nan),
+            )
+        ),
+        "vi_coverage": float(
+            attrs.get(
+                "vi_coverage_vs_truth",
+                vi_attrs.get("coverage", np.nan),
+            )
+        ),
+        "vi_ci_width": float(
+            attrs.get(
+                "vi_ci_width_vs_truth",
+                vi_attrs.get("ci_width", np.nan),
+            )
+        ),
     }
     metrics.update(_compute_ci_width_metrics(idata))
     return metrics

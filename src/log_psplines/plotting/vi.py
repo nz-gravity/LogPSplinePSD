@@ -22,7 +22,6 @@ def plot_vi_elbo(
     guide_name: str,
     outfile: str,
     loss_components: Optional[Dict[str, np.ndarray]] = None,
-    coarse_losses: Optional[np.ndarray] = None,
 ) -> None:
     """Plot the ELBO trace recorded during SVI optimisation.
 
@@ -31,17 +30,9 @@ def plot_vi_elbo(
         guide_name: Name of the VI guide.
         outfile: Output file path.
         loss_components: Optional per-block loss traces.
-        coarse_losses: Optional ELBO trace from the preceding coarse-grid VI.
-            When provided, the coarse and fine traces are concatenated and a
-            vertical line marks the transition.
     """
     if losses.size == 0:
         return
-
-    coarse_n = 0
-    if coarse_losses is not None and coarse_losses.size > 0:
-        coarse_n = coarse_losses.size
-        losses = np.concatenate([coarse_losses, losses])
 
     # Use consistent styling - larger figure for multiple components
     fig_width = 8.0 if loss_components else 6.0
@@ -86,27 +77,6 @@ def plot_vi_elbo(
                     alpha=0.7,
                     label=f"{comp_name}",
                 )
-
-    if coarse_n > 0:
-        ax.axvline(coarse_n, color="gray", ls="--", lw=1, alpha=0.7)
-        ax.text(
-            coarse_n,
-            ax.get_ylim()[1],
-            " fine",
-            va="top",
-            ha="left",
-            fontsize=8,
-            color="gray",
-        )
-        ax.text(
-            coarse_n,
-            ax.get_ylim()[1],
-            "coarse ",
-            va="top",
-            ha="right",
-            fontsize=8,
-            color="gray",
-        )
 
     ax.set_xlabel("VI Evaluation", fontsize=config.labelsize)
     ax.set_ylabel("ELBO (relative)", fontsize=config.labelsize)
@@ -416,10 +386,16 @@ def save_vi_diagnostics_univariate(
                 losses=losses_arr,
                 guide_name=guide_name,
                 outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
-                coarse_losses=(
-                    np.asarray(coarse) if coarse is not None else None
-                ),
             )
+            coarse_arr = np.asarray(coarse) if coarse is not None else None
+            if coarse_arr is not None and coarse_arr.size:
+                plot_vi_elbo(
+                    losses=coarse_arr,
+                    guide_name=f"{guide_name} (coarse)",
+                    outfile=os.path.join(
+                        diagnostics_dir, "vi_elbo_trace_coarse.png"
+                    ),
+                )
 
     weights = diagnostics.get("weights")
     if weights is not None:
@@ -460,6 +436,12 @@ def save_vi_diagnostics_multivariate(
     loss_components = diagnostics.get("losses_per_block")
     coarse_raw = diagnostics.get("coarse_losses")
     coarse_arr = np.asarray(coarse_raw) if coarse_raw is not None else None
+    coarse_components_raw = diagnostics.get("coarse_losses_per_block")
+    coarse_components_arr = (
+        np.asarray(coarse_components_raw)
+        if coarse_components_raw is not None
+        else None
+    )
 
     component_dict: Optional[Dict[str, np.ndarray]] = None
     component_source = None
@@ -486,7 +468,6 @@ def save_vi_diagnostics_multivariate(
                 guide_name=guide_name,
                 outfile=outfile,
                 loss_components=component_dict,
-                coarse_losses=coarse_arr,
             )
         elif losses_arr.ndim > 1 and losses_arr.shape[1] > 0:
             mean_loss = losses_arr.mean(axis=0)
@@ -502,7 +483,6 @@ def save_vi_diagnostics_multivariate(
                 guide_name=guide_name,
                 outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
                 loss_components=components if components else None,
-                coarse_losses=coarse_arr,
             )
     elif component_dict:
         # No aggregate losses stored; fall back to plotting components only
@@ -513,7 +493,35 @@ def save_vi_diagnostics_multivariate(
             guide_name=guide_name,
             outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
             loss_components=component_dict,
-            coarse_losses=coarse_arr,
+        )
+
+    coarse_component_dict: Optional[Dict[str, np.ndarray]] = None
+    if coarse_components_arr is not None:
+        if (
+            coarse_components_arr.ndim == 2
+            and coarse_components_arr.shape[1] > 0
+        ):
+            coarse_component_dict = {
+                f"block_{idx}": coarse_components_arr[idx]
+                for idx in range(coarse_components_arr.shape[0])
+            }
+        elif (
+            coarse_components_arr.ndim == 3
+            and coarse_components_arr.shape[2] > 0
+        ):
+            coarse_component_dict = {}
+            for block_idx in range(coarse_components_arr.shape[0]):
+                coarse_component_dict[f"block_{block_idx}"] = (
+                    coarse_components_arr[block_idx].mean(axis=0)
+                )
+
+    if coarse_arr is not None and coarse_arr.size:
+        guide_name = str(diagnostics.get("guide", "vi"))
+        plot_vi_elbo(
+            losses=coarse_arr,
+            guide_name=f"{guide_name} (coarse)",
+            outfile=os.path.join(diagnostics_dir, "vi_elbo_trace_coarse.png"),
+            loss_components=coarse_component_dict,
         )
 
     psd_quantiles_val = diagnostics.get("psd_quantiles")

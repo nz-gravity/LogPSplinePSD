@@ -200,6 +200,8 @@ def _build_multivar_blocked_sampler(
         vi_progress_bar=run.vi.vi_progress_bar,
         alpha_phi_theta=run.nuts.alpha_phi_theta,
         beta_phi_theta=run.nuts.beta_phi_theta,
+        design_from_vi=run.nuts.design_from_vi,
+        design_from_vi_tau=run.nuts.design_from_vi_tau,
         **blocked_extra_kwargs,
     )
     return MultivarBlockedNUTSSampler(data, model, blocked_config)

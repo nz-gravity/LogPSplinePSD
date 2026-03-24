@@ -8,6 +8,7 @@ import numpy as np
 
 from ..datatypes import Periodogram
 from ..datatypes.multivar import EmpiricalPSD, MultivarFFT
+from ..logger import logger
 from .checks import _run_preprocessing_checks
 from .coarse_grain import _smallest_divisor_geq
 from .config_utils import _build_config_from_kwargs, _normalize_run_config

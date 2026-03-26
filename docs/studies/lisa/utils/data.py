@@ -19,6 +19,7 @@ for path in (SRC_ROOT, PROJECT_ROOT):
         sys.path.insert(0, str(path))
 
 from log_psplines.datatypes import MultivariateTimeseries  # noqa: E402
+from log_psplines.example_datasets.lisa_data import LASER_FREQ  # noqa: E402
 from log_psplines.logger import logger  # noqa: E402
 
 # Import the generator from the sibling datagen script.
@@ -44,6 +45,9 @@ def generate_lisa_data(
     seed: int,
     duration_days: float,
     block_days: float,
+    fmin_generate: float = GENERATION_FMIN,
+    fmax_generate: float = GENERATION_FMAX,
+    absolute_freq_units: bool = False,
 ) -> tuple[MultivariateTimeseries, np.ndarray, np.ndarray, int, int, float]:
     """Generate LISA XYZ noise and return block-trimmed timeseries.
 
@@ -70,8 +74,8 @@ def generate_lisa_data(
         delta_t=dt,
         model=MODEL,
         seed=seed,
-        fmin_generate=GENERATION_FMIN,
-        fmax_generate=GENERATION_FMAX,
+        fmin_generate=float(fmin_generate),
+        fmax_generate=float(fmax_generate),
         cholesky_floor_rel=CHOLESKY_FLOOR_REL,
         cholesky_floor_abs=CHOLESKY_FLOOR_ABS,
         freq_chunk_size=FREQ_CHUNK_SIZE,
@@ -95,6 +99,14 @@ def generate_lisa_data(
     z_t = z_t[:n_used]
 
     y_full = np.vstack((x_t, y_t, z_t)).T.astype(np.float64)
+    if absolute_freq_units:
+        # lisatools XYZ outputs are fractional-frequency-like observables.
+        # Scaling the time series by the laser carrier frequency converts them
+        # to absolute-frequency fluctuations, so the PSD scales by nu0^2.
+        y_full = y_full * float(LASER_FREQ)
+        S_true = (
+            np.asarray(S_true, dtype=np.complex128) * float(LASER_FREQ) ** 2
+        )
     t_full = np.arange(n_used, dtype=np.float64) * dt
     ts = MultivariateTimeseries(y=y_full, t=t_full)
 

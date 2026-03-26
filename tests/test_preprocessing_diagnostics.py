@@ -78,6 +78,28 @@ def test_save_eigenvalue_separation_plot(outdir):
     assert os.path.getsize(out) > 0
 
 
+def test_save_eigenvalue_separation_plot_with_excluded_bands(outdir):
+    out = f"{outdir}/{OUT}"
+    os.makedirs(out, exist_ok=True)
+    pytest.importorskip("matplotlib")
+
+    freq = np.array([0.1, 0.2, 0.3, 0.4], dtype=float)
+    matrix = np.zeros((freq.size, 2, 2), dtype=np.complex128)
+    matrix[:, 0, 0] = np.array([4.0, 3.0, 2.0, 1.0])
+    matrix[:, 1, 1] = np.array([2.0, 1.5, 1.0, 0.5])
+    diag = eigenvalue_separation_diagnostics(freq=freq, matrix=matrix)
+
+    out = f"{out}/eig_ratios_excluded.png"
+    save_eigenvalue_separation_plot(
+        diag,
+        str(out),
+        warn_threshold=0.8,
+        excluded_bands=((0.15, 0.25), (0.35, 0.38)),
+    )
+    assert os.path.exists(out)
+    assert os.path.getsize(out) > 0
+
+
 def test_save_eigenvalue_separation_plot_with_cholesky_components(outdir):
     out = f"{outdir}/{OUT}"
     os.makedirs(out, exist_ok=True)
@@ -175,7 +197,9 @@ def test_preprocessing_plot_var2_3d_low_and_high_coarse(outdir):
         )
         preproc = _preprocess_data(ts, config=cfg)
 
-        plot_path = f"{case_out}/preprocessing_eigenvalue_ratios.png"
+        plot_path = (
+            f"{case_out}/diagnostics/preprocessing_eigenvalue_ratios.png"
+        )
         assert os.path.exists(plot_path)
         assert os.path.getsize(plot_path) > 0
 

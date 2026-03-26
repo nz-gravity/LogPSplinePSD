@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
-from scipy.signal import csd, welch, windows
+from scipy.signal import csd
+from scipy.signal import detrend as signal_detrend
+from scipy.signal import welch, windows
 
 from ..logger import logger
 from .multivar_utils import (
@@ -166,6 +168,8 @@ class MultivarFFT:
         scaling_factor: Optional[float] = 1.0,
         channel_stds: Optional[np.ndarray] = None,
         window: Optional[str | tuple] = None,
+        detrend: str | bool = "constant",
+        wishart_floor_fraction: Optional[float] = None,
     ) -> "MultivarFFT":
         """
         Compute block-averaged (Wishart) FFT statistics for multivariate series.
@@ -185,6 +189,16 @@ class MultivarFFT:
         window : str or tuple, optional
             Taper applied to each block before the FFT. Defaults to
             ``None`` (rectangular window).
+        detrend : {"constant", "linear"} or bool, optional
+            Per-block detrending applied before tapering. ``"constant"``
+            subtracts the block mean, ``"linear"`` removes a linear trend,
+            and ``False`` disables detrending.
+        wishart_floor_fraction : float, optional
+            If set, floor the eigenvalues of each Wishart matrix at this
+            fraction of the median trace.  Useful for spectra with
+            deterministic nulls (e.g. LISA TDI transfer functions) where
+            the spectral matrix becomes near-singular.  A value of 1e-6
+            is recommended.
         """
         if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):
             raise TypeError("Nb must be a positive integer.")
@@ -203,9 +217,16 @@ class MultivarFFT:
             )
 
         blocks = x.reshape(Nb, Lb, p)
-        # Detrend each block (Welch-style constant detrend) to reduce low-frequency
-        # leakage into the first few positive bins when using tapered windows.
-        blocks = blocks - np.mean(blocks, axis=1, keepdims=True)
+        if detrend in (False, None):
+            pass
+        elif detrend == "constant":
+            blocks = blocks - np.mean(blocks, axis=1, keepdims=True)
+        elif detrend == "linear":
+            blocks = signal_detrend(blocks, axis=1, type="linear")
+        else:
+            raise ValueError(
+                "detrend must be one of False, None, 'constant', or 'linear'."
+            )
 
         if window is None:
             taper = np.ones(Lb, dtype=np.float64)
@@ -268,6 +289,35 @@ class MultivarFFT:
             block_ffts = block_ffts[:, freq_mask, :]
 
         Y = np.einsum("bnc,bnd->ncd", block_ffts, np.conj(block_ffts))
+
+        # Regularize near-singular Wishart matrices (e.g. LISA TDI transfer
+        # nulls where the spectral matrix drops to near-zero).  We floor the
+        # eigenvalues of Y at a small fraction of each bin's OWN trace so that
+        # downstream Cholesky / likelihood computations remain stable without
+        # discarding any frequency bins or corrupting the off-diagonal
+        # structure at low-power frequencies.
+        #
+        # Using per-frequency trace (not global median) is critical: the PSD
+        # can span 6+ orders of magnitude, so a global floor derived from
+        # the median trace destroys the eigenvalue structure (and hence
+        # coherence) at low-power frequencies far from the nulls.
+        if wishart_floor_fraction is not None:
+            trace_per_bin = np.real(np.trace(Y, axis1=-2, axis2=-1))
+            wishart_floor = float(wishart_floor_fraction) * trace_per_bin
+            lam, v = np.linalg.eigh(Y)
+            lam_real = lam.real
+            # Floor each bin's eigenvalues against its own trace-based threshold
+            needs_clip = lam_real < wishart_floor[:, np.newaxis]
+            if np.any(needs_clip):
+                lam_real = np.where(
+                    needs_clip,
+                    wishart_floor[:, np.newaxis],
+                    lam_real,
+                )
+                Y = (v * lam_real[:, np.newaxis, :]) @ np.conj(
+                    np.swapaxes(v, -2, -1)
+                )
+
         U = Y_to_U(Y)
         u_re = U.real
         u_im = U.imag
@@ -305,14 +355,29 @@ class MultivarFFT:
                 f"Invalid frequency bounds supplied: fmin={fmin}, fmax={fmax}."
             )
         mask = (self.freq >= fmin) & (self.freq <= fmax)
+        return self.filter_frequency_mask(mask)
+
+    def filter_frequency_mask(self, mask: np.ndarray) -> "MultivarFFT":
+        """Return a new MultivarFFT retaining only bins where ``mask`` is True."""
+        mask = np.asarray(mask, dtype=bool)
+        if mask.shape != (self.N,):
+            raise ValueError(
+                f"mask must have shape ({self.N},), got {mask.shape}."
+            )
+        n_kept = int(np.count_nonzero(mask))
+        if n_kept <= 0:
+            raise ValueError(
+                "Frequency masking removed all bins; adjust exclusion bands."
+            )
         raw_psd = None
         raw_freq = None
         if self.raw_psd is not None:
             raw_psd = self.raw_psd[mask]
-            raw_freq = self.freq[mask]
+        if self.raw_freq is not None:
+            raw_freq = self.raw_freq[mask]
         return MultivarFFT(
             freq=self.freq[mask],
-            N=int(np.sum(mask)),
+            N=n_kept,
             p=self.p,
             u_re=self.u_re[mask],
             u_im=self.u_im[mask],
@@ -325,6 +390,22 @@ class MultivarFFT:
             duration=self.duration,
             channel_stds=self.channel_stds,
         )
+
+    def exclude_frequency_bands(
+        self,
+        bands: Sequence[tuple[float, float]],
+    ) -> "MultivarFFT":
+        """Return a new MultivarFFT excluding bins in ``bands``."""
+        if len(bands) == 0:
+            return self
+        mask = np.ones((self.N,), dtype=bool)
+        for low, high in bands:
+            low_f = float(low)
+            high_f = float(high)
+            if high_f < low_f:
+                low_f, high_f = high_f, low_f
+            mask &= ~((self.freq >= low_f) & (self.freq <= high_f))
+        return self.filter_frequency_mask(mask)
 
     def __repr__(self):
         return f"MultivarFFT(N={self.N}, p={self.p})"
@@ -446,6 +527,8 @@ class MultivariateTimeseries:
         fmin: Optional[float] = None,
         fmax: Optional[float] = None,
         window: Optional[str | tuple] = None,
+        detrend: str | bool = "constant",
+        wishart_floor_fraction: Optional[float] = None,
     ) -> "MultivarFFT":
         n = self.y.shape[0]
         if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):
@@ -466,6 +549,8 @@ class MultivariateTimeseries:
             scaling_factor=self.scaling_factor,
             channel_stds=self.original_stds,
             window=window,
+            detrend=detrend,
+            wishart_floor_fraction=wishart_floor_fraction,
         )
         log_msg = (
             f"Wishart averaging (blocks={Nb}): "

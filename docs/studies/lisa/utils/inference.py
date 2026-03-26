@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence
 
 import arviz as az
 import numpy as np
@@ -36,11 +36,20 @@ def run_lisa_mcmc(
     beta_delta: float = 3.0,
     vi: bool = False,
     vi_steps: int = 500_000,
-    vi_lr: float = 1e-4,
+    vi_lr: float = 5e-3,
     vi_guide: str = "diag",
     vi_posterior_draws: int = 1024,
+    coarse_grain_config_vi: CoarseGrainConfig | None = None,
+    auto_coarse_vi: bool = False,
+    auto_coarse_vi_target_nfreq: int = 192,
+    fmin: float = FMIN,
+    fmax: float = FMAX,
     wishart_window: str | tuple[str, float] | None = None,
+    wishart_detrend: str | bool = "constant",
+    wishart_floor_fraction: float | None = None,
+    exclude_freq_bands: Sequence[tuple[float, float]] = (),
     tau: Optional[float] = None,
+    only_vi: bool = False,
     outdir: str = ".",
 ) -> az.InferenceData:
     """Run multivariate MCMC on LISA data.
@@ -65,7 +74,10 @@ def run_lisa_mcmc(
         f"warmup={n_warmup}, samples={n_samples}, "
         f"target_accept={target_accept}, max_tree_depth={max_tree_depth}, "
         f"wishart_window={wishart_window}, "
-        f"vi={'on' if vi else 'off'}, tau={tau}."
+        f"wishart_detrend={wishart_detrend}, "
+        f"wishart_floor_fraction={wishart_floor_fraction}, "
+        f"vi={'on' if vi else 'off'}, only_vi={only_vi}, "
+        f"n_excluded_bands={len(exclude_freq_bands)}, tau={tau}."
     )
 
     idata = run_mcmc(
@@ -81,17 +93,23 @@ def run_lisa_mcmc(
         verbose=True,
         coarse_grain_config=coarse_cfg,
         wishart_window=wishart_window,
+        wishart_detrend=wishart_detrend,
+        wishart_floor_fraction=wishart_floor_fraction,
         Nb=Nb,
-        fmin=FMIN,
-        fmax=FMAX,
+        fmin=fmin,
+        fmax=fmax,
+        exclude_freq_bands=tuple(exclude_freq_bands),
         alpha_delta=alpha_delta,
         beta_delta=beta_delta,
-        only_vi=False,
+        only_vi=only_vi,
         init_from_vi=vi,
         vi_steps=vi_steps if vi else 0,
         vi_lr=vi_lr,
         vi_guide=vi_guide,
         vi_posterior_draws=vi_posterior_draws,
+        coarse_grain_config_vi=coarse_grain_config_vi,
+        auto_coarse_vi=auto_coarse_vi,
+        auto_coarse_vi_target_nfreq=auto_coarse_vi_target_nfreq,
         vi_progress_bar=True,
         target_accept_prob=target_accept,
         max_tree_depth=max_tree_depth,

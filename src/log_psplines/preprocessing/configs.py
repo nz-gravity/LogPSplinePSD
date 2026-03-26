@@ -43,6 +43,7 @@ TruePSDInput = Union[
     list,
     dict,
 ]
+FrequencyBand = Tuple[float, float]
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ class ModelConfig:
     true_psd: TruePSDInput = None
     fmin: Optional[float] = None
     fmax: Optional[float] = None
+    exclude_freq_bands: tuple[FrequencyBand, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -123,6 +125,12 @@ class RunMCMCConfig:
     # larger equivalent noise bandwidth (ENBW). Changing this affects the
     # likelihood, not just plots.
     wishart_window: Optional[str | tuple] = None
+    wishart_detrend: str | bool = "constant"
+    # Floor the eigenvalues of each Wishart matrix at this fraction of the
+    # median trace.  Useful for spectra with deterministic nulls (e.g. LISA
+    # TDI transfer functions).  Set to e.g. 1e-6 to stabilise Cholesky /
+    # likelihood near nulls without affecting bins with real power.
+    wishart_floor_fraction: Optional[float] = None
     welch_nperseg: int | None = None
     welch_noverlap: int | None = None
     welch_window: str = "hann"

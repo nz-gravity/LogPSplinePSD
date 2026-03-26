@@ -95,6 +95,136 @@ def _blocked_welch(
     return EmpiricalPSD(freq=freq_ref, psd=psd_avg, coherence=coherence)
 
 
+def _empirical_ci_dict(empirical: EmpiricalPSD) -> dict:
+    """Build a degenerate CI dictionary from a single empirical estimate."""
+    psd = np.asarray(empirical.psd)
+    coh = np.asarray(empirical.coherence)
+    _, p, _ = psd.shape
+    ci_dict: dict[str, dict[tuple[int, int], tuple[np.ndarray, ...]]] = {
+        "psd": {},
+        "coh": {},
+        "re": {},
+        "im": {},
+        "mag": {},
+    }
+    for i in range(p):
+        ci_dict["psd"][(i, i)] = (
+            psd[:, i, i].real,
+            psd[:, i, i].real,
+            psd[:, i, i].real,
+        )
+        for j in range(p):
+            if i > j:
+                ci_dict["coh"][(i, j)] = (
+                    coh[:, i, j],
+                    coh[:, i, j],
+                    coh[:, i, j],
+                )
+            elif i != j:
+                ci_dict["re"][(i, j)] = (
+                    psd[:, i, j].real,
+                    psd[:, i, j].real,
+                    psd[:, i, j].real,
+                )
+                ci_dict["im"][(i, j)] = (
+                    psd[:, i, j].imag,
+                    psd[:, i, j].imag,
+                    psd[:, i, j].imag,
+                )
+    return ci_dict
+
+
+def make_preprocessing_psd_plot(
+    *,
+    y_full: np.ndarray,
+    fs: float,
+    Lb: int,
+    freq_true: np.ndarray,
+    S_true: np.ndarray,
+    outdir: str,
+    filename: str = "preprocessing_psd_matrix.png",
+    welch_window: str | tuple[str, float] | None = None,
+    fmin: float = FMIN,
+    fmax: float = FMAX,
+    excluded_bands: tuple[tuple[float, float], ...] = (),
+) -> None:
+    """Plot true PSD vs raw empirical PSD vs blocked Welch before inference."""
+    n = y_full.shape[0]
+    if n < 2:
+        raise ValueError(
+            "Need at least two samples to build preprocessing PSD."
+        )
+
+    freq_emp = np.fft.rfftfreq(n, d=1.0 / fs)[1:]
+    fft = np.fft.rfft(y_full, axis=0)[1:, :]
+    scale = np.full(freq_emp.shape, 2.0 / (n * fs), dtype=np.float64)
+    if (n % 2) == 0 and scale.size > 0:
+        scale[-1] = 1.0 / (n * fs)
+    psd_emp = np.einsum("ni,nj->nij", fft, np.conj(fft)) * scale[:, None, None]
+    diag = np.abs(np.diagonal(psd_emp, axis1=1, axis2=2))
+    denom = diag[:, :, None] * diag[:, None, :]
+    coh = np.abs(psd_emp) ** 2
+    with np.errstate(divide="ignore", invalid="ignore"):
+        coherence_emp = np.where(denom > 0, coh.real / denom, np.nan)
+    for ch in range(y_full.shape[1]):
+        coherence_emp[:, ch, ch] = 1.0
+
+    empirical = EmpiricalPSD(
+        freq=freq_emp,
+        psd=psd_emp,
+        coherence=coherence_emp,
+    )
+    empirical = _restrict_freq_range(_drop_dc(empirical), fmin=fmin, fmax=fmax)
+
+    welch_nperseg = int(round(10.0 * fs / float(fmin)))
+    welch_nperseg = max(256, min(welch_nperseg, Lb))
+    welch_noverlap = min(int(round(0.5 * welch_nperseg)), welch_nperseg - 1)
+    empirical_welch = _blocked_welch(
+        y_full,
+        fs=fs,
+        Lb=Lb,
+        nperseg=welch_nperseg,
+        noverlap=welch_noverlap,
+        window=welch_window_arg(welch_window),
+        detrend="constant",
+    )
+    empirical_welch = _restrict_freq_range(
+        _drop_dc(empirical_welch),
+        fmin=fmin,
+        fmax=fmax,
+    )
+
+    plot_psd_matrix(
+        PSDMatrixPlotSpec(
+            ci_dict=_empirical_ci_dict(empirical),
+            freq=np.asarray(empirical.freq, dtype=float),
+            empirical_psd=None,
+            extra_empirical_psd=[empirical_welch],
+            extra_empirical_labels=["Welch (block-avg)"],
+            extra_empirical_styles=[
+                dict(color="0.5", lw=1.3, alpha=0.9, ls="-", zorder=-4),
+            ],
+            true_psd=interp_matrix(
+                np.asarray(freq_true),
+                np.asarray(S_true),
+                np.asarray(empirical.freq, dtype=float),
+            ),
+            outdir=outdir,
+            filename=filename,
+            diag_yscale="log",
+            offdiag_yscale="linear",
+            xscale="log",
+            show_coherence=True,
+            show_knots=False,
+            label="Empirical",
+            model_color="0.75",
+            freq_range=(fmin, fmax),
+            excluded_bands=excluded_bands,
+        )
+    )
+    logger.info(f"Saved preprocessing PSD plot to {outdir}/{filename}")
+
+
 def make_psd_plot(
     idata,
     *,
@@ -107,6 +237,9 @@ def make_psd_plot(
     outdir: str,
     filename: str = "psd_matrix.png",
     welch_window: str | tuple[str, float] | None = None,
+    fmin: float = FMIN,
+    fmax: float = FMAX,
+    excluded_bands: tuple[tuple[float, float], ...] = (),
 ) -> None:
     """Generate PSD matrix plot with Welch overlay.
 
@@ -122,8 +255,8 @@ def make_psd_plot(
     )
 
     # Blocked Welch diagnostic — targets df ≈ FMIN.
-    welch_nperseg = int(round(fs / FMIN))
-    welch_nperseg = max(256, min(welch_nperseg, y_full.shape[0]))
+    welch_nperseg = int(round(10.0 * fs / float(fmin)))
+    welch_nperseg = max(256, min(welch_nperseg, Lb))
     welch_noverlap = int(round(0.5 * welch_nperseg))
     welch_noverlap = min(welch_noverlap, welch_nperseg - 1)
 
@@ -134,11 +267,11 @@ def make_psd_plot(
         nperseg=welch_nperseg,
         noverlap=welch_noverlap,
         window=welch_window_arg(welch_window),
-        detrend=False,
+        detrend="constant",
     )
     empirical_welch = _drop_dc(empirical_welch)
     empirical_welch = _restrict_freq_range(
-        empirical_welch, fmin=FMIN, fmax=FMAX
+        empirical_welch, fmin=fmin, fmax=fmax
     )
 
     plot_psd_matrix(
@@ -159,8 +292,36 @@ def make_psd_plot(
             show_csd_magnitude=False,
             show_coherence=True,
             overlay_vi=True,
-            freq_range=(FMIN, FMAX),
+            freq_range=(fmin, fmax),
             true_psd=true_psd_physical,
+            excluded_bands=excluded_bands,
         )
     )
     logger.info(f"Saved PSD plot to {outdir}/{filename}")
+
+    # Also save a linear-x version for inspecting null regions.
+    linear_filename = filename.replace(".png", "_linx.png")
+    plot_psd_matrix(
+        PSDMatrixPlotSpec(
+            idata=idata,
+            freq=freq_plot,
+            empirical_psd=None,
+            extra_empirical_psd=[empirical_welch],
+            extra_empirical_labels=["Welch (block-avg)"],
+            extra_empirical_styles=[
+                dict(color="0.5", lw=1.3, alpha=0.9, ls="-", zorder=-4),
+            ],
+            outdir=outdir,
+            filename=linear_filename,
+            diag_yscale="log",
+            offdiag_yscale="linear",
+            xscale="linear",
+            show_csd_magnitude=False,
+            show_coherence=True,
+            overlay_vi=True,
+            freq_range=(fmin, fmax),
+            true_psd=true_psd_physical,
+            excluded_bands=excluded_bands,
+        )
+    )
+    logger.info(f"Saved linear-x PSD plot to {outdir}/{linear_filename}")

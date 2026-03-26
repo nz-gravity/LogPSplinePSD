@@ -242,6 +242,7 @@ def save_eigenvalue_separation_plot(
     *,
     warn_threshold: float = 0.8,
     info_text: str | None = None,
+    excluded_bands: tuple[tuple[float, float], ...] = (),
     cholesky_matrix: np.ndarray | None = None,
     cholesky_jitter: float = 1e-12,
     max_cholesky_jitter: float = 1e-4,
@@ -254,6 +255,8 @@ def save_eigenvalue_separation_plot(
         out: Output image path.
         warn_threshold: Horizontal threshold shown on ratio panel.
         info_text: Optional metadata line shown at the top of the figure.
+        excluded_bands: Frequency bands shaded on all panels to show bins
+            removed during preprocessing.
         cholesky_matrix: Optional spectral matrix with shape (N, p, p) used to
             plot model-native components (log-delta and theta) across
             frequency.
@@ -272,9 +275,25 @@ def save_eigenvalue_separation_plot(
     freq = np.asarray(diag.freq, dtype=float)
     eig = np.asarray(diag.eigvals_desc, dtype=float)
     ratios = {k: np.asarray(v, dtype=float) for k, v in diag.ratios.items()}
+    excluded_bands = tuple(
+        (float(low), float(high)) for low, high in excluded_bands
+    )
 
     use_log_x = bool(freq.size) and np.all(freq > 0)
     show_cholesky = cholesky_matrix is not None
+
+    def _shade_excluded_bands(ax, *, add_label: bool) -> None:
+        for idx, (low, high) in enumerate(excluded_bands):
+            left = min(low, high)
+            right = max(low, high)
+            ax.axvspan(
+                left,
+                right,
+                color="#d8b365",
+                alpha=0.28,
+                zorder=0,
+                label="excluded band" if add_label and idx == 0 else None,
+            )
 
     if show_cholesky:
         matrix = np.asarray(cholesky_matrix, dtype=np.complex128)
@@ -308,6 +327,7 @@ def save_eigenvalue_separation_plot(
         ax_ratio, ax_eig = axes[0], axes[1]
 
     # Ratios
+    _shade_excluded_bands(ax_ratio, add_label=True)
     for key, ratio in ratios.items():
         if use_log_x:
             ax_ratio.semilogx(freq, ratio, label=key.replace("r_", "r"))
@@ -328,6 +348,7 @@ def save_eigenvalue_separation_plot(
     ax_ratio.set_title("Eigenvalue separation ratios")
 
     # Eigenvalues
+    _shade_excluded_bands(ax_eig, add_label=False)
     p = int(eig.shape[1]) if eig.ndim == 2 else 0
     for idx in range(p):
         if use_log_x:
@@ -366,6 +387,7 @@ def save_eigenvalue_separation_plot(
                     pair_idx = col * (2 * p - col - 1) // 2 + (row - col - 1)
                     color = f"C{(pair_idx + p) % 10}"
 
+                _shade_excluded_bands(ax, add_label=False)
                 if use_log_x:
                     ax.semilogx(freq, y, color=color, lw=1.2)
                 else:

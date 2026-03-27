@@ -6,14 +6,78 @@ from typing import Optional
 
 import arviz as az
 import numpy as np
+import xarray as xr
 
 from log_psplines.datatypes import MultivariateTimeseries
+from log_psplines.datatypes.multivar_utils import interp_matrix
 from log_psplines.logger import logger
 from log_psplines.mcmc import run_mcmc
 from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
 FMIN = 1e-4
 FMAX = 1e-1
+
+
+def attach_truth_psd_group(
+    idata: az.InferenceData,
+    *,
+    freq_true: np.ndarray,
+    S_true: np.ndarray,
+) -> az.InferenceData:
+    """Attach truth PSD on the posterior frequency grid to ``idata``."""
+    posterior_psd = getattr(idata, "posterior_psd", None)
+    if posterior_psd is None or "freq" not in posterior_psd.coords:
+        logger.warning("posterior_psd missing; cannot attach truth_psd group.")
+        return idata
+
+    freq_posterior = np.asarray(
+        posterior_psd.coords["freq"].values, dtype=float
+    )
+    truth_interp = interp_matrix(
+        np.asarray(freq_true, dtype=float),
+        np.asarray(S_true, dtype=np.complex128),
+        freq_posterior,
+    )
+
+    channels = np.asarray(posterior_psd.coords["channels"].values)
+    channels2 = np.asarray(posterior_psd.coords["channels2"].values)
+    truth_ds = xr.Dataset(
+        {
+            "psd_matrix_real": xr.DataArray(
+                np.asarray(np.real(truth_interp), dtype=np.float64),
+                dims=["freq", "channels", "channels2"],
+                coords={
+                    "freq": freq_posterior,
+                    "channels": channels,
+                    "channels2": channels2,
+                },
+            ),
+            "psd_matrix_imag": xr.DataArray(
+                np.asarray(np.imag(truth_interp), dtype=np.float64),
+                dims=["freq", "channels", "channels2"],
+                coords={
+                    "freq": freq_posterior,
+                    "channels": channels,
+                    "channels2": channels2,
+                },
+            ),
+        }
+    )
+    idata["truth_psd"] = xr.DataTree(dataset=truth_ds)
+    return idata
+
+
+def save_inference_data(
+    idata: az.InferenceData,
+    *,
+    outdir: str,
+    filename: str = "inference_data.nc",
+) -> str:
+    """Persist the current ``idata`` to NetCDF and return the written path."""
+    outpath = f"{outdir}/{filename}"
+    idata.to_netcdf(outpath, engine="h5netcdf")
+    logger.info(f"Saved enriched inference data to {outpath}")
+    return outpath
 
 
 def run_lisa_mcmc(
@@ -102,4 +166,5 @@ def run_lisa_mcmc(
         tau=tau,
     )
 
+    attach_truth_psd_group(idata, freq_true=freq_true, S_true=S_true)
     return idata

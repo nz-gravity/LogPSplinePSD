@@ -6,6 +6,7 @@ import pytest
 import xarray as xr
 
 from log_psplines.arviz_utils.from_arviz import (
+    get_multivar_ci_summary,
     get_periodogram,
     get_posterior_psd,
     get_weights,
@@ -69,3 +70,72 @@ def test_get_periodogram_missing_group():
     idata = az.from_dict({})
     with pytest.raises(KeyError):
         get_periodogram(idata)
+
+
+def test_get_multivar_ci_summary_extracts_quantiles_and_truth():
+    freqs = np.array([0.1, 0.2])
+    percentiles = np.array([5.0, 50.0, 95.0])
+    psd_real = np.arange(3 * 2 * 2 * 2, dtype=float).reshape(3, 2, 2, 2)
+    psd_imag = -psd_real
+    truth_real = np.ones((2, 2, 2), dtype=float) * 7.0
+    truth_imag = np.ones((2, 2, 2), dtype=float) * -3.0
+
+    posterior_ds = xr.Dataset(
+        {
+            "psd_matrix_real": xr.DataArray(
+                psd_real,
+                coords={
+                    "percentile": percentiles,
+                    "freq": freqs,
+                    "channels": [0, 1],
+                    "channels2": [0, 1],
+                },
+                dims=("percentile", "freq", "channels", "channels2"),
+            ),
+            "psd_matrix_imag": xr.DataArray(
+                psd_imag,
+                coords={
+                    "percentile": percentiles,
+                    "freq": freqs,
+                    "channels": [0, 1],
+                    "channels2": [0, 1],
+                },
+                dims=("percentile", "freq", "channels", "channels2"),
+            ),
+        }
+    )
+    truth_ds = xr.Dataset(
+        {
+            "psd_matrix_real": xr.DataArray(
+                truth_real,
+                coords={
+                    "freq": freqs,
+                    "channels": [0, 1],
+                    "channels2": [0, 1],
+                },
+                dims=("freq", "channels", "channels2"),
+            ),
+            "psd_matrix_imag": xr.DataArray(
+                truth_imag,
+                coords={
+                    "freq": freqs,
+                    "channels": [0, 1],
+                    "channels2": [0, 1],
+                },
+                dims=("freq", "channels", "channels2"),
+            ),
+        }
+    )
+
+    idata = az.from_dict({})
+    idata["posterior_psd"] = xr.DataTree(dataset=posterior_ds)
+    idata["truth_psd"] = xr.DataTree(dataset=truth_ds)
+
+    summary = get_multivar_ci_summary(idata)
+    np.testing.assert_allclose(summary["freq"], freqs)
+    np.testing.assert_allclose(summary["psd_real_q05"], psd_real[0])
+    np.testing.assert_allclose(summary["psd_real_q50"], psd_real[1])
+    np.testing.assert_allclose(summary["psd_real_q95"], psd_real[2])
+    np.testing.assert_allclose(summary["psd_imag_q05"], psd_imag[0])
+    np.testing.assert_allclose(summary["true_psd_real"], truth_real)
+    np.testing.assert_allclose(summary["true_psd_imag"], truth_imag)

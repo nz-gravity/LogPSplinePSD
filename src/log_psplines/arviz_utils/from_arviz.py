@@ -10,6 +10,14 @@ from ..datatypes import Periodogram
 from ..psplines import LogPSplines
 
 
+def _nearest_percentile_slice(
+    values: np.ndarray, percentiles: np.ndarray, target: float
+) -> np.ndarray:
+    """Return the percentile slice nearest to ``target``."""
+    idx = int(np.argmin(np.abs(percentiles - target)))
+    return np.asarray(values[idx])
+
+
 def get_posterior_psd(idata: az.InferenceData):
     """Return (freqs, median_psd, lower, upper) from stored percentiles."""
 
@@ -24,13 +32,63 @@ def get_posterior_psd(idata: az.InferenceData):
     values = np.asarray(psd.values)
 
     def _grab(p: float) -> np.ndarray:
-        idx = int(np.argmin(np.abs(percentiles - p)))
-        return values[idx]
+        return _nearest_percentile_slice(values, percentiles, p)
 
     median = _grab(50.0)
     lower = _grab(5.0)
     upper = _grab(95.0)
     return freqs, median, lower, upper
+
+
+def get_multivar_ci_summary(
+    idata: az.InferenceData,
+    posterior_group: str = "posterior_psd",
+    truth_group: str = "truth_psd",
+) -> dict[str, np.ndarray]:
+    """Extract multivariate PSD quantiles and truth arrays for plotting.
+
+    Returns a dict with shape conventions:
+    - ``freq``: ``(F,)``
+    - ``psd_real_q05/q50/q95``: ``(F, C, C)``
+    - ``psd_imag_q05/q50/q95``: ``(F, C, C)``
+    - ``true_psd_real/true_psd_imag``: ``(F, C, C)``
+    """
+    try:
+        posterior = getattr(idata, posterior_group)
+        truth = getattr(idata, truth_group)
+    except AttributeError as exc:
+        raise KeyError(
+            f"InferenceData missing '{posterior_group}' or '{truth_group}' group."
+        ) from exc
+
+    try:
+        psd_real = np.asarray(posterior["psd_matrix_real"].values)
+        psd_imag = np.asarray(posterior["psd_matrix_imag"].values)
+        percentiles = np.asarray(
+            posterior["psd_matrix_real"].coords["percentile"].values,
+            dtype=float,
+        )
+        freq = np.asarray(
+            posterior["psd_matrix_real"].coords["freq"].values, dtype=float
+        )
+        true_real = np.asarray(truth["psd_matrix_real"].values)
+        true_imag = np.asarray(truth["psd_matrix_imag"].values)
+    except (KeyError, TypeError) as exc:
+        raise KeyError(
+            "InferenceData missing multivariate PSD variables required for plotting."
+        ) from exc
+
+    return {
+        "freq": freq,
+        "psd_real_q05": _nearest_percentile_slice(psd_real, percentiles, 5.0),
+        "psd_real_q50": _nearest_percentile_slice(psd_real, percentiles, 50.0),
+        "psd_real_q95": _nearest_percentile_slice(psd_real, percentiles, 95.0),
+        "psd_imag_q05": _nearest_percentile_slice(psd_imag, percentiles, 5.0),
+        "psd_imag_q50": _nearest_percentile_slice(psd_imag, percentiles, 50.0),
+        "psd_imag_q95": _nearest_percentile_slice(psd_imag, percentiles, 95.0),
+        "true_psd_real": np.asarray(true_real, dtype=np.float64),
+        "true_psd_imag": np.asarray(true_imag, dtype=np.float64),
+    }
 
 
 def get_spline_model(idata: az.InferenceData) -> LogPSplines:

@@ -49,7 +49,7 @@ set_level("INFO")
 logger.info(f"JAX devices: {jax.devices()}")
 
 from utils.data import generate_lisa_data  # noqa: E402
-from utils.inference import run_lisa_mcmc  # noqa: E402
+from utils.inference import run_lisa_mcmc, save_inference_data  # noqa: E402
 from utils.metrics import extract_and_save_metrics  # noqa: E402
 from utils.plotting import make_psd_plot  # noqa: E402
 from utils.preprocessing import (  # noqa: E402
@@ -267,6 +267,19 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Skip PSD matrix plot generation.",
     )
+    out_g.add_argument(
+        "--keep-nc",
+        dest="keep_nc",
+        action="store_true",
+        default=True,
+        help="Keep inference_data.nc after run (default: enabled).",
+    )
+    out_g.add_argument(
+        "--delete-nc",
+        dest="keep_nc",
+        action="store_false",
+        help="Delete inference_data.nc after run to save disk.",
+    )
 
     return parser.parse_args()
 
@@ -342,6 +355,8 @@ def main() -> None:
     idata.attrs["diff_order"] = args.diff_order
     idata.attrs["duration_days"] = args.duration_days
     idata.attrs["run_slug"] = run_slug
+    idata.attrs["channel_basis"] = "XYZ"
+    save_inference_data(idata, outdir=seed_dir)
 
     # 4. Extract metrics + save compact outputs
     metrics = extract_and_save_metrics(
@@ -388,11 +403,13 @@ def main() -> None:
         except Exception as exc:
             logger.warning(f"Plot generation failed: {exc}")
 
-    # 6. Cleanup large files
+    # 6. Cleanup large files (unless explicitly disabled)
     nc_path = Path(seed_dir) / "inference_data.nc"
-    if nc_path.exists():
+    if nc_path.exists() and not args.keep_nc:
         nc_path.unlink()
         logger.info(f"Removed {nc_path} to save disk space.")
+    elif nc_path.exists() and args.keep_nc:
+        logger.info(f"Keeping {nc_path} (--keep-nc set).")
 
     logger.info(
         f"=== Seed {args.seed} complete in {runtime:.0f}s | "

@@ -154,6 +154,19 @@ def parse_args() -> argparse.Namespace:
         help="Target coarse-grained freq bins; 0 = disabled (default: 8192).",
     )
     model_g.add_argument(
+        "--null-excision",
+        nargs="*",
+        metavar="CENTER:HW",
+        default=None,
+        help=(
+            "Null-band excision: remove frequency bins around LISA transfer nulls. "
+            "Pass zero or more 'center:halfwidth' pairs in Hz "
+            "(e.g. --null-excision 0.030:0.001 0.060:0.001 0.090:0.001). "
+            "With no values, uses the three standard LISA TDI-2 nulls at "
+            "0.030, 0.060, 0.090 Hz with ±1 mHz half-width."
+        ),
+    )
+    model_g.add_argument(
         "--alpha-delta",
         type=float,
         default=3.0,
@@ -321,6 +334,26 @@ def main() -> None:
     Nl = compute_Nl_analysis(Lb, dt)
     coarse_cfg = setup_coarse_grain(Nl, args.coarse_Nc)
 
+    # 2b. Parse null-band excision
+    _LISA_NULLS_DEFAULT = ((0.030, 0.001), (0.060, 0.001), (0.090, 0.001))
+    if args.null_excision is None:
+        freq_excl_bands = ()
+    elif len(args.null_excision) == 0:
+        # --null-excision with no values → use standard LISA nulls
+        freq_excl_bands = tuple(
+            (c - hw, c + hw) for c, hw in _LISA_NULLS_DEFAULT
+        )
+    else:
+        freq_excl_bands = tuple(
+            (
+                float(p.split(":")[0]) - float(p.split(":")[1]),
+                float(p.split(":")[0]) + float(p.split(":")[1]),
+            )
+            for p in args.null_excision
+        )
+    if freq_excl_bands:
+        logger.info(f"Null-band excision bands: {freq_excl_bands}")
+
     # 3. Run MCMC
     idata = run_lisa_mcmc(
         ts,
@@ -342,6 +375,7 @@ def main() -> None:
         vi_steps=args.vi_steps,
         wishart_window=wishart_ws,
         tau=args.tau,
+        freq_excl_bands=freq_excl_bands,
         outdir=seed_dir,
     )
 

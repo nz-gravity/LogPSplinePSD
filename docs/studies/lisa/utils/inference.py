@@ -105,6 +105,7 @@ def run_lisa_mcmc(
     vi_posterior_draws: int = 1024,
     wishart_window: str | tuple[str, float] | None = None,
     tau: Optional[float] = None,
+    freq_excl_bands: tuple[tuple[float, float], ...] = (),
     outdir: str = ".",
 ) -> az.InferenceData:
     """Run multivariate MCMC on LISA data.
@@ -148,6 +149,7 @@ def run_lisa_mcmc(
         Nb=Nb,
         fmin=FMIN,
         fmax=FMAX,
+        freq_excl_bands=freq_excl_bands,
         alpha_delta=alpha_delta,
         beta_delta=beta_delta,
         only_vi=False,

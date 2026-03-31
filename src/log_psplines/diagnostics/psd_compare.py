@@ -9,7 +9,9 @@ from scipy.integrate import simpson
 
 from ._utils import (
     compute_ci_coverage_multivar,
+    compute_ci_coverage_multivar_detailed,
     compute_ci_coverage_univar,
+    compute_coherence_coverage,
     compute_matrix_l2,
     compute_matrix_riae,
     compute_riae,
@@ -139,11 +141,22 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
         metrics["riae_diag_mean"] = float(np.mean(diag_riae))
         metrics["riae_diag_max"] = float(np.max(diag_riae))
 
-    offdiag_mask = ~np.eye(true_psd_real.shape[1], dtype=bool)
+    p = true_psd_real.shape[1]
+    offdiag_mask = ~np.eye(p, dtype=bool)
+    upper_tri_mask = np.triu(np.ones((p, p), dtype=bool), k=1)
+    lower_tri_mask = np.tril(np.ones((p, p), dtype=bool), k=-1)
+
+    # Cast truth to complex so Re/Im decomposition is always well-defined.
+    # For real-valued true PSDs (e.g. LISA), Im parts are zero — that is correct.
+    true_psd_complex = np.asarray(true_psd_real).astype(complex)
+
+    # --- off-diagonal RIAE (norm over all off-diagonal, existing metric) ---
     diff_offdiag = np.linalg.norm(
-        (q50_real - true_psd_real)[:, offdiag_mask], axis=1
+        (q50_real - np.real(true_psd_complex))[:, offdiag_mask], axis=1
     )
-    true_offdiag = np.linalg.norm(true_psd_real[:, offdiag_mask], axis=1)
+    true_offdiag = np.linalg.norm(
+        np.real(true_psd_complex)[:, offdiag_mask], axis=1
+    )
     offdiag_num = float(simpson(diff_offdiag, x=freqs))
     offdiag_den = float(simpson(true_offdiag, x=freqs))
     if offdiag_den != 0:
@@ -153,28 +166,58 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
         q05_real = extract_percentile(psd_real, percentiles, 5.0)
         q95_real = extract_percentile(psd_real, percentiles, 95.0)
         metrics["riae_matrix_p05"] = compute_matrix_riae(
-            q05_real, true_psd_real, freqs
+            q05_real, np.real(true_psd_complex), freqs
         )
         metrics["riae_matrix_p95"] = compute_matrix_riae(
-            q95_real, true_psd_real, freqs
+            q95_real, np.real(true_psd_complex), freqs
         )
-        diag_mask = np.eye(true_psd_real.shape[1], dtype=bool)
-        diag_width = (q95_real - q05_real)[:, diag_mask]
+        diag_mask_2d = np.eye(p, dtype=bool)
+        diag_width = (q95_real - q05_real)[:, diag_mask_2d]
         metrics["ci_width_diag_mean"] = float(np.mean(diag_width))
         metrics["ci_width"] = metrics["ci_width_diag_mean"]
 
-    # Coherence diagnostics on off-diagonal structure
+    # --- RIAE: Re and Im off-diagonal separately ---
+    q50_im = (
+        extract_percentile(psd_imag, percentiles, 50.0)
+        if psd_imag is not None
+        else np.zeros_like(q50_real)
+    )
+    true_re_upper = np.real(true_psd_complex)[:, upper_tri_mask]
+    true_im_upper = np.imag(true_psd_complex)[:, upper_tri_mask]
+    est_re_upper = q50_real[:, upper_tri_mask]
+    est_im_upper = q50_im[:, upper_tri_mask]
+
+    re_num = float(
+        simpson(np.linalg.norm(est_re_upper - true_re_upper, axis=1), x=freqs)
+    )
+    re_den = float(simpson(np.linalg.norm(true_re_upper, axis=1), x=freqs))
+    metrics["riae_offdiag_re"] = (
+        re_num / re_den if re_den != 0 else float("nan")
+    )
+
+    im_den = float(simpson(np.linalg.norm(true_im_upper, axis=1), x=freqs))
+    if im_den != 0:
+        im_num = float(
+            simpson(
+                np.linalg.norm(est_im_upper - true_im_upper, axis=1), x=freqs
+            )
+        )
+        metrics["riae_offdiag_im"] = im_num / im_den
+    # If Im true is ~0 (e.g. LISA), riae_offdiag_im is undefined — leave absent.
+
+    # --- Coherence RIAE ---
     coherence_est = _coherence(q50_real)
-    coherence_true = _coherence(true_psd_real)
+    coherence_true = _coherence(true_psd_complex)
     coh_diff = np.linalg.norm(
         (coherence_est - coherence_true)[:, offdiag_mask], axis=1
     )
-    coh_true = np.linalg.norm(coherence_true[:, offdiag_mask], axis=1)
+    coh_true_norm = np.linalg.norm(coherence_true[:, offdiag_mask], axis=1)
     coh_num = float(simpson(coh_diff, x=freqs))
-    coh_den = float(simpson(coh_true, x=freqs))
+    coh_den = float(simpson(coh_true_norm, x=freqs))
     if coh_den != 0:
         metrics["coherence_riae"] = coh_num / coh_den
 
+    # --- Frequency-band RIAE ---
     freq_quantiles = np.quantile(freqs, [0.0, 0.25, 0.5, 0.75, 1.0])
     freq_edges = np.unique(freq_quantiles)
     if freq_edges.size >= 2:
@@ -184,28 +227,24 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
             if np.count_nonzero(mask) < 2 or end <= start:
                 continue
             riae_band = compute_matrix_riae(
-                q50_real[mask], true_psd_real[mask], freqs[mask]
+                q50_real[mask], np.real(true_psd_complex)[mask], freqs[mask]
             )
             band_values.append(riae_band)
         if band_values:
             metrics["riae_band_max"] = float(np.max(band_values))
             metrics["riae_band_mean"] = float(np.mean(band_values))
 
+    # --- Coverage breakdown ---
     if percentiles.size >= 3:
         q05_im = (
             extract_percentile(psd_imag, percentiles, 5.0)
             if psd_imag is not None
-            else np.zeros_like(q50_real)
+            else np.zeros_like(q05_real)
         )
         q95_im = (
             extract_percentile(psd_imag, percentiles, 95.0)
             if psd_imag is not None
-            else np.zeros_like(q50_real)
-        )
-        q50_im = (
-            extract_percentile(psd_imag, percentiles, 50.0)
-            if psd_imag is not None
-            else np.zeros_like(q50_real)
+            else np.zeros_like(q95_real)
         )
         percentiles_stack = np.stack(
             [
@@ -215,9 +254,26 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
             ],
             axis=0,
         )
-        metrics["coverage"] = compute_ci_coverage_multivar(
-            percentiles_stack, true_psd_real
+        # Use complex truth so _complex_to_real encodes Im parts correctly.
+        detail = compute_ci_coverage_multivar_detailed(
+            percentiles_stack, true_psd_complex
         )
+        metrics["coverage"] = detail["overall"]
+        metrics["coverage_diag"] = detail["diag"]
+        metrics["coverage_offdiag_re"] = detail["offdiag_re"]
+        metrics["coverage_offdiag_im"] = detail["offdiag_im"]
+
+        # Coherence coverage from precomputed coherence quantiles (more accurate
+        # than computing coherence from marginal percentiles).
+        if "coherence" in psd_ds:
+            coh_arr = np.asarray(psd_ds["coherence"].values)[:, freq_idx, ...]
+            coh_pcts = np.asarray(
+                psd_ds["coherence"].coords.get("percentile", percentiles),
+                dtype=float,
+            )
+            metrics["coverage_coherence"] = compute_coherence_coverage(
+                coh_arr, true_psd_complex, coh_pcts
+            )
 
     return metrics
 

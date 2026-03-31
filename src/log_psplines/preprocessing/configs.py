@@ -55,6 +55,9 @@ class ModelConfig:
     true_psd: TruePSDInput = None
     fmin: Optional[float] = None
     fmax: Optional[float] = None
+    freq_excl_bands: tuple[tuple[float, float], ...] = field(
+        default_factory=tuple
+    )
 
 
 @dataclass(frozen=True)

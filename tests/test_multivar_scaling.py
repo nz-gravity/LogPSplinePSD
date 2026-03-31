@@ -14,7 +14,11 @@ from log_psplines.mcmc import (
     VIConfig,
     run_mcmc,
 )
-from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
+from log_psplines.preprocessing.coarse_grain import (
+    CoarseGrainConfig,
+    apply_coarse_grain_multivar_fft,
+    compute_binning_structure,
+)
 from log_psplines.preprocessing.preprocessing import (
     _coarse_grain_processed_data,
 )
@@ -238,3 +242,20 @@ def test_univariate_and_multivar_scaling_consistency():
         rtol=1e-6,
         atol=1e-10,
     )
+
+
+def test_multivar_coarse_grain_preserves_enbw():
+    rng = np.random.default_rng(123)
+    data = rng.normal(size=(256, 2))
+
+    fft = MultivariateTimeseries(y=data).to_wishart_stats(Nb=4, window="hann")
+    assert fft.enbw > 1.0
+
+    spec = compute_binning_structure(fft.freq, Nh=4)
+    fft_coarse = apply_coarse_grain_multivar_fft(fft, spec)
+
+    assert fft_coarse.Nh == 4
+    assert fft_coarse.enbw == pytest.approx(fft.enbw)
+
+    fft_cut = fft.cut(float(fft.freq[2]), float(fft.freq[-3]))
+    assert fft_cut.enbw == pytest.approx(fft.enbw)

@@ -242,11 +242,17 @@ class BaseSampler(ABC):
             "riae_matrix",
             "l2_matrix",
             "coverage",
+            "coverage_diag",
+            "coverage_offdiag_re",
+            "coverage_offdiag_im",
+            "coverage_coherence",
             "ci_width",
             "coherence_riae",
             "riae_diag_mean",
             "riae_diag_max",
             "riae_offdiag",
+            "riae_offdiag_re",
+            "riae_offdiag_im",
             "ci_width_diag_mean",
         }
 

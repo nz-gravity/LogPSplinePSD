@@ -346,6 +346,53 @@ def extract_percentile(
     return values[idx]
 
 
+def compute_coherence_coverage(
+    coherence_quantiles: np.ndarray,
+    true_psd: np.ndarray,
+    percentiles: np.ndarray,
+) -> float:
+    """90% CI coverage for off-diagonal coherence.
+
+    Parameters
+    ----------
+    coherence_quantiles:
+        Shape (n_percentiles, F, p, p).  Real-valued coherence samples or
+        stacked [q05, q50, q95] slices (shape[0] == 3).
+    true_psd:
+        True PSD matrix, shape (F, p, p).  May be real or complex; coherence
+        is computed as |S_ij|^2 / (S_ii * S_jj).
+    percentiles:
+        Percentile values associated with the first axis of
+        ``coherence_quantiles`` (e.g. [5, 50, 95]).
+    """
+    arr = np.asarray(coherence_quantiles, dtype=float)
+    if arr.ndim != 4 or arr.shape[0] < 2:
+        return float("nan")
+
+    if arr.shape[0] == 3 and np.allclose(percentiles[:3], [5.0, 50.0, 95.0]):
+        q05 = arr[0]
+        q95 = arr[2]
+    else:
+        idx05 = int(np.argmin(np.abs(percentiles - 5.0)))
+        idx95 = int(np.argmin(np.abs(percentiles - 95.0)))
+        q05 = arr[idx05]
+        q95 = arr[idx95]
+
+    true_arr = np.asarray(true_psd)
+    diag = np.real(np.diagonal(true_arr, axis1=1, axis2=2))  # (F, p)
+    denom = np.sqrt(np.maximum(diag[..., None] * diag[:, None, :], 0.0))
+    true_coh = np.zeros(true_arr.shape[:3], dtype=float)
+    valid = denom > 0
+    true_coh[valid] = np.abs(true_arr[valid]) ** 2 / denom[valid] ** 2
+
+    p = true_arr.shape[-1]
+    offdiag_mask = ~np.eye(p, dtype=bool)
+    covered = (true_coh[:, offdiag_mask] >= q05[:, offdiag_mask]) & (
+        true_coh[:, offdiag_mask] <= q95[:, offdiag_mask]
+    )
+    return float(np.mean(covered))
+
+
 def _complex_to_real(mat: np.ndarray) -> np.ndarray:
     """Convert complex matrices to a real-valued representation for CI checks."""
     arr = np.asarray(mat)

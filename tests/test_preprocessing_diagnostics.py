@@ -3,15 +3,22 @@ import os
 import numpy as np
 import pytest
 
-from log_psplines.datatypes import MultivariateTimeseries
+from log_psplines.datatypes import MultivariateTimeseries, Timeseries
 from log_psplines.diagnostics.preprocessing import (
     _raw_psd_to_model_components,
     eigenvalue_separation_diagnostics,
     save_eigenvalue_separation_plot,
 )
 from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
-from log_psplines.preprocessing.configs import DiagnosticsConfig, RunMCMCConfig
-from log_psplines.preprocessing.preprocessing import _preprocess_data
+from log_psplines.preprocessing.configs import (
+    DiagnosticsConfig,
+    ModelConfig,
+    RunMCMCConfig,
+)
+from log_psplines.preprocessing.preprocessing import (
+    _coarse_grain_processed_data,
+    _preprocess_data,
+)
 
 OUT = "out_preproc"
 
@@ -190,3 +197,63 @@ def test_preprocessing_plot_var2_3d_low_and_high_coarse(outdir):
             assert preproc.processed_data.N == (
                 expected_fine_n // coarse_cfg.Nh
             )
+
+
+def test_preprocess_univar_freq_excl_bands_apply_before_coarse_grain():
+    n = 128
+    t = np.arange(n, dtype=np.float64)
+    y = (
+        np.sin(2.0 * np.pi * 0.08 * t)
+        + 0.4 * np.sin(2.0 * np.pi * 0.19 * t)
+        + 0.1 * np.random.default_rng(3).standard_normal(n)
+    )
+    ts = Timeseries(t=t, y=y)
+
+    fine = ts.standardise_for_psd().to_periodogram()
+    excl_band = (float(fine.freqs[2]), float(fine.freqs[5]))
+    cfg = RunMCMCConfig(
+        diagnostics=DiagnosticsConfig(verbose=False),
+        coarse_grain_config=CoarseGrainConfig(enabled=True, Nh=4, Nc=None),
+        model=ModelConfig(freq_excl_bands=(excl_band,)),
+    )
+
+    preproc = _preprocess_data(ts, config=cfg)
+    processed = preproc.processed_data
+
+    keep = ~((fine.freqs >= excl_band[0]) & (fine.freqs <= excl_band[1]))
+    expected_fine = fine.apply_mask(keep)
+    expected_coarse, _ = _coarse_grain_processed_data(
+        expected_fine, cfg.coarse_grain_config, None
+    )
+
+    assert np.all(
+        (processed.freqs < excl_band[0]) | (processed.freqs > excl_band[1])
+    )
+    assert expected_coarse is not None
+    assert np.allclose(processed.freqs, expected_coarse.freqs)
+    assert np.allclose(processed.power, expected_coarse.power)
+
+
+def test_preprocess_multivar_freq_excl_bands_remove_likelihood_bins():
+    n = 128
+    t = np.arange(n, dtype=np.float64)
+    y = np.column_stack(
+        [
+            np.sin(2.0 * np.pi * 0.08 * t),
+            np.cos(2.0 * np.pi * 0.14 * t + 0.2),
+        ]
+    )
+    ts = MultivariateTimeseries(t=t, y=y)
+
+    fine = ts.standardise_for_psd().to_wishart_stats(Nb=2)
+    excl_band = (float(fine.freq[3]), float(fine.freq[6]))
+    cfg = RunMCMCConfig(
+        Nb=2,
+        diagnostics=DiagnosticsConfig(verbose=False),
+        model=ModelConfig(freq_excl_bands=(excl_band,)),
+    )
+
+    preproc = _preprocess_data(ts, config=cfg)
+    freq = preproc.processed_data.freq
+
+    assert np.all((freq < excl_band[0]) | (freq > excl_band[1]))

@@ -298,13 +298,9 @@ class MultivarFFT:
             ),
         )
 
-    def cut(self, fmin: float, fmax: float) -> "MultivarFFT":
-        """Return a new MultivarFFT within frequency range [fmin, fmax]."""
-        if fmax < fmin:
-            raise ValueError(
-                f"Invalid frequency bounds supplied: fmin={fmin}, fmax={fmax}."
-            )
-        mask = (self.freq >= fmin) & (self.freq <= fmax)
+    def apply_mask(self, mask: np.ndarray) -> "MultivarFFT":
+        """Return a new MultivarFFT retaining only bins where ``mask`` is True."""
+        mask = np.asarray(mask, dtype=bool)
         raw_psd = None
         raw_freq = None
         if self.raw_psd is not None:
@@ -324,7 +320,16 @@ class MultivarFFT:
             fs=self.fs,
             duration=self.duration,
             channel_stds=self.channel_stds,
+            enbw=self.enbw,
         )
+
+    def cut(self, fmin: float, fmax: float) -> "MultivarFFT":
+        """Return a new MultivarFFT within frequency range [fmin, fmax]."""
+        if fmax < fmin:
+            raise ValueError(
+                f"Invalid frequency bounds supplied: fmin={fmin}, fmax={fmax}."
+            )
+        return self.apply_mask((self.freq >= fmin) & (self.freq <= fmax))
 
     def __repr__(self):
         return f"MultivarFFT(N={self.N}, p={self.p})"

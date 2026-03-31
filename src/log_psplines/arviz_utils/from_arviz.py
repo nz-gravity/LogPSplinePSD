@@ -64,6 +64,11 @@ def get_multivar_ci_summary(
     try:
         psd_real = np.asarray(posterior["psd_matrix_real"].values)
         psd_imag = np.asarray(posterior["psd_matrix_imag"].values)
+        coherence = (
+            np.asarray(posterior["coherence"].values)
+            if "coherence" in posterior
+            else None
+        )
         percentiles = np.asarray(
             posterior["psd_matrix_real"].coords["percentile"].values,
             dtype=float,
@@ -78,7 +83,7 @@ def get_multivar_ci_summary(
             "InferenceData missing multivariate PSD variables required for plotting."
         ) from exc
 
-    return {
+    result = {
         "freq": freq,
         "psd_real_q05": _nearest_percentile_slice(psd_real, percentiles, 5.0),
         "psd_real_q50": _nearest_percentile_slice(psd_real, percentiles, 50.0),
@@ -89,6 +94,17 @@ def get_multivar_ci_summary(
         "true_psd_real": np.asarray(true_real, dtype=np.float64),
         "true_psd_imag": np.asarray(true_imag, dtype=np.float64),
     }
+    if coherence is not None:
+        result["coh_q05"] = _nearest_percentile_slice(
+            coherence, percentiles, 5.0
+        )
+        result["coh_q50"] = _nearest_percentile_slice(
+            coherence, percentiles, 50.0
+        )
+        result["coh_q95"] = _nearest_percentile_slice(
+            coherence, percentiles, 95.0
+        )
+    return result
 
 
 def get_spline_model(idata: az.InferenceData) -> LogPSplines:

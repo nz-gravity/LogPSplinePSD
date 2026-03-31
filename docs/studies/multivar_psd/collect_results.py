@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR = os.path.join(HERE, "out_var3")
+DEFAULT_OUT_DIR = os.path.join(HERE, "out_var3")
 
 
 # ---------------------------------------------------------------------------
@@ -30,9 +30,12 @@ OUT_DIR = os.path.join(HERE, "out_var3")
 # ---------------------------------------------------------------------------
 
 
-def collect(pattern: str = "*") -> pd.DataFrame:
+def collect(
+    pattern: str = "*",
+    results_dir: str = DEFAULT_OUT_DIR,
+) -> pd.DataFrame:
     """Read all compact_run_summary.json files matching the glob pattern."""
-    search = os.path.join(OUT_DIR, pattern, "compact_run_summary.json")
+    search = os.path.join(results_dir, pattern, "compact_run_summary.json")
     files = sorted(glob.glob(search))
 
     if not files:
@@ -50,7 +53,7 @@ def collect(pattern: str = "*") -> pd.DataFrame:
             print(f"  Warning: could not read {f}: {e}")
 
     df = pd.DataFrame(rows)
-    print(f"Collected {len(df)} runs from out_var3/{pattern}/")
+    print(f"Collected {len(df)} runs from {results_dir}/{pattern}/")
     return df
 
 
@@ -177,8 +180,16 @@ def main():
     parser.add_argument(
         "--glob",
         default="*",
-        help="Glob pattern for subdirs in out_var3/ (default: '*'). "
+        help="Glob pattern for subdirs in the results root (default: '*'). "
         "Examples: '*rect*', '*Nh*', '*large*'",
+    )
+    parser.add_argument(
+        "--results-dir",
+        default=DEFAULT_OUT_DIR,
+        help=(
+            "Root directory containing per-run subdirectories "
+            f"(default: '{DEFAULT_OUT_DIR}')."
+        ),
     )
     parser.add_argument(
         "--out",
@@ -190,7 +201,7 @@ def main():
     label = args.glob.strip("*").strip("_") or "all"
     out_prefix = args.out or f"results_{label}"
 
-    df = collect(args.glob)
+    df = collect(args.glob, results_dir=args.results_dir)
     if df.empty:
         return
 

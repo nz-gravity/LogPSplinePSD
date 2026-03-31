@@ -349,6 +349,7 @@ def apply_coarse_grain_multivar_fft(
         raw_freq=f_coarse,
         channel_stds=fft.channel_stds,
         Nh=Nh,
+        enbw=float(getattr(fft, "enbw", 1.0) or 1.0),
     )
 
     return fft_coarse

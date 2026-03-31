@@ -128,19 +128,31 @@ def _extract_run_metrics(
         )
         try:
             acc = psd_compare._handle_multivariate(psd_group, true_psd_phys)
-            metrics["riae_matrix"] = float(acc.get("riae_matrix", np.nan))
-            metrics["riae_diag_mean"] = float(
-                acc.get("riae_diag_mean", np.nan)
-            )
-            metrics["riae_offdiag"] = float(acc.get("riae_offdiag", np.nan))
-            metrics["coherence_riae"] = float(
-                acc.get("coherence_riae", np.nan)
-            )
-            metrics["coverage"] = float(acc.get("coverage", np.nan))
+            for key in (
+                "riae_matrix",
+                "riae_diag_mean",
+                "riae_offdiag",
+                "riae_offdiag_re",
+                "riae_offdiag_im",
+                "coherence_riae",
+                "coverage",
+                "coverage_diag",
+                "coverage_offdiag_re",
+                "coverage_offdiag_im",
+                "coverage_coherence",
+            ):
+                metrics[key] = float(acc.get(key, np.nan))
         except Exception as exc:
             logger.warning(f"Could not compute PSD accuracy: {exc}")
-            metrics["riae_matrix"] = float("nan")
-            metrics["coverage"] = float("nan")
+            for key in (
+                "riae_matrix",
+                "coverage",
+                "coverage_diag",
+                "coverage_offdiag_re",
+                "coverage_offdiag_im",
+                "coverage_coherence",
+            ):
+                metrics[key] = float("nan")
 
     # CI width metrics
     metrics.update(_compute_ci_width_metrics(idata))

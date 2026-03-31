@@ -1,8 +1,10 @@
 """Multivariate PSD simulation study with in-script VAR data generation.
 
-CLI args:
-1) seed (default 0)
-2) mode: "large" or "short"
+Notes
+-----
+This script historically uses ``N`` for the number of time samples. In the
+notation used elsewhere in the repo, this quantity is more naturally denoted
+by ``n``.
 """
 
 import argparse
@@ -549,19 +551,32 @@ def simulation_study(
     K: int = 10,
     wishart_window: str | tuple | None = "hann",
     coarse_nh_override: int | None = None,
+    n_override: int | None = None,
+    nb_override: int | None = None,
     label: str = "",
     tau: float | None = None,
     knot_scoring: str = "spectral",
     knot_method: str = "density",
 ) -> None:
     cfg = MODE_CONFIG[mode]
-    N = int(cfg["N"])
-    Nb = int(cfg["Nb"])
+    preset_N = int(cfg["N"])
+    preset_Nb = int(cfg["Nb"])
+    N = preset_N if n_override is None else int(n_override)
+    Nb = preset_Nb if nb_override is None else int(nb_override)
+    if N <= 0:
+        raise ValueError("N must be positive.")
+    if Nb <= 0:
+        raise ValueError("Nb must be positive.")
+    if N % Nb != 0:
+        raise ValueError(f"N={N} must be divisible by Nb={Nb}.")
+
     coarse_Nh = (
         cfg["coarse_Nh"]
         if coarse_nh_override is None
         else (None if coarse_nh_override == 0 else int(coarse_nh_override))
     )
+    block_length = N // Nb
+    raw_retained_bins = block_length // 2
 
     if wishart_window is None:
         window_label = "rect"
@@ -572,13 +587,19 @@ def simulation_study(
     else:
         window_label = wishart_window
     nh_label = "noNh" if coarse_Nh is None else f"Nh{coarse_Nh}"
+    nb_suffix = "" if Nb == preset_Nb else f"_Nb{Nb}"
     label_suffix = f"_{label}" if label else ""
     print(
         f">>>> Running simulation with mode={mode}, N={N}, Nb={Nb}, K={K}, "
-        f"window={window_label}, coarse_Nh={coarse_Nh}, seed={seed}, label={label!r} <<<<"
+        f"Lb={block_length}, raw_Nl={raw_retained_bins}, "
+        f"window={window_label}, coarse_Nh={coarse_Nh}, "
+        f"seed={seed}, label={label!r} <<<<"
     )
     _log_var_coefficients()
-    outdir = f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}_{window_label}_{nh_label}{label_suffix}"
+    outdir = (
+        f"{HERE}/{outdir}/seed_{seed}_{mode}_N{N}_K{K}_{window_label}_"
+        f"{nh_label}{nb_suffix}{label_suffix}"
+    )
     os.makedirs(outdir, exist_ok=True)
 
     spectral_radius = _companion_spectral_radius(VAR_COEFFS)
@@ -894,6 +915,26 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--n-time",
+        type=int,
+        default=None,
+        dest="n_override",
+        help=(
+            "Override the preset number of time samples. "
+            "This is the quantity denoted by n in the manuscript notation."
+        ),
+    )
+    parser.add_argument(
+        "--nb-override",
+        type=int,
+        default=None,
+        dest="nb_override",
+        help=(
+            "Override the preset number of blocks Nb. "
+            "Useful for large-n segment-size sweeps."
+        ),
+    )
+    parser.add_argument(
         "--outdir",
         type=str,
         default=OUT,
@@ -964,6 +1005,8 @@ if __name__ == "__main__":
             K=args.K,
             wishart_window=wishart_window,
             coarse_nh_override=args.coarse_nh,
+            n_override=args.n_override,
+            nb_override=args.nb_override,
             label=args.label,
             tau=args.tau,
             knot_scoring=args.knot_scoring,

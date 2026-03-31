@@ -129,7 +129,17 @@ class Periodogram:
 
     def highpass(self, min_freq: float) -> "Periodogram":
         """Return a new Periodogram with frequencies above a threshold."""
-        mask = self.freqs > min_freq
+        return self.apply_mask(self.freqs > min_freq)
+
+    def apply_mask(self, mask: np.ndarray) -> "Periodogram":
+        """Return a new Periodogram retaining only bins where ``mask`` is True."""
+        mask = np.asarray(mask, dtype=bool)
+        if mask.shape != self.freqs.shape:
+            raise ValueError(
+                f"mask must have shape {self.freqs.shape}, got {mask.shape}."
+            )
+        if not np.any(mask):
+            raise ValueError("Frequency mask removed all bins.")
         return Periodogram(
             self.freqs[mask],
             self.power[mask],
@@ -165,14 +175,7 @@ class Periodogram:
 
     def cut(self, fmin, fmax):
         """Return a new Periodogram with frequencies within [fmin, fmax]."""
-        mask = (self.freqs >= fmin) & (self.freqs <= fmax)
-        return Periodogram(
-            self.freqs[mask],
-            self.power[mask],
-            filtered=True,
-            scaling_factor=self.scaling_factor,
-            Nh=self.Nh,
-        )
+        return self.apply_mask((self.freqs >= fmin) & (self.freqs <= fmax))
 
     @property
     def amplitude_range(self):

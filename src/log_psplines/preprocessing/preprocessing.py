@@ -87,6 +87,47 @@ def _get_frequency_count(data: Union[Periodogram, MultivarFFT]) -> int:
     return int(len(data.freq))
 
 
+def _get_frequency_axis(
+    data: Union[Periodogram, MultivarFFT],
+) -> np.ndarray:
+    if isinstance(data, Periodogram):
+        return np.asarray(data.freqs, dtype=float)
+    return np.asarray(data.freq, dtype=float)
+
+
+def _apply_frequency_mask(
+    data: Union[Periodogram, MultivarFFT],
+    mask: np.ndarray,
+) -> Union[Periodogram, MultivarFFT]:
+    if isinstance(data, Periodogram):
+        return data.apply_mask(mask)
+    return data.apply_mask(mask)
+
+
+def _apply_frequency_exclusion(
+    data: Union[Periodogram, MultivarFFT],
+    excl_bands: tuple[tuple[float, float], ...],
+) -> Union[Periodogram, MultivarFFT]:
+    """Remove excluded frequency bands from processed data before inference."""
+    if not excl_bands:
+        return data
+
+    freq = _get_frequency_axis(data)
+    keep = np.ones(freq.shape, dtype=bool)
+    for f_lo, f_hi in excl_bands:
+        keep &= ~((freq >= f_lo) & (freq <= f_hi))
+
+    n_excl = int((~keep).sum())
+    if n_excl == 0:
+        return data
+
+    logger.info(
+        f"Null-band excision: removing {n_excl} bins across {len(excl_bands)} band(s). "
+        f"{int(np.count_nonzero(keep))} bins retained."
+    )
+    return _apply_frequency_mask(data, keep)
+
+
 def _derive_vi_coarse_grain_config(
     processed_data: Union[Periodogram, MultivarFFT],
     run_config: RunMCMCConfig,
@@ -146,6 +187,10 @@ def _preprocess_with_run_config(
     fft_data, raw_ts, sampler_type = _prepare_processed_data(
         data,
         run_config,
+    )
+    fft_data = _apply_frequency_exclusion(
+        fft_data,
+        run_config.model.freq_excl_bands or (),
     )
     scaled_true_psd = _align_true_psd_to_freq(
         run_config.model.true_psd,

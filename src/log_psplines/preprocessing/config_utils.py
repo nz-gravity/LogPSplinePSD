@@ -39,6 +39,7 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "knot_kwargs",
         "fmin",
         "fmax",
+        "freq_excl_bands",
         "true_psd",
         "parametric_model",
     }

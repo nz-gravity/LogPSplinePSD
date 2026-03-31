@@ -72,7 +72,7 @@ def results_to_arviz(
         from ..diagnostics.psd_compare import _run as _run_psd_compare
 
         psd_metrics = _run_psd_compare(
-            idata=idata, truth=np.asarray(config.true_psd)
+            idata=idata, truth=np.asarray(config.true_psd, dtype=complex)
         )
         idata.attrs.update(psd_metrics)
     return idata

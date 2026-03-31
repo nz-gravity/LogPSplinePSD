@@ -553,6 +553,11 @@ def simulation_study(
     coarse_nh_override: int | None = None,
     n_override: int | None = None,
     nb_override: int | None = None,
+    quick: bool = False,
+    n_samples_override: int | None = None,
+    n_warmup_override: int | None = None,
+    num_chains_override: int | None = None,
+    vi_steps_override: int | None = None,
     label: str = "",
     tau: float | None = None,
     knot_scoring: str = "spectral",
@@ -575,6 +580,48 @@ def simulation_study(
         if coarse_nh_override is None
         else (None if coarse_nh_override == 0 else int(coarse_nh_override))
     )
+    n_samples = (
+        1000
+        if quick and n_samples_override is None
+        else (
+            DEFAULT_N_SAMPLES
+            if n_samples_override is None
+            else int(n_samples_override)
+        )
+    )
+    n_warmup = (
+        1000
+        if quick and n_warmup_override is None
+        else (
+            DEFAULT_N_WARMUP
+            if n_warmup_override is None
+            else int(n_warmup_override)
+        )
+    )
+    num_chains = (
+        2
+        if quick and num_chains_override is None
+        else (
+            DEFAULT_NUM_CHAINS
+            if num_chains_override is None
+            else int(num_chains_override)
+        )
+    )
+    vi_steps = (
+        20_000
+        if quick and vi_steps_override is None
+        else (
+            DEFAULT_VI_STEPS
+            if vi_steps_override is None
+            else int(vi_steps_override)
+        )
+    )
+    if n_samples <= 0 or n_warmup <= 0:
+        raise ValueError("n_samples and n_warmup must be positive.")
+    if num_chains <= 0:
+        raise ValueError("num_chains must be positive.")
+    if vi_steps <= 0:
+        raise ValueError("vi_steps must be positive.")
     block_length = N // Nb
     raw_retained_bins = block_length // 2
 
@@ -593,7 +640,8 @@ def simulation_study(
         f">>>> Running simulation with mode={mode}, N={N}, Nb={Nb}, K={K}, "
         f"Lb={block_length}, raw_Nl={raw_retained_bins}, "
         f"window={window_label}, coarse_Nh={coarse_Nh}, "
-        f"seed={seed}, label={label!r} <<<<"
+        f"seed={seed}, chains={num_chains}, warmup={n_warmup}, "
+        f"samples={n_samples}, vi_steps={vi_steps}, label={label!r} <<<<"
     )
     _log_var_coefficients()
     outdir = (
@@ -648,15 +696,15 @@ def simulation_study(
         n_knots=K,
         degree=2,
         diffMatrixOrder=2,
-        n_samples=DEFAULT_N_SAMPLES,
-        n_warmup=DEFAULT_N_WARMUP,
-        num_chains=DEFAULT_NUM_CHAINS,
+        n_samples=n_samples,
+        n_warmup=n_warmup,
+        num_chains=num_chains,
         outdir=outdir,
         verbose=True,
         target_accept_prob=DEFAULT_TARGET_ACCEPT_PROB,
         max_tree_depth=DEFAULT_MAX_TREE_DEPTH,
         init_from_vi=DEFAULT_INIT_FROM_VI,
-        vi_steps=DEFAULT_VI_STEPS,
+        vi_steps=vi_steps,
         vi_guide=DEFAULT_VI_GUIDE,
         vi_psd_max_draws=DEFAULT_VI_PSD_MAX_DRAWS,
         vi_lr=VI_LR,
@@ -915,6 +963,14 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--quick",
+        action="store_true",
+        help=(
+            "Use lighter inference settings for exploratory runs "
+            "(defaults: 1000 warmup, 1000 samples, 2 chains, 20000 VI steps)."
+        ),
+    )
+    parser.add_argument(
         "--n-time",
         type=int,
         default=None,
@@ -933,6 +989,34 @@ if __name__ == "__main__":
             "Override the preset number of blocks Nb. "
             "Useful for large-n segment-size sweeps."
         ),
+    )
+    parser.add_argument(
+        "--n-samples",
+        type=int,
+        default=None,
+        dest="n_samples_override",
+        help="Override the number of posterior samples per chain.",
+    )
+    parser.add_argument(
+        "--n-warmup",
+        type=int,
+        default=None,
+        dest="n_warmup_override",
+        help="Override the number of warmup samples per chain.",
+    )
+    parser.add_argument(
+        "--num-chains",
+        type=int,
+        default=None,
+        dest="num_chains_override",
+        help="Override the number of MCMC chains.",
+    )
+    parser.add_argument(
+        "--vi-steps",
+        type=int,
+        default=None,
+        dest="vi_steps_override",
+        help="Override the number of VI optimisation steps used for init.",
     )
     parser.add_argument(
         "--outdir",
@@ -1007,6 +1091,11 @@ if __name__ == "__main__":
             coarse_nh_override=args.coarse_nh,
             n_override=args.n_override,
             nb_override=args.nb_override,
+            quick=args.quick,
+            n_samples_override=args.n_samples_override,
+            n_warmup_override=args.n_warmup_override,
+            num_chains_override=args.num_chains_override,
+            vi_steps_override=args.vi_steps_override,
             label=args.label,
             tau=args.tau,
             knot_scoring=args.knot_scoring,

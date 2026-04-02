@@ -13,7 +13,7 @@ import json
 import os
 from typing import Literal
 
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
+os.environ.setdefault("XLA_FLAGS", "--xla_force_host_platform_device_count=4")
 
 import jax
 import numpy as np
@@ -638,7 +638,7 @@ def simulation_study(
     label_suffix = f"_{label}" if label else ""
     print(
         f">>>> Running simulation with mode={mode}, N={N}, Nb={Nb}, K={K}, "
-        f"Lb={block_length}, raw_Nl={raw_retained_bins}, "
+        f"Lb={block_length}, N_l={raw_retained_bins}, "
         f"window={window_label}, coarse_Nh={coarse_Nh}, "
         f"seed={seed}, chains={num_chains}, warmup={n_warmup}, "
         f"samples={n_samples}, vi_steps={vi_steps}, label={label!r} <<<<"

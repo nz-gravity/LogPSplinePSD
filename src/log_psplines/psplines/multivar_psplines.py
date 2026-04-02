@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..datatypes import MultivarFFT, Periodogram
+from ..datatypes.multivar_utils import U_to_Y
 from ..logger import logger
 from .initialisation import init_basis_and_penalty, init_weights
 from .knots_locator import init_knots, multivar_psd_knot_scores
@@ -224,7 +225,10 @@ class MultivariateLogPSplines:
         u_re_np = np.asarray(fft_data.u_re, dtype=np.float64)
         u_im_np = np.asarray(fft_data.u_im, dtype=np.float64)
         u_complex_np = u_re_np + 1j * u_im_np
-        Y_np = np.einsum("fkc,fkd->fcd", u_complex_np, np.conj(u_complex_np))
+        # Use channel-space Wishart matrices Y[f] = U[f] U[f]^H.
+        # This is the matrix consumed by the likelihood and preserves
+        # cross-spectral structure for knot scoring.
+        Y_np = U_to_Y(u_complex_np)
         Nb = max(int(fft_data.Nb), 1)
 
         knot_scoring = (

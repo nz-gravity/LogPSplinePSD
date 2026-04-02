@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from log_psplines.datatypes import MultivarFFT
+from log_psplines.datatypes.multivar_utils import U_to_Y
 from log_psplines.psplines import MultivariateLogPSplines
 
 
@@ -219,8 +220,71 @@ def test_multivar_density_uses_fixed_basis_count_per_component():
         model.offdiag_re_model,
         model.offdiag_im_model,
     ]
-    knot_sizes = {int(component.knots.shape[0]) for component in component_models}
-    basis_sizes = {int(component.basis.shape[1]) for component in component_models}
+    knot_sizes = {
+        int(component.knots.shape[0]) for component in component_models
+    }
+    basis_sizes = {
+        int(component.basis.shape[1]) for component in component_models
+    }
 
     assert knot_sizes == {n_knots}
     assert basis_sizes == {n_knots + degree - 1}
+
+
+def test_multivar_density_scoring_uses_channel_space_wishart(
+    monkeypatch,
+):
+    n_freq = 8
+    p = 3
+    rng = np.random.default_rng(123)
+    freq = np.linspace(0.05, 0.5, n_freq, dtype=np.float64)
+    u_re = rng.normal(size=(n_freq, p, p)).astype(np.float64)
+    u_im = rng.normal(size=(n_freq, p, p)).astype(np.float64)
+    fft_data = MultivarFFT(
+        u_re=u_re,
+        u_im=u_im,
+        freq=freq,
+        N=n_freq,
+        p=p,
+        Nb=2,
+    )
+
+    captured: dict[str, np.ndarray] = {}
+
+    def _capture_scores(
+        Y_np: np.ndarray,
+        Nb: int,
+        p: int,
+        *,
+        scoring: str = "cholesky",
+        u_re: np.ndarray | None = None,
+        u_im: np.ndarray | None = None,
+    ) -> tuple[list[np.ndarray], np.ndarray]:
+        captured["Y_np"] = np.asarray(Y_np, dtype=np.complex128)
+        diag_scores = [np.ones(n_freq, dtype=np.float64) for _ in range(p)]
+        offdiag = np.ones(n_freq, dtype=np.float64)
+        return diag_scores, offdiag
+
+    monkeypatch.setattr(
+        "log_psplines.psplines.multivar_psplines.multivar_psd_knot_scores",
+        _capture_scores,
+    )
+
+    MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=6,
+        degree=2,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density", "scoring": "cholesky"},
+    )
+
+    assert (
+        "Y_np" in captured
+    ), "Expected knot scoring to receive a Wishart matrix."
+    expected = U_to_Y(
+        np.asarray(u_re, dtype=np.float64)
+        + 1j * np.asarray(u_im, dtype=np.float64)
+    )
+    np.testing.assert_allclose(
+        captured["Y_np"], expected, rtol=1e-10, atol=1e-10
+    )

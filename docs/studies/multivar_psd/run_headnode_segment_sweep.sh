@@ -14,6 +14,10 @@ GRID="${GRID:-default}"
 QUICK="${QUICK:-1}"
 COLLECT="${COLLECT:-1}"
 LABEL_PREFIX="${LABEL_PREFIX:-head}"
+N_SAMPLES="${N_SAMPLES:-}"
+N_WARMUP="${N_WARMUP:-}"
+NUM_CHAINS="${NUM_CHAINS:-}"
+VI_STEPS="${VI_STEPS:-}"
 
 if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
   echo "Could not find python executable: ${PYTHON_BIN}"
@@ -29,6 +33,18 @@ COMMON_ARGS=(
 
 if [[ "${QUICK}" == "1" ]]; then
   COMMON_ARGS+=(--quick)
+fi
+if [[ -n "${N_SAMPLES}" ]]; then
+  COMMON_ARGS+=(--n-samples "${N_SAMPLES}")
+fi
+if [[ -n "${N_WARMUP}" ]]; then
+  COMMON_ARGS+=(--n-warmup "${N_WARMUP}")
+fi
+if [[ -n "${NUM_CHAINS}" ]]; then
+  COMMON_ARGS+=(--num-chains "${NUM_CHAINS}")
+fi
+if [[ -n "${VI_STEPS}" ]]; then
+  COMMON_ARGS+=(--vi-steps "${VI_STEPS}")
 fi
 
 LABELS=()
@@ -81,6 +97,9 @@ echo "  outdir: ${OUTDIR}"
 echo "  seeds:  ${SEEDS}"
 echo "  grid:   ${GRID}"
 echo "  quick:  ${QUICK}"
+if [[ -n "${N_SAMPLES}${N_WARMUP}${NUM_CHAINS}${VI_STEPS}" ]]; then
+  echo "  overrides: n_samples=${N_SAMPLES:-default} n_warmup=${N_WARMUP:-default} num_chains=${NUM_CHAINS:-default} vi_steps=${VI_STEPS:-default}"
+fi
 
 for seed in ${SEEDS}; do
   for idx in "${!LABELS[@]}"; do
@@ -90,7 +109,7 @@ for seed in ${SEEDS}; do
 
     echo
     echo "=== seed=${seed} label=${label} Nb=${nb} Nh=${nh:-0} ==="
-    "${PYTHON_BIN}" 3d_study.py \
+    PYTHONUNBUFFERED=1 "${PYTHON_BIN}" 3d_study.py \
       "${seed}" \
       large \
       "${COMMON_ARGS[@]}" \

@@ -9,6 +9,7 @@ from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
 from ..logger import logger
 from .configs import RunMCMCConfig
+from .data_prep import _normalize_excluded_frequency_bands
 
 
 def _run_preprocessing_checks(
@@ -30,7 +31,7 @@ def _run_preprocessing_checks(
         )
 
         # Use hardcoded defaults
-        min_lambda1_quantile = 0.0
+        min_lambda1_quantile = 0.05
         warn_threshold = 0.8
         warn_frac = 0.25
 
@@ -121,11 +122,15 @@ def _run_preprocessing_checks(
         info_text = ", ".join(info_parts)
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
+        excluded_bands = _normalize_excluded_frequency_bands(
+            config.model.exclude_freq_bands
+        )
         save_eigenvalue_separation_plot(
             diag,
             str(out_path),
             warn_threshold=warn_threshold,
             info_text=info_text,
+            excluded_bands=excluded_bands,
             cholesky_matrix=np.asarray(processed_data.raw_psd),
         )
         if config.diagnostics.verbose:

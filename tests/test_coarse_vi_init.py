@@ -58,6 +58,33 @@ def test_preprocess_builds_explicit_coarse_vi_context():
     )
 
 
+def test_preprocess_adjusts_explicit_coarse_vi_nc_to_divisor():
+    data = ARData(order=2, duration=2.0, fs=128, sigma=0.5, seed=10).ts
+    cfg = RunMCMCConfig(
+        model=ModelConfig(n_knots=5),
+        diagnostics=DiagnosticsConfig(verbose=False, compute_lnz=False),
+        vi=VIConfig(
+            coarse_grain_config_vi=CoarseGrainConfig(
+                enabled=True,
+                Nc=80,
+                Nh=None,
+            ),
+        ),
+    )
+
+    preproc = _preprocess_data(data, config=cfg)
+
+    assert preproc.coarse_vi_context is not None
+    metadata = preproc.coarse_vi_context.metadata
+    assert metadata["coarse_vi_mode"] == "config"
+    full_nfreq = int(metadata["coarse_vi_full_nfreq"])
+    coarse_nfreq = int(metadata["coarse_vi_nfreq"])
+    assert full_nfreq % coarse_nfreq == 0
+    assert coarse_nfreq <= 80
+    assert metadata["coarse_vi_requested_Nc"] == 80
+    assert metadata["coarse_vi_adjusted_Nc"] == coarse_nfreq
+
+
 def test_preprocess_builds_auto_coarse_vi_context():
     data = ARData(order=2, duration=8.0, fs=256, sigma=0.5, seed=1).ts
     cfg = RunMCMCConfig(

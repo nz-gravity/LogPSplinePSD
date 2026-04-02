@@ -116,7 +116,7 @@ class CoarseGrainSpec:
     Nc: int  # number of bins
 
     def __repr__(self):
-        return f"CoarseGrainSpec(Nc={self.Nc}, Nh={self.Nh},Nl={self.Nc * self.Nh}"
+        return f"CoarseGrainSpec(Nc={self.Nc}, Nh={self.Nh}, Nl={self.Nc * self.Nh}"
 
 
 def _resolve_equal_bin_params(
@@ -236,10 +236,7 @@ def compute_binning_structure(
     ).astype(np.int32)
 
     if (Nh % 2) == 0:
-        logger.warning(
-            f"Nl={Nl} and Nc={Nc} imply even Nh={Nh}. "
-            "Midpoint is not unique; using lower-middle Fourier frequency.",
-        )
+        logger.info(f"Nl={Nl} and Nc={Nc} imply even Nh={Nh}. ")
         J_mid: Int[np.ndarray, "nc"] = J_start + (Nh // 2) - 1
     else:
         J_mid = J_start + (Nh // 2)

@@ -10,13 +10,18 @@ from ..datatypes import Periodogram
 from ..datatypes.multivar import EmpiricalPSD, MultivarFFT
 from ..logger import logger
 from .checks import _run_preprocessing_checks
-from .coarse_grain import _smallest_divisor_geq
+from .coarse_grain import (
+    CoarseGrainConfig,
+    _closest_divisor,
+    _smallest_divisor_geq,
+)
 from .config_utils import _build_config_from_kwargs, _normalize_run_config
 from .configs import RunMCMCConfig, SamplerName
 from .data_prep import (
     _build_welch_overlay,
     _coarse_grain_processed_data,
     _normalize_coarse_grain_config,
+    _normalize_excluded_frequency_bands,
     _prepare_processed_data,
 )
 from .sampler_factory import (
@@ -140,10 +145,45 @@ def _derive_vi_coarse_grain_config(
         vi_cfg.coarse_grain_config_vi
     )
     if explicit_cfg.enabled:
-        return explicit_cfg, {
+        metadata: dict[str, object] = {
             "coarse_vi_mode": "config",
             "coarse_vi_full_nfreq": full_nfreq,
         }
+
+        if explicit_cfg.Nc is not None:
+            requested_nc = int(explicit_cfg.Nc)
+            if full_nfreq % requested_nc != 0:
+                adjusted_nc = _closest_divisor(full_nfreq, requested_nc)
+                logger.info(
+                    "Adjusting explicit coarse VI bins: "
+                    f"N_full={full_nfreq} not divisible by Nc={requested_nc}; "
+                    f"using Nc={adjusted_nc}."
+                )
+                explicit_cfg = CoarseGrainConfig(
+                    enabled=True,
+                    Nc=adjusted_nc,
+                    Nh=None,
+                )
+                metadata["coarse_vi_requested_Nc"] = requested_nc
+                metadata["coarse_vi_adjusted_Nc"] = adjusted_nc
+        elif explicit_cfg.Nh is not None:
+            requested_nh = int(explicit_cfg.Nh)
+            if full_nfreq % requested_nh != 0:
+                adjusted_nh = _closest_divisor(full_nfreq, requested_nh)
+                logger.info(
+                    "Adjusting explicit coarse VI bin width: "
+                    f"N_full={full_nfreq} not divisible by Nh={requested_nh}; "
+                    f"using Nh={adjusted_nh}."
+                )
+                explicit_cfg = CoarseGrainConfig(
+                    enabled=True,
+                    Nc=None,
+                    Nh=adjusted_nh,
+                )
+                metadata["coarse_vi_requested_Nh"] = requested_nh
+                metadata["coarse_vi_adjusted_Nh"] = adjusted_nh
+
+        return explicit_cfg, metadata
 
     if not vi_cfg.auto_coarse_vi:
         return None, None
@@ -202,11 +242,14 @@ def _preprocess_with_run_config(
         fft_data_cg is not None
     ), "Coarse graining should preserve non-None fft_data"
     fft_data = fft_data_cg
-
-    # Null-band excision: applied after CG so the CG divisibility constraint is unaffected.
+    # Frequency-band exclusion is applied after coarse graining so CG divisibility
+    # constraints are unaffected.
+    exclude_bands = _normalize_excluded_frequency_bands(
+        run_config.model.exclude_freq_bands
+    )
     fft_data = _apply_frequency_exclusion(
         fft_data,
-        run_config.model.freq_excl_bands or (),
+        exclude_bands,
     )
     scaled_true_psd = _align_true_psd_to_freq(scaled_true_psd, fft_data)
 

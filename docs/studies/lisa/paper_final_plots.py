@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -438,23 +439,11 @@ def _load_component_model(
     diff_matrix_order: int,
 ) -> LogPSplines:
     """Rehydrate one stored spline component from ``idata.spline_model``."""
-    basis = jnp.asarray(np.asarray(dataset[f"{prefix}_basis"].values))
-    penalty = jnp.asarray(
-        np.asarray(dataset[f"{prefix}_penalty_matrix"].values)
-    )
-    knots = np.asarray(dataset[f"{prefix}_knots"].values, dtype=np.float64)
-    parametric_model = jnp.asarray(
-        np.asarray(dataset[f"{prefix}_parametric_model"].values)
-    )
-    return LogPSplines(
+    return LogPSplines.from_storage_dataset(
+        dataset,
+        prefix=prefix,
         degree=degree,
         diffMatrixOrder=diff_matrix_order,
-        n=int(basis.shape[0]),
-        basis=basis,
-        penalty_matrix=penalty,
-        knots=knots,
-        weights=None,
-        parametric_model=parametric_model,
     )
 
 
@@ -481,23 +470,38 @@ def _load_multivar_spline_model(idata) -> MultivariateLogPSplines:
         for idx in range(p)
     ]
 
-    offdiag_re_model = None
-    offdiag_im_model = None
+    offdiag_re_models = {}
+    offdiag_im_models = {}
     if p > 1:
-        if "offdiag_re_basis" in dataset:
-            offdiag_re_model = _load_component_model(
-                dataset,
-                "offdiag_re",
-                degree=degree,
-                diff_matrix_order=diff_matrix_order,
+        for key in dataset.data_vars:
+            match_re = re.fullmatch(
+                r"theta_re_(\d+)_(\d+)_(?:knots|basis)", str(key)
             )
-        if "offdiag_im_basis" in dataset:
-            offdiag_im_model = _load_component_model(
-                dataset,
-                "offdiag_im",
-                degree=degree,
-                diff_matrix_order=diff_matrix_order,
+            if match_re is not None:
+                j = int(match_re.group(1))
+                l = int(match_re.group(2))
+                prefix = f"theta_re_{j}_{l}"
+                offdiag_re_models[(j, l)] = _load_component_model(
+                    dataset,
+                    prefix,
+                    degree=degree,
+                    diff_matrix_order=diff_matrix_order,
+                )
+                continue
+
+            match_im = re.fullmatch(
+                r"theta_im_(\d+)_(\d+)_(?:knots|basis)", str(key)
             )
+            if match_im is not None:
+                j = int(match_im.group(1))
+                l = int(match_im.group(2))
+                prefix = f"theta_im_{j}_{l}"
+                offdiag_im_models[(j, l)] = _load_component_model(
+                    dataset,
+                    prefix,
+                    degree=degree,
+                    diff_matrix_order=diff_matrix_order,
+                )
 
     return MultivariateLogPSplines(
         degree=degree,
@@ -505,8 +509,8 @@ def _load_multivar_spline_model(idata) -> MultivariateLogPSplines:
         N=N,
         p=p,
         diagonal_models=diagonal_models,
-        offdiag_re_model=offdiag_re_model,
-        offdiag_im_model=offdiag_im_model,
+        offdiag_re_models=offdiag_re_models,
+        offdiag_im_models=offdiag_im_models,
     )
 
 

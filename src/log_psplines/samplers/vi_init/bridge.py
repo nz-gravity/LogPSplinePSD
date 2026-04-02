@@ -104,14 +104,17 @@ def transfer_block_init_values(
 
     if channel_index > 0:
         for theta_idx in range(channel_index):
-            for prefix, fine_model in (
-                ("theta_re", fine_sampler.spline_model.offdiag_re_model),
-                ("theta_im", fine_sampler.spline_model.offdiag_im_model),
-            ):
+            for prefix, part in (("theta_re", "re"), ("theta_im", "im")):
+                fine_model = fine_sampler.spline_model.get_theta_model(
+                    part, channel_index, theta_idx
+                )
+                coarse_model = coarse_sampler.spline_model.get_theta_model(
+                    part, channel_index, theta_idx
+                )
                 w_key = f"weights_{prefix}_{channel_index}_{theta_idx}"
                 candidate[w_key] = transfer_multivar_log_spline(
                     coarse_weights=np.asarray(draw_values[w_key]),
-                    coarse_basis=np.asarray(coarse_sampler._theta_basis),
+                    coarse_basis=np.asarray(coarse_model.basis),
                     coarse_freq=coarse_freq,
                     fine_spline_model=fine_model,
                     fine_freq=fine_freq,

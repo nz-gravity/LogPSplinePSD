@@ -562,8 +562,10 @@ def _vi_weights_to_log_delta_theta(
     Parameters
     ----------
     values : dict
-        VI means (single vectors) or draws (batched).  Keys like
-        ``weights_delta_0``, ``weights_theta_re``, ``weights_theta_im``.
+        VI means (single vectors) or draws (batched). Keys include
+        ``weights_delta_0`` and either legacy shared theta keys
+        (``weights_theta_re``, ``weights_theta_im``) or per-component keys
+        (``weights_theta_re_{j}_{l}``, ``weights_theta_im_{j}_{l}``).
     sampler :
         Multivariate sampler (provides ``all_bases``, ``p``, ``n_theta``, ``N``).
     is_batch : bool
@@ -589,17 +591,56 @@ def _vi_weights_to_log_delta_theta(
 
     n_samples = log_delta_sq.shape[0]
     if sampler.n_theta > 0:
-        basis_theta = jnp.asarray(sampler.all_bases[sampler.p])
-        w_re = jnp.asarray(values["weights_theta_re"])
-        w_im = jnp.asarray(values["weights_theta_im"])
-        if is_batch:
-            tr_base = w_re @ basis_theta.T
-            ti_base = w_im @ basis_theta.T
+        theta_re = jnp.zeros((n_samples, sampler.N, sampler.n_theta))
+        theta_im = jnp.zeros_like(theta_re)
+
+        # Backward compatibility: shared theta keys.
+        if "weights_theta_re" in values and "weights_theta_im" in values:
+            first_pair = sampler.spline_model.theta_pair_from_index(0)
+            basis_theta = jnp.asarray(
+                sampler.spline_model.get_theta_model(
+                    "re", first_pair[0], first_pair[1]
+                ).basis
+            )
+            w_re = jnp.asarray(values["weights_theta_re"])
+            w_im = jnp.asarray(values["weights_theta_im"])
+            if is_batch:
+                tr_base = w_re @ basis_theta.T
+                ti_base = w_im @ basis_theta.T
+            else:
+                tr_base = (jnp.einsum("nk,k->n", basis_theta, w_re))[None, :]
+                ti_base = (jnp.einsum("nk,k->n", basis_theta, w_im))[None, :]
+            theta_re = jnp.repeat(tr_base[:, :, None], sampler.n_theta, axis=2)
+            theta_im = jnp.repeat(ti_base[:, :, None], sampler.n_theta, axis=2)
         else:
-            tr_base = (jnp.einsum("nk,k->n", basis_theta, w_re))[None, :]
-            ti_base = (jnp.einsum("nk,k->n", basis_theta, w_im))[None, :]
-        theta_re = jnp.repeat(tr_base[:, :, None], sampler.n_theta, axis=2)
-        theta_im = jnp.repeat(ti_base[:, :, None], sampler.n_theta, axis=2)
+            for j in range(1, sampler.p):
+                for l in range(j):
+                    theta_idx = sampler.spline_model.theta_index(j, l)
+                    key_re = f"weights_theta_re_{j}_{l}"
+                    key_im = f"weights_theta_im_{j}_{l}"
+                    if key_re not in values or key_im not in values:
+                        continue
+
+                    basis_re = jnp.asarray(
+                        sampler.spline_model.get_theta_model("re", j, l).basis
+                    )
+                    basis_im = jnp.asarray(
+                        sampler.spline_model.get_theta_model("im", j, l).basis
+                    )
+                    w_re = jnp.asarray(values[key_re])
+                    w_im = jnp.asarray(values[key_im])
+                    if is_batch:
+                        theta_re_eval = w_re @ basis_re.T
+                        theta_im_eval = w_im @ basis_im.T
+                    else:
+                        theta_re_eval = (
+                            jnp.einsum("nk,k->n", basis_re, w_re)[None, :]
+                        )
+                        theta_im_eval = (
+                            jnp.einsum("nk,k->n", basis_im, w_im)[None, :]
+                        )
+                    theta_re = theta_re.at[:, :, theta_idx].set(theta_re_eval)
+                    theta_im = theta_im.at[:, :, theta_idx].set(theta_im_eval)
     else:
         theta_re = jnp.zeros((n_samples, sampler.N, 0))
         theta_im = jnp.zeros((n_samples, sampler.N, 0))
@@ -688,8 +729,13 @@ def compute_vi_artifacts_multivar(
         m.n_basis + 2 for m in sampler.spline_model.diagonal_models
     )
     if sampler.n_theta > 0:
-        total_latents += sampler.spline_model.offdiag_re_model.n_basis + 2
-        total_latents += sampler.spline_model.offdiag_im_model.n_basis + 2
+        for pair in sampler.spline_model.theta_pairs:
+            total_latents += (
+                sampler.spline_model.offdiag_re_models[pair].n_basis + 2
+            )
+            total_latents += (
+                sampler.spline_model.offdiag_im_models[pair].n_basis + 2
+            )
     guide_spec = sampler.config.vi_guide or suggest_guide_multivar(
         total_latents
     )
@@ -865,6 +911,12 @@ def _build_block_model_args(
     beta_phi_theta: float,
 ) -> tuple:
     """Build the positional args tuple for ``_blocked_channel_model``."""
+    theta_re_basis, theta_re_penalty = sampler._theta_component_arrays_for_channel(
+        channel_index, part="re"
+    )
+    theta_im_basis, theta_im_penalty = sampler._theta_component_arrays_for_channel(
+        channel_index, part="im"
+    )
     return (
         channel_index,
         sampler.u_re[:, channel_index, :],
@@ -873,8 +925,10 @@ def _build_block_model_args(
         sampler.u_im[:, :channel_index, :],
         sampler.all_bases[channel_index],
         sampler.all_penalties[channel_index],
-        sampler._theta_basis,
-        sampler._theta_penalty,
+        theta_re_basis,
+        theta_re_penalty,
+        theta_im_basis,
+        theta_im_penalty,
         sampler.config.alpha_phi,
         sampler.config.beta_phi,
         alpha_phi_theta,
@@ -919,21 +973,28 @@ def _build_block_init_values(
         f"weights_delta_{channel_index}": delta_weights_init,
     }
     if theta_count > 0:
-        theta_weights_re = jnp.asarray(
-            sampler.spline_model.offdiag_re_model.weights
-        )
-        theta_weights_im = jnp.asarray(
-            sampler.spline_model.offdiag_im_model.weights
-        )
-        _add_theta_init_values(
-            init_values=init_values,
-            channel_index=channel_index,
-            theta_count=theta_count,
-            delta_init=jnp.asarray(delta_init),
-            phi_theta_init=jnp.asarray(phi_theta_init),
-            theta_weights_re=theta_weights_re,
-            theta_weights_im=theta_weights_im,
-        )
+        for theta_idx in range(theta_count):
+            re_model = sampler.spline_model.get_theta_model(
+                "re", channel_index, theta_idx
+            )
+            im_model = sampler.spline_model.get_theta_model(
+                "im", channel_index, theta_idx
+            )
+            pfx = f"{channel_index}_{theta_idx}"
+            init_values[f"delta_theta_re_{pfx}"] = jnp.asarray(delta_init)
+            init_values[f"phi_theta_re_{pfx}"] = jnp.log(
+                jnp.asarray(phi_theta_init)
+            )
+            init_values[f"weights_theta_re_{pfx}"] = jnp.asarray(
+                re_model.weights
+            )
+            init_values[f"delta_theta_im_{pfx}"] = jnp.asarray(delta_init)
+            init_values[f"phi_theta_im_{pfx}"] = jnp.log(
+                jnp.asarray(phi_theta_init)
+            )
+            init_values[f"weights_theta_im_{pfx}"] = jnp.asarray(
+                im_model.weights
+            )
     return init_values
 
 
@@ -1057,6 +1118,11 @@ def _accumulate_block_vi_diagnostics(
         ):
             components = []
             for theta_idx in range(theta_count):
+                basis = jnp.asarray(
+                    sampler.spline_model.get_theta_model(
+                        part, channel_index, theta_idx
+                    ).basis
+                )
                 w = vi_result.means.get(
                     f"weights_theta_{part}_{channel_index}_{theta_idx}"
                 )
@@ -1064,9 +1130,7 @@ def _accumulate_block_vi_diagnostics(
                     raise KeyError(
                         f"theta weights {part} {channel_index}_{theta_idx}"
                     )
-                components.append(
-                    _to_np(jnp.einsum("nk,k->n", sampler._theta_basis, w))
-                )
+                components.append(_to_np(jnp.einsum("nk,k->n", basis, w)))
             if components:
                 accum[accum_key][:, theta_slice] = np.stack(components, axis=1)
 
@@ -1110,9 +1174,14 @@ def _accumulate_block_vi_diagnostics(
                 ("re", "theta_re_draws"),
                 ("im", "theta_im_draws"),
             ):
+                basis = jnp.asarray(
+                    sampler.spline_model.get_theta_model(
+                        part, channel_index, theta_idx
+                    ).basis
+                )
                 _record_draws(
                     vi_result.samples.get(f"weights_theta_{part}_{prefix}"),
-                    sampler._theta_basis,
+                    basis,
                     accum[buf_key],
                     column,
                 )
@@ -1338,9 +1407,19 @@ def prepare_block_vi(
 
         theta_start = channel_index * (channel_index - 1) // 2
         theta_count = channel_index
+        theta_basis_cols = 0
+        if theta_count > 0:
+            theta_basis_cols = max(
+                int(
+                    sampler.spline_model.get_theta_model(
+                        "re", channel_index, theta_idx
+                    ).basis.shape[1]
+                )
+                for theta_idx in range(theta_count)
+            )
 
         guide_spec = sampler.config.vi_guide or suggest_guide_block(
-            delta_basis.shape[1], theta_count, sampler._theta_basis.shape[1]
+            delta_basis.shape[1], theta_count, theta_basis_cols
         )
         progress_bar = (
             sampler.config.vi_progress_bar

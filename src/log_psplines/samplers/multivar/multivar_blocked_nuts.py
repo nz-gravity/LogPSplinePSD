@@ -64,8 +64,10 @@ def _blocked_channel_model(
     u_im_prev: jnp.ndarray,
     basis_delta: jnp.ndarray,
     penalty_delta: jnp.ndarray,
-    basis_theta: jnp.ndarray,
-    penalty_theta: jnp.ndarray,
+    basis_theta_re_by_component: tuple[jnp.ndarray, ...],
+    penalty_theta_re_by_component: tuple[jnp.ndarray, ...],
+    basis_theta_im_by_component: tuple[jnp.ndarray, ...],
+    penalty_theta_im_by_component: tuple[jnp.ndarray, ...],
     alpha_phi: float,
     beta_phi: float,
     alpha_phi_theta: float,
@@ -94,8 +96,10 @@ def _blocked_channel_model(
         in the second dimension when ``channel_index == 0``.
     basis_delta, penalty_delta
         P‑spline basis/penalty for ``log δ_j(f)^2``.
-    basis_theta, penalty_theta
-        P‑spline basis/penalty shared by all θ_{jl}(f) in this row.
+    basis_theta_re_by_component, penalty_theta_re_by_component
+        P‑spline basis/penalty for each real theta component in this row.
+    basis_theta_im_by_component, penalty_theta_im_by_component
+        P‑spline basis/penalty for each imaginary theta component in this row.
     alpha_phi, beta_phi, alpha_delta, beta_delta
         Hyperparameters for the hierarchical priors used in
         :func:`sample_pspline_block`.
@@ -151,12 +155,14 @@ def _blocked_channel_model(
         theta_im_components = []
 
         for theta_idx in range(n_theta_block):
+            basis_theta_re = basis_theta_re_by_component[theta_idx]
+            penalty_theta_re = penalty_theta_re_by_component[theta_idx]
             theta_prefix = f"theta_re_{channel_label}_{theta_idx}"
             theta_re_block = sample_pspline_block(
                 delta_name=f"delta_{theta_prefix}",
                 phi_name=f"phi_{theta_prefix}",
                 weights_name=f"weights_{theta_prefix}",
-                penalty_matrix=penalty_theta,
+                penalty_matrix=penalty_theta_re,
                 alpha_phi=alpha_phi_theta,
                 beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
@@ -165,16 +171,18 @@ def _blocked_channel_model(
                 tau=tau,
             )
             theta_re_eval = jnp.einsum(
-                "nk,k->n", basis_theta, theta_re_block["weights"]
+                "nk,k->n", basis_theta_re, theta_re_block["weights"]
             )
             theta_re_components.append(theta_re_eval)
 
+            basis_theta_im = basis_theta_im_by_component[theta_idx]
+            penalty_theta_im = penalty_theta_im_by_component[theta_idx]
             theta_im_prefix = f"theta_im_{channel_label}_{theta_idx}"
             theta_im_block = sample_pspline_block(
                 delta_name=f"delta_{theta_im_prefix}",
                 phi_name=f"phi_{theta_im_prefix}",
                 weights_name=f"weights_{theta_im_prefix}",
-                penalty_matrix=penalty_theta,
+                penalty_matrix=penalty_theta_im,
                 alpha_phi=alpha_phi_theta,
                 beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
@@ -184,7 +192,7 @@ def _blocked_channel_model(
             )
 
             theta_im_eval = jnp.einsum(
-                "nk,k->n", basis_theta, theta_im_block["weights"]
+                "nk,k->n", basis_theta_im, theta_im_block["weights"]
             )
             theta_im_components.append(theta_im_eval)
 
@@ -324,24 +332,32 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         self.config: MultivarBlockedNUTSConfig = config
         self._vi_diagnostics: Optional[Dict[str, Any]] = None
 
-        theta_basis_idx = self.p
-        self._theta_basis = (
-            self.all_bases[theta_basis_idx]
-            if self.n_theta > 0
-            else jnp.zeros((self.N, 0), dtype=jnp.float32)
-        )
-        self._theta_penalty = (
-            self.all_penalties[theta_basis_idx]
-            if self.n_theta > 0
-            else jnp.zeros((0, 0))
-        )
-
         self._design_weights: dict = {}
         if self.config.design_psd is not None:
             design_psd = self._align_design_psd(self.config.design_psd)
             self._design_weights = self.spline_model.compute_design_weights(
                 design_psd
             )
+
+    def _theta_component_arrays_for_channel(
+        self,
+        channel_index: int,
+        *,
+        part: str,
+    ) -> tuple[tuple[jnp.ndarray, ...], tuple[jnp.ndarray, ...]]:
+        """Return per-theta basis/penalty tuples for one blocked channel."""
+        if channel_index <= 0 or self.n_theta == 0:
+            return tuple(), tuple()
+
+        bases: list[jnp.ndarray] = []
+        penalties: list[jnp.ndarray] = []
+        for theta_idx in range(channel_index):
+            model = self.spline_model.get_theta_model(
+                part, channel_index, theta_idx
+            )
+            bases.append(jnp.asarray(model.basis, dtype=jnp.float32))
+            penalties.append(jnp.asarray(model.penalty_matrix))
+        return tuple(bases), tuple(penalties)
 
     def _align_design_psd(
         self,
@@ -452,6 +468,12 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         return evaluate_log_density_batch
 
     def _channel_model_kwargs(self, channel_index: int) -> Dict[str, Any]:
+        theta_re_basis, theta_re_penalty = self._theta_component_arrays_for_channel(
+            channel_index, part="re"
+        )
+        theta_im_basis, theta_im_penalty = self._theta_component_arrays_for_channel(
+            channel_index, part="im"
+        )
         return {
             "channel_index": channel_index,
             "u_re_channel": self.u_re[:, channel_index, :],
@@ -460,8 +482,10 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             "u_im_prev": self.u_im[:, :channel_index, :],
             "basis_delta": self.all_bases[channel_index],
             "penalty_delta": self.all_penalties[channel_index],
-            "basis_theta": self._theta_basis,
-            "penalty_theta": self._theta_penalty,
+            "basis_theta_re_by_component": theta_re_basis,
+            "penalty_theta_re_by_component": theta_re_penalty,
+            "basis_theta_im_by_component": theta_im_basis,
+            "penalty_theta_im_by_component": theta_im_penalty,
             "alpha_phi": float(self.config.alpha_phi),
             "beta_phi": float(self.config.beta_phi),
             "alpha_phi_theta": float(self.config.alpha_phi_theta),
@@ -589,6 +613,16 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         for channel_index in range(self.p):
             delta_basis = self.all_bases[channel_index]
             delta_penalty = self.all_penalties[channel_index]
+            theta_re_basis, theta_re_penalty = (
+                self._theta_component_arrays_for_channel(
+                    channel_index, part="re"
+                )
+            )
+            theta_im_basis, theta_im_penalty = (
+                self._theta_component_arrays_for_channel(
+                    channel_index, part="im"
+                )
+            )
 
             theta_start = channel_index * (channel_index - 1) // 2
             theta_count = channel_index
@@ -639,8 +673,10 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 u_im_prev,
                 delta_basis,
                 delta_penalty,
-                self._theta_basis,
-                self._theta_penalty,
+                theta_re_basis,
+                theta_re_penalty,
+                theta_im_basis,
+                theta_im_penalty,
                 self.config.alpha_phi,
                 self.config.beta_phi,
                 self.config.alpha_phi_theta,

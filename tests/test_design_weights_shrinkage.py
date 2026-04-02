@@ -111,7 +111,7 @@ def test_compute_design_weights_returns_correct_keys():
             assert f"theta_re_{j}_{l}" in dw
             assert f"theta_im_{j}_{l}" in dw
             assert dw[f"theta_re_{j}_{l}"].shape == (
-                model.offdiag_re_model.n_basis,
+                model.get_theta_model("re", j, l).n_basis,
             )
 
 

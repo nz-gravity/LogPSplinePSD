@@ -1,32 +1,80 @@
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Literal, Optional, Sequence, Tuple, cast
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from ..datatypes import MultivarFFT, Periodogram
-from ..datatypes.multivar_utils import U_to_Y
+from ..datatypes.multivar_utils import U_to_Y, psd_to_cholesky_components
 from ..logger import logger
-from .initialisation import init_basis_and_penalty, init_weights
+from .initialisation import init_weights
 from .knots_locator import init_knots, multivar_psd_knot_scores
 from .psplines import LogPSplines
 
 _MULTIVAR_ALLOWED_KNOT_METHODS = ("uniform", "log", "density")
 
 
-def _build_component_knots_basis_penalty(
+@dataclass(frozen=True)
+class MultivarComponentKey:
+    """Stable identifier for one multivariate spline component."""
+
+    family: Literal["delta", "theta"]
+    j: int
+    l: Optional[int] = None
+    part: Optional[Literal["re", "im"]] = None
+
+    def __post_init__(self):
+        if int(self.j) < 0:
+            raise ValueError(f"j must be >= 0, got {self.j}")
+        if self.family == "delta":
+            if self.l is not None or self.part is not None:
+                raise ValueError(
+                    "delta components must have l=None and part=None"
+                )
+            return
+
+        if self.family != "theta":
+            raise ValueError(
+                f"Unknown component family '{self.family}'. "
+                "Use 'delta' or 'theta'."
+            )
+        if self.l is None:
+            raise ValueError("theta components require l")
+        if self.part not in ("re", "im"):
+            raise ValueError("theta components require part in {'re','im'}")
+        if not (0 <= int(self.l) < int(self.j)):
+            raise ValueError(
+                f"Invalid theta index (j={self.j}, l={self.l}); "
+                "expected 0 <= l < j."
+            )
+
+    @property
+    def name(self) -> str:
+        if self.family == "delta":
+            return f"delta_{self.j}"
+        assert self.l is not None and self.part is not None
+        return f"theta_{self.part}_{self.j}_{self.l}"
+
+
+@dataclass
+class MultivarComponentSpec:
+    """Container for a component's model and optional knot-score metadata."""
+
+    key: MultivarComponentKey
+    model: LogPSplines
+    score: Optional[np.ndarray] = None
+
+
+def _build_component_knots(
     *,
     freq: np.ndarray,
     n_knots: int,
     score: np.ndarray,
-    degree: int,
     n_freq: int,
-    diff_matrix_order: int,
-    freq_norm: np.ndarray,
     knot_kwargs: dict[str, object],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Build knots, basis, and penalty for one spline component."""
+) -> np.ndarray:
+    """Build knots for one spline component."""
     method_raw = knot_kwargs.get("method", "density")
     method = str(method_raw).strip().lower()
     if method not in _MULTIVAR_ALLOWED_KNOT_METHODS:
@@ -56,50 +104,28 @@ def _build_component_knots_basis_penalty(
         parametric_model=None,
         **{**knot_kwargs, "method": method},
     )
-    basis, penalty = init_basis_and_penalty(
-        knots,
-        degree,
-        n_freq,
-        diff_matrix_order,
-        grid_points=freq_norm,
-    )
-    return knots, np.asarray(basis), np.asarray(penalty)
+    return knots
 
 
 def _build_pspline_from_log_target(
     *,
     log_target: np.ndarray,
     knots: np.ndarray,
-    basis: np.ndarray,
-    penalty: np.ndarray,
     degree: int,
     diff_matrix_order: int,
     n_freq: int,
+    grid_points: np.ndarray,
 ) -> LogPSplines:
-    """Create a LogPSplines model and initialize weights from log-target data."""
-    basis_jnp = jnp.asarray(basis)
-    penalty_jnp = jnp.asarray(penalty)
-    parametric_model = jnp.ones(n_freq)
-    dummy_model = LogPSplines(
+    """Create a LogPSplines model initialized from log-target data."""
+    return LogPSplines.from_knots(
+        knots=np.asarray(knots, dtype=np.float64),
         degree=degree,
         diffMatrixOrder=diff_matrix_order,
         n=n_freq,
-        basis=basis_jnp,
-        penalty_matrix=penalty_jnp,
-        knots=knots,
-        weights=jnp.zeros(basis_jnp.shape[1]),
-        parametric_model=parametric_model,
-    )
-    weights = init_weights(jnp.asarray(log_target), dummy_model)
-    return LogPSplines(
-        degree=degree,
-        diffMatrixOrder=diff_matrix_order,
-        n=n_freq,
-        basis=basis_jnp,
-        penalty_matrix=penalty_jnp,
-        knots=knots,
-        weights=weights,
-        parametric_model=parametric_model,
+        grid_points=np.asarray(grid_points, dtype=np.float64),
+        parametric_model=jnp.ones(n_freq),
+        log_target=np.asarray(log_target, dtype=np.float64),
+        init_num_steps=5000,
     )
 
 
@@ -127,10 +153,16 @@ class MultivariateLogPSplines:
         Number of channels in multivariate data
     diagonal_models : List[LogPSplines]
         P-spline models for diagonal PSD components (one per channel)
-    offdiag_re_model : LogPSplines, optional
-        P-spline model for real parts of off-diagonal terms
-    offdiag_im_model : LogPSplines, optional
-        P-spline model for imaginary parts of off-diagonal terms
+    offdiag_re_models : Dict[Tuple[int, int], LogPSplines], optional
+        P-spline models for real parts of off-diagonal terms keyed by
+        ``(j, l)`` with ``j > l``.
+    offdiag_im_models : Dict[Tuple[int, int], LogPSplines], optional
+        P-spline models for imaginary parts of off-diagonal terms keyed by
+        ``(j, l)`` with ``j > l``.
+    component_specs : Dict[MultivarComponentKey, MultivarComponentSpec], optional
+        Unified typed registry for all components.
+    component_order : List[MultivarComponentKey], optional
+        Deterministic ordering used to assemble tuples passed to samplers.
     """
 
     degree: int
@@ -140,9 +172,20 @@ class MultivariateLogPSplines:
 
     # P-spline components for each Cholesky parameter
     diagonal_models: List[LogPSplines]  # One per channel
-    offdiag_re_model: Optional[LogPSplines] = None  # Real off-diagonal terms
-    offdiag_im_model: Optional[LogPSplines] = (
-        None  # Imaginary off-diagonal terms
+    offdiag_re_models: Dict[Tuple[int, int], LogPSplines] = field(
+        default_factory=dict
+    )
+    offdiag_im_models: Dict[Tuple[int, int], LogPSplines] = field(
+        default_factory=dict
+    )
+    component_specs: Dict[MultivarComponentKey, MultivarComponentSpec] = (
+        field(default_factory=dict, repr=False)
+    )
+    component_order: List[MultivarComponentKey] = field(
+        default_factory=list, repr=False
+    )
+    component_scores: Dict[MultivarComponentKey, np.ndarray] = field(
+        default_factory=dict, repr=False
     )
 
     def __post_init__(self):
@@ -153,12 +196,36 @@ class MultivariateLogPSplines:
                 f"must match number of channels ({self.p})"
             )
 
-        # For multivariate case (p > 1), we need off-diagonal models
-        if self.p > 1:
-            if self.offdiag_re_model is None or self.offdiag_im_model is None:
-                raise ValueError(
-                    "Off-diagonal models required for multivariate case (p > 1)"
-                )
+        if self.n_theta == 0:
+            self.offdiag_re_models = {}
+            self.offdiag_im_models = {}
+            self._initialise_component_registry()
+            return
+
+        pairs = self.theta_pairs
+        if self.component_specs:
+            for j, l in pairs:
+                key_re = MultivarComponentKey("theta", j, l=l, part="re")
+                key_im = MultivarComponentKey("theta", j, l=l, part="im")
+                if key_re in self.component_specs:
+                    self.offdiag_re_models[(j, l)] = self.component_specs[
+                        key_re
+                    ].model
+                if key_im in self.component_specs:
+                    self.offdiag_im_models[(j, l)] = self.component_specs[
+                        key_im
+                    ].model
+
+        missing_re = [pair for pair in pairs if pair not in self.offdiag_re_models]
+        missing_im = [pair for pair in pairs if pair not in self.offdiag_im_models]
+        if missing_re or missing_im:
+            raise ValueError(
+                "Per-component off-diagonal models are incomplete. "
+                f"Missing real models for pairs={missing_re}, "
+                f"missing imag models for pairs={missing_im}."
+            )
+
+        self._initialise_component_registry()
 
     @classmethod
     def from_multivar_fft(
@@ -234,7 +301,11 @@ class MultivariateLogPSplines:
         knot_scoring = (
             str(knot_kwargs.get("scoring", "cholesky")).strip().lower()
         )
-        diagonal_scores, offdiag_score = multivar_psd_knot_scores(
+        (
+            diagonal_scores,
+            offdiag_re_scores,
+            offdiag_im_scores,
+        ) = multivar_psd_knot_scores(
             Y_np,
             Nb,
             p,
@@ -242,23 +313,22 @@ class MultivariateLogPSplines:
             u_re=u_re_np if knot_scoring == "spectral" else None,
             u_im=u_im_np if knot_scoring == "spectral" else None,
         )
+        component_scores: Dict[MultivarComponentKey, np.ndarray] = {}
 
         # Create diagonal models (one per channel), each with its own
         # knot placement and basis construction.
         diagonal_models = []
         for i in range(p):
             score_diag = diagonal_scores[i]
-            knots_diag, basis_diag, penalty_diag = (
-                _build_component_knots_basis_penalty(
-                    freq=freq,
-                    n_knots=n_knots,
-                    score=score_diag,
-                    degree=degree,
-                    n_freq=N,
-                    diff_matrix_order=diffMatrixOrder,
-                    freq_norm=freq_norm,
-                    knot_kwargs=knot_kwargs,
-                )
+            component_scores[MultivarComponentKey("delta", i)] = np.asarray(
+                score_diag, dtype=np.float64
+            )
+            knots_diag = _build_component_knots(
+                freq=freq,
+                n_knots=n_knots,
+                score=score_diag,
+                n_freq=N,
+                knot_kwargs=knot_kwargs,
             )
 
             empirical_diag_power = np.real(Y_np[:, i, i]) / Nb
@@ -269,65 +339,84 @@ class MultivariateLogPSplines:
             diagonal_model = _build_pspline_from_log_target(
                 log_target=log_diag_target,
                 knots=knots_diag,
-                basis=basis_diag,
-                penalty=penalty_diag,
                 degree=degree,
                 diff_matrix_order=diffMatrixOrder,
                 n_freq=N,
+                grid_points=freq_norm,
             )
             diagonal_models.append(diagonal_model)
 
         # Create off-diagonal models if needed
-        offdiag_re_model = None
-        offdiag_im_model = None
+        offdiag_re_models: Dict[Tuple[int, int], LogPSplines] = {}
+        offdiag_im_models: Dict[Tuple[int, int], LogPSplines] = {}
+        theta_pairs = [(j, l) for j in range(1, p) for l in range(j)]
 
         if p > 1:
-            # Simple empirical cross-spectra initialization for sanity checking
-            n_theta = int(p * (p - 1) / 2)  # Number of off-diagonal parameters
-            empirical_csd = np.zeros(N, dtype=np.float64)
-            for i in range(1, p):
-                for j in range(i):
-                    csd_ij = np.abs(Y_np[:, i, j]) / Nb
-                    empirical_csd += np.abs(csd_ij)
-            empirical_csd = (
-                empirical_csd / n_theta
-            )  # Average across theta components
+            if len(offdiag_re_scores) != len(theta_pairs):
+                raise ValueError(
+                    "Off-diagonal real knot score length mismatch: "
+                    f"expected {len(theta_pairs)}, got {len(offdiag_re_scores)}."
+                )
+            if len(offdiag_im_scores) != len(theta_pairs):
+                raise ValueError(
+                    "Off-diagonal imag knot score length mismatch: "
+                    f"expected {len(theta_pairs)}, got {len(offdiag_im_scores)}."
+                )
 
-            # Initialize with small values based on empirical estimates
-            small_init = np.log(np.maximum(empirical_csd, 1e-8))
+            # Empirical Cholesky theta for initialising spline weights.
+            # The sampler evaluates theta = B @ w directly (no exp), so weights
+            # must be initialised to reproduce the empirical theta values, not
+            # their log-magnitude.
+            _, theta_emp = psd_to_cholesky_components(Y_np / max(Nb, 1))
 
-            # Build a dedicated off-diagonal basis from Cholesky theta components.
-            knots_theta, basis_theta, penalty_theta = (
-                _build_component_knots_basis_penalty(
+            for theta_idx, (j_idx, l_idx) in enumerate(theta_pairs):
+                score_theta_re = np.asarray(
+                    offdiag_re_scores[theta_idx], dtype=np.float64
+                )
+                score_theta_im = np.asarray(
+                    offdiag_im_scores[theta_idx], dtype=np.float64
+                )
+                component_scores[
+                    MultivarComponentKey("theta", j_idx, l=l_idx, part="re")
+                ] = score_theta_re
+                component_scores[
+                    MultivarComponentKey("theta", j_idx, l=l_idx, part="im")
+                ] = score_theta_im
+                # Use actual empirical theta components as initialisation targets.
+                # Re and Im are initialised independently so each spline starts
+                # from the correct signed value rather than a log-magnitude proxy.
+                theta_re_init = np.real(theta_emp[:, j_idx, l_idx])
+                theta_im_init = np.imag(theta_emp[:, j_idx, l_idx])
+                knots_theta_re = _build_component_knots(
                     freq=freq,
                     n_knots=n_knots,
-                    score=offdiag_score,
-                    degree=degree,
+                    score=score_theta_re,
                     n_freq=N,
-                    diff_matrix_order=diffMatrixOrder,
-                    freq_norm=freq_norm,
                     knot_kwargs=knot_kwargs,
                 )
-            )
-
-            offdiag_re_model = _build_pspline_from_log_target(
-                log_target=small_init,
-                knots=knots_theta,
-                basis=basis_theta,
-                penalty=penalty_theta,
-                degree=degree,
-                diff_matrix_order=diffMatrixOrder,
-                n_freq=N,
-            )
-            offdiag_im_model = _build_pspline_from_log_target(
-                log_target=small_init,
-                knots=knots_theta,
-                basis=basis_theta,
-                penalty=penalty_theta,
-                degree=degree,
-                diff_matrix_order=diffMatrixOrder,
-                n_freq=N,
-            )
+                knots_theta_im = _build_component_knots(
+                    freq=freq,
+                    n_knots=n_knots,
+                    score=score_theta_im,
+                    n_freq=N,
+                    knot_kwargs=knot_kwargs,
+                )
+                offdiag_re_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
+                    log_target=theta_re_init,
+                    knots=knots_theta_re,
+                    degree=degree,
+                    diff_matrix_order=diffMatrixOrder,
+                    n_freq=N,
+                    grid_points=freq_norm,
+                )
+                offdiag_im_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
+                    log_target=theta_im_init,
+                    knots=knots_theta_im,
+                    degree=degree,
+                    diff_matrix_order=diffMatrixOrder,
+                    n_freq=N,
+                    grid_points=freq_norm,
+                )
 
         return cls(
             degree=degree,
@@ -335,19 +424,22 @@ class MultivariateLogPSplines:
             N=N,
             p=p,
             diagonal_models=diagonal_models,
-            offdiag_re_model=offdiag_re_model,
-            offdiag_im_model=offdiag_im_model,
+            offdiag_re_models=offdiag_re_models,
+            offdiag_im_models=offdiag_im_models,
+            component_scores=component_scores,
         )
 
     @property
     def n_knots(self) -> int:
         """Representative knot count from the first diagonal component."""
-        return len(self.diagonal_models[0].knots)
+        first_key = self.component_order[0]
+        return len(self.component_specs[first_key].model.knots)
 
     @property
     def n_basis(self) -> int:
         """Number of basis functions per component."""
-        return self.diagonal_models[0].n_basis
+        first_key = self.component_order[0]
+        return self.component_specs[first_key].model.n_basis
 
     @property
     def n_theta(self) -> int:
@@ -355,9 +447,115 @@ class MultivariateLogPSplines:
         return int(self.p * (self.p - 1) / 2)
 
     @property
+    def theta_pairs(self) -> List[Tuple[int, int]]:
+        """Lower-triangular (j, l) index pairs with j > l in model order."""
+        return [(j, l) for j in range(1, self.p) for l in range(j)]
+
+    def delta_key(self, j: int) -> MultivarComponentKey:
+        return MultivarComponentKey("delta", int(j))
+
+    def theta_key(self, part: str, j: int, l: int) -> MultivarComponentKey:
+        part_val = str(part).strip().lower()
+        if part_val not in ("re", "im"):
+            raise ValueError(f"Unknown theta part '{part}'. Use 're' or 'im'.")
+        return MultivarComponentKey(
+            "theta",
+            int(j),
+            l=int(l),
+            part=cast(Literal["re", "im"], part_val),
+        )
+
+    @property
+    def expected_component_order(self) -> List[MultivarComponentKey]:
+        order = [self.delta_key(j) for j in range(self.p)]
+        order.extend(self.theta_key("re", j, l) for j, l in self.theta_pairs)
+        order.extend(self.theta_key("im", j, l) for j, l in self.theta_pairs)
+        return order
+
+    def _initialise_component_registry(self) -> None:
+        """Create/validate a typed component registry from model fields."""
+        expected_order = self.expected_component_order
+        if not self.component_order:
+            self.component_order = list(expected_order)
+
+        if not self.component_specs:
+            specs: Dict[MultivarComponentKey, MultivarComponentSpec] = {}
+            for j, model in enumerate(self.diagonal_models):
+                key = self.delta_key(j)
+                specs[key] = MultivarComponentSpec(
+                    key=key,
+                    model=model,
+                    score=self.component_scores.get(key),
+                )
+            for j, l in self.theta_pairs:
+                key_re = self.theta_key("re", j, l)
+                key_im = self.theta_key("im", j, l)
+                specs[key_re] = MultivarComponentSpec(
+                    key=key_re,
+                    model=self.offdiag_re_models[(j, l)],
+                    score=self.component_scores.get(key_re),
+                )
+                specs[key_im] = MultivarComponentSpec(
+                    key=key_im,
+                    model=self.offdiag_im_models[(j, l)],
+                    score=self.component_scores.get(key_im),
+                )
+            self.component_specs = specs
+        if not self.component_scores:
+            self.component_scores = {
+                key: spec.score
+                for key, spec in self.component_specs.items()
+                if spec.score is not None
+            }
+
+        missing = [k for k in expected_order if k not in self.component_specs]
+        if missing:
+            raise ValueError(
+                "component_specs is missing required keys: "
+                f"{[k.name for k in missing]}"
+            )
+        if len(self.component_order) != len(expected_order):
+            raise ValueError(
+                f"component_order must have {len(expected_order)} entries, "
+                f"got {len(self.component_order)}."
+            )
+        if set(self.component_order) != set(expected_order):
+            raise ValueError(
+                "component_order must contain exactly the expected keys."
+            )
+
+    def theta_pair_from_index(self, theta_idx: int) -> Tuple[int, int]:
+        pairs = self.theta_pairs
+        if theta_idx < 0 or theta_idx >= len(pairs):
+            raise IndexError(
+                f"theta index {theta_idx} out of range [0, {len(pairs)})"
+            )
+        return pairs[theta_idx]
+
+    def get_component_spec(
+        self, key: MultivarComponentKey
+    ) -> MultivarComponentSpec:
+        return self.component_specs[key]
+
+    def iter_component_specs(self) -> List[MultivarComponentSpec]:
+        return [self.component_specs[key] for key in self.component_order]
+
+    def theta_index(self, j: int, l: int) -> int:
+        if not (0 <= l < j < self.p):
+            raise ValueError(
+                f"Invalid theta pair ({j}, {l}) for p={self.p}; expected 0 <= l < j < p."
+            )
+        return j * (j - 1) // 2 + l
+
+    def get_theta_model(self, part: str, j: int, l: int) -> LogPSplines:
+        """Return the model for theta_{j,l} real/imag part."""
+        key = self.theta_key(part, j, l)
+        return self.component_specs[key].model
+
+    @property
     def total_components(self) -> int:
         """Total number of P-spline components."""
-        return self.p + (2 if self.n_theta > 0 else 0)
+        return self.p + (2 * self.n_theta if self.n_theta > 0 else 0)
 
     def get_all_bases_and_penalties(
         self,
@@ -372,20 +570,10 @@ class MultivariateLogPSplines:
         """
         all_bases = []
         all_penalties = []
-
-        # Add diagonal components
-        for model in self.diagonal_models:
+        for key in self.component_order:
+            model = self.component_specs[key].model
             all_bases.append(model.basis)
             all_penalties.append(model.penalty_matrix)
-
-        # Add off-diagonal components if they exist
-        if self.offdiag_re_model is not None:
-            all_bases.append(self.offdiag_re_model.basis)
-            all_penalties.append(self.offdiag_re_model.penalty_matrix)
-
-        if self.offdiag_im_model is not None:
-            all_bases.append(self.offdiag_im_model.basis)
-            all_penalties.append(self.offdiag_im_model.penalty_matrix)
 
         return all_bases, all_penalties
 
@@ -422,7 +610,8 @@ class MultivariateLogPSplines:
         design_weights: dict[str, jnp.ndarray] = {}
 
         # Diagonal components: log δ_j(f)² = 2 log L_{jj}(f)
-        for j, diag_model in enumerate(self.diagonal_models):
+        for j in range(self.p):
+            diag_model = self.component_specs[self.delta_key(j)].model
             log_delta_sq = 2.0 * np.log(np.abs(L[:, j, j]))  # (N,)
             design_weights[f"delta_{j}"] = init_weights(
                 jnp.asarray(log_delta_sq), diag_model
@@ -430,7 +619,7 @@ class MultivariateLogPSplines:
 
         # Off-diagonal components: θ_{j,l} = −T_{j,l} where T = D^{1/2} L^{-1}
         # Unit lower-triangular T^{-1} = L / diag(L), so T = (T^{-1})^{-1}.
-        if self.offdiag_re_model is not None:
+        if self.n_theta > 0:
             # Build unit lower-triangular T^{-1}[f] = L[f] / L[f,l,l] per column l
             diag_L = np.abs(
                 L[..., np.arange(self.p), np.arange(self.p)]
@@ -455,11 +644,13 @@ class MultivariateLogPSplines:
                 for l in range(j):
                     # theta_{j,l} = -T_{j,l} (complex)
                     theta_jl = -T[:, j, l]  # (N,) complex
+                    re_model = self.get_theta_model("re", j, l)
+                    im_model = self.get_theta_model("im", j, l)
                     design_weights[f"theta_re_{j}_{l}"] = init_weights(
-                        jnp.asarray(theta_jl.real), self.offdiag_re_model
+                        jnp.asarray(theta_jl.real), re_model
                     )
                     design_weights[f"theta_im_{j}_{l}"] = init_weights(
-                        jnp.asarray(theta_jl.imag), self.offdiag_im_model
+                        jnp.asarray(theta_jl.imag), im_model
                     )
 
         return design_weights

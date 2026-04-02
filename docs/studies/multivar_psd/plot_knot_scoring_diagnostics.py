@@ -66,7 +66,6 @@ SIGMA = np.array(
 )
 
 METHODS = ("spectral", "cholesky")
-COMPONENTS = ("diag_0", "diag_1", "diag_2", "offdiag_shared")
 
 
 @dataclass(frozen=True)
@@ -172,7 +171,8 @@ def _summarise_score(
     n = dist.size
     top_bins = max(1, int(np.ceil(0.10 * n)))
     top10_mass = float(np.sum(np.sort(dist)[-top_bins:]))
-    entropy = -float(np.sum(np.where(dist > 0.0, dist * np.log(dist), 0.0)))
+    positive = dist > 0.0
+    entropy = -float(np.sum(dist[positive] * np.log(dist[positive])))
     effective_bins = float(np.exp(entropy))
     effective_fraction = effective_bins / float(max(n, 1))
     return ScoreSummary(
@@ -216,12 +216,13 @@ def _write_csv(path: str, fieldnames: list[str], rows: Iterable[dict]) -> None:
 def _plot_score_panels(
     *,
     freq: np.ndarray,
+    components: list[str],
     scores_by_method: dict[str, dict[str, np.ndarray]],
     knots_hz_by_method: dict[str, dict[str, np.ndarray]],
     summary_by_method: dict[str, dict[str, ScoreSummary]],
     out_path: str,
 ) -> None:
-    n_rows = len(COMPONENTS)
+    n_rows = len(components)
     fig, axes = plt.subplots(
         nrows=n_rows,
         ncols=2,
@@ -232,7 +233,7 @@ def _plot_score_panels(
     method_colors = {"spectral": "#1f77b4", "cholesky": "#ff7f0e"}
 
     for col, method in enumerate(METHODS):
-        for row, component in enumerate(COMPONENTS):
+        for row, component in enumerate(components):
             ax = axes[row, col]
             score = scores_by_method[method][component]
             score_norm = _as_distribution(score)
@@ -265,7 +266,8 @@ def _plot_cholesky_component_panels(
     log_delta_sq: np.ndarray,
     theta: np.ndarray,
     diag_knots_hz: dict[str, dict[str, np.ndarray]],
-    offdiag_knots_hz: dict[str, np.ndarray],
+    offdiag_re_knots_hz: dict[str, dict[tuple[int, int], np.ndarray]],
+    offdiag_im_knots_hz: dict[str, dict[tuple[int, int], np.ndarray]],
     out_path: str,
 ) -> None:
     p = log_delta_sq.shape[1]
@@ -324,17 +326,67 @@ def _plot_cholesky_component_panels(
         ax_right = axes[row, 1]
         if row < len(pairs):
             i, j = pairs[row]
-            theta_abs = np.abs(theta[:, i, j])
-            ax_right.plot(freq, theta_abs, color="black", lw=1.1)
+            theta_re_abs = np.abs(np.real(theta[:, i, j]))
+            theta_im_abs = np.abs(np.imag(theta[:, i, j]))
+            ax_right.plot(freq, theta_re_abs, color="black", lw=1.1)
+            ax_right.plot(freq, theta_im_abs, color="0.35", lw=1.0, ls="--")
             for method in METHODS:
-                for knot in offdiag_knots_hz[method]:
+                for knot in offdiag_re_knots_hz[method][(i, j)]:
                     ax_right.axvline(
                         knot,
                         color=method_colors[method],
                         lw=0.8,
                         alpha=0.24,
                     )
-            ax_right.set_title(f"|theta[{i},{j}]| with shared offdiag knots")
+                for knot in offdiag_im_knots_hz[method][(i, j)]:
+                    ax_right.axvline(
+                        knot,
+                        color=method_colors[method],
+                        lw=0.8,
+                        alpha=0.24,
+                        ls="--",
+                    )
+            ax_right.set_title(
+                f"theta[{i},{j}] magnitudes with Re/Im knot overlays"
+            )
+            if row == 0:
+                handles = [
+                    plt.Line2D([0], [0], color="black", lw=1.3, label="|Re theta|"),
+                    plt.Line2D(
+                        [0], [0], color="0.35", lw=1.2, ls="--", label="|Im theta|"
+                    ),
+                    plt.Line2D(
+                        [0],
+                        [0],
+                        color=method_colors["spectral"],
+                        lw=1.2,
+                        label="spectral knots (Re)",
+                    ),
+                    plt.Line2D(
+                        [0],
+                        [0],
+                        color=method_colors["spectral"],
+                        lw=1.2,
+                        ls="--",
+                        label="spectral knots (Im)",
+                    ),
+                    plt.Line2D(
+                        [0],
+                        [0],
+                        color=method_colors["cholesky"],
+                        lw=1.2,
+                        label="cholesky knots (Re)",
+                    ),
+                    plt.Line2D(
+                        [0],
+                        [0],
+                        color=method_colors["cholesky"],
+                        lw=1.2,
+                        ls="--",
+                        label="cholesky knots (Im)",
+                    ),
+                ]
+                ax_right.legend(handles=handles, loc="upper right", fontsize=8)
             ax_right.grid(alpha=0.15)
             ax_right.set_ylabel("Magnitude")
         else:
@@ -359,7 +411,8 @@ def _plot_s_matrix_knots_grid(
     freq: np.ndarray,
     s_matrix: np.ndarray,
     diag_knots_hz: dict[str, dict[str, np.ndarray]],
-    offdiag_knots_hz: dict[str, np.ndarray],
+    offdiag_re_knots_hz: dict[str, dict[tuple[int, int], np.ndarray]],
+    offdiag_im_knots_hz: dict[str, dict[tuple[int, int], np.ndarray]],
     out_path: str,
 ) -> None:
     """Plot S(f) in a 3x3 panel layout with spectral/cholesky knot overlays."""
@@ -395,8 +448,12 @@ def _plot_s_matrix_knots_grid(
                             alpha=0.25,
                         )
             else:
+                pair = (i, j) if i > j else (j, i)
                 for method in METHODS:
-                    for knot in offdiag_knots_hz[method]:
+                    knot_map = (
+                        offdiag_re_knots_hz if i < j else offdiag_im_knots_hz
+                    )
+                    for knot in knot_map[method][pair]:
                         ax.axvline(
                             knot,
                             color=method_colors[method],
@@ -656,7 +713,7 @@ def run_comparison(
     summary_by_method: dict[str, dict[str, ScoreSummary]] = {}
 
     for method in METHODS:
-        diag_scores, offdiag_score = multivar_psd_knot_scores(
+        diag_scores, offdiag_re_scores, offdiag_im_scores = multivar_psd_knot_scores(
             y_np,
             nb,
             p,
@@ -664,6 +721,17 @@ def run_comparison(
             u_re=u_re if method == "spectral" else None,
             u_im=u_im if method == "spectral" else None,
         )
+        theta_pairs = [(j, l) for j in range(1, p) for l in range(j)]
+        if len(offdiag_re_scores) != len(theta_pairs):
+            raise ValueError(
+                "Expected "
+                + f"{len(theta_pairs)} offdiag re scores, got {len(offdiag_re_scores)}."
+            )
+        if len(offdiag_im_scores) != len(theta_pairs):
+            raise ValueError(
+                "Expected "
+                + f"{len(theta_pairs)} offdiag im scores, got {len(offdiag_im_scores)}."
+            )
         method_scores: dict[str, np.ndarray] = {}
         method_knots_norm: dict[str, np.ndarray] = {}
         method_knots_hz: dict[str, np.ndarray] = {}
@@ -684,19 +752,39 @@ def run_comparison(
                 method, component, score
             )
 
-        offdiag_component = "offdiag_shared"
-        offdiag_score = np.asarray(offdiag_score, dtype=np.float64)
-        offdiag_knots_norm, offdiag_knots_hz = _compute_density_knots(
-            freq=freq,
-            score=offdiag_score,
-            n_knots=n_knots,
-        )
-        method_scores[offdiag_component] = offdiag_score
-        method_knots_norm[offdiag_component] = offdiag_knots_norm
-        method_knots_hz[offdiag_component] = offdiag_knots_hz
-        method_summary[offdiag_component] = _summarise_score(
-            method, offdiag_component, offdiag_score
-        )
+        for theta_idx, pair in enumerate(theta_pairs):
+            j, l = pair
+            component_re = f"theta_re_{j}_{l}"
+            offdiag_re_score = np.asarray(
+                offdiag_re_scores[theta_idx], dtype=np.float64
+            )
+            offdiag_re_knots_norm, offdiag_re_knots_hz = _compute_density_knots(
+                freq=freq,
+                score=offdiag_re_score,
+                n_knots=n_knots,
+            )
+            method_scores[component_re] = offdiag_re_score
+            method_knots_norm[component_re] = offdiag_re_knots_norm
+            method_knots_hz[component_re] = offdiag_re_knots_hz
+            method_summary[component_re] = _summarise_score(
+                method, component_re, offdiag_re_score
+            )
+
+            component_im = f"theta_im_{j}_{l}"
+            offdiag_im_score = np.asarray(
+                offdiag_im_scores[theta_idx], dtype=np.float64
+            )
+            offdiag_im_knots_norm, offdiag_im_knots_hz = _compute_density_knots(
+                freq=freq,
+                score=offdiag_im_score,
+                n_knots=n_knots,
+            )
+            method_scores[component_im] = offdiag_im_score
+            method_knots_norm[component_im] = offdiag_im_knots_norm
+            method_knots_hz[component_im] = offdiag_im_knots_hz
+            method_summary[component_im] = _summarise_score(
+                method, component_im, offdiag_im_score
+            )
 
         scores_by_method[method] = method_scores
         knots_norm_by_method[method] = method_knots_norm
@@ -704,8 +792,14 @@ def run_comparison(
         summary_by_method[method] = method_summary
 
     score_plot_path = os.path.join(outdir, "knot_score_panels.png")
+    components = [f"diag_{i}" for i in range(p)] + [
+        f"theta_re_{j}_{l}" for j in range(1, p) for l in range(j)
+    ] + [
+        f"theta_im_{j}_{l}" for j in range(1, p) for l in range(j)
+    ]
     _plot_score_panels(
         freq=freq,
+        components=components,
         scores_by_method=scores_by_method,
         knots_hz_by_method=knots_hz_by_method,
         summary_by_method=summary_by_method,
@@ -724,8 +818,20 @@ def run_comparison(
             }
             for method in METHODS
         },
-        offdiag_knots_hz={
-            method: knots_hz_by_method[method]["offdiag_shared"]
+        offdiag_re_knots_hz={
+            method: {
+                (j, l): knots_hz_by_method[method][f"theta_re_{j}_{l}"]
+                for j in range(1, p)
+                for l in range(j)
+            }
+            for method in METHODS
+        },
+        offdiag_im_knots_hz={
+            method: {
+                (j, l): knots_hz_by_method[method][f"theta_im_{j}_{l}"]
+                for j in range(1, p)
+                for l in range(j)
+            }
             for method in METHODS
         },
         out_path=cholesky_plot_path,
@@ -742,8 +848,20 @@ def run_comparison(
             }
             for method in METHODS
         },
-        offdiag_knots_hz={
-            method: knots_hz_by_method[method]["offdiag_shared"]
+        offdiag_re_knots_hz={
+            method: {
+                (j, l): knots_hz_by_method[method][f"theta_re_{j}_{l}"]
+                for j in range(1, p)
+                for l in range(j)
+            }
+            for method in METHODS
+        },
+        offdiag_im_knots_hz={
+            method: {
+                (j, l): knots_hz_by_method[method][f"theta_im_{j}_{l}"]
+                for j in range(1, p)
+                for l in range(j)
+            }
             for method in METHODS
         },
         out_path=s_matrix_plot_path,
@@ -751,7 +869,7 @@ def run_comparison(
 
     knot_rows: list[dict[str, object]] = []
     for method in METHODS:
-        for component in COMPONENTS:
+        for component in components:
             knots_norm = knots_norm_by_method[method][component]
             knots_hz = knots_hz_by_method[method][component]
             for knot_idx, (k_norm, k_hz) in enumerate(
@@ -781,7 +899,7 @@ def run_comparison(
 
     summary_rows: list[dict[str, object]] = []
     for method in METHODS:
-        for component in COMPONENTS:
+        for component in components:
             metric = summary_by_method[method][component]
             summary_rows.append(
                 {

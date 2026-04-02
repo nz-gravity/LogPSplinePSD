@@ -44,8 +44,8 @@ def test_get_panel_knots_from_idata_multivar_dataset():
                 ["diag_1_knots_dim"],
                 np.array([0.0, 0.6, 1.0], dtype=np.float64),
             ),
-            "offdiag_re_knots": (
-                ["offdiag_re_knots_dim"],
+            "theta_re_1_0_knots": (
+                ["theta_re_1_0_knots_dim"],
                 np.array([0.0, 0.4, 1.0], dtype=np.float64),
             ),
         }
@@ -58,7 +58,43 @@ def test_get_panel_knots_from_idata_multivar_dataset():
     assert set(diag_knots.keys()) == {0, 1}
     np.testing.assert_allclose(diag_knots[0], np.array([0.0, 0.2, 1.0]))
     np.testing.assert_allclose(diag_knots[1], np.array([0.0, 0.6, 1.0]))
-    np.testing.assert_allclose(offdiag_knots, np.array([0.0, 0.4, 1.0]))
+    assert isinstance(offdiag_knots, dict)
+    np.testing.assert_allclose(
+        offdiag_knots[(1, 0)], np.array([0.0, 0.4, 1.0])
+    )
+    assert fallback_knots is None
+
+
+def test_get_panel_knots_from_idata_multivar_pair_specific_knots():
+    spline_dataset = xr.Dataset(
+        {
+            "diag_0_knots": (
+                ["diag_0_knots_dim"],
+                np.array([0.0, 0.2, 1.0], dtype=np.float64),
+            ),
+            "theta_re_1_0_knots": (
+                ["theta_re_1_0_knots_dim"],
+                np.array([0.0, 0.3, 1.0], dtype=np.float64),
+            ),
+            "theta_im_2_0_knots": (
+                ["theta_im_2_0_knots_dim"],
+                np.array([0.0, 0.6, 1.0], dtype=np.float64),
+            ),
+        }
+    )
+    fake_idata = {"spline_model": spline_dataset}
+
+    diag_knots, offdiag_knots, fallback_knots = _get_panel_knots_from_idata(
+        fake_idata
+    )
+    assert set(diag_knots.keys()) == {0}
+    assert isinstance(offdiag_knots, dict)
+    np.testing.assert_allclose(
+        offdiag_knots[(1, 0)], np.array([0.0, 0.3, 1.0])
+    )
+    np.testing.assert_allclose(
+        offdiag_knots[(2, 0)], np.array([0.0, 0.6, 1.0])
+    )
     assert fallback_knots is None
 
 

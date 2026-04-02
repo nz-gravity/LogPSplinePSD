@@ -39,7 +39,7 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "knot_kwargs",
         "fmin",
         "fmax",
-        "freq_excl_bands",
+        "exclude_freq_bands",
         "true_psd",
         "parametric_model",
     }
@@ -86,6 +86,8 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "coarse_grain_config",
         "Nb",
         "wishart_window",
+        "wishart_detrend",
+        "wishart_floor_fraction",
         "welch_nperseg",
         "welch_noverlap",
         "welch_window",

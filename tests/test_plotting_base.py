@@ -120,3 +120,26 @@ def test_plot_psd_matrix_overlays_vi_coherence(tmp_path):
     np.testing.assert_allclose(vi_lines[-1].get_ydata(), vi_coh[1, :, 1, 0])
 
     plt.close(fig)
+
+
+def test_plot_psd_matrix_shades_excluded_bands(tmp_path):
+    freq = np.array([0.1, 0.2, 0.4], dtype=float)
+    real = np.ones((3, freq.size, 2, 2), dtype=float)
+    imag = np.zeros_like(real)
+    coherence = np.full_like(real, 0.2)
+
+    posterior_ds = _make_psd_dataset(freq, real, imag, coherence)
+    idata = DummyIdata(posterior_psd=posterior_ds)
+
+    spec = PSDMatrixPlotSpec(
+        idata=idata,
+        outdir=str(tmp_path),
+        filename="excluded_bands.png",
+        show_coherence=True,
+        excluded_bands=((0.15, 0.25),),
+        save=False,
+    )
+    fig, axes = plot_psd_matrix(spec)
+
+    assert axes[0, 0].patches, "Expected exclusion shading patches."
+    plt.close(fig)

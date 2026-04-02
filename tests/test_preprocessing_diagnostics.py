@@ -85,6 +85,28 @@ def test_save_eigenvalue_separation_plot(outdir):
     assert os.path.getsize(out) > 0
 
 
+def test_save_eigenvalue_separation_plot_with_excluded_bands(outdir):
+    out = f"{outdir}/{OUT}"
+    os.makedirs(out, exist_ok=True)
+    pytest.importorskip("matplotlib")
+
+    freq = np.array([0.1, 0.2, 0.3, 0.4], dtype=float)
+    matrix = np.zeros((freq.size, 2, 2), dtype=np.complex128)
+    matrix[:, 0, 0] = np.array([4.0, 3.0, 2.0, 1.0])
+    matrix[:, 1, 1] = np.array([2.0, 1.5, 1.0, 0.5])
+    diag = eigenvalue_separation_diagnostics(freq=freq, matrix=matrix)
+
+    out = f"{out}/eig_ratios_excluded.png"
+    save_eigenvalue_separation_plot(
+        diag,
+        str(out),
+        warn_threshold=0.8,
+        excluded_bands=((0.15, 0.25), (0.35, 0.38)),
+    )
+    assert os.path.exists(out)
+    assert os.path.getsize(out) > 0
+
+
 def test_save_eigenvalue_separation_plot_with_cholesky_components(outdir):
     out = f"{outdir}/{OUT}"
     os.makedirs(out, exist_ok=True)
@@ -182,7 +204,9 @@ def test_preprocessing_plot_var2_3d_low_and_high_coarse(outdir):
         )
         preproc = _preprocess_data(ts, config=cfg)
 
-        plot_path = f"{case_out}/preprocessing_eigenvalue_ratios.png"
+        plot_path = (
+            f"{case_out}/diagnostics/preprocessing_eigenvalue_ratios.png"
+        )
         assert os.path.exists(plot_path)
         assert os.path.getsize(plot_path) > 0
 
@@ -199,7 +223,7 @@ def test_preprocessing_plot_var2_3d_low_and_high_coarse(outdir):
             )
 
 
-def test_preprocess_univar_freq_excl_bands_apply_before_coarse_grain():
+def test_preprocess_univar_exclude_freq_bands_apply_after_coarse_grain():
     n = 128
     t = np.arange(n, dtype=np.float64)
     y = (
@@ -214,27 +238,30 @@ def test_preprocess_univar_freq_excl_bands_apply_before_coarse_grain():
     cfg = RunMCMCConfig(
         diagnostics=DiagnosticsConfig(verbose=False),
         coarse_grain_config=CoarseGrainConfig(enabled=True, Nh=4, Nc=None),
-        model=ModelConfig(freq_excl_bands=(excl_band,)),
+        model=ModelConfig(exclude_freq_bands=(excl_band,)),
     )
 
     preproc = _preprocess_data(ts, config=cfg)
     processed = preproc.processed_data
 
-    keep = ~((fine.freqs >= excl_band[0]) & (fine.freqs <= excl_band[1]))
-    expected_fine = fine.apply_mask(keep)
     expected_coarse, _ = _coarse_grain_processed_data(
-        expected_fine, cfg.coarse_grain_config, None
+        fine, cfg.coarse_grain_config, None
     )
+    assert expected_coarse is not None
+    keep = ~(
+        (expected_coarse.freqs >= excl_band[0])
+        & (expected_coarse.freqs <= excl_band[1])
+    )
+    expected_processed = expected_coarse.apply_mask(keep)
 
     assert np.all(
         (processed.freqs < excl_band[0]) | (processed.freqs > excl_band[1])
     )
-    assert expected_coarse is not None
-    assert np.allclose(processed.freqs, expected_coarse.freqs)
-    assert np.allclose(processed.power, expected_coarse.power)
+    assert np.allclose(processed.freqs, expected_processed.freqs)
+    assert np.allclose(processed.power, expected_processed.power)
 
 
-def test_preprocess_multivar_freq_excl_bands_remove_likelihood_bins():
+def test_preprocess_multivar_exclude_freq_bands_remove_likelihood_bins():
     n = 128
     t = np.arange(n, dtype=np.float64)
     y = np.column_stack(
@@ -250,7 +277,7 @@ def test_preprocess_multivar_freq_excl_bands_remove_likelihood_bins():
     cfg = RunMCMCConfig(
         Nb=2,
         diagnostics=DiagnosticsConfig(verbose=False),
-        model=ModelConfig(freq_excl_bands=(excl_band,)),
+        model=ModelConfig(exclude_freq_bands=(excl_band,)),
     )
 
     preproc = _preprocess_data(ts, config=cfg)

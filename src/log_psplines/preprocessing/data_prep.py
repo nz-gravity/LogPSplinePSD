@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 import numpy as np
 
@@ -29,6 +29,85 @@ def _normalize_coarse_grain_config(
     if isinstance(coarse_grain_config, dict):
         return CoarseGrainConfig(**coarse_grain_config)
     return coarse_grain_config
+
+
+def _normalize_excluded_frequency_bands(
+    bands: Sequence[tuple[float, float]] | None,
+) -> tuple[tuple[float, float], ...]:
+    """Return sorted, merged excluded frequency bands."""
+    if bands is None:
+        return ()
+
+    cleaned: list[tuple[float, float]] = []
+    for band in bands:
+        if len(band) != 2:
+            raise ValueError(
+                "Each excluded frequency band must be a length-2 tuple."
+            )
+        low = float(band[0])
+        high = float(band[1])
+        if not np.isfinite(low) or not np.isfinite(high):
+            raise ValueError("Excluded frequency bands must be finite.")
+        if high < low:
+            low, high = high, low
+        cleaned.append((low, high))
+
+    if not cleaned:
+        return ()
+
+    cleaned.sort(key=lambda item: item[0])
+    merged: list[tuple[float, float]] = [cleaned[0]]
+    for low, high in cleaned[1:]:
+        prev_low, prev_high = merged[-1]
+        if low <= prev_high:
+            merged[-1] = (prev_low, max(prev_high, high))
+        else:
+            merged.append((low, high))
+    return tuple(merged)
+
+
+def _build_frequency_exclusion_mask(
+    freq: np.ndarray,
+    bands: Sequence[tuple[float, float]],
+) -> np.ndarray:
+    """Return a boolean mask retaining frequencies outside ``bands``."""
+    freq = np.asarray(freq, dtype=np.float64)
+    mask = np.ones(freq.shape, dtype=bool)
+    for low, high in bands:
+        mask &= ~((freq >= float(low)) & (freq <= float(high)))
+    return mask
+
+
+def _filter_empirical_psd(
+    empirical: EmpiricalPSD,
+    bands: Sequence[tuple[float, float]],
+) -> EmpiricalPSD:
+    """Return an EmpiricalPSD with excluded frequency bands removed."""
+    if len(bands) == 0:
+        return empirical
+    mask = _build_frequency_exclusion_mask(empirical.freq, bands)
+    if not np.any(mask):
+        raise ValueError(
+            "Frequency masking removed all empirical overlay bins."
+        )
+    return EmpiricalPSD(
+        freq=np.asarray(empirical.freq)[mask],
+        psd=np.asarray(empirical.psd)[mask],
+        coherence=np.asarray(empirical.coherence)[mask],
+        channels=empirical.channels,
+    )
+
+
+def _apply_multivar_frequency_exclusion(
+    processed_data: Optional[Union[Periodogram, MultivarFFT]],
+    bands: Sequence[tuple[float, float]],
+) -> Optional[Union[Periodogram, MultivarFFT]]:
+    """Apply post-coarse excluded bands to multivariate processed data."""
+    if processed_data is None or not isinstance(processed_data, MultivarFFT):
+        return processed_data
+    if len(bands) == 0:
+        return processed_data
+    return processed_data.exclude_frequency_bands(bands)
 
 
 def _coarse_grain_processed_data(
@@ -133,6 +212,8 @@ def _prepare_processed_data(
             fmin=config.model.fmin,
             fmax=config.model.fmax,
             window=config.wishart_window,
+            detrend=config.wishart_detrend,
+            wishart_floor_fraction=config.wishart_floor_fraction,
         )
 
     if config.diagnostics.verbose:
@@ -186,6 +267,12 @@ def _build_welch_overlay(
             psd=np.asarray(welch_emp.psd)[keep],
             coherence=np.asarray(welch_emp.coherence)[keep],
             channels=welch_emp.channels,
+        )
+        overlay = _filter_empirical_psd(
+            overlay,
+            _normalize_excluded_frequency_bands(
+                config.model.exclude_freq_bands
+            ),
         )
         return (
             [overlay],

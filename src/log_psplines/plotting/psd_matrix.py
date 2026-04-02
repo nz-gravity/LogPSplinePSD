@@ -82,8 +82,12 @@ def _get_panel_knots_from_idata(
         for key in dataset.data_vars:
             match = re.fullmatch(r"diag_(\d+)_knots", str(key))
             if match is None:
-                match_re = re.fullmatch(r"theta_re_(\d+)_(\d+)_knots", str(key))
-                match_im = re.fullmatch(r"theta_im_(\d+)_(\d+)_knots", str(key))
+                match_re = re.fullmatch(
+                    r"theta_re_(\d+)_(\d+)_knots", str(key)
+                )
+                match_im = re.fullmatch(
+                    r"theta_im_(\d+)_(\d+)_knots", str(key)
+                )
                 if match_re is not None:
                     j = int(match_re.group(1))
                     l = int(match_re.group(2))
@@ -483,6 +487,7 @@ class PSDMatrixPlotSpec:
     prior_label: str = "Prior"
     prior_alpha: float = 0.15
     freq_range: Optional[tuple[float, float]] = None
+    excluded_bands: tuple[tuple[float, float], ...] = ()
     psd_scale: (
         np.ndarray | float | Callable[[np.ndarray], np.ndarray] | None
     ) = None
@@ -690,6 +695,25 @@ def _plot_empirical_overlays(
         ax.plot(extra_emp.freq, series_getter(extra_emp), **kw)
 
 
+def _shade_excluded_bands(
+    ax: plt.Axes,
+    excluded_bands: tuple[tuple[float, float], ...],
+    *,
+    add_label: bool = False,
+) -> None:
+    for idx, (low, high) in enumerate(excluded_bands):
+        left = min(float(low), float(high))
+        right = max(float(low), float(high))
+        ax.axvspan(
+            left,
+            right,
+            color="#d8b365",
+            alpha=0.24,
+            zorder=-20,
+            label="Excluded band" if add_label and idx == 0 else None,
+        )
+
+
 def _render_diag_panel(
     ax: plt.Axes,
     i: int,
@@ -709,6 +733,9 @@ def _render_diag_panel(
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
     q05, q50, q95 = ci_dict["psd"][(i, i)]
+    _shade_excluded_bands(
+        ax, spec.excluded_bands, add_label=(i == 0 and j == 0)
+    )
     # Prior band first (background layer)
     if prior_ci_dict and (i, i) in prior_ci_dict.get("psd", {}):
         pr_q05, pr_q50, pr_q95 = prior_ci_dict["psd"][(i, i)]
@@ -795,6 +822,7 @@ def _render_coherence_panel(
     if "coh" not in ci_dict or (i, j) not in ci_dict["coh"]:
         raise ValueError("ci_dict missing coherence (i,j)={i,j}")
     q05, q50, q95 = ci_dict["coh"][(i, j)]
+    _shade_excluded_bands(ax, spec.excluded_bands)
     # Prior coherence band (if available)
     if (
         prior_ci_dict
@@ -884,6 +912,7 @@ def _render_magnitude_panel(
             f"ci_dict missing |CSD| quantiles for (i,j)=({i},{j})"
         )
     q05, q50, q95 = ci_dict["mag"][(i, j)]
+    _shade_excluded_bands(ax, spec.excluded_bands)
     if (
         prior_ci_dict
         and "mag" in prior_ci_dict
@@ -964,6 +993,7 @@ def _render_re_panel(
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
     q05, q50, q95 = ci_dict["re"][(i, j)]
+    _shade_excluded_bands(ax, spec.excluded_bands)
     if (
         prior_ci_dict
         and "re" in prior_ci_dict
@@ -1044,6 +1074,7 @@ def _render_im_panel(
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
     q05, q50, q95 = ci_dict["im"][(i, j)]
+    _shade_excluded_bands(ax, spec.excluded_bands)
     if (
         prior_ci_dict
         and "im" in prior_ci_dict

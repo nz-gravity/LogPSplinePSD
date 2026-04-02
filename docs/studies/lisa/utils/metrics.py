@@ -86,12 +86,24 @@ def _compute_ci_width_metrics(idata) -> dict[str, float]:
     return metrics
 
 
+def _build_freq_inclusion_mask(
+    freq: np.ndarray,
+    excluded_bands: tuple[tuple[float, float], ...],
+) -> np.ndarray:
+    """Return a boolean mask of frequencies NOT in any excluded band."""
+    mask = np.ones(len(freq), dtype=bool)
+    for lo, hi in excluded_bands:
+        mask &= ~((freq >= lo) & (freq <= hi))
+    return mask
+
+
 def _extract_run_metrics(
     idata,
     *,
     seed: int,
     freq_true: np.ndarray,
     S_true: np.ndarray,
+    excluded_bands: tuple[tuple[float, float], ...] = (),
 ) -> dict[str, float | int | str]:
     """Extract compact scalar metrics for downstream aggregation."""
     attrs = idata.attrs
@@ -153,6 +165,39 @@ def _extract_run_metrics(
                 "coverage_coherence",
             ):
                 metrics[key] = float("nan")
+
+        # Null-excluded metrics: recompute on the non-null frequency subset.
+        if excluded_bands:
+            inclusion = _build_freq_inclusion_mask(freq_plot, excluded_bands)
+            n_excluded = int(np.sum(~inclusion))
+            metrics["n_freq_excluded"] = n_excluded
+            if np.any(inclusion):
+                idx = np.where(inclusion)[0]
+                psd_group_masked = psd_group.isel(freq=idx)
+                true_psd_masked = true_psd_phys[inclusion]
+                try:
+                    acc_m = psd_compare._handle_multivariate(
+                        psd_group_masked, true_psd_masked
+                    )
+                    metrics["riae_matrix_masked"] = float(
+                        acc_m.get("riae_matrix", np.nan)
+                    )
+                    metrics["riae_diag_mean_masked"] = float(
+                        acc_m.get("riae_diag_mean", np.nan)
+                    )
+                    metrics["riae_offdiag_masked"] = float(
+                        acc_m.get("riae_offdiag", np.nan)
+                    )
+                    metrics["coherence_riae_masked"] = float(
+                        acc_m.get("coherence_riae", np.nan)
+                    )
+                    metrics["coverage_masked"] = float(
+                        acc_m.get("coverage", np.nan)
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Could not compute masked PSD accuracy: {exc}"
+                    )
 
     # CI width metrics
     metrics.update(_compute_ci_width_metrics(idata))
@@ -226,12 +271,17 @@ def extract_and_save_metrics(
     freq_true: np.ndarray,
     S_true: np.ndarray,
     outdir: str,
+    excluded_bands: tuple[tuple[float, float], ...] = (),
 ) -> dict[str, float | int | str]:
     """Extract all metrics, save JSON/CSV/NPZ, return metrics dict."""
     os.makedirs(outdir, exist_ok=True)
 
     metrics = _extract_run_metrics(
-        idata, seed=seed, freq_true=freq_true, S_true=S_true
+        idata,
+        seed=seed,
+        freq_true=freq_true,
+        S_true=S_true,
+        excluded_bands=excluded_bands,
     )
 
     # Save JSON

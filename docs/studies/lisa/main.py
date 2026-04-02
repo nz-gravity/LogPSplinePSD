@@ -44,6 +44,9 @@ ensure_lisatools_backends()
 import jax  # noqa: E402
 
 from log_psplines.logger import logger, set_level  # noqa: E402
+from log_psplines.preprocessing.coarse_grain import (  # noqa: E402
+    CoarseGrainConfig,
+)
 
 set_level("INFO")
 logger.info(f"JAX devices: {jax.devices()}")
@@ -51,8 +54,13 @@ logger.info(f"JAX devices: {jax.devices()}")
 from utils.data import generate_lisa_data  # noqa: E402
 from utils.inference import run_lisa_mcmc, save_inference_data  # noqa: E402
 from utils.metrics import extract_and_save_metrics  # noqa: E402
-from utils.plotting import make_psd_plot  # noqa: E402
+from utils.plotting import (  # noqa: E402
+    make_preprocessing_psd_plot,
+    make_psd_plot,
+)
 from utils.preprocessing import (  # noqa: E402
+    build_transfer_null_exclusion_bands,
+    compute_analysis_frequencies,
     compute_Nl_analysis,
     setup_coarse_grain,
 )
@@ -80,6 +88,7 @@ def _build_run_slug(args) -> str:
         f"_d{args.diff_order}"
         f"_km{args.knot_method}"
         f"_ww{window_slug(wishart_ws)}"
+        f"_wd{args.wishart_detrend}"
         f"_ew{window_slug(welch_ws)}"
         f"_nc{args.coarse_Nc}"
         f"_bd{args.block_days:g}d"
@@ -120,6 +129,18 @@ def parse_args() -> argparse.Namespace:
         default=7.0,
         help="Block duration in days (default: 7.0 → Nb=52 for 365 days).",
     )
+    data_g.add_argument(
+        "--absolute-freq-units",
+        action="store_true",
+        default=True,
+        help="Scale XYZ time series into absolute-frequency units so PSD diagnostics live near 1e-9 instead of 1e-37.",
+    )
+    data_g.add_argument(
+        "--no-absolute-freq-units",
+        action="store_false",
+        dest="absolute_freq_units",
+        help="Keep native fractional-frequency-like lisatools units.",
+    )
 
     # ── Spline / model ────────────────────────────────────────────────────────
     model_g = parser.add_argument_group("model")
@@ -146,6 +167,18 @@ def parse_args() -> argparse.Namespace:
         choices=(1, 2),
         default=2,
         help="P-spline difference penalty order (default: 2).",
+    )
+    model_g.add_argument(
+        "--fmin",
+        type=float,
+        default=1e-4,
+        help="Lower analysis frequency in Hz (default: 1e-4).",
+    )
+    model_g.add_argument(
+        "--fmax",
+        type=float,
+        default=1e-1,
+        help="Upper analysis frequency in Hz (default: 1e-1).",
     )
     model_g.add_argument(
         "--coarse-Nc",
@@ -189,10 +222,23 @@ def parse_args() -> argparse.Namespace:
         help="Taper applied to each block before Wishart likelihood FFT (default: none).",
     )
     win_g.add_argument(
+        "--wishart-detrend",
+        type=str,
+        choices=("none", "constant", "linear"),
+        default="constant",
+        help="Per-block detrending before the Wishart FFT (default: constant).",
+    )
+    win_g.add_argument(
         "--wishart-tukey-alpha",
         type=float,
         default=0.1,
         help="Tukey alpha for --wishart-window tukey (default: 0.1).",
+    )
+    win_g.add_argument(
+        "--wishart-floor-fraction",
+        type=float,
+        default=None,
+        help="Floor Wishart eigenvalues at this fraction of the median trace.",
     )
     win_g.add_argument(
         "--welch-window",
@@ -262,6 +308,57 @@ def parse_args() -> argparse.Namespace:
         default=500_000,
         help="VI optimization steps (default: 500000).",
     )
+    vi_g.add_argument(
+        "--vi-guide",
+        type=str,
+        default="diag",
+        help="VI guide spec (default: diag).",
+    )
+    vi_g.add_argument(
+        "--vi-posterior-draws",
+        type=int,
+        default=1024,
+        help="Posterior draws used for VI diagnostics/init (default: 1024).",
+    )
+    vi_g.add_argument(
+        "--vi-coarse-Nc",
+        type=int,
+        default=0,
+        help="Explicit coarse VI grid size Nc; 0 disables explicit coarse VI config.",
+    )
+    vi_g.add_argument(
+        "--auto-coarse-vi",
+        action="store_true",
+        default=False,
+        help="Enable coarse-to-fine VI warm start for large frequency grids.",
+    )
+    vi_g.add_argument(
+        "--auto-coarse-vi-target-nfreq",
+        type=int,
+        default=192,
+        help="Target frequency count for auto coarse VI (default: 192).",
+    )
+
+    # ── Transfer-null excision ───────────────────────────────────────────────
+    excise_g = parser.add_argument_group("transfer-null excision")
+    excise_g.add_argument(
+        "--exclude-transfer-nulls",
+        action="store_true",
+        default=False,
+        help="Exclude small frequency bands around deterministic LISA transfer nulls.",
+    )
+    excise_g.add_argument(
+        "--exclude-bins-per-side",
+        type=int,
+        default=1,
+        help="Frequency bins to exclude on each side of each transfer null (default: 1).",
+    )
+    excise_g.add_argument(
+        "--exclude-half-width",
+        type=float,
+        default=None,
+        help="Explicit half-width for each excluded null band in Hz (default: infer from retained grid).",
+    )
 
     # ── Design prior ──────────────────────────────────────────────────────────
     prior_g = parser.add_argument_group("prior")
@@ -311,13 +408,20 @@ def main() -> None:
         f"Config: duration={args.duration_days}d, K={args.K}, "
         f"knot_method={args.knot_method}, diff_order={args.diff_order}, "
         f"block_days={args.block_days}, coarse_Nc={args.coarse_Nc}, "
+        f"fmin={args.fmin}, fmax={args.fmax}, "
+        f"absolute_freq_units={args.absolute_freq_units}, "
         f"wishart_window={args.wishart_window}, "
+        f"wishart_detrend={args.wishart_detrend}, "
+        f"wishart_floor_fraction={args.wishart_floor_fraction}, "
         f"vi={'on' if args.vi else 'off'}, tau={args.tau}"
     )
 
     # Resolve window specs
     wishart_ws = window_spec(
         args.wishart_window, tukey_alpha=args.wishart_tukey_alpha
+    )
+    wishart_detrend = (
+        False if args.wishart_detrend == "none" else args.wishart_detrend
     )
     welch_ws = window_spec(
         args.welch_window, tukey_alpha=args.welch_tukey_alpha
@@ -328,31 +432,73 @@ def main() -> None:
         seed=args.seed,
         duration_days=args.duration_days,
         block_days=args.block_days,
+        fmin_generate=min(args.fmin, 1e-5),
+        fmax_generate=max(args.fmax, 1e-1),
+        absolute_freq_units=args.absolute_freq_units,
     )
-
     # 2. Setup coarse graining
-    Nl = compute_Nl_analysis(Lb, dt)
+    Nl = compute_Nl_analysis(Lb, dt, fmin=args.fmin, fmax=args.fmax)
     coarse_cfg = setup_coarse_grain(Nl, args.coarse_Nc)
+    coarse_vi_cfg = None
+    if args.vi_coarse_Nc > 0:
+        coarse_vi_cfg = CoarseGrainConfig(enabled=True, Nc=args.vi_coarse_Nc)
 
-    # 2b. Parse null-band excision
+    exclude_freq_bands: tuple[tuple[float, float], ...] = ()
+    if args.exclude_transfer_nulls:
+        retained_freq = compute_analysis_frequencies(
+            Lb,
+            dt,
+            fmin=args.fmin,
+            fmax=args.fmax,
+            coarse_cfg=coarse_cfg,
+        )
+        exclude_freq_bands = build_transfer_null_exclusion_bands(
+            retained_freq,
+            bins_per_side=args.exclude_bins_per_side,
+            half_width=args.exclude_half_width,
+            fmin=args.fmin,
+            fmax=args.fmax,
+        )
+        logger.info(
+            f"Transfer-null excision enabled: {len(exclude_freq_bands)} bands."
+        )
+
+    try:
+        make_preprocessing_psd_plot(
+            y_full=ts.y,
+            fs=1.0 / dt,
+            Lb=Lb,
+            freq_true=freq_true,
+            S_true=S_true,
+            outdir=seed_dir,
+            welch_window=welch_ws,
+            fmin=args.fmin,
+            fmax=args.fmax,
+            excluded_bands=exclude_freq_bands,
+        )
+    except Exception as exc:
+        logger.warning(f"Preprocessing PSD plot generation failed: {exc}")
+
+    # 2b. Parse explicit null-band excision and append to excluded bands
     _LISA_NULLS_DEFAULT = ((0.030, 0.001), (0.060, 0.001), (0.090, 0.001))
     if args.null_excision is None:
-        freq_excl_bands = ()
+        null_excision_bands: tuple[tuple[float, float], ...] = ()
     elif len(args.null_excision) == 0:
         # --null-excision with no values → use standard LISA nulls
-        freq_excl_bands = tuple(
+        null_excision_bands = tuple(
             (c - hw, c + hw) for c, hw in _LISA_NULLS_DEFAULT
         )
     else:
-        freq_excl_bands = tuple(
+        null_excision_bands = tuple(
             (
                 float(p.split(":")[0]) - float(p.split(":")[1]),
                 float(p.split(":")[0]) + float(p.split(":")[1]),
             )
             for p in args.null_excision
         )
-    if freq_excl_bands:
-        logger.info(f"Null-band excision bands: {freq_excl_bands}")
+    if null_excision_bands:
+        logger.info(f"Null-band excision bands: {null_excision_bands}")
+        exclude_freq_bands = (*exclude_freq_bands, *null_excision_bands)
 
     # 3. Run MCMC
     idata = run_lisa_mcmc(
@@ -373,9 +519,18 @@ def main() -> None:
         beta_delta=args.beta_delta,
         vi=args.vi,
         vi_steps=args.vi_steps,
+        vi_guide=args.vi_guide,
+        vi_posterior_draws=args.vi_posterior_draws,
+        coarse_grain_config_vi=coarse_vi_cfg,
         wishart_window=wishart_ws,
+        wishart_detrend=wishart_detrend,
+        wishart_floor_fraction=args.wishart_floor_fraction,
+        exclude_freq_bands=exclude_freq_bands,
+        auto_coarse_vi=args.auto_coarse_vi,
+        auto_coarse_vi_target_nfreq=args.auto_coarse_vi_target_nfreq,
+        fmin=args.fmin,
+        fmax=args.fmax,
         tau=args.tau,
-        freq_excl_bands=freq_excl_bands,
         outdir=seed_dir,
     )
 
@@ -399,6 +554,7 @@ def main() -> None:
         freq_true=freq_true,
         S_true=S_true,
         outdir=seed_dir,
+        excluded_bands=exclude_freq_bands,
     )
     # Also record config fields in the metrics JSON
     metrics["K"] = args.K
@@ -433,6 +589,9 @@ def main() -> None:
                 S_true=S_true,
                 outdir=seed_dir,
                 welch_window=welch_ws,
+                fmin=args.fmin,
+                fmax=args.fmax,
+                excluded_bands=exclude_freq_bands,
             )
         except Exception as exc:
             logger.warning(f"Plot generation failed: {exc}")

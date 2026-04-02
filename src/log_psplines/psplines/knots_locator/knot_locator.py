@@ -1,6 +1,7 @@
 import warnings
 
 import numpy as np
+from scipy.ndimage import uniform_filter1d
 
 from ...datatypes import Periodogram
 from ...datatypes.multivar_utils import psd_to_cholesky_components
@@ -204,55 +205,58 @@ def _quantile_based_knots(
     periodogram: Periodogram,
     parametric_model: np.ndarray | None = None,
 ) -> np.ndarray:
-    """
-    Implement Patricio's quantile-based knot placement method.
+    """Place knots at equal quantiles of a gradient-based spectral feature score.
 
-    The procedure follows these steps:
-    1. Take square root of periodogram values
-    2. Standardize the values
-    3. Take absolute values and normalize to create a PMF
-    4. Interpolate to get a continuous CDF
-    5. Place knots at equally spaced quantiles of this CDF
-    """
-    # Step 1: Square root transformation
-    x = np.sqrt(periodogram.power)
+    Knot density is proportional to the absolute gradient of a lightly smoothed
+    version of the score signal.  This concentrates knots where the spectral
+    shape changes most rapidly — at peaks, troughs, and transitions — rather
+    than at regions of high absolute amplitude.
 
-    # Optionally subtract parametric model
+    A small uniform floor (5 % of mean gradient) is added so that flat
+    featureless regions still receive some knots.
+    """
+    power = np.asarray(periodogram.power, dtype=np.float64)
+    freqs = np.asarray(periodogram.freqs, dtype=np.float64)
+
     if parametric_model is not None:
-        # Subtract from power, then take square root
-        power_adjusted = periodogram.power - parametric_model
-        # Ensure positivity
-        power_adjusted = power_adjusted + np.abs(np.min(power_adjusted))
-        x = np.sqrt(power_adjusted)
+        power = power - parametric_model
+        power = power + np.abs(np.min(power))
 
-    # Step 2: Standardize
-    x_mean = np.mean(x)
-    x_std = np.std(x)
-    if not np.isfinite(x_std) or x_std <= 0.0:
-        y = np.zeros_like(x)
-    else:
-        y = (x - x_mean) / x_std
+    power = np.maximum(power, 1e-12)
 
-    # Step 3: Absolute values and normalize to create PMF
-    z = np.abs(y)
-    z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
-    total = np.sum(z)
-    if total <= 0:
-        z = np.ones_like(z) / z.size
-    else:
-        z = z / total
+    n = power.size
+    if n < 3:
+        # Too few points for gradient — fall back to uniform spacing.
+        return np.linspace(float(freqs[0]), float(freqs[-1]), n_knots)
 
-    # Step 4: Create cumulative distribution function
+    # Light smoothing: window ≈ 2 % of N, at least 5 bins.
+    window = max(5, n // 50)
+    smooth = uniform_filter1d(power, size=window, mode="nearest")
+
+    # Absolute gradient of smoothed signal as the feature score.
+    # np.gradient uses central differences in the interior and one-sided
+    # differences at the boundaries.
+    gradient = np.abs(np.gradient(smooth, freqs))
+    gradient = np.nan_to_num(gradient, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # Add a uniform floor anchored to the signal scale (not the gradient scale)
+    # so that floating-point noise in the gradient of a flat signal cannot
+    # create spurious non-uniformity.  Floor = 1 % of mean smoothed signal
+    # ensures featureless regions still receive approximately uniform knots,
+    # while genuine spectral features (whose gradient exceeds the floor) still
+    # attract extra knots.
+    signal_scale = float(np.mean(smooth))
+    floor = 0.01 * signal_scale if signal_scale > 0.0 else 1.0
+    z = gradient + floor
+    z = z / z.sum()
+
+    # CDF → quantile-based knot positions
     cdf_values = np.cumsum(z)
     cdf_values = np.insert(cdf_values, 0, 0.0)
-    freqs = np.insert(periodogram.freqs, 0, periodogram.freqs[0])
+    freqs_ext = np.insert(freqs, 0, freqs[0])
 
-    # Step 5: Place knots at equally spaced quantiles
-    # We want n_knots total, including endpoints
     quantiles = np.linspace(0, 1, n_knots)
-
-    # Interpolate to find frequencies corresponding to these quantiles
-    knots = np.interp(quantiles, cdf_values, freqs)
+    knots = np.interp(quantiles, cdf_values, freqs_ext)
 
     return knots
 
@@ -265,7 +269,7 @@ def multivar_psd_knot_scores(
     scoring: str = "cholesky",
     u_re: np.ndarray | None = None,
     u_im: np.ndarray | None = None,
-) -> tuple[list[np.ndarray], np.ndarray]:
+) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
     """Compute per-component knot placement scores from an empirical PSD matrix.
 
     Two scoring strategies are available:
@@ -277,9 +281,8 @@ def multivar_psd_knot_scores(
 
     ``"spectral"``
         Uses raw spectral energy: diagonal score is the sum of squared Fourier
-        coefficients per channel, off-diagonal score is the mean absolute
-        cross-spectral magnitude.  This was the original scoring before the
-        Cholesky refactor.
+        coefficients per channel, and each off-diagonal component score is the
+        absolute cross-spectral magnitude for its channel pair.
 
     Args:
         Y_np: (N, p, p) complex Wishart matrix (sum of outer products).
@@ -291,7 +294,10 @@ def multivar_psd_knot_scores(
 
     Returns:
         diagonal_scores: List of p arrays of shape (N,), one per channel.
-        offdiag_score: (N,) array — shared score for off-diagonal components.
+        offdiag_re_scores: List of arrays of shape (N,), one per
+            theta_re_{j,l} component in lower-triangular order.
+        offdiag_im_scores: List of arrays of shape (N,), one per
+            theta_im_{j,l} component in lower-triangular order.
     """
     scoring = scoring.strip().lower()
 
@@ -300,13 +306,12 @@ def multivar_psd_knot_scores(
             Y_np / max(int(Nb), 1)
         )
         diagonal_scores = [np.abs(log_delta_sq[:, i]) for i in range(p)]
-        if p > 1:
-            pair_scores = [
-                np.abs(theta[:, i, j]) for i in range(1, p) for j in range(i)
-            ]
-            offdiag_score = np.mean(np.vstack(pair_scores), axis=0)
-        else:
-            offdiag_score = np.zeros(Y_np.shape[0], dtype=np.float64)
+        offdiag_re_scores = [
+            np.abs(np.real(theta[:, i, j])) for i in range(1, p) for j in range(i)
+        ]
+        offdiag_im_scores = [
+            np.abs(np.imag(theta[:, i, j])) for i in range(1, p) for j in range(i)
+        ]
 
     elif scoring == "spectral":
         if u_re is None or u_im is None:
@@ -322,17 +327,16 @@ def multivar_psd_knot_scores(
             )
             for i in range(p)
         ]
-        if p > 1:
-            theta_scores = [
-                np.abs(Y_np[:, i, j]) for i in range(1, p) for j in range(i)
-            ]
-            offdiag_score = np.mean(np.vstack(theta_scores), axis=0)
-        else:
-            offdiag_score = np.zeros(Y_np.shape[0], dtype=np.float64)
+        offdiag_re_scores = [
+            np.abs(np.real(Y_np[:, i, j])) for i in range(1, p) for j in range(i)
+        ]
+        offdiag_im_scores = [
+            np.abs(np.imag(Y_np[:, i, j])) for i in range(1, p) for j in range(i)
+        ]
 
     else:
         raise ValueError(
             f"Unknown knot scoring '{scoring}'. Use 'cholesky' or 'spectral'."
         )
 
-    return diagonal_scores, offdiag_score
+    return diagonal_scores, offdiag_re_scores, offdiag_im_scores

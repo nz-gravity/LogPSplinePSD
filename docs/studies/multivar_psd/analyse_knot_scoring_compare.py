@@ -30,7 +30,7 @@ def _read_score_summary(path: str) -> dict[str, dict[str, float]]:
             r for r in method_rows if r["component"].startswith("diag_")
         ]
         offdiag_rows = [
-            r for r in method_rows if r["component"] == "offdiag_shared"
+            r for r in method_rows if r["component"].startswith("theta_")
         ]
 
         diag_top10 = (
@@ -44,12 +44,14 @@ def _read_score_summary(path: str) -> dict[str, dict[str, float]]:
             else float("nan")
         )
         off_top10 = (
-            float(offdiag_rows[0]["top10_mass"])
+            float(np.mean([float(r["top10_mass"]) for r in offdiag_rows]))
             if offdiag_rows
             else float("nan")
         )
         off_eff = (
-            float(offdiag_rows[0]["effective_fraction"])
+            float(
+                np.mean([float(r["effective_fraction"]) for r in offdiag_rows])
+            )
             if offdiag_rows
             else float("nan")
         )
@@ -57,8 +59,8 @@ def _read_score_summary(path: str) -> dict[str, dict[str, float]]:
         out[method] = {
             "diag_top10_mass_mean": float(diag_top10),
             "diag_effective_fraction_mean": float(diag_eff),
-            "offdiag_top10_mass": float(off_top10),
-            "offdiag_effective_fraction": float(off_eff),
+            "offdiag_top10_mass_mean": float(off_top10),
+            "offdiag_effective_fraction_mean": float(off_eff),
         }
     return out
 
@@ -163,19 +165,19 @@ def _analysis_markdown(analysis: dict[str, Any]) -> str:
         "",
         "## Score Concentration",
         "",
-        "| Method | Diag top10 mass (mean) | Diag effective fraction (mean) | Offdiag top10 mass | Offdiag effective fraction |",
+        "| Method | Diag top10 mass (mean) | Diag effective fraction (mean) | Offdiag top10 mass (mean) | Offdiag effective fraction (mean) |",
         "| --- | ---: | ---: | ---: | ---: |",
         (
             f"| spectral | {_fmt(score['spectral'].get('diag_top10_mass_mean'))} | "
             f"{_fmt(score['spectral'].get('diag_effective_fraction_mean'))} | "
-            f"{_fmt(score['spectral'].get('offdiag_top10_mass'))} | "
-            f"{_fmt(score['spectral'].get('offdiag_effective_fraction'))} |"
+            f"{_fmt(score['spectral'].get('offdiag_top10_mass_mean'))} | "
+            f"{_fmt(score['spectral'].get('offdiag_effective_fraction_mean'))} |"
         ),
         (
             f"| cholesky | {_fmt(score['cholesky'].get('diag_top10_mass_mean'))} | "
             f"{_fmt(score['cholesky'].get('diag_effective_fraction_mean'))} | "
-            f"{_fmt(score['cholesky'].get('offdiag_top10_mass'))} | "
-            f"{_fmt(score['cholesky'].get('offdiag_effective_fraction'))} |"
+            f"{_fmt(score['cholesky'].get('offdiag_top10_mass_mean'))} | "
+            f"{_fmt(score['cholesky'].get('offdiag_effective_fraction_mean'))} |"
         ),
         "",
         "## Posterior Metrics",

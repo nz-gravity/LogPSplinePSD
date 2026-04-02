@@ -297,29 +297,15 @@ def _prepare_attributes_and_dims(
 
 def _pack_spline_model(spline_model) -> Dataset:
     """Pack univariate spline model parameters into xarray Dataset."""
-    data = {
-        "knots": (["knots_dim"], np.array(spline_model.knots)),
+    data: Dict[str, Any] = {
         "degree": spline_model.degree,
         "diffMatrixOrder": spline_model.diffMatrixOrder,
         "n": spline_model.n,
-        "basis": (["freq", "weights_dim"], np.array(spline_model.basis)),
-        "penalty_matrix": (
-            ["weights_dim_row", "weights_dim_col"],
-            np.array(spline_model.penalty_matrix),
-        ),
-        "parametric_model": (
-            ["freq"],
-            np.array(spline_model.parametric_model),
-        ),
     }
-
-    coords = {
-        "knots_dim": np.arange(len(spline_model.knots)),
-        "weights_dim": np.arange(spline_model.basis.shape[1]),
-        "weights_dim_row": np.arange(spline_model.penalty_matrix.shape[0]),
-        "weights_dim_col": np.arange(spline_model.penalty_matrix.shape[1]),
-        "freq": np.arange(spline_model.basis.shape[0]),
-    }
+    payload, coords = spline_model.to_storage_payload(
+        include_linear_operators=False
+    )
+    data.update(payload)
 
     return Dataset(
         {
@@ -726,39 +712,11 @@ def _pack_model_component(
     model, prefix: str, data: Dict[str, Any], coords: Dict[str, Any]
 ) -> None:
     """Pack a single model component into data and coords dicts."""
-    data.update(
-        {
-            f"{prefix}_knots": (
-                [f"{prefix}_knots_dim"],
-                np.array(model.knots),
-            ),
-            f"{prefix}_basis": (
-                [f"{prefix}_freq", f"{prefix}_weights_dim"],
-                np.array(model.basis),
-            ),
-            f"{prefix}_penalty_matrix": (
-                [f"{prefix}_weights_dim_row", f"{prefix}_weights_dim_col"],
-                np.array(model.penalty_matrix),
-            ),
-            f"{prefix}_parametric_model": (
-                [f"{prefix}_freq"],
-                np.array(model.parametric_model),
-            ),
-        }
+    payload, component_coords = model.to_storage_payload(
+        prefix=prefix, include_linear_operators=False
     )
-    coords.update(
-        {
-            f"{prefix}_knots_dim": np.arange(len(model.knots)),
-            f"{prefix}_weights_dim": np.arange(model.basis.shape[1]),
-            f"{prefix}_weights_dim_row": np.arange(
-                model.penalty_matrix.shape[0]
-            ),
-            f"{prefix}_weights_dim_col": np.arange(
-                model.penalty_matrix.shape[1]
-            ),
-            f"{prefix}_freq": np.arange(model.basis.shape[0]),
-        }
-    )
+    data.update(payload)
+    coords.update(component_coords)
 
 
 def _pack_spline_model_multivar(spline_model) -> Dataset:
@@ -776,13 +734,18 @@ def _pack_spline_model_multivar(spline_model) -> Dataset:
     for i, diag_model in enumerate(spline_model.diagonal_models):
         _pack_model_component(diag_model, f"diag_{i}", data, coords)
 
-    if spline_model.offdiag_re_model is not None:
+    for j, l in spline_model.theta_pairs:
         _pack_model_component(
-            spline_model.offdiag_re_model, "offdiag_re", data, coords
+            spline_model.get_theta_model("re", j, l),
+            f"theta_re_{j}_{l}",
+            data,
+            coords,
         )
-    if spline_model.offdiag_im_model is not None:
         _pack_model_component(
-            spline_model.offdiag_im_model, "offdiag_im", data, coords
+            spline_model.get_theta_model("im", j, l),
+            f"theta_im_{j}_{l}",
+            data,
+            coords,
         )
 
     return Dataset(
@@ -900,7 +863,6 @@ def _compute_prior_predictive_multivar(
         **standardized** (channel-whitened) parameterization.
     """
     rng = np.random.default_rng(seed)
-    all_bases, all_penalties = spline_model.get_all_bases_and_penalties()
     N = spline_model.N
     p = spline_model.p
 
@@ -956,8 +918,9 @@ def _compute_prior_predictive_multivar(
 
     for draw_idx in range(n_prior_draws):
         for j in range(p):
-            basis = np.asarray(all_bases[j])
-            penalty = np.asarray(all_penalties[j])
+            diag_model = spline_model.diagonal_models[j]
+            basis = np.asarray(diag_model.basis)
+            penalty = np.asarray(diag_model.penalty_matrix)
             k = basis.shape[1]
 
             delta = rng.gamma(shape=alpha_delta, scale=1.0 / beta_delta)
@@ -978,10 +941,6 @@ def _compute_prior_predictive_multivar(
             )
 
         if p > 1:
-            theta_basis = np.asarray(all_bases[p])
-            theta_penalty = np.asarray(all_penalties[p])
-            k_theta = theta_basis.shape[1]
-
             theta_idx = 0
             for j_ch in range(1, p):
                 for l_ch in range(j_ch):
@@ -989,6 +948,12 @@ def _compute_prior_predictive_multivar(
                         ("re", theta_re_all),
                         ("im", theta_im_all),
                     ]:
+                        theta_model = spline_model.get_theta_model(
+                            part, j_ch, l_ch
+                        )
+                        theta_basis = np.asarray(theta_model.basis)
+                        theta_penalty = np.asarray(theta_model.penalty_matrix)
+                        k_theta = theta_basis.shape[1]
                         delta_t = rng.gamma(
                             shape=alpha_delta, scale=1.0 / beta_delta
                         )
@@ -1000,7 +965,9 @@ def _compute_prior_predictive_multivar(
                         w_d_t = np.asarray(
                             design_weights.get(key, np.zeros(k_theta))
                         )
-                        prec_t = phi_t * theta_penalty + 1e-6 * np.eye(k_theta)
+                        prec_t = (
+                            phi_t * theta_penalty + 1e-6 * np.eye(k_theta)
+                        )
                         if tau is not None and key in design_weights:
                             prec_t += np.eye(k_theta) / tau**2
                         cov_t = np.linalg.inv(prec_t)
@@ -1056,18 +1023,39 @@ def _reconstruct_theta_params(
     param_type: str,
 ) -> jnp.ndarray:
     """Reconstruct theta parameters from samples."""
-    all_bases, _ = spline_model.get_all_bases_and_penalties()
+    first_sample = next(iter(samples.values()))
+    n_samples = first_sample.shape[1]
+    theta = jnp.zeros((n_samples, fft_data.N, max(1, spline_model.n_theta)))
+    found = False
+
+    if spline_model.n_theta > 0:
+        for theta_idx, (j, l) in enumerate(spline_model.theta_pairs):
+            key = f"weights_theta_{param_type}_{j}_{l}"
+            if key not in samples:
+                continue
+            weights_full = samples[key]
+            weights = weights_full[0]
+            basis = jnp.asarray(
+                spline_model.get_theta_model(param_type, j, l).basis
+            )
+            theta_eval = batch_spline_eval(basis, weights)
+            theta = theta.at[:, :, theta_idx].set(theta_eval)
+            found = True
+
+    if found:
+        return theta
 
     key = f"weights_theta_{param_type}"
     if key in samples and spline_model.n_theta > 0:
         weights_full = samples[key]
         weights = weights_full[0]
-        basis_idx = fft_data.p + (0 if param_type == "re" else 1)
-        theta_base = batch_spline_eval(all_bases[basis_idx], weights)
+        first_j, first_l = spline_model.theta_pair_from_index(0)
+        basis = jnp.asarray(
+            spline_model.get_theta_model(param_type, first_j, first_l).basis
+        )
+        theta_base = batch_spline_eval(basis, weights)
         return jnp.tile(
             theta_base[:, :, None], (1, 1, max(1, spline_model.n_theta))
         )
-    else:
-        first_sample = next(iter(samples.values()))
-        n_samples = first_sample.shape[1]
-        return jnp.zeros((n_samples, fft_data.N, max(1, spline_model.n_theta)))
+
+    return theta

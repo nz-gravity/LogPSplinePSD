@@ -5,6 +5,7 @@ import pytest
 from log_psplines.datatypes import MultivarFFT
 from log_psplines.datatypes.multivar_utils import U_to_Y
 from log_psplines.psplines import MultivariateLogPSplines
+from log_psplines.psplines.multivar_psplines import MultivarComponentKey
 
 
 @pytest.fixture(autouse=True)
@@ -216,10 +217,17 @@ def test_multivar_density_uses_fixed_basis_count_per_component():
         knot_kwargs={"method": "density"},
     )
 
-    component_models = model.diagonal_models + [
-        model.offdiag_re_model,
-        model.offdiag_im_model,
-    ]
+    component_models = (
+        model.diagonal_models
+        + [
+            model.offdiag_re_models[pair]
+            for pair in model.theta_pairs
+        ]
+        + [
+            model.offdiag_im_models[pair]
+            for pair in model.theta_pairs
+        ]
+    )
     knot_sizes = {
         int(component.knots.shape[0]) for component in component_models
     }
@@ -259,11 +267,13 @@ def test_multivar_density_scoring_uses_channel_space_wishart(
         scoring: str = "cholesky",
         u_re: np.ndarray | None = None,
         u_im: np.ndarray | None = None,
-    ) -> tuple[list[np.ndarray], np.ndarray]:
+    ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
         captured["Y_np"] = np.asarray(Y_np, dtype=np.complex128)
         diag_scores = [np.ones(n_freq, dtype=np.float64) for _ in range(p)]
-        offdiag = np.ones(n_freq, dtype=np.float64)
-        return diag_scores, offdiag
+        n_theta = p * (p - 1) // 2
+        offdiag_re = [np.ones(n_freq, dtype=np.float64) for _ in range(n_theta)]
+        offdiag_im = [np.ones(n_freq, dtype=np.float64) for _ in range(n_theta)]
+        return diag_scores, offdiag_re, offdiag_im
 
     monkeypatch.setattr(
         "log_psplines.psplines.multivar_psplines.multivar_psd_knot_scores",
@@ -288,3 +298,99 @@ def test_multivar_density_scoring_uses_channel_space_wishart(
     np.testing.assert_allclose(
         captured["Y_np"], expected, rtol=1e-10, atol=1e-10
     )
+
+
+def test_multivar_density_assigns_distinct_re_im_knot_vectors(monkeypatch):
+    n_freq = 64
+    p = 2
+    freq = np.linspace(0.05, 0.5, n_freq, dtype=np.float64)
+    u_re = np.ones((n_freq, p, p), dtype=np.float64) * 0.1
+    u_im = np.zeros((n_freq, p, p), dtype=np.float64)
+    fft_data = MultivarFFT(
+        u_re=u_re,
+        u_im=u_im,
+        freq=freq,
+        N=n_freq,
+        p=p,
+        Nb=2,
+    )
+
+    def _separate_scores(
+        Y_np: np.ndarray,
+        Nb: int,
+        p: int,
+        *,
+        scoring: str = "cholesky",
+        u_re: np.ndarray | None = None,
+        u_im: np.ndarray | None = None,
+    ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
+        diag_scores = [np.ones(n_freq, dtype=np.float64) for _ in range(p)]
+
+        # Force different density concentration so re/im knot vectors should differ.
+        re_score = np.ones(n_freq, dtype=np.float64)
+        im_score = np.ones(n_freq, dtype=np.float64)
+        re_score[8] = 100.0
+        im_score[52] = 100.0
+        return diag_scores, [re_score], [im_score]
+
+    monkeypatch.setattr(
+        "log_psplines.psplines.multivar_psplines.multivar_psd_knot_scores",
+        _separate_scores,
+    )
+
+    model = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=10,
+        degree=2,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density", "scoring": "cholesky"},
+    )
+
+    knots_re = np.round(np.asarray(model.offdiag_re_models[(1, 0)].knots), 12)
+    knots_im = np.round(np.asarray(model.offdiag_im_models[(1, 0)].knots), 12)
+    assert not np.array_equal(knots_re, knots_im)
+
+
+def test_multivar_component_registry_tracks_all_components():
+    n_freq = 32
+    p = 3
+    rng = np.random.default_rng(7)
+    freq = np.linspace(0.05, 0.5, n_freq, dtype=np.float64)
+    u_re = rng.normal(scale=0.2, size=(n_freq, p, p)).astype(np.float64)
+    u_im = rng.normal(scale=0.2, size=(n_freq, p, p)).astype(np.float64)
+    fft_data = MultivarFFT(
+        u_re=u_re,
+        u_im=u_im,
+        freq=freq,
+        N=n_freq,
+        p=p,
+        Nb=2,
+    )
+
+    model = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=8,
+        degree=2,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+    )
+
+    expected_order = [
+        "delta_0",
+        "delta_1",
+        "delta_2",
+        "theta_re_1_0",
+        "theta_re_2_0",
+        "theta_re_2_1",
+        "theta_im_1_0",
+        "theta_im_2_0",
+        "theta_im_2_1",
+    ]
+    order_names = [key.name for key in model.component_order]
+    assert order_names == expected_order
+    assert len(model.component_specs) == len(expected_order)
+
+    key = MultivarComponentKey("theta", 2, l=1, part="im")
+    spec = model.get_component_spec(key)
+    assert spec.key == key
+    assert spec.model is model.get_theta_model("im", 2, 1)

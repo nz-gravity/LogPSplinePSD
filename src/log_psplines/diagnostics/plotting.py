@@ -17,16 +17,6 @@ from ..plotting.base import (
     setup_plot_style,
 )
 from ._utils import extract_percentile
-from .derived_weights import (
-    HDI_PROB,
-    REP_WEIGHT_ESS_K,
-    REP_WEIGHT_EVEN_K,
-    REP_WEIGHT_VAR_K,
-    build_plot_dataset,
-    compute_weight_summaries,
-    find_weight_vars,
-    select_rep_indices,
-)
 from .psd_compare import _run as _run_psd_compare
 from .run_all import run_all_diagnostics
 
@@ -55,6 +45,7 @@ class DiagnosticsConfig:
     pair_max_vars: int = 4
     trace_max_plots: int = 15
     trace_plot_seed: int = 0
+    random_weight_indices_per_var: int = 6
     save_ess_rhat_profiles: bool = True
     save_ess_rhat_profiles_individual: bool = False
     save_nuts_block_diagnostics_individual: bool = False
@@ -86,6 +77,74 @@ def _var_priority(name: str) -> tuple[int, str]:
     if name.startswith("weights"):
         return (2, name)
     return (3, name)
+
+
+def _find_weight_vars(posterior: xr.Dataset) -> list[str]:
+    return [
+        str(name)
+        for name in posterior.data_vars
+        if str(name).startswith("weights")
+    ]
+
+
+def _basis_dim(var: xr.DataArray) -> str | None:
+    dims = [d for d in var.dims if d not in ("chain", "draw")]
+    return str(dims[-1]) if dims else None
+
+
+def _select_random_weight_indices(
+    var: xr.DataArray, *, max_k: int, rng: np.random.Generator
+) -> np.ndarray:
+    basis_dim = _basis_dim(var)
+    if basis_dim is None:
+        return np.array([], dtype=int)
+    size = int(var.sizes.get(basis_dim, 0))
+    if size <= 0:
+        return np.array([], dtype=int)
+    k = min(int(max_k), size)
+    if k <= 0:
+        return np.array([], dtype=int)
+    if k == size:
+        return np.arange(size, dtype=int)
+    return np.sort(rng.choice(size, size=k, replace=False)).astype(int)
+
+
+def _build_plot_dataset_random_weights(
+    idata,
+    rep_indices: dict[str, np.ndarray],
+) -> xr.Dataset:
+    posterior = getattr(idata, "posterior", None)
+    if posterior is None:
+        return xr.Dataset()
+
+    ds = xr.Dataset()
+    weight_vars = set(_find_weight_vars(posterior))
+
+    for name, var in posterior.data_vars.items():
+        if "chain" not in var.dims or "draw" not in var.dims:
+            continue
+        if str(name) in weight_vars:
+            continue
+        extra_dims = [d for d in var.dims if d not in ("chain", "draw")]
+        if extra_dims:
+            continue
+        ds[str(name)] = var
+
+    for wname, idxs in rep_indices.items():
+        if wname not in posterior.data_vars:
+            continue
+        var = posterior[wname]
+        basis_dim = _basis_dim(var)
+        if basis_dim is None:
+            continue
+        for idx in np.asarray(idxs, dtype=int):
+            try:
+                sliced = var.isel({basis_dim: int(idx)})
+            except Exception:
+                continue
+            ds[f"{wname}__idx_{int(idx)}"] = sliced
+
+    return ds
 
 
 def _flat_dim_from_shape(shape: tuple[int, ...]) -> int:
@@ -245,31 +304,27 @@ def _build_trace_plot_idata(idata_plot, config: DiagnosticsConfig):
     return trace_idata, total, len(trace_vars)
 
 
-def _build_arviz_plot_data(idata):
+def _build_arviz_plot_data(idata, config: DiagnosticsConfig):
     posterior = getattr(idata, "posterior", None)
     if posterior is None:
-        return None, {}, []
-
-    derived_scalar, derived_vector = compute_weight_summaries(
-        idata, hdi_prob=HDI_PROB
-    )
+        return None, []
 
     rep_indices: dict[str, np.ndarray] = {}
-    weight_vars = find_weight_vars(posterior)
+    weight_vars = _find_weight_vars(posterior)
+    rng = np.random.default_rng(int(config.trace_plot_seed))
     for name in weight_vars:
         try:
-            rep_indices[name] = select_rep_indices(
+            rep_indices[name] = _select_random_weight_indices(
                 posterior[name],
-                ess_k=REP_WEIGHT_ESS_K,
-                var_k=REP_WEIGHT_VAR_K,
-                even_k=REP_WEIGHT_EVEN_K,
+                max_k=int(config.random_weight_indices_per_var),
+                rng=rng,
             )
         except Exception:
             rep_indices[name] = np.array([], dtype=int)
 
-    plot_ds = build_plot_dataset(idata, derived_scalar, rep_indices)
+    plot_ds = _build_plot_dataset_random_weights(idata, rep_indices)
     if not plot_ds.data_vars:
-        return None, derived_vector, weight_vars
+        return None, weight_vars
 
     idata_plot = xr.DataTree()
     idata_plot["posterior"] = xr.DataTree(dataset=plot_ds)
@@ -281,7 +336,7 @@ def _build_arviz_plot_data(idata):
             _ensure_diverging_sample_stats(idata_plot)
         except Exception:
             pass
-    return idata_plot, derived_vector, weight_vars
+    return idata_plot, weight_vars
 
 
 def _ensure_diverging_sample_stats(idata: az.InferenceData) -> None:
@@ -752,7 +807,7 @@ def _create_diagnostic_plots(
     """Create only the essential diagnostic plots."""
     logger.debug("Generating diagnostic plots...")
 
-    idata_plot, vector_summaries, weight_vars = _build_arviz_plot_data(idata)
+    idata_plot, weight_vars = _build_arviz_plot_data(idata, config)
 
     trace_idata, trace_total, trace_selected = _build_trace_plot_idata(
         idata_plot, config

@@ -121,7 +121,7 @@ class MultivarBaseSampler(BaseSampler):
             basis_shapes = ", ".join(
                 [f"{tuple(b.shape)}" for b in self.all_bases]
             )
-            logger.info(f"B-spline basis shapes: {basis_shapes}")
+            logger.info(f"B-spline basis ({len(self.all_bases)} models): {basis_shapes}")
             total = self.N * self.Nh
             logger.info(
                 f"Applied coarse-grain counts; total effective count = {total}"

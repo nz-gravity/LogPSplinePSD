@@ -75,12 +75,32 @@ def default_init_values_multivar(
         init_values[f"weights_delta_{idx}"] = jnp.asarray(model.weights)
 
     if spline_model.n_theta > 0:
-        for prefix, model in (
-            ("theta_re", spline_model.offdiag_re_model),
-            ("theta_im", spline_model.offdiag_im_model),
-        ):
-            init_values[f"delta_{prefix}"] = delta_0
-            init_values[f"phi_{prefix}"] = log_phi_0
-            init_values[f"weights_{prefix}"] = jnp.asarray(model.weights)
+        for j, l in spline_model.theta_pairs:
+            re_model = spline_model.get_theta_model("re", j, l)
+            im_model = spline_model.get_theta_model("im", j, l)
+            init_values[f"delta_theta_re_{j}_{l}"] = delta_0
+            init_values[f"phi_theta_re_{j}_{l}"] = log_phi_0
+            init_values[f"weights_theta_re_{j}_{l}"] = jnp.asarray(
+                re_model.weights
+            )
+            init_values[f"delta_theta_im_{j}_{l}"] = delta_0
+            init_values[f"phi_theta_im_{j}_{l}"] = log_phi_0
+            init_values[f"weights_theta_im_{j}_{l}"] = jnp.asarray(
+                im_model.weights
+            )
+
+        # Backward-compatible shared aliases (first theta component), used by
+        # legacy fully-coupled multivariate paths.
+        first_j, first_l = spline_model.theta_pair_from_index(0)
+        init_values["delta_theta_re"] = delta_0
+        init_values["phi_theta_re"] = log_phi_0
+        init_values["weights_theta_re"] = jnp.asarray(
+            spline_model.get_theta_model("re", first_j, first_l).weights
+        )
+        init_values["delta_theta_im"] = delta_0
+        init_values["phi_theta_im"] = log_phi_0
+        init_values["weights_theta_im"] = jnp.asarray(
+            spline_model.get_theta_model("im", first_j, first_l).weights
+        )
 
     return init_values

@@ -52,7 +52,11 @@ def _get_knots_from_idata(idata) -> Optional[np.ndarray]:
 
 def _get_panel_knots_from_idata(
     idata,
-) -> tuple[dict[int, np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
+) -> tuple[
+    dict[int, np.ndarray],
+    dict[tuple[int, int], np.ndarray],
+    Optional[np.ndarray],
+]:
     """Extract per-panel knot arrays for multivariate plotting.
 
     Returns
@@ -60,11 +64,12 @@ def _get_panel_knots_from_idata(
     tuple
         ``(diag_knots, offdiag_knots, fallback_knots)``, where:
         - ``diag_knots`` maps diagonal index i -> knots for panel S_ii
-        - ``offdiag_knots`` is used for off-diagonal panels when available
+        - ``offdiag_knots`` maps pair ``(j,l)`` -> knots for off-diagonal
+          panels
         - ``fallback_knots`` is a shared fallback (e.g. univariate knots)
     """
     diag_knots: dict[int, np.ndarray] = {}
-    offdiag_knots: Optional[np.ndarray] = None
+    offdiag_knots: dict[tuple[int, int], np.ndarray] = {}
     fallback_knots = _get_knots_from_idata(idata)
 
     if idata is None:
@@ -77,13 +82,20 @@ def _get_panel_knots_from_idata(
         for key in dataset.data_vars:
             match = re.fullmatch(r"diag_(\d+)_knots", str(key))
             if match is None:
+                match_re = re.fullmatch(r"theta_re_(\d+)_(\d+)_knots", str(key))
+                match_im = re.fullmatch(r"theta_im_(\d+)_(\d+)_knots", str(key))
+                if match_re is not None:
+                    j = int(match_re.group(1))
+                    l = int(match_re.group(2))
+                    offdiag_knots[(j, l)] = np.asarray(dataset[key].values)
+                    continue
+                if match_im is not None:
+                    j = int(match_im.group(1))
+                    l = int(match_im.group(2))
+                    offdiag_knots[(j, l)] = np.asarray(dataset[key].values)
                 continue
             idx = int(match.group(1))
             diag_knots[idx] = np.asarray(dataset[key].values)
-        if "offdiag_re_knots" in dataset:
-            offdiag_knots = np.asarray(dataset["offdiag_re_knots"].values)
-        elif "offdiag_im_knots" in dataset:
-            offdiag_knots = np.asarray(dataset["offdiag_im_knots"].values)
     except (KeyError, AttributeError, TypeError):
         pass
 
@@ -1200,12 +1212,16 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
 
     # Extract knots if show_knots is enabled
     diag_knots: dict[int, np.ndarray] = {}
-    offdiag_knots: Optional[np.ndarray] = None
+    offdiag_knots: dict[tuple[int, int], np.ndarray] = {}
     fallback_knots: Optional[np.ndarray] = None
     if spec.show_knots:
         diag_knots, offdiag_knots, fallback_knots = (
             _get_panel_knots_from_idata(spec.idata)
         )
+
+    def _resolve_offdiag_knots(i_idx: int, j_idx: int) -> Optional[np.ndarray]:
+        pair = (i_idx, j_idx) if i_idx > j_idx else (j_idx, i_idx)
+        return offdiag_knots.get(pair, fallback_knots)
 
     if empirical_psd is not None:
         p = empirical_psd.psd.shape[1]
@@ -1272,11 +1288,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     prior_label_added=prior_label_added,
                 )
             elif i > j and spec.show_coherence:
-                panel_knots = (
-                    offdiag_knots
-                    if offdiag_knots is not None
-                    else fallback_knots
-                )
+                panel_knots = _resolve_offdiag_knots(i, j)
                 vi_label_added, prior_label_added = _render_coherence_panel(
                     axis,
                     i,
@@ -1296,11 +1308,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     prior_label_added=prior_label_added,
                 )
             elif i > j and spec.show_csd_magnitude:
-                panel_knots = (
-                    offdiag_knots
-                    if offdiag_knots is not None
-                    else fallback_knots
-                )
+                panel_knots = _resolve_offdiag_knots(i, j)
                 vi_label_added, prior_label_added = _render_magnitude_panel(
                     axis,
                     i,
@@ -1320,11 +1328,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     prior_label_added=prior_label_added,
                 )
             elif i > j:
-                panel_knots = (
-                    offdiag_knots
-                    if offdiag_knots is not None
-                    else fallback_knots
-                )
+                panel_knots = _resolve_offdiag_knots(i, j)
                 vi_label_added, prior_label_added = _render_re_panel(
                     axis,
                     i,
@@ -1344,11 +1348,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
                     prior_label_added=prior_label_added,
                 )
             elif i < j:
-                panel_knots = (
-                    offdiag_knots
-                    if offdiag_knots is not None
-                    else fallback_knots
-                )
+                panel_knots = _resolve_offdiag_knots(i, j)
                 vi_label_added, prior_label_added = _render_im_panel(
                     axis,
                     i,

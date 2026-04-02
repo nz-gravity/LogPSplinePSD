@@ -3,7 +3,6 @@ from __future__ import annotations
 """Extracts data from arviz InferenceData objects"""
 
 import arviz as az
-import jax.numpy as jnp
 import numpy as np
 
 from ..datatypes import Periodogram
@@ -111,25 +110,7 @@ def get_spline_model(idata: az.InferenceData) -> LogPSplines:
     """Extract spline model from inference data, handling different data structures."""
     try:
         dataset = idata["spline_model"]
-        knots = dataset["knots"].values
-        degree = dataset["degree"].item()
-        diffMatrixOrder = dataset["diffMatrixOrder"].item()
-        n = dataset["n"].item()
-        basis = jnp.array(dataset["basis"].values)
-        penalty_matrix = jnp.array(dataset["penalty_matrix"].values)
-        parametric_model = jnp.array(
-            dataset.get("parametric_model", jnp.ones(n)).values  # type: ignore
-        )
-
-        return LogPSplines(
-            knots=knots,
-            degree=degree,
-            diffMatrixOrder=diffMatrixOrder,
-            n=n,
-            basis=basis,
-            penalty_matrix=penalty_matrix,
-            parametric_model=parametric_model,
-        )
+        return LogPSplines.from_storage_dataset(dataset)
     except KeyError:
         # For VI or other data structures where spline_model is not available
         # Return None or a default - let the calling function handle this

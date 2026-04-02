@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Any, Mapping, Optional, Union
 
 import jax
 import matplotlib.pyplot as plt
@@ -179,11 +179,12 @@ class LogPSplines:
     degree: int
     diffMatrixOrder: int
     n: int
-    basis: jnp.ndarray
-    penalty_matrix: jnp.ndarray
     knots: np.ndarray
+    basis: Optional[jnp.ndarray] = None
+    penalty_matrix: Optional[jnp.ndarray] = None
     weights: Optional[jnp.ndarray] = None
     parametric_model: Union[jnp.ndarray, None] = None
+    grid_points: Optional[np.ndarray] = None
 
     def __post_init__(self):
         """Validate model parameters and check mathematical consistency."""
@@ -206,12 +207,305 @@ class LogPSplines:
                 f"Number of knots ({len(self.knots)}) must be ≥ degree ({self.degree}) "
                 "for well-defined B-spline basis."
             )
+
+        self.knots = np.asarray(self.knots, dtype=np.float64)
+        if self.knots.ndim != 1:
+            raise ValueError(f"knots must be 1-D, got shape {self.knots.shape}")
+        if self.knots.size == 0:
+            raise ValueError("knots must be non-empty")
+        if not np.all(np.isfinite(self.knots)):
+            raise ValueError("knots must be finite")
+        if np.any(np.diff(self.knots) < 0):
+            raise ValueError("knots must be sorted ascending")
+
+        if self.grid_points is None:
+            self.grid_points = np.linspace(
+                0.0, 1.0, int(self.n), dtype=np.float64
+            )
+        else:
+            self.grid_points = np.asarray(self.grid_points, dtype=np.float64)
+            if self.grid_points.ndim != 1:
+                raise ValueError(
+                    "grid_points must be 1-D with length n, "
+                    f"got shape {self.grid_points.shape}"
+                )
+            if self.grid_points.shape[0] != int(self.n):
+                raise ValueError(
+                    f"grid_points length must match n={self.n}, "
+                    f"got {self.grid_points.shape[0]}"
+                )
+            if not np.all(np.isfinite(self.grid_points)):
+                raise ValueError("grid_points must be finite")
+            if np.any(np.diff(self.grid_points) < 0):
+                raise ValueError("grid_points must be sorted ascending")
+
+        if self.basis is None or self.penalty_matrix is None:
+            basis, penalty_matrix = init_basis_and_penalty(
+                self.knots,
+                self.degree,
+                self.n,
+                self.diffMatrixOrder,
+                grid_points=self.grid_points,
+            )
+            self.basis = basis
+            self.penalty_matrix = penalty_matrix
+
+        self.basis = jnp.asarray(self.basis)
+        self.penalty_matrix = jnp.asarray(self.penalty_matrix)
+        if self.basis.ndim != 2:
+            raise ValueError(
+                f"basis must be 2-D (n, n_basis), got shape {self.basis.shape}"
+            )
+        if self.basis.shape[0] != int(self.n):
+            raise ValueError(
+                f"basis first dimension must match n={self.n}, got {self.basis.shape[0]}"
+            )
+        if self.penalty_matrix.ndim != 2:
+            raise ValueError(
+                f"penalty_matrix must be 2-D, got shape {self.penalty_matrix.shape}"
+            )
+        if self.penalty_matrix.shape[0] != self.penalty_matrix.shape[1]:
+            raise ValueError("penalty_matrix must be square")
+        if self.penalty_matrix.shape[0] != self.basis.shape[1]:
+            raise ValueError(
+                "penalty_matrix dimension must match basis n_basis: "
+                f"{self.penalty_matrix.shape[0]} vs {self.basis.shape[1]}"
+            )
+
+        if self.weights is None:
+            self.weights = jnp.zeros(self.basis.shape[1], dtype=self.basis.dtype)
+        else:
+            self.weights = jnp.asarray(self.weights)
+            if self.weights.ndim != 1:
+                raise ValueError(
+                    f"weights must be 1-D, got shape {self.weights.shape}"
+                )
+            if self.weights.shape[0] != self.basis.shape[1]:
+                raise ValueError(
+                    "weights length must match basis n_basis: "
+                    f"{self.weights.shape[0]} vs {self.basis.shape[1]}"
+                )
+
+        if self.parametric_model is None:
+            self.parametric_model = jnp.ones(self.n, dtype=self.basis.dtype)
+        else:
+            self.parametric_model = jnp.asarray(self.parametric_model)
+            if self.parametric_model.ndim != 1:
+                raise ValueError(
+                    "parametric_model must be 1-D with length n, "
+                    f"got shape {self.parametric_model.shape}"
+                )
+            if self.parametric_model.shape[0] != int(self.n):
+                raise ValueError(
+                    f"parametric_model length must match n={self.n}, "
+                    f"got {self.parametric_model.shape[0]}"
+                )
+            self.parametric_model = jnp.maximum(self.parametric_model, 1e-24)
+        self._log_parametric_model = jnp.log(self.parametric_model)
         assert (
             self.log_parametric_model is not None
         ), "parametric_model must be provided or initialized."
 
     def __repr__(self):
         return f"LogPSplines(knots={self.n_knots}, degree={self.degree}, penaltyOrder={self.diffMatrixOrder}, n={self.n})"  # , sparsity={self.basis_sparsity:.2f}, penalty_sparsity={self.penalty_sparsity:.2f})"
+
+    @staticmethod
+    def _storage_name(field: str, prefix: str | None = None) -> str:
+        return f"{prefix}_{field}" if prefix else field
+
+    @staticmethod
+    def _storage_dim(dim: str, prefix: str | None = None) -> str:
+        return f"{prefix}_{dim}" if prefix else dim
+
+    @staticmethod
+    def _as_numpy(value: Any) -> np.ndarray:
+        if hasattr(value, "values"):
+            return np.asarray(value.values)
+        return np.asarray(value)
+
+    @classmethod
+    def _dataset_scalar(
+        cls, dataset: Mapping[str, Any], key: str
+    ) -> float | int:
+        value = cls._as_numpy(dataset[key])
+        if value.ndim == 0:
+            return value.item()
+        if value.size == 1:
+            return value.reshape(()).item()
+        raise ValueError(f"Expected scalar at key '{key}', got shape {value.shape}")
+
+    def to_storage_payload(
+        self,
+        *,
+        prefix: str | None = None,
+        include_linear_operators: bool = False,
+    ) -> tuple[dict[str, tuple[list[str], np.ndarray]], dict[str, np.ndarray]]:
+        """Return dataset-ready payload for this spline component."""
+        knots_key = self._storage_name("knots", prefix)
+        grid_key = self._storage_name("grid_points", prefix)
+        param_key = self._storage_name("parametric_model", prefix)
+        knots_dim = self._storage_dim("knots_dim", prefix)
+        freq_dim = self._storage_dim("freq", prefix)
+
+        data: dict[str, tuple[list[str], np.ndarray]] = {
+            knots_key: ([knots_dim], np.asarray(self.knots, dtype=np.float64)),
+            grid_key: ([freq_dim], np.asarray(self.grid_points, dtype=np.float64)),
+            param_key: ([freq_dim], np.asarray(self.parametric_model)),
+        }
+        coords: dict[str, np.ndarray] = {
+            knots_dim: np.arange(len(self.knots)),
+            freq_dim: np.arange(int(self.n)),
+        }
+
+        if include_linear_operators:
+            basis_key = self._storage_name("basis", prefix)
+            penalty_key = self._storage_name("penalty_matrix", prefix)
+            weights_dim = self._storage_dim("weights_dim", prefix)
+            weights_dim_row = self._storage_dim("weights_dim_row", prefix)
+            weights_dim_col = self._storage_dim("weights_dim_col", prefix)
+            data[basis_key] = (
+                [freq_dim, weights_dim],
+                np.asarray(self.basis),
+            )
+            data[penalty_key] = (
+                [weights_dim_row, weights_dim_col],
+                np.asarray(self.penalty_matrix),
+            )
+            coords[weights_dim] = np.arange(int(self.basis.shape[1]))
+            coords[weights_dim_row] = np.arange(
+                int(self.penalty_matrix.shape[0])
+            )
+            coords[weights_dim_col] = np.arange(
+                int(self.penalty_matrix.shape[1])
+            )
+
+        return data, coords
+
+    @classmethod
+    def from_storage_dataset(
+        cls,
+        dataset: Mapping[str, Any],
+        *,
+        prefix: str | None = None,
+        degree: int | None = None,
+        diffMatrixOrder: int | None = None,
+        n: int | None = None,
+    ) -> "LogPSplines":
+        """Rehydrate a spline model component from a saved dataset mapping."""
+        knots_key = cls._storage_name("knots", prefix)
+        if knots_key not in dataset:
+            raise KeyError(f"Missing required spline key '{knots_key}'.")
+        knots = np.asarray(cls._as_numpy(dataset[knots_key]), dtype=np.float64)
+
+        if degree is None:
+            if "degree" not in dataset:
+                raise KeyError("Missing required scalar 'degree'.")
+            degree = int(cls._dataset_scalar(dataset, "degree"))
+        if diffMatrixOrder is None:
+            if "diffMatrixOrder" not in dataset:
+                raise KeyError("Missing required scalar 'diffMatrixOrder'.")
+            diffMatrixOrder = int(cls._dataset_scalar(dataset, "diffMatrixOrder"))
+
+        grid_key = cls._storage_name("grid_points", prefix)
+        param_key = cls._storage_name("parametric_model", prefix)
+        basis_key = cls._storage_name("basis", prefix)
+        penalty_key = cls._storage_name("penalty_matrix", prefix)
+
+        grid_points = (
+            np.asarray(cls._as_numpy(dataset[grid_key]), dtype=np.float64)
+            if grid_key in dataset
+            else None
+        )
+        parametric_model = (
+            jnp.asarray(cls._as_numpy(dataset[param_key]))
+            if param_key in dataset
+            else None
+        )
+        basis = (
+            jnp.asarray(cls._as_numpy(dataset[basis_key]))
+            if basis_key in dataset
+            else None
+        )
+        penalty_matrix = (
+            jnp.asarray(cls._as_numpy(dataset[penalty_key]))
+            if penalty_key in dataset
+            else None
+        )
+
+        if n is None:
+            if "n" in dataset:
+                n = int(cls._dataset_scalar(dataset, "n"))
+            elif "N" in dataset:
+                n = int(cls._dataset_scalar(dataset, "N"))
+            elif grid_points is not None:
+                n = int(grid_points.shape[0])
+            elif parametric_model is not None:
+                n = int(parametric_model.shape[0])
+            elif basis is not None:
+                n = int(basis.shape[0])
+            else:
+                raise KeyError(
+                    "Could not infer n while loading spline component. "
+                    "Provide n explicitly or store one of "
+                    "{n, N, *_grid_points, *_parametric_model, *_basis}."
+                )
+
+        return cls(
+            degree=int(degree),
+            diffMatrixOrder=int(diffMatrixOrder),
+            n=int(n),
+            knots=knots,
+            basis=basis,
+            penalty_matrix=penalty_matrix,
+            weights=None,
+            parametric_model=parametric_model,
+            grid_points=grid_points,
+        )
+
+    @classmethod
+    def from_knots(
+        cls,
+        *,
+        knots: np.ndarray,
+        degree: int,
+        diffMatrixOrder: int,
+        n: int,
+        grid_points: np.ndarray | None = None,
+        parametric_model: jnp.ndarray | None = None,
+        log_target: jnp.ndarray | np.ndarray | None = None,
+        init_num_steps: int = 5000,
+    ) -> "LogPSplines":
+        """Build from knots/grid and optionally initialize weights from log-target.
+
+        This is the high-level constructor for research workflows:
+        it computes basis + penalty internally and can fit initial spline
+        weights directly from a supplied log-spectrum target.
+        """
+        model = cls(
+            knots=np.asarray(knots, dtype=np.float64),
+            degree=degree,
+            diffMatrixOrder=diffMatrixOrder,
+            n=int(n),
+            basis=None,
+            penalty_matrix=None,
+            weights=None,
+            parametric_model=parametric_model,
+            grid_points=grid_points,
+        )
+        if log_target is not None:
+            target = jnp.asarray(log_target)
+            if target.ndim != 1 or target.shape[0] != int(n):
+                raise ValueError(
+                    "log_target must be 1-D with length n, "
+                    f"got shape {target.shape} for n={n}"
+                )
+            model.weights = init_weights(
+                target,
+                model,
+                init_weights=model.weights,
+                num_steps=int(init_num_steps),
+            )
+        return model
 
     @classmethod
     def from_periodogram(
@@ -287,21 +581,16 @@ class LogPSplines:
         fmin, fmax = float(periodogram.freqs[0]), float(periodogram.freqs[-1])
         denom = (fmax - fmin) if fmax > fmin else 1.0
         grid = (np.asarray(periodogram.freqs) - fmin) / denom
-        basis, penalty_matrix = init_basis_and_penalty(
-            knots, degree, periodogram.n, diffMatrixOrder, grid_points=grid
-        )
-        model = cls(
+        model = cls.from_knots(
             knots=knots,
             degree=degree,
             diffMatrixOrder=diffMatrixOrder,
             n=periodogram.n,
-            basis=basis,
-            penalty_matrix=penalty_matrix,
-            weights=jnp.zeros(basis.shape[1]),
+            grid_points=grid,
             parametric_model=parametric_model,
+            log_target=jnp.log(periodogram.power),
+            init_num_steps=5000,
         )
-        weights = init_weights(jnp.log(periodogram.power), model)
-        model.weights = weights
         return model
 
     @property
@@ -330,6 +619,8 @@ class LogPSplines:
 
     @property
     def n_basis(self) -> int:
+        if self.basis is not None:
+            return int(self.basis.shape[1])
         return self.n_knots + self.degree - 1
 
     def __call__(

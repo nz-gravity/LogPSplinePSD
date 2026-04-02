@@ -13,10 +13,6 @@ from log_psplines.diagnostics._utils import (
     compute_riae,
     interior_frequency_slice,
 )
-from log_psplines.diagnostics.derived_weights import (
-    HDI_PROB,
-    compute_weight_summaries,
-)
 from log_psplines.diagnostics.plotting import DiagnosticsConfig
 
 
@@ -158,34 +154,3 @@ def test_run_all_ignores_energy_channel_metrics():
     )
 
     assert "energy" not in result
-
-
-def test_derived_weight_summaries_penalty():
-    weights = np.array([[[1.0, -2.0, 3.0], [0.5, -1.5, 2.0]]])
-    idata = az.from_dict({"posterior": {"weights": weights}})
-    penalty = np.diag([1.0, 2.0, 3.0])
-    spline_model = Dataset(
-        {
-            "penalty_matrix": DataArray(
-                penalty,
-                dims=["weights_dim_row", "weights_dim_col"],
-            )
-        }
-    )
-    idata["spline_model"] = xr.DataTree(dataset=spline_model)
-
-    scalar, vector = compute_weight_summaries(idata, hdi_prob=HDI_PROB)
-    assert "w_rms__weights" in scalar
-    assert "w_maxabs__weights" in scalar
-    assert "penalty__weights" in scalar
-    assert "w_hdi_width__weights" in vector
-
-    w = weights.reshape((weights.shape[0], weights.shape[1], -1))
-    expected_rms = np.sqrt(np.mean(w * w, axis=-1))
-    expected_penalty = np.einsum("...i,ij,...j->...", w, penalty, w)
-    np.testing.assert_allclose(
-        scalar["w_rms__weights"].values, expected_rms, rtol=1e-6
-    )
-    np.testing.assert_allclose(
-        scalar["penalty__weights"].values, expected_penalty, rtol=1e-6
-    )

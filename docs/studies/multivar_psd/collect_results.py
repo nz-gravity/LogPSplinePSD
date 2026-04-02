@@ -53,6 +53,10 @@ def collect(
             print(f"  Warning: could not read {f}: {e}")
 
     df = pd.DataFrame(rows)
+    if not df.empty:
+        geometry = df.apply(_derive_geometry, axis=1, result_type="expand")
+        geometry.columns = ["Lb", "N_ell", "Nc"]
+        df = pd.concat([df, geometry], axis=1)
     print(f"Collected {len(df)} runs from {results_dir}/{pattern}/")
     return df
 
@@ -71,13 +75,39 @@ KEY_METRICS = [
     "ess_median",
     "runtime",
 ]
-GROUP_COLS = ["mode", "N", "Nb", "Nh"]
+GROUP_COLS = ["mode", "N", "Nb", "Lb", "Nh", "N_ell", "Nc"]
+
+
+def _derive_geometry(row: pd.Series) -> tuple[float, float, float]:
+    """Derive (Lb, N_ell, Nc) from stored run metadata."""
+    try:
+        n_time = int(row["N"])
+        nb = int(row["Nb"])
+        if n_time <= 0 or nb <= 0 or (n_time % nb) != 0:
+            return np.nan, np.nan, np.nan
+        lb = n_time // nb
+        n_ell = lb // 2
+        nh_val = row.get("Nh", "OFF")
+        if isinstance(nh_val, str) and nh_val.upper() == "OFF":
+            return float(lb), float(n_ell), float(n_ell)
+        nh = int(nh_val)
+        if nh <= 0 or (n_ell % nh) != 0:
+            return float(lb), float(n_ell), np.nan
+        return float(lb), float(n_ell), float(n_ell // nh)
+    except Exception:
+        return np.nan, np.nan, np.nan
 
 
 def summarise(df: pd.DataFrame) -> pd.DataFrame:
     """Compute mean ± std per condition (mode × N × Nb × Nh)."""
     if df.empty:
         return df
+
+    if not {"Lb", "N_ell", "Nc"}.issubset(df.columns):
+        df = df.copy()
+        geometry = df.apply(_derive_geometry, axis=1, result_type="expand")
+        geometry.columns = ["Lb", "N_ell", "Nc"]
+        df = pd.concat([df, geometry], axis=1)
 
     # Coerce numeric
     for col in KEY_METRICS:
@@ -119,7 +149,7 @@ def print_table(summary: pd.DataFrame) -> None:
     print("  RESULTS SUMMARY")
     print("=" * 72)
     header = (
-        f"  {'Mode':<12} {'N':>6} {'Nb':>4} {'Nh':>5} {'Seeds':>6}  "
+        f"  {'Mode':<12} {'N':>6} {'Nb':>4} {'Lb':>6} {'Nh':>5} {'N_ell':>6} {'Nc':>6} {'Seeds':>6}  "
         f"{'Coverage':>10}  {'RIAE':>10}  {'L2':>10}"
     )
     if has_vi:
@@ -129,7 +159,25 @@ def print_table(summary: pd.DataFrame) -> None:
     print("  " + "-" * (116 if has_vi else 80))
 
     for _, row in summary.iterrows():
+        lb_val = row.get("Lb", np.nan)
         nh = str(row.get("Nh", "?"))
+        n_ell_val = row.get("N_ell", np.nan)
+        nc_val = row.get("Nc", np.nan)
+        lb = (
+            str(int(lb_val))
+            if pd.notna(lb_val) and np.isfinite(float(lb_val))
+            else "?"
+        )
+        n_ell = (
+            str(int(n_ell_val))
+            if pd.notna(n_ell_val) and np.isfinite(float(n_ell_val))
+            else "?"
+        )
+        nc = (
+            str(int(nc_val))
+            if pd.notna(nc_val) and np.isfinite(float(nc_val))
+            else "?"
+        )
         cov = row.get("coverage_mean", float("nan"))
         cov_s = row.get("coverage_std", float("nan"))
         riae = row.get("riae_matrix_mean", float("nan"))
@@ -149,7 +197,10 @@ def print_table(summary: pd.DataFrame) -> None:
             f"  {str(row.get('mode','?')):<12} "
             f"{int(row.get('N', 0)):>6} "
             f"{int(row.get('Nb', 0)):>4} "
+            f"{lb:>6} "
             f"{nh:>5} "
+            f"{n_ell:>6} "
+            f"{nc:>6} "
             f"{n_s:>6}  "
             f"{cov:>8.4f}±{cov_s:.3f}  "
             f"{riae:>8.4f}±{riae_s:.3f}  "
@@ -227,7 +278,11 @@ def main():
             print(
                 f"    seed={int(row['seed']):3d}  "
                 f"mode={str(row.get('mode','?')):<12}  "
+                f"Nb={int(row.get('Nb', 0)):>3d}  "
+                f"Lb={int(row.get('Lb', 0)):>5d}  "
                 f"Nh={str(row.get('Nh','?')):>5}  "
+                f"N_ell={int(row.get('N_ell', 0)):>5d}  "
+                f"Nc={int(row.get('Nc', 0)):>5d}  "
                 f"coverage={float(row['coverage']):.4f}"
             )
 

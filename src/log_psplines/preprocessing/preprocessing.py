@@ -188,10 +188,6 @@ def _preprocess_with_run_config(
         data,
         run_config,
     )
-    fft_data = _apply_frequency_exclusion(
-        fft_data,
-        run_config.model.freq_excl_bands or (),
-    )
     scaled_true_psd = _align_true_psd_to_freq(
         run_config.model.true_psd,
         fft_data,
@@ -207,6 +203,13 @@ def _preprocess_with_run_config(
     ), "Coarse graining should preserve non-None fft_data"
     fft_data = fft_data_cg
 
+    # Null-band excision: applied after CG so the CG divisibility constraint is unaffected.
+    fft_data = _apply_frequency_exclusion(
+        fft_data,
+        run_config.model.freq_excl_bands or (),
+    )
+    scaled_true_psd = _align_true_psd_to_freq(scaled_true_psd, fft_data)
+
     if include_overlays:
         (
             extra_empirical_psd,
@@ -218,7 +221,6 @@ def _preprocess_with_run_config(
         extra_empirical_labels = None
         extra_empirical_styles = None
 
-    scaled_true_psd = _align_true_psd_to_freq(scaled_true_psd, fft_data)
     _run_preprocessing_checks(fft_data, run_config)
     return PreprocessedMCMCInput(
         processed_data=fft_data,

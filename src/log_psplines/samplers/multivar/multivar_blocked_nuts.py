@@ -80,6 +80,7 @@ def _blocked_channel_model(
     design_weights: dict | None = None,
     tau: Optional[float] = None,
     enbw: float = 1.0,
+    eta: float = 1.0,
 ) -> None:
     """NumPyro model for a single Cholesky block (row of ``T``).
 
@@ -113,6 +114,23 @@ def _blocked_channel_model(
         divided by ``enbw`` so that the posterior is correctly calibrated
         regardless of window choice.  Rectangular window → ``enbw=1.0``
         (no change).  Hann window → ``enbw≈1.5``.
+    eta
+        Likelihood tempering exponent (η-posterior).  The log-likelihood
+        is multiplied by ``eta`` before being passed to ``numpyro.factor``.
+        ``eta=1.0`` recovers the standard (untempered) posterior.  Values
+        ``0 < eta < 1`` flatten the likelihood surface, producing wider
+        credible intervals.
+
+        When the sampler config sets ``eta="auto"`` (the default), the
+        resolved value passed here is ``min(1, n_basis * Nb * Nh / N_freq)``
+        where ``n_basis`` is the number of B-spline basis functions,
+        ``Nb`` the Wishart degrees of freedom, ``Nh`` the coarse-grain
+        multiplicity, and ``N_freq`` the post-coarse-graining bin count.  This corrects for the Whittle pseudo-
+        likelihood overstating Fisher information when ``N_freq`` >>
+        ``n_basis`` (Grünwald "Safe Bayes" / generalized posterior).
+        The correction is analogous to the ENBW factor: both account
+        for the effective number of independent observations being
+        smaller than the raw bin count.
 
     Notes
     -----
@@ -238,6 +256,11 @@ def _blocked_channel_model(
     log_likelihood = log_likelihood / jnp.asarray(
         enbw, dtype=log_delta_sq.dtype
     )
+    # η-tempering: scale the log-likelihood by eta ∈ (0, 1] to produce a
+    # generalized posterior.  eta=1.0 is the standard (untempered) case.
+    log_likelihood = log_likelihood * jnp.asarray(
+        eta, dtype=log_delta_sq.dtype
+    )
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
 
@@ -294,6 +317,18 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     tau: Optional[float] = None
     design_from_vi: bool = False
     design_from_vi_tau: float = 10.0
+
+    # η-tempering (generalized posterior / Safe Bayes correction).
+    # Corrects over-concentration of the Whittle pseudo-likelihood when the
+    # smooth P-spline model has far fewer effective parameters (n_basis) than
+    # frequency bins (N_freq).
+    #
+    # - ``"auto"`` (default): η = min(1, n_basis × Nb × Nh / N_freq), computed
+    #   per Cholesky block from basis shape and data attributes.
+    #   This is the recommended setting.
+    # - ``1.0``: no correction (standard Whittle posterior, legacy behaviour).
+    # - Any float in (0, 1]: manual override for investigation.
+    eta: float | str = "auto"
 
     def __post_init__(self):
         super().__post_init__()
@@ -435,6 +470,50 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
     def sampler_type(self) -> str:
         return "multivariate_blocked_nuts"
 
+    def _resolve_eta(self, channel_index: int) -> float:
+        """Resolve the eta config value to a concrete float for a channel.
+
+        When ``eta="auto"``, compute the correction factor from model
+        dimensions.  The Whittle likelihood treats ``N_freq`` frequency bins
+        as independent observations, but the P-spline model constrains the
+        spectrum to an ``n_basis``-dimensional smooth subspace.  The
+        resulting posterior is over-concentrated by approximately
+        ``N_freq / (n_basis × Nb)``, because each of the ``n_basis``
+        effective parameters absorbs information from ``N_freq / n_basis``
+        bins, while the ``Nb`` Wishart replications per bin provide genuine
+        independent information that the model can use.
+
+        The auto formula is therefore::
+
+            η = min(1, n_basis × Nb × Nh / N_freq)
+
+        where ``N_freq`` is already the post-coarse-graining bin count
+        (``self.N``), ``Nb`` is the Wishart DOF, and ``Nh`` is the
+        coarse-grain multiplicity.  ``Nh`` must appear because the
+        likelihood weights each coarse bin by ``Nb × Nh`` (the log-det
+        term scales as ``Nb * Nh`` and the residual sums over ``Nb * Nh``
+        replicates), so the total Fisher information per coarse bin is
+        proportional to ``Nb × Nh``, not ``Nb`` alone.
+
+        This is analogous to the ENBW correction (which adjusts for
+        inter-bin correlation from windowing) — both account for the
+        effective number of independent observations being smaller than
+        the raw count.
+        """
+        raw = self.config.eta
+        if isinstance(raw, str) and raw == "auto":
+            basis = self.all_bases[channel_index]
+            n_freq, n_basis = basis.shape
+            eta = min(1.0, float(n_basis * self.Nb * self.Nh) / float(n_freq))
+            if channel_index == 0:
+                logger.info(
+                    f"eta='auto': n_basis={n_basis}, Nb={self.Nb}, Nh={self.Nh}, "
+                    f"N_freq={n_freq} -> "
+                    f"eta = min(1, {n_basis}*{self.Nb}*{self.Nh}/{n_freq}) = {eta:.4f}",
+                )
+            return eta
+        return float(raw)
+
     def _get_channel_setting(
         self,
         name: str,
@@ -468,11 +547,11 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         return evaluate_log_density_batch
 
     def _channel_model_kwargs(self, channel_index: int) -> Dict[str, Any]:
-        theta_re_basis, theta_re_penalty = self._theta_component_arrays_for_channel(
-            channel_index, part="re"
+        theta_re_basis, theta_re_penalty = (
+            self._theta_component_arrays_for_channel(channel_index, part="re")
         )
-        theta_im_basis, theta_im_penalty = self._theta_component_arrays_for_channel(
-            channel_index, part="im"
+        theta_im_basis, theta_im_penalty = (
+            self._theta_component_arrays_for_channel(channel_index, part="im")
         )
         return {
             "channel_index": channel_index,
@@ -496,6 +575,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             "Nb": int(self.Nb),
             "Nh": int(self.Nh),
             "enbw": float(self.enbw),
+            "eta": self._resolve_eta(channel_index),
             "design_weights": self._design_weights,
             "tau": self.config.tau,
         }
@@ -688,6 +768,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self.Nh,
                 self._design_weights or None,
                 self.config.tau,
+                self.enbw,
+                self._resolve_eta(channel_index),
                 extra_fields=(
                     (
                         "potential_energy",

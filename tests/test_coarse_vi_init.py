@@ -263,3 +263,34 @@ def test_multivariate_var2_3d_coarse_vi_warm_start_invariants():
     assert np.all(diag > 0.0)
     assert np.nanmin(coherence) >= -1e-8
     assert np.nanmax(coherence) <= 1.0 + 1e-8
+
+
+def test_multivariate_auto_coarse_vi_uses_max_component_basis_size():
+    n = 1024
+    ts = MultivariateTimeseries(
+        t=np.arange(n, dtype=np.float64),
+        y=_simulate_var2_3d(n, seed=21),
+    )
+    cfg = RunMCMCConfig(
+        Nb=2,
+        model=ModelConfig(
+            n_knots={
+                "delta": 5,
+                "theta_re": 5,
+                "theta_im": 9,
+            },
+            degree=3,
+        ),
+        diagnostics=DiagnosticsConfig(verbose=False, compute_lnz=False),
+        vi=VIConfig(
+            auto_coarse_vi=True,
+            auto_coarse_vi_min_full_nfreq=1,
+        ),
+    )
+
+    preproc = _preprocess_data(ts, config=cfg)
+
+    assert preproc.coarse_vi_context is not None
+    metadata = preproc.coarse_vi_context.metadata
+    assert metadata["coarse_vi_mode"] == "auto"
+    assert metadata["coarse_vi_basis_target_floor"] == 110

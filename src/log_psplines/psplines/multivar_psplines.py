@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import (
     Callable,
@@ -22,6 +23,7 @@ from .knots_locator import init_knots, multivar_psd_knot_scores
 from .psplines import LogPSplines
 
 _MULTIVAR_ALLOWED_KNOT_METHODS = ("uniform", "log", "density")
+_MULTIVAR_KNOT_FAMILY_KEYS = ("delta", "theta_re", "theta_im")
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,17 @@ class MultivarComponentSpec:
     key: MultivarComponentKey
     model: LogPSplines
     score: Optional[np.ndarray] = None
+
+
+def _resolve_family_knot_counts(
+    n_knots: int | Mapping[object, object],
+) -> dict[str, int]:
+    """Return knot counts for delta, theta_re, and theta_im families."""
+    if isinstance(n_knots, Mapping):
+        return {key: int(n_knots[key]) for key in _MULTIVAR_KNOT_FAMILY_KEYS}
+
+    count = int(n_knots)
+    return {key: count for key in _MULTIVAR_KNOT_FAMILY_KEYS}
 
 
 def _build_component_knots(
@@ -247,7 +260,7 @@ class MultivariateLogPSplines:
     def from_multivar_fft(
         cls,
         fft_data: MultivarFFT,
-        n_knots: int,
+        n_knots: int | Mapping[object, object],
         degree: int = 3,
         diffMatrixOrder: int = 2,
         knot_kwargs: dict[str, object] | None = None,
@@ -259,8 +272,11 @@ class MultivariateLogPSplines:
         ----------
         fft_data : MultivarFFT
             Multivariate FFT data with real/imaginary components and design matrices
-        n_knots : int
-            Number of interior knots for P-spline basis
+        n_knots : int or mapping
+            Knot-count specification for the Cholesky components. Provide a
+            single integer to reuse the same number of knots for every
+            component, or a mapping with family counts for
+            ``"delta"``, ``"theta_re"``, and ``"theta_im"``.
         degree : int, default=3
             Polynomial degree of B-spline basis
         diffMatrixOrder : int, default=2
@@ -284,6 +300,7 @@ class MultivariateLogPSplines:
 
         N = fft_data.N
         p = fft_data.p
+        family_knot_counts = _resolve_family_knot_counts(n_knots)
 
         # Create frequency grid for knot placement (normalized to [0,1])
         freq = np.asarray(fft_data.freq, dtype=np.float64)
@@ -337,13 +354,14 @@ class MultivariateLogPSplines:
         # knot placement and basis construction.
         diagonal_models = []
         for i in range(p):
+            delta_key = MultivarComponentKey("delta", i)
             score_diag = diagonal_scores[i]
-            component_scores[MultivarComponentKey("delta", i)] = np.asarray(
+            component_scores[delta_key] = np.asarray(
                 score_diag, dtype=np.float64
             )
             knots_diag = _build_component_knots(
                 freq=freq,
-                n_knots=n_knots,
+                n_knots=family_knot_counts["delta"],
                 score=score_diag,
                 n_freq=N,
                 knot_kwargs=knot_kwargs,
@@ -388,18 +406,20 @@ class MultivariateLogPSplines:
             _, theta_emp = psd_to_cholesky_components(Y_np / max(Nb, 1))
 
             for theta_idx, (j_idx, l_idx) in enumerate(theta_pairs):
+                theta_re_key = MultivarComponentKey(
+                    "theta", j_idx, l=l_idx, part="re"
+                )
+                theta_im_key = MultivarComponentKey(
+                    "theta", j_idx, l=l_idx, part="im"
+                )
                 score_theta_re = np.asarray(
                     offdiag_re_scores[theta_idx], dtype=np.float64
                 )
                 score_theta_im = np.asarray(
                     offdiag_im_scores[theta_idx], dtype=np.float64
                 )
-                component_scores[
-                    MultivarComponentKey("theta", j_idx, l=l_idx, part="re")
-                ] = score_theta_re
-                component_scores[
-                    MultivarComponentKey("theta", j_idx, l=l_idx, part="im")
-                ] = score_theta_im
+                component_scores[theta_re_key] = score_theta_re
+                component_scores[theta_im_key] = score_theta_im
                 # Use actual empirical theta components as initialisation targets.
                 # Re and Im are initialised independently so each spline starts
                 # from the correct signed value rather than a log-magnitude proxy.
@@ -407,14 +427,14 @@ class MultivariateLogPSplines:
                 theta_im_init = np.imag(theta_emp[:, j_idx, l_idx])
                 knots_theta_re = _build_component_knots(
                     freq=freq,
-                    n_knots=n_knots,
+                    n_knots=family_knot_counts["theta_re"],
                     score=score_theta_re,
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
                 )
                 knots_theta_im = _build_component_knots(
                     freq=freq,
-                    n_knots=n_knots,
+                    n_knots=family_knot_counts["theta_im"],
                     score=score_theta_im,
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
@@ -452,16 +472,14 @@ class MultivariateLogPSplines:
         )
 
     @property
-    def n_knots(self) -> int:
-        """Representative knot count from the first diagonal component."""
-        first_key = self.component_order[0]
-        return len(self.component_specs[first_key].model.knots)
+    def n_knots(self) -> int | list[list[int]]:
+        """Knot counts per Cholesky entry, or one int when all are equal."""
+        return self._component_count_matrix("n_knots")
 
     @property
-    def n_basis(self) -> int:
-        """Number of basis functions per component."""
-        first_key = self.component_order[0]
-        return self.component_specs[first_key].model.n_basis
+    def n_basis(self) -> int | list[list[int]]:
+        """Basis counts per Cholesky entry, or one int when all are equal."""
+        return self._component_count_matrix("n_basis")
 
     @property
     def n_theta(self) -> int:
@@ -598,6 +616,42 @@ class MultivariateLogPSplines:
             all_penalties.append(model.penalty_matrix)
 
         return all_bases, all_penalties
+
+    def _component_count_matrix(
+        self, quantity: Literal["n_knots", "n_basis"]
+    ) -> int | list[list[int]]:
+        """Return component counts as a matrix matching the Cholesky layout."""
+        matrix = [[0 for _ in range(self.p)] for _ in range(self.p)]
+        counts: list[int] = []
+
+        for j in range(self.p):
+            diag_model = self.component_specs[self.delta_key(j)].model
+            value = (
+                int(len(diag_model.knots))
+                if quantity == "n_knots"
+                else int(diag_model.n_basis)
+            )
+            matrix[j][j] = value
+            counts.append(value)
+
+        for j, l in self.theta_pairs:
+            re_model = self.get_theta_model("re", j, l)
+            im_model = self.get_theta_model("im", j, l)
+            re_value = (
+                int(len(re_model.knots))
+                if quantity == "n_knots"
+                else int(re_model.n_basis)
+            )
+            im_value = (
+                int(len(im_model.knots))
+                if quantity == "n_knots"
+                else int(im_model.n_basis)
+            )
+            matrix[j][l] = re_value
+            matrix[l][j] = im_value
+            counts.extend([re_value, im_value])
+
+        return counts[0] if len(set(counts)) == 1 else matrix
 
     def compute_design_weights(
         self,
@@ -896,9 +950,16 @@ class MultivariateLogPSplines:
         return psd_percentiles, psd_imag_percentiles, coherence_percentiles
 
     def __repr__(self):
+        knot_counts = {
+            len(spec.model.knots) for spec in self.component_specs.values()
+        }
+        if len(knot_counts) == 1:
+            knot_label = str(next(iter(knot_counts)))
+        else:
+            knot_label = f"mixed[{min(knot_counts)}-{max(knot_counts)}]"
         return (
             f"MultivariateLogPSplines(channels={self.p}, "
-            f"knots={self.n_knots}, degree={self.degree}, "
+            f"knots={knot_label}, degree={self.degree}, "
             f"penaltyOrder={self.diffMatrixOrder}, N={self.N})"
         )
 

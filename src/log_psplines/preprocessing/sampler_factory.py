@@ -32,6 +32,10 @@ def _build_model_from_data(
     model_config,
 ):
     if isinstance(processed_data, Periodogram):
+        if isinstance(model_config.n_knots, dict):
+            raise TypeError(
+                "Univariate models require model.n_knots to be a single integer."
+            )
         return LogPSplines.from_periodogram(
             processed_data,
             n_knots=model_config.n_knots,

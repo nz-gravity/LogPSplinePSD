@@ -115,7 +115,10 @@ def _build_component_knots(
         raise ValueError(
             f"score length must match n_freq={n_freq}, got {score_array.shape[0]}"
         )
-    score_array = np.maximum(score_array, 1e-12)
+    # Scores may be signed (e.g. Cholesky theta oscillating around zero).
+    # Clean NaN/inf but preserve sign so gradient-based placement sees
+    # genuine shape transitions, not artificial kinks at zero crossings.
+    score_array = np.nan_to_num(score_array, nan=0.0, posinf=0.0, neginf=0.0)
     knot_periodogram = Periodogram(
         freqs=np.asarray(freq, dtype=np.float64),
         power=score_array,
@@ -283,9 +286,9 @@ class MultivariateLogPSplines:
             Supported methods match univariate naming:
             ``method in {"uniform", "log", "density"}``.
             When omitted, defaults to ``method="density"``.
-            For ``method="density"``, the knot CDF is built from the
-            trace-equivalent Wishart energy ``sum(u_re**2 + u_im**2)``
-            computed per frequency.
+            For ``method="density"``, per-component knot scores are always
+            computed from the Cholesky parameterization of the channel-space
+            Wishart matrix.
 
         Returns
         -------
@@ -328,9 +331,14 @@ class MultivariateLogPSplines:
         Y_np = U_to_Y(u_complex_np)
         Nb = max(int(fft_data.Nb), 1)
 
-        knot_scoring = (
-            str(knot_kwargs.get("scoring", "cholesky")).strip().lower()
-        )
+        requested_scoring = knot_kwargs.get("scoring")
+        if requested_scoring is not None:
+            knot_kwargs = {
+                key: value
+                for key, value in knot_kwargs.items()
+                if key != "scoring"
+            }
+
         (
             diagonal_scores,
             offdiag_re_scores,
@@ -339,9 +347,6 @@ class MultivariateLogPSplines:
             Y_np,
             Nb,
             p,
-            scoring=knot_scoring,
-            u_re=u_re_np if knot_scoring == "spectral" else None,
-            u_im=u_im_np if knot_scoring == "spectral" else None,
         )
         component_scores: Dict[MultivarComponentKey, np.ndarray] = {}
 

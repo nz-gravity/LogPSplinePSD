@@ -28,6 +28,7 @@ def _make_fft_data(
     n_freq: int = 40,
     peak_index: int | None = None,
     peak_scale: float = 0.0,
+    peak_width: int = 5,
 ) -> MultivarFFT:
     """Construct deterministic multivariate FFT stats for knot tests."""
     p = 2
@@ -47,8 +48,13 @@ def _make_fft_data(
 
     if peak_index is not None and peak_scale > 0.0:
         peak_index = int(np.clip(peak_index, 0, n_freq - 1))
-        u_re[peak_index] *= peak_scale
-        u_im[peak_index] *= peak_scale
+        # Broad peak so the adaptive denoiser recognises it as a genuine
+        # feature rather than a noise spike.
+        half = max(1, peak_width // 2)
+        lo = max(0, peak_index - half)
+        hi = min(n_freq, peak_index + half + 1)
+        u_re[lo:hi] *= peak_scale
+        u_im[lo:hi] *= peak_scale
 
     return MultivarFFT(
         u_re=u_re,
@@ -175,6 +181,28 @@ def test_multivar_invalid_knot_methods_raise_clear_error(method: str):
             diffMatrixOrder=2,
             knot_kwargs={"method": method},
         )
+
+
+def test_multivar_non_cholesky_scoring_is_ignored():
+    fft_data = _make_fft_data()
+    model_default = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=8,
+        degree=3,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+    )
+    model_with_scoring = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=8,
+        degree=3,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density", "scoring": "spectral"},
+    )
+    np.testing.assert_allclose(
+        model_default.diagonal_models[0].knots,
+        model_with_scoring.diagonal_models[0].knots,
+    )
 
 
 def test_multivar_density_allows_component_specific_diagonal_knots():
@@ -322,7 +350,7 @@ def test_multivar_density_scoring_uses_channel_space_wishart(
         n_knots=6,
         degree=2,
         diffMatrixOrder=2,
-        knot_kwargs={"method": "density", "scoring": "cholesky"},
+        knot_kwargs={"method": "density"},
     )
 
     assert (
@@ -364,10 +392,12 @@ def test_multivar_density_assigns_distinct_re_im_knot_vectors(monkeypatch):
         diag_scores = [np.ones(n_freq, dtype=np.float64) for _ in range(p)]
 
         # Force different density concentration so re/im knot vectors should differ.
+        # Use broad bumps (not single spikes) so the adaptive denoiser
+        # recognises them as genuine features rather than noise.
         re_score = np.ones(n_freq, dtype=np.float64)
         im_score = np.ones(n_freq, dtype=np.float64)
-        re_score[8] = 100.0
-        im_score[52] = 100.0
+        re_score[6:12] = 50.0
+        im_score[50:56] = 50.0
         return diag_scores, [re_score], [im_score]
 
     monkeypatch.setattr(
@@ -380,7 +410,7 @@ def test_multivar_density_assigns_distinct_re_im_knot_vectors(monkeypatch):
         n_knots=10,
         degree=2,
         diffMatrixOrder=2,
-        knot_kwargs={"method": "density", "scoring": "cholesky"},
+        knot_kwargs={"method": "density"},
     )
 
     knots_re = np.round(np.asarray(model.offdiag_re_models[(1, 0)].knots), 12)

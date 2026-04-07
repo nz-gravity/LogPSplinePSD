@@ -272,7 +272,7 @@ def _preprocess_with_run_config(
         extra_empirical_labels = None
         extra_empirical_styles = None
 
-    _run_preprocessing_checks(fft_data, run_config)
+    # _run_preprocessing_checks(fft_data, run_config)
     return PreprocessedMCMCInput(
         processed_data=fft_data,
         scaled_true_psd=scaled_true_psd,

@@ -1,5 +1,14 @@
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Literal, Optional, Sequence, Tuple, cast
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    cast,
+)
 
 import jax
 import jax.numpy as jnp
@@ -93,7 +102,10 @@ def _build_component_knots(
         raise ValueError(
             f"score length must match n_freq={n_freq}, got {score_array.shape[0]}"
         )
-    score_array = np.maximum(score_array, 1e-12)
+    # Scores may be signed (e.g. Cholesky theta oscillating around zero).
+    # Clean NaN/inf but preserve sign so gradient-based placement sees
+    # genuine shape transitions, not artificial kinks at zero crossings.
+    score_array = np.nan_to_num(score_array, nan=0.0, posinf=0.0, neginf=0.0)
     knot_periodogram = Periodogram(
         freqs=np.asarray(freq, dtype=np.float64),
         power=score_array,
@@ -178,8 +190,8 @@ class MultivariateLogPSplines:
     offdiag_im_models: Dict[Tuple[int, int], LogPSplines] = field(
         default_factory=dict
     )
-    component_specs: Dict[MultivarComponentKey, MultivarComponentSpec] = (
-        field(default_factory=dict, repr=False)
+    component_specs: Dict[MultivarComponentKey, MultivarComponentSpec] = field(
+        default_factory=dict, repr=False
     )
     component_order: List[MultivarComponentKey] = field(
         default_factory=list, repr=False
@@ -216,8 +228,12 @@ class MultivariateLogPSplines:
                         key_im
                     ].model
 
-        missing_re = [pair for pair in pairs if pair not in self.offdiag_re_models]
-        missing_im = [pair for pair in pairs if pair not in self.offdiag_im_models]
+        missing_re = [
+            pair for pair in pairs if pair not in self.offdiag_re_models
+        ]
+        missing_im = [
+            pair for pair in pairs if pair not in self.offdiag_im_models
+        ]
         if missing_re or missing_im:
             raise ValueError(
                 "Per-component off-diagonal models are incomplete. "
@@ -254,9 +270,9 @@ class MultivariateLogPSplines:
             Supported methods match univariate naming:
             ``method in {"uniform", "log", "density"}``.
             When omitted, defaults to ``method="density"``.
-            For ``method="density"``, the knot CDF is built from the
-            trace-equivalent Wishart energy ``sum(u_re**2 + u_im**2)``
-            computed per frequency.
+            For ``method="density"``, per-component knot scores are always
+            computed from the Cholesky parameterization of the channel-space
+            Wishart matrix.
 
         Returns
         -------
@@ -298,9 +314,14 @@ class MultivariateLogPSplines:
         Y_np = U_to_Y(u_complex_np)
         Nb = max(int(fft_data.Nb), 1)
 
-        knot_scoring = (
-            str(knot_kwargs.get("scoring", "cholesky")).strip().lower()
-        )
+        requested_scoring = knot_kwargs.get("scoring")
+        if requested_scoring is not None:
+            knot_kwargs = {
+                key: value
+                for key, value in knot_kwargs.items()
+                if key != "scoring"
+            }
+
         (
             diagonal_scores,
             offdiag_re_scores,
@@ -309,9 +330,6 @@ class MultivariateLogPSplines:
             Y_np,
             Nb,
             p,
-            scoring=knot_scoring,
-            u_re=u_re_np if knot_scoring == "spectral" else None,
-            u_im=u_im_np if knot_scoring == "spectral" else None,
         )
         component_scores: Dict[MultivarComponentKey, np.ndarray] = {}
 
@@ -401,21 +419,25 @@ class MultivariateLogPSplines:
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
                 )
-                offdiag_re_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
-                    log_target=theta_re_init,
-                    knots=knots_theta_re,
-                    degree=degree,
-                    diff_matrix_order=diffMatrixOrder,
-                    n_freq=N,
-                    grid_points=freq_norm,
+                offdiag_re_models[(j_idx, l_idx)] = (
+                    _build_pspline_from_log_target(
+                        log_target=theta_re_init,
+                        knots=knots_theta_re,
+                        degree=degree,
+                        diff_matrix_order=diffMatrixOrder,
+                        n_freq=N,
+                        grid_points=freq_norm,
+                    )
                 )
-                offdiag_im_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
-                    log_target=theta_im_init,
-                    knots=knots_theta_im,
-                    degree=degree,
-                    diff_matrix_order=diffMatrixOrder,
-                    n_freq=N,
-                    grid_points=freq_norm,
+                offdiag_im_models[(j_idx, l_idx)] = (
+                    _build_pspline_from_log_target(
+                        log_target=theta_im_init,
+                        knots=knots_theta_im,
+                        degree=degree,
+                        diff_matrix_order=diffMatrixOrder,
+                        n_freq=N,
+                        grid_points=freq_norm,
+                    )
                 )
 
         return cls(

@@ -115,6 +115,8 @@ def run_lisa_mcmc(
     tau: Optional[float] = None,
     only_vi: bool = False,
     outdir: str = ".",
+    eta: float | str = "auto",
+    eta_c: float = 2.0,
 ) -> az.InferenceData:
     """Run multivariate MCMC on LISA data.
 
@@ -183,6 +185,8 @@ def run_lisa_mcmc(
         compute_lnz=False,
         design_psd=true_psd_source if tau is not None else None,
         tau=tau,
+        eta=eta,
+        eta_c=eta_c,
     )
 
     attach_truth_psd_group(idata, freq_true=freq_true, S_true=S_true)

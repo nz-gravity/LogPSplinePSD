@@ -320,15 +320,21 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
 
     # η-tempering (generalized posterior / Safe Bayes correction).
     # Corrects over-concentration of the Whittle pseudo-likelihood when the
-    # smooth P-spline model has far fewer effective parameters (n_basis) than
-    # frequency bins (N_freq).
+    # smooth P-spline model has far fewer effective parameters than frequency
+    # bins.  The Whittle likelihood treats each coarse-grained bin as
+    # carrying Nb×Nh independent Wishart replications, inflating the Fisher
+    # information far beyond what the smooth P-spline model can resolve.
     #
-    # - ``"auto"`` (default): η = min(1, n_basis × Nb × Nh / N_freq), computed
-    #   per Cholesky block from basis shape and data attributes.
-    #   This is the recommended setting.
+    # - ``"auto"`` (default): η = min(1, c / (Nb × Nh)), where c is set by
+    #   ``eta_c``.  Empirically validated on VAR(2) simulations (coverage
+    #   study, seeds 0-99, multiple Nb/Nh configurations).
     # - ``1.0``: no correction (standard Whittle posterior, legacy behaviour).
     # - Any float in (0, 1]: manual override for investigation.
     eta: float | str = "auto"
+    # Scaling constant for the auto-eta formula: η = min(1, eta_c / (Nb×Nh)).
+    # Default c=2 targets ~90% coverage.  Increase for wider CIs (more
+    # conservative), decrease for tighter CIs.
+    eta_c: float = 2.0
 
     def __post_init__(self):
         super().__post_init__()
@@ -471,45 +477,40 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         return "multivariate_blocked_nuts"
 
     def _resolve_eta(self, channel_index: int) -> float:
+        return self._resolve_eta_value(self.config.eta, channel_index)
+
+    def _resolve_eta_value(
+        self,
+        eta_value: float | str | None,
+        channel_index: int,
+    ) -> float:
         """Resolve the eta config value to a concrete float for a channel.
 
         When ``eta="auto"``, compute the correction factor from model
-        dimensions.  The Whittle likelihood treats ``N_freq`` frequency bins
-        as independent observations, but the P-spline model constrains the
-        spectrum to an ``n_basis``-dimensional smooth subspace.  The
-        resulting posterior is over-concentrated by approximately
-        ``N_freq / (n_basis × Nb)``, because each of the ``n_basis``
-        effective parameters absorbs information from ``N_freq / n_basis``
-        bins, while the ``Nb`` Wishart replications per bin provide genuine
-        independent information that the model can use.
+        dimensions using the empirically validated scaling rule::
 
-        The auto formula is therefore::
+            η = min(1, c / (Nb × Nh))
 
-            η = min(1, n_basis × Nb × Nh / N_freq)
+        where ``c`` is ``config.eta_c`` (default 2), ``Nb`` is the Bartlett
+        segment count (Wishart DOF), and ``Nh`` is the coarse-graining
+        multiplicity.  The product ``Nb × Nh`` controls the effective sample
+        size per coarse-grained frequency bin in the Whittle likelihood;
+        dividing by it re-calibrates the posterior width to achieve nominal
+        coverage.
 
-        where ``N_freq`` is already the post-coarse-graining bin count
-        (``self.N``), ``Nb`` is the Wishart DOF, and ``Nh`` is the
-        coarse-grain multiplicity.  ``Nh`` must appear because the
-        likelihood weights each coarse bin by ``Nb × Nh`` (the log-det
-        term scales as ``Nb * Nh`` and the residual sums over ``Nb * Nh``
-        replicates), so the total Fisher information per coarse bin is
-        proportional to ``Nb × Nh``, not ``Nb`` alone.
-
-        This is analogous to the ENBW correction (which adjusts for
-        inter-bin correlation from windowing) — both account for the
-        effective number of independent observations being smaller than
-        the raw count.
+        This formula was validated on VAR(2) simulations across multiple
+        ``Nb``, ``Nh``, and ``n_basis`` configurations.  Notably, ``n_basis``
+        is *not* a first-order term — the dominant over-concentration scales
+        with the data replication factor ``Nb × Nh``, not the model dimension.
         """
-        raw = self.config.eta
+        raw = self.config.eta if eta_value is None else eta_value
         if isinstance(raw, str) and raw == "auto":
-            basis = self.all_bases[channel_index]
-            n_freq, n_basis = basis.shape
-            eta = min(1.0, float(n_basis * self.Nb * self.Nh) / float(n_freq))
-            if channel_index == 0:
+            c = self.config.eta_c
+            eta = min(1.0, c / float(self.Nb * self.Nh))
+            if channel_index == 0 and eta_value in (None, self.config.eta):
                 logger.info(
-                    f"eta='auto': n_basis={n_basis}, Nb={self.Nb}, Nh={self.Nh}, "
-                    f"N_freq={n_freq} -> "
-                    f"eta = min(1, {n_basis}*{self.Nb}*{self.Nh}/{n_freq}) = {eta:.4f}",
+                    f"eta='auto': c={c}, Nb={self.Nb}, Nh={self.Nh} -> "
+                    f"eta = min(1, {c}/({self.Nb}*{self.Nh})) = {eta:.4f}",
                 )
             return eta
         return float(raw)
@@ -625,6 +626,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         combined_samples: Dict[str, np.ndarray] = {}
         combined_stats: Dict[str, np.ndarray] = {}
+        warmup_attrs: Dict[str, float | int] = {}
 
         channel_log_delta = []
         theta_re_total = None
@@ -731,21 +733,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             if init_strategy is not None:
                 kernel_kwargs["init_strategy"] = init_strategy
 
-            kernel = NUTS(_blocked_channel_model, **kernel_kwargs)
-
-            mcmc = MCMC(
-                kernel,
-                num_warmup=n_warmup,
-                num_samples=n_samples,
-                num_chains=self.config.num_chains,
-                chain_method=self.chain_method,
-                progress_bar=self.config.verbose,
-                jit_model_args=False,
-            )
-
-            start_time = time.time()
-            mcmc.run(
-                mcmc_keys[channel_index],
+            model_args = (
                 channel_index,
                 u_re_channel,
                 u_im_channel,
@@ -769,19 +757,42 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 self._design_weights or None,
                 self.config.tau,
                 self.enbw,
-                self._resolve_eta(channel_index),
-                extra_fields=(
-                    (
-                        "potential_energy",
-                        "energy",
-                        "num_steps",
-                        "adapt_state.step_size",
-                        "accept_prob",
-                        "diverging",
-                    )
-                    if self.config.save_nuts_diagnostics
-                    else ()
-                ),
+            )
+
+            extra_fields = (
+                (
+                    "potential_energy",
+                    "energy",
+                    "num_steps",
+                    "adapt_state.step_size",
+                    "accept_prob",
+                    "diverging",
+                )
+                if self.config.save_nuts_diagnostics
+                else ()
+            )
+
+            sample_eta = self._resolve_eta(channel_index)
+            warmup_attrs[f"sampling_eta_channel_{channel_index}"] = float(
+                sample_eta
+            )
+
+            kernel = NUTS(_blocked_channel_model, **kernel_kwargs)
+            mcmc = MCMC(
+                kernel,
+                num_warmup=n_warmup,
+                num_samples=n_samples,
+                num_chains=self.config.num_chains,
+                chain_method=self.chain_method,
+                progress_bar=self.config.verbose,
+                jit_model_args=False,
+            )
+            start_time = time.time()
+            mcmc.run(
+                mcmc_keys[channel_index],
+                *model_args,
+                sample_eta,
+                extra_fields=extra_fields,
             )
             total_runtime += time.time() - start_time
 
@@ -863,6 +874,12 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             combined_stats.update(block_stats)
 
         self.runtime = total_runtime
+        if warmup_attrs:
+            existing_attrs = dict(
+                getattr(self, "_extra_idata_attrs", {}) or {}
+            )
+            existing_attrs.update(warmup_attrs)
+            self._extra_idata_attrs = existing_attrs
 
         log_delta_sq = jnp.stack(channel_log_delta, axis=-1)
 

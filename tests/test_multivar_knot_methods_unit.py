@@ -255,6 +255,45 @@ def test_multivar_density_uses_fixed_basis_count_per_component():
     assert basis_sizes == {n_knots + degree - 1}
 
 
+def test_multivar_n_knots_mapping_supports_family_overrides():
+    fft_data = _make_fft_data(n_freq=48)
+
+    model = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots={
+            "delta": 11,
+            "theta_re": 7,
+            "theta_im": 4,
+        },
+        degree=3,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+    )
+
+    assert int(model.diagonal_models[1].knots.shape[0]) == 11
+    assert int(model.diagonal_models[0].knots.shape[0]) == 11
+    assert int(model.offdiag_re_models[(1, 0)].knots.shape[0]) == 7
+    assert int(model.offdiag_im_models[(1, 0)].knots.shape[0]) == 4
+    assert model.n_knots == [[11, 4], [7, 11]]
+    assert model.n_basis == [[13, 6], [9, 13]]
+    assert int(model.offdiag_im_models[(1, 0)].basis.shape[1]) == 6
+
+
+def test_multivar_n_knots_returns_scalar_when_all_component_counts_match():
+    fft_data = _make_fft_data()
+
+    model = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots={"delta": 8, "theta_re": 8, "theta_im": 8},
+        degree=3,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+    )
+
+    assert model.n_knots == 8
+    assert model.n_basis == 10
+
+
 def test_multivar_density_scoring_uses_channel_space_wishart(
     monkeypatch,
 ):

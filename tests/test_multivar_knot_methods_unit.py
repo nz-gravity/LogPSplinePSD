@@ -28,6 +28,7 @@ def _make_fft_data(
     n_freq: int = 40,
     peak_index: int | None = None,
     peak_scale: float = 0.0,
+    peak_width: int = 5,
 ) -> MultivarFFT:
     """Construct deterministic multivariate FFT stats for knot tests."""
     p = 2
@@ -47,8 +48,13 @@ def _make_fft_data(
 
     if peak_index is not None and peak_scale > 0.0:
         peak_index = int(np.clip(peak_index, 0, n_freq - 1))
-        u_re[peak_index] *= peak_scale
-        u_im[peak_index] *= peak_scale
+        # Broad peak so the adaptive denoiser recognises it as a genuine
+        # feature rather than a noise spike.
+        half = max(1, peak_width // 2)
+        lo = max(0, peak_index - half)
+        hi = min(n_freq, peak_index + half + 1)
+        u_re[lo:hi] *= peak_scale
+        u_im[lo:hi] *= peak_scale
 
     return MultivarFFT(
         u_re=u_re,

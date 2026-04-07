@@ -204,34 +204,56 @@ def _init_knots_from_arrays(
 def _adaptive_denoise(signal: np.ndarray) -> np.ndarray:
     """Denoise a 1-D signal for gradient-based knot placement.
 
-    Uses a two-stage approach that is fully parameter-free:
+    Two-stage, parameter-free pipeline:
 
-    1. **Median filter** — removes isolated outlier spikes (common in
-       periodogram-derived signals with heavy-tailed chi-squared noise)
-       without blurring genuine step transitions or peaks.
-    2. **Savitzky-Golay filter** — locally polynomial smooth that preserves
-       the shape, location, and height of peaks and inflection points.
+    1. **Median filter** (wide, ~5 % of N) — aggressively removes heavy-tailed
+       periodogram noise spikes without shifting peaks or transitions.
+    2. **Savitzky-Golay filter** (narrower, ~2 % of N, cubic) — smooths the
+       residual while preserving the shape, location, and height of genuine
+       features.
 
-    Window sizes are derived from signal length (~2 % of N, minimum 5 bins,
-    forced odd for both filters).
+    The asymmetric widths are intentional: the median pass must be wide enough
+    to suppress noise in noisy regions, while the savgol pass stays tight to
+    avoid blurring real spectral features.
     """
     n = signal.size
     if n < 5:
         return signal.copy()
 
-    # Window ≈ 2 % of N, at least 5 bins, forced odd.
-    win = max(5, n // 50)
-    win = win if win % 2 == 1 else win + 1
+    # Stage 1: wide median filter — kills heavy-tailed outlier noise.
+    med_win = max(5, n // 20)  # ~5 % of N
+    med_win = med_win if med_win % 2 == 1 else med_win + 1
+    denoised = medfilt(signal, kernel_size=med_win)
 
-    # Stage 1: median filter — robust to heavy-tailed outlier spikes.
-    denoised = medfilt(signal, kernel_size=win)
-
-    # Stage 2: Savitzky-Golay — polynomial smooth preserving peaks.
-    # polyorder=3 (cubic) handles peaks well; clamp to win-1 for safety.
-    polyorder = min(3, win - 1)
-    denoised = savgol_filter(denoised, window_length=win, polyorder=polyorder)
+    # Stage 2: tighter Savitzky-Golay — preserves peak shape.
+    sg_win = max(5, n // 50)  # ~2 % of N
+    sg_win = sg_win if sg_win % 2 == 1 else sg_win + 1
+    polyorder = min(3, sg_win - 1)
+    denoised = savgol_filter(
+        denoised, window_length=sg_win, polyorder=polyorder
+    )
 
     return denoised
+
+
+def denoise_score(
+    signal: np.ndarray,
+    freqs: np.ndarray,
+) -> np.ndarray:
+    """Denoise a score signal using the same pipeline as knot placement.
+
+    Args:
+        signal: 1-D score array (may be signed).
+        freqs: Corresponding frequency array (unused, kept for API
+            compatibility with the preprocessing plot).
+
+    Returns:
+        Denoised signal on the original frequency grid.
+    """
+    signal = np.asarray(signal, dtype=np.float64)
+    if signal.size < 5:
+        return signal.copy()
+    return _adaptive_denoise(signal)
 
 
 def _quantile_based_knots(
@@ -241,13 +263,10 @@ def _quantile_based_knots(
 ) -> np.ndarray:
     """Place knots at equal quantiles of a gradient-based spectral feature score.
 
-    Knot density is proportional to the absolute gradient of a lightly smoothed
-    version of the score signal.  This concentrates knots where the spectral
-    shape changes most rapidly — at peaks, troughs, and transitions — rather
-    than at regions of high absolute amplitude.
-
-    A small uniform floor (5 % of mean gradient) is added so that flat
-    featureless regions still receive some knots.
+    Knot density is proportional to the absolute gradient of the denoised
+    score signal, plus a small uniform floor so that flat regions still
+    receive some knots.  All processing is in linear frequency — the space
+    where the B-spline basis is evaluated.
     """
     power = np.asarray(periodogram.power, dtype=np.float64)
     freqs = np.asarray(periodogram.freqs, dtype=np.float64)
@@ -258,38 +277,25 @@ def _quantile_based_knots(
 
     n = power.size
     if n < 3:
-        # Too few points for gradient — fall back to uniform spacing.
         return np.linspace(float(freqs[0]), float(freqs[-1]), n_knots)
 
     smooth = _adaptive_denoise(power)
 
-    # Absolute gradient of denoised signal as the feature score.
-    # np.gradient uses central differences in the interior and one-sided
-    # differences at the boundaries.
-    # NOTE: the input may be signed (e.g. Cholesky theta components that
-    # oscillate around zero).  Taking |grad| is correct regardless of sign;
-    # we do NOT clamp negative values beforehand because that would create
-    # artificial gradient spikes at zero crossings.
     gradient = np.abs(np.gradient(smooth, freqs))
     gradient = np.nan_to_num(gradient, nan=0.0, posinf=0.0, neginf=0.0)
 
-    # Add a uniform floor anchored to the signal scale (not the gradient
-    # scale) so that floating-point noise in the gradient of a flat signal
-    # cannot create spurious non-uniformity.  Use mean(|smooth|) rather
-    # than mean(smooth) so that signed signals with mean ≈ 0 still get a
-    # sensible floor.
+    # Uniform floor so featureless regions still get some knots.
     signal_scale = float(np.mean(np.abs(smooth)))
     floor = 0.01 * signal_scale if signal_scale > 0.0 else 1.0
     z = gradient + floor
     z = z / z.sum()
 
-    # CDF → quantile-based knot positions
-    cdf_values = np.cumsum(z)
-    cdf_values = np.insert(cdf_values, 0, 0.0)
+    cdf = np.cumsum(z)
+    cdf = np.insert(cdf, 0, 0.0)
     freqs_ext = np.insert(freqs, 0, freqs[0])
 
     quantiles = np.linspace(0, 1, n_knots)
-    knots = np.interp(quantiles, cdf_values, freqs_ext)
+    knots = np.interp(quantiles, cdf, freqs_ext)
 
     return knots
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from math import ceil
 from typing import Optional, Union
@@ -95,33 +94,9 @@ def _get_frequency_count(data: Union[Periodogram, MultivarFFT]) -> int:
 
 def _max_config_n_knots(n_knots: int | dict[str, int]) -> int:
     """Return the largest knot count implied by a model config."""
-    if isinstance(n_knots, (int, np.integer)) and not isinstance(
-        n_knots, bool
-    ):
+    if isinstance(n_knots, int):
         return int(n_knots)
-    if not isinstance(n_knots, Mapping):
-        raise TypeError(
-            "model.n_knots must be either an integer or a mapping of knot counts."
-        )
-    if not n_knots:
-        raise ValueError("model.n_knots mapping cannot be empty.")
-
-    max_knots: int | None = None
-    for key, value in n_knots.items():
-        if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
-            raise TypeError(
-                "model.n_knots"
-                f"[{key!r}] must be an integer, got {type(value).__name__}."
-            )
-        count = int(value)
-        if count < 2:
-            raise ValueError(
-                f"model.n_knots[{key!r}] must be >= 2, got {count}."
-            )
-        max_knots = count if max_knots is None else max(max_knots, count)
-
-    assert max_knots is not None
-    return max_knots
+    return max(int(value) for value in n_knots.values())
 
 
 def _get_frequency_axis(

@@ -252,37 +252,24 @@ def test_multivar_n_knots_mapping_supports_family_overrides():
     assert int(model.diagonal_models[0].knots.shape[0]) == 11
     assert int(model.offdiag_re_models[(1, 0)].knots.shape[0]) == 7
     assert int(model.offdiag_im_models[(1, 0)].knots.shape[0]) == 4
-    assert int(model.offdiag_re_models[(1, 0)].basis.shape[1]) == 9
+    assert model.n_knots == [[11, 4], [7, 11]]
+    assert model.n_basis == [[13, 6], [9, 13]]
     assert int(model.offdiag_im_models[(1, 0)].basis.shape[1]) == 6
 
 
-def test_multivar_n_knots_mapping_requires_all_families():
+def test_multivar_n_knots_returns_scalar_when_all_component_counts_match():
     fft_data = _make_fft_data()
 
-    with pytest.raises(
-        ValueError,
-        match="n_knots mapping must define all multivariate knot families",
-    ):
-        MultivariateLogPSplines.from_multivar_fft(
-            fft_data=fft_data,
-            n_knots={"delta": 8},
-            degree=3,
-            diffMatrixOrder=2,
-            knot_kwargs={"method": "density"},
-        )
+    model = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots={"delta": 8, "theta_re": 8, "theta_im": 8},
+        degree=3,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+    )
 
-
-def test_multivar_n_knots_mapping_rejects_unknown_keys():
-    fft_data = _make_fft_data()
-
-    with pytest.raises(ValueError, match="Unsupported n_knots mapping key"):
-        MultivariateLogPSplines.from_multivar_fft(
-            fft_data=fft_data,
-            n_knots={"delta": 8, "theta_re": 4, "theta_real": 4},
-            degree=3,
-            diffMatrixOrder=2,
-            knot_kwargs={"method": "density"},
-        )
+    assert model.n_knots == 8
+    assert model.n_basis == 10
 
 
 def test_multivar_density_scoring_uses_channel_space_wishart(

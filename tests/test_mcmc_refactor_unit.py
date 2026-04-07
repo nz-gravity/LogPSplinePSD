@@ -1,11 +1,15 @@
 import numpy as np
+import pytest
 
+from log_psplines.datatypes import Periodogram
 from log_psplines.datatypes.univar import Timeseries
 from log_psplines.mcmc import (
+    ModelConfig,
     RunMCMCConfig,
     _build_welch_overlay,
     run_mcmc,
 )
+from log_psplines.preprocessing.sampler_factory import _build_model_from_data
 
 
 class _DummySampler:
@@ -53,3 +57,18 @@ def test_welch_overlay_guard_returns_none_without_outdir():
     cfg = RunMCMCConfig()
     overlays = _build_welch_overlay(None, None, cfg)
     assert overlays == (None, None, None)
+
+
+def test_univariate_model_rejects_componentwise_n_knots():
+    periodogram = Periodogram(
+        freqs=np.linspace(0.1, 1.0, 8),
+        power=np.ones(8),
+    )
+
+    with pytest.raises(
+        TypeError, match="Univariate models require model.n_knots"
+    ):
+        _build_model_from_data(
+            periodogram,
+            ModelConfig(n_knots={"delta": 5, "theta_re": 5, "theta_im": 5}),
+        )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from math import ceil
 from typing import Optional, Union
@@ -92,6 +93,37 @@ def _get_frequency_count(data: Union[Periodogram, MultivarFFT]) -> int:
     return int(len(data.freq))
 
 
+def _max_config_n_knots(n_knots: int | dict[str, int]) -> int:
+    """Return the largest knot count implied by a model config."""
+    if isinstance(n_knots, (int, np.integer)) and not isinstance(
+        n_knots, bool
+    ):
+        return int(n_knots)
+    if not isinstance(n_knots, Mapping):
+        raise TypeError(
+            "model.n_knots must be either an integer or a mapping of knot counts."
+        )
+    if not n_knots:
+        raise ValueError("model.n_knots mapping cannot be empty.")
+
+    max_knots: int | None = None
+    for key, value in n_knots.items():
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+            raise TypeError(
+                "model.n_knots"
+                f"[{key!r}] must be an integer, got {type(value).__name__}."
+            )
+        count = int(value)
+        if count < 2:
+            raise ValueError(
+                f"model.n_knots[{key!r}] must be >= 2, got {count}."
+            )
+        max_knots = count if max_knots is None else max(max_knots, count)
+
+    assert max_knots is not None
+    return max_knots
+
+
 def _get_frequency_axis(
     data: Union[Periodogram, MultivarFFT],
 ) -> np.ndarray:
@@ -139,7 +171,8 @@ def _derive_vi_coarse_grain_config(
 ):
     vi_cfg = run_config.vi
     full_nfreq = _get_frequency_count(processed_data)
-    k_basis = int(run_config.model.n_knots + run_config.model.degree - 1)
+    max_n_knots = _max_config_n_knots(run_config.model.n_knots)
+    k_basis = int(max_n_knots + run_config.model.degree - 1)
 
     explicit_cfg = _normalize_coarse_grain_config(
         vi_cfg.coarse_grain_config_vi

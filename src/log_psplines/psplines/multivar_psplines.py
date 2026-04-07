@@ -1,5 +1,15 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Literal, Optional, Sequence, Tuple, cast
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    cast,
+)
 
 import jax
 import jax.numpy as jnp
@@ -13,6 +23,7 @@ from .knots_locator import init_knots, multivar_psd_knot_scores
 from .psplines import LogPSplines
 
 _MULTIVAR_ALLOWED_KNOT_METHODS = ("uniform", "log", "density")
+_MULTIVAR_KNOT_FAMILY_KEYS = ("delta", "theta_re", "theta_im")
 
 
 @dataclass(frozen=True)
@@ -64,6 +75,98 @@ class MultivarComponentSpec:
     key: MultivarComponentKey
     model: LogPSplines
     score: Optional[np.ndarray] = None
+
+
+def _coerce_positive_knot_count(value: object, *, label: str) -> int:
+    """Return a validated knot count."""
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise TypeError(
+            f"{label} must be an integer knot count, got {type(value).__name__}."
+        )
+    count = int(value)
+    if count < 2:
+        raise ValueError(f"{label} must be >= 2, got {count}.")
+    return count
+
+
+def _component_knot_family_name(key: MultivarComponentKey) -> str:
+    """Return the family-level knot override key for a component."""
+    if key.family == "delta":
+        return "delta"
+    assert key.part is not None
+    return f"theta_{key.part}"
+
+
+def _expected_component_order_for_p(p: int) -> list[MultivarComponentKey]:
+    """Return the canonical multivariate component ordering for dimension ``p``."""
+    order = [MultivarComponentKey("delta", j) for j in range(p)]
+    for j in range(1, p):
+        for l in range(j):
+            order.append(MultivarComponentKey("theta", j, l=l, part="re"))
+    for j in range(1, p):
+        for l in range(j):
+            order.append(MultivarComponentKey("theta", j, l=l, part="im"))
+    return order
+
+
+def _resolve_component_knot_counts(
+    *,
+    n_knots: int | Mapping[object, object],
+    p: int,
+) -> dict[MultivarComponentKey, int]:
+    """Resolve scalar or per-family knot specifications for a p-variate model.
+
+    ``n_knots`` can be:
+
+    - a single integer, applied to every Cholesky component;
+    - a mapping with exactly the family keys ``"delta"``, ``"theta_re"``,
+      and ``"theta_im"``.
+    """
+    expected_order = _expected_component_order_for_p(p)
+    if isinstance(n_knots, (int, np.integer)) and not isinstance(
+        n_knots, bool
+    ):
+        count = _coerce_positive_knot_count(n_knots, label="n_knots")
+        return {key: count for key in expected_order}
+
+    if not isinstance(n_knots, Mapping):
+        raise TypeError(
+            "n_knots must be either a single integer or a mapping of "
+            "multivariate knot families to integers."
+        )
+    if not n_knots:
+        raise ValueError("n_knots mapping cannot be empty.")
+
+    family_counts: dict[str, int] = {}
+    for raw_key, raw_value in n_knots.items():
+        if not isinstance(raw_key, str):
+            raise TypeError("n_knots mapping keys must be strings.")
+        key_name = raw_key.strip().lower()
+        count = _coerce_positive_knot_count(
+            raw_value, label=f"n_knots[{key_name!r}]"
+        )
+        if key_name not in _MULTIVAR_KNOT_FAMILY_KEYS:
+            allowed = ", ".join(_MULTIVAR_KNOT_FAMILY_KEYS)
+            raise ValueError(
+                f"Unsupported n_knots mapping key '{raw_key}'. "
+                f"Allowed keys are: {allowed}."
+            )
+        family_counts[key_name] = count
+
+    missing: list[str] = []
+    for key in _MULTIVAR_KNOT_FAMILY_KEYS:
+        if key not in family_counts:
+            missing.append(key)
+    if missing:
+        raise ValueError(
+            "n_knots mapping must define all multivariate knot families: "
+            f"{_MULTIVAR_KNOT_FAMILY_KEYS}. Missing: {missing}."
+        )
+
+    return {
+        key: family_counts[_component_knot_family_name(key)]
+        for key in expected_order
+    }
 
 
 def _build_component_knots(
@@ -178,8 +281,8 @@ class MultivariateLogPSplines:
     offdiag_im_models: Dict[Tuple[int, int], LogPSplines] = field(
         default_factory=dict
     )
-    component_specs: Dict[MultivarComponentKey, MultivarComponentSpec] = (
-        field(default_factory=dict, repr=False)
+    component_specs: Dict[MultivarComponentKey, MultivarComponentSpec] = field(
+        default_factory=dict, repr=False
     )
     component_order: List[MultivarComponentKey] = field(
         default_factory=list, repr=False
@@ -216,8 +319,12 @@ class MultivariateLogPSplines:
                         key_im
                     ].model
 
-        missing_re = [pair for pair in pairs if pair not in self.offdiag_re_models]
-        missing_im = [pair for pair in pairs if pair not in self.offdiag_im_models]
+        missing_re = [
+            pair for pair in pairs if pair not in self.offdiag_re_models
+        ]
+        missing_im = [
+            pair for pair in pairs if pair not in self.offdiag_im_models
+        ]
         if missing_re or missing_im:
             raise ValueError(
                 "Per-component off-diagonal models are incomplete. "
@@ -231,7 +338,7 @@ class MultivariateLogPSplines:
     def from_multivar_fft(
         cls,
         fft_data: MultivarFFT,
-        n_knots: int,
+        n_knots: int | Mapping[object, object],
         degree: int = 3,
         diffMatrixOrder: int = 2,
         knot_kwargs: dict[str, object] | None = None,
@@ -243,8 +350,11 @@ class MultivariateLogPSplines:
         ----------
         fft_data : MultivarFFT
             Multivariate FFT data with real/imaginary components and design matrices
-        n_knots : int
-            Number of interior knots for P-spline basis
+        n_knots : int or mapping
+            Knot-count specification for the Cholesky components. Provide a
+            single integer to reuse the same number of knots for every
+            component, or a mapping with family counts for
+            ``"delta"``, ``"theta_re"``, and ``"theta_im"``.
         degree : int, default=3
             Polynomial degree of B-spline basis
         diffMatrixOrder : int, default=2
@@ -268,6 +378,9 @@ class MultivariateLogPSplines:
 
         N = fft_data.N
         p = fft_data.p
+        component_knot_counts = _resolve_component_knot_counts(
+            n_knots=n_knots, p=p
+        )
 
         # Create frequency grid for knot placement (normalized to [0,1])
         freq = np.asarray(fft_data.freq, dtype=np.float64)
@@ -319,13 +432,14 @@ class MultivariateLogPSplines:
         # knot placement and basis construction.
         diagonal_models = []
         for i in range(p):
+            delta_key = MultivarComponentKey("delta", i)
             score_diag = diagonal_scores[i]
-            component_scores[MultivarComponentKey("delta", i)] = np.asarray(
+            component_scores[delta_key] = np.asarray(
                 score_diag, dtype=np.float64
             )
             knots_diag = _build_component_knots(
                 freq=freq,
-                n_knots=n_knots,
+                n_knots=component_knot_counts[delta_key],
                 score=score_diag,
                 n_freq=N,
                 knot_kwargs=knot_kwargs,
@@ -370,18 +484,20 @@ class MultivariateLogPSplines:
             _, theta_emp = psd_to_cholesky_components(Y_np / max(Nb, 1))
 
             for theta_idx, (j_idx, l_idx) in enumerate(theta_pairs):
+                theta_re_key = MultivarComponentKey(
+                    "theta", j_idx, l=l_idx, part="re"
+                )
+                theta_im_key = MultivarComponentKey(
+                    "theta", j_idx, l=l_idx, part="im"
+                )
                 score_theta_re = np.asarray(
                     offdiag_re_scores[theta_idx], dtype=np.float64
                 )
                 score_theta_im = np.asarray(
                     offdiag_im_scores[theta_idx], dtype=np.float64
                 )
-                component_scores[
-                    MultivarComponentKey("theta", j_idx, l=l_idx, part="re")
-                ] = score_theta_re
-                component_scores[
-                    MultivarComponentKey("theta", j_idx, l=l_idx, part="im")
-                ] = score_theta_im
+                component_scores[theta_re_key] = score_theta_re
+                component_scores[theta_im_key] = score_theta_im
                 # Use actual empirical theta components as initialisation targets.
                 # Re and Im are initialised independently so each spline starts
                 # from the correct signed value rather than a log-magnitude proxy.
@@ -389,33 +505,37 @@ class MultivariateLogPSplines:
                 theta_im_init = np.imag(theta_emp[:, j_idx, l_idx])
                 knots_theta_re = _build_component_knots(
                     freq=freq,
-                    n_knots=n_knots,
+                    n_knots=component_knot_counts[theta_re_key],
                     score=score_theta_re,
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
                 )
                 knots_theta_im = _build_component_knots(
                     freq=freq,
-                    n_knots=n_knots,
+                    n_knots=component_knot_counts[theta_im_key],
                     score=score_theta_im,
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
                 )
-                offdiag_re_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
-                    log_target=theta_re_init,
-                    knots=knots_theta_re,
-                    degree=degree,
-                    diff_matrix_order=diffMatrixOrder,
-                    n_freq=N,
-                    grid_points=freq_norm,
+                offdiag_re_models[(j_idx, l_idx)] = (
+                    _build_pspline_from_log_target(
+                        log_target=theta_re_init,
+                        knots=knots_theta_re,
+                        degree=degree,
+                        diff_matrix_order=diffMatrixOrder,
+                        n_freq=N,
+                        grid_points=freq_norm,
+                    )
                 )
-                offdiag_im_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
-                    log_target=theta_im_init,
-                    knots=knots_theta_im,
-                    degree=degree,
-                    diff_matrix_order=diffMatrixOrder,
-                    n_freq=N,
-                    grid_points=freq_norm,
+                offdiag_im_models[(j_idx, l_idx)] = (
+                    _build_pspline_from_log_target(
+                        log_target=theta_im_init,
+                        knots=knots_theta_im,
+                        degree=degree,
+                        diff_matrix_order=diffMatrixOrder,
+                        n_freq=N,
+                        grid_points=freq_norm,
+                    )
                 )
 
         return cls(
@@ -437,7 +557,7 @@ class MultivariateLogPSplines:
 
     @property
     def n_basis(self) -> int:
-        """Number of basis functions per component."""
+        """Representative basis count from the first registered component."""
         first_key = self.component_order[0]
         return self.component_specs[first_key].model.n_basis
 
@@ -874,9 +994,16 @@ class MultivariateLogPSplines:
         return psd_percentiles, psd_imag_percentiles, coherence_percentiles
 
     def __repr__(self):
+        knot_counts = {
+            len(spec.model.knots) for spec in self.component_specs.values()
+        }
+        if len(knot_counts) == 1:
+            knot_label = str(next(iter(knot_counts)))
+        else:
+            knot_label = f"mixed[{min(knot_counts)}-{max(knot_counts)}]"
         return (
             f"MultivariateLogPSplines(channels={self.p}, "
-            f"knots={self.n_knots}, degree={self.degree}, "
+            f"knots={knot_label}, degree={self.degree}, "
             f"penaltyOrder={self.diffMatrixOrder}, N={self.N})"
         )
 

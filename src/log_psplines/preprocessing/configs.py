@@ -48,7 +48,7 @@ FrequencyBand = Tuple[float, float]
 
 @dataclass(frozen=True)
 class ModelConfig:
-    n_knots: int = 10
+    n_knots: int | dict[str, int] = 10
     degree: int = 3
     diffMatrixOrder: int = 2
     knot_kwargs: dict[str, Any] = field(default_factory=dict)

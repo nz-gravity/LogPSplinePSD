@@ -396,9 +396,18 @@ def save_eigenvalue_separation_plot(
 
                 _shade_excluded_bands(ax, add_label=False)
                 if use_log_x:
-                    ax.semilogx(freq, y, color=color, lw=1.2)
+                    ax.semilogx(freq, y, color=color, lw=0.7, alpha=0.45)
                 else:
-                    ax.plot(freq, y, color=color, lw=1.2)
+                    ax.plot(freq, y, color=color, lw=0.7, alpha=0.45)
+
+                # Overlay the denoised signal the knot allocator uses.
+                from ..psplines.knots_locator import denoise_score
+
+                y_smooth = denoise_score(y, freq)
+                if use_log_x:
+                    ax.semilogx(freq, y_smooth, color=color, lw=1.5)
+                else:
+                    ax.plot(freq, y_smooth, color=color, lw=1.5)
 
                 # Draw knot locations as vertical tick marks if provided.
                 if component_knots is not None and label in component_knots:

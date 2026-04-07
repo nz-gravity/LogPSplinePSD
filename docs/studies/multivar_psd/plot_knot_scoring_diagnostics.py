@@ -1,11 +1,11 @@
-"""Compare VAR(2)-3D density-knot allocation for spectral vs cholesky scoring.
+"""Inspect VAR(2)-3D density-knot allocation with cholesky scoring.
 
 This script reproduces the knot-allocation stage used in the multivariate
 study without running full MCMC. It generates:
 
-1. Per-component score-vs-knot plots for both scoring methods.
-2. Cholesky-component plots (log_delta_sq and |theta_{j,l}|) with both knot
-   sets overlaid.
+1. Per-component score-vs-knot plots for cholesky scoring.
+2. Cholesky-component plots (log_delta_sq and |theta_{j,l}|) with knots
+    overlaid.
 3. 3x3 spectral-matrix component plot with knot overlays.
 4. CSV/JSON summaries of knot locations and score concentration metrics.
 """
@@ -65,7 +65,7 @@ SIGMA = np.array(
     dtype=np.float64,
 )
 
-METHODS = ("spectral", "cholesky")
+METHODS = ("cholesky",)
 
 
 @dataclass(frozen=True)
@@ -351,9 +351,16 @@ def _plot_cholesky_component_panels(
             )
             if row == 0:
                 handles = [
-                    plt.Line2D([0], [0], color="black", lw=1.3, label="|Re theta|"),
                     plt.Line2D(
-                        [0], [0], color="0.35", lw=1.2, ls="--", label="|Im theta|"
+                        [0], [0], color="black", lw=1.3, label="|Re theta|"
+                    ),
+                    plt.Line2D(
+                        [0],
+                        [0],
+                        color="0.35",
+                        lw=1.2,
+                        ls="--",
+                        label="|Im theta|",
                     ),
                     plt.Line2D(
                         [0],
@@ -647,7 +654,7 @@ def _run_posterior_for_scoring(
         vi_psd_max_draws=128,
         Nb=nb,
         wishart_window=_parse_window(window),
-        knot_kwargs={"method": "density", "scoring": scoring},
+        knot_kwargs={"method": "density"},
         compute_coherence_quantiles=False,
         true_psd=true_psd,
         max_save_bytes=20_000_000,
@@ -713,13 +720,12 @@ def run_comparison(
     summary_by_method: dict[str, dict[str, ScoreSummary]] = {}
 
     for method in METHODS:
-        diag_scores, offdiag_re_scores, offdiag_im_scores = multivar_psd_knot_scores(
-            y_np,
-            nb,
-            p,
-            scoring=method,
-            u_re=u_re if method == "spectral" else None,
-            u_im=u_im if method == "spectral" else None,
+        diag_scores, offdiag_re_scores, offdiag_im_scores = (
+            multivar_psd_knot_scores(
+                y_np,
+                nb,
+                p,
+            )
         )
         theta_pairs = [(j, l) for j in range(1, p) for l in range(j)]
         if len(offdiag_re_scores) != len(theta_pairs):
@@ -758,10 +764,12 @@ def run_comparison(
             offdiag_re_score = np.asarray(
                 offdiag_re_scores[theta_idx], dtype=np.float64
             )
-            offdiag_re_knots_norm, offdiag_re_knots_hz = _compute_density_knots(
-                freq=freq,
-                score=offdiag_re_score,
-                n_knots=n_knots,
+            offdiag_re_knots_norm, offdiag_re_knots_hz = (
+                _compute_density_knots(
+                    freq=freq,
+                    score=offdiag_re_score,
+                    n_knots=n_knots,
+                )
             )
             method_scores[component_re] = offdiag_re_score
             method_knots_norm[component_re] = offdiag_re_knots_norm
@@ -774,10 +782,12 @@ def run_comparison(
             offdiag_im_score = np.asarray(
                 offdiag_im_scores[theta_idx], dtype=np.float64
             )
-            offdiag_im_knots_norm, offdiag_im_knots_hz = _compute_density_knots(
-                freq=freq,
-                score=offdiag_im_score,
-                n_knots=n_knots,
+            offdiag_im_knots_norm, offdiag_im_knots_hz = (
+                _compute_density_knots(
+                    freq=freq,
+                    score=offdiag_im_score,
+                    n_knots=n_knots,
+                )
             )
             method_scores[component_im] = offdiag_im_score
             method_knots_norm[component_im] = offdiag_im_knots_norm
@@ -792,11 +802,11 @@ def run_comparison(
         summary_by_method[method] = method_summary
 
     score_plot_path = os.path.join(outdir, "knot_score_panels.png")
-    components = [f"diag_{i}" for i in range(p)] + [
-        f"theta_re_{j}_{l}" for j in range(1, p) for l in range(j)
-    ] + [
-        f"theta_im_{j}_{l}" for j in range(1, p) for l in range(j)
-    ]
+    components = (
+        [f"diag_{i}" for i in range(p)]
+        + [f"theta_re_{j}_{l}" for j in range(1, p) for l in range(j)]
+        + [f"theta_im_{j}_{l}" for j in range(1, p) for l in range(j)]
+    )
     _plot_score_panels(
         freq=freq,
         components=components,
@@ -928,20 +938,7 @@ def run_comparison(
     summary_json_path = os.path.join(outdir, "run_summary.json")
     posterior_plot_path = None
     if run_posterior:
-        spectral_idata = _run_posterior_for_scoring(
-            ts=ts_for_posterior,
-            n_knots=n_knots,
-            nb=nb,
-            window=window,
-            outdir=outdir,
-            scoring="spectral",
-            n_samples=posterior_samples,
-            n_warmup=posterior_warmup,
-            num_chains=posterior_chains,
-            vi_steps=posterior_vi_steps,
-            true_psd=(freq, true_psd),
-        )
-        cholesky_idata = _run_posterior_for_scoring(
+        _run_posterior_for_scoring(
             ts=ts_for_posterior,
             n_knots=n_knots,
             nb=nb,
@@ -953,26 +950,6 @@ def run_comparison(
             num_chains=posterior_chains,
             vi_steps=posterior_vi_steps,
             true_psd=(freq, true_psd),
-        )
-        freq_s, s_q05, s_q50, s_q95 = _extract_psd_quantiles(spectral_idata)
-        freq_c, c_q05, c_q50, c_q95 = _extract_psd_quantiles(cholesky_idata)
-        if freq_s.shape != freq_c.shape or not np.allclose(freq_s, freq_c):
-            raise ValueError(
-                "Spectral/cholesky posterior frequency grids differ."
-            )
-        posterior_plot_path = os.path.join(
-            outdir, "posterior_comparison_3x3.png"
-        )
-        _plot_posterior_comparison_3x3(
-            freq=freq_s,
-            truth=true_psd,
-            spectral_q05=s_q05,
-            spectral_q50=s_q50,
-            spectral_q95=s_q95,
-            cholesky_q05=c_q05,
-            cholesky_q50=c_q50,
-            cholesky_q95=c_q95,
-            out_path=posterior_plot_path,
         )
 
     run_summary: dict[str, object] = {
@@ -1003,7 +980,7 @@ def run_comparison(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="VAR(2)-3D knot scoring diagnostics for spectral vs cholesky."
+        description="VAR(2)-3D knot scoring diagnostics for cholesky."
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed.")
     parser.add_argument(
@@ -1034,7 +1011,7 @@ def main() -> None:
     parser.add_argument(
         "--with-posterior",
         action="store_true",
-        help="Also run spectral/cholesky posterior fits and save 3x3 posterior comparison.",
+        help="Also run the cholesky posterior fit for reference.",
     )
     parser.add_argument(
         "--posterior-samples",

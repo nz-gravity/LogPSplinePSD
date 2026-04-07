@@ -1098,6 +1098,5 @@ if __name__ == "__main__":
             vi_steps_override=args.vi_steps_override,
             label=args.label,
             tau=args.tau,
-            knot_scoring=args.knot_scoring,
             knot_method=args.knot_method,
         )

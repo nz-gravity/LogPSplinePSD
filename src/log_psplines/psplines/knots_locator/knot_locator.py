@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 from scipy.ndimage import uniform_filter1d
+from scipy.signal import medfilt, savgol_filter
 
 from ...datatypes import Periodogram
 from ...datatypes.multivar_utils import psd_to_cholesky_components
@@ -200,6 +201,39 @@ def _init_knots_from_arrays(
     return knots
 
 
+def _adaptive_denoise(signal: np.ndarray) -> np.ndarray:
+    """Denoise a 1-D signal for gradient-based knot placement.
+
+    Uses a two-stage approach that is fully parameter-free:
+
+    1. **Median filter** — removes isolated outlier spikes (common in
+       periodogram-derived signals with heavy-tailed chi-squared noise)
+       without blurring genuine step transitions or peaks.
+    2. **Savitzky-Golay filter** — locally polynomial smooth that preserves
+       the shape, location, and height of peaks and inflection points.
+
+    Window sizes are derived from signal length (~2 % of N, minimum 5 bins,
+    forced odd for both filters).
+    """
+    n = signal.size
+    if n < 5:
+        return signal.copy()
+
+    # Window ≈ 2 % of N, at least 5 bins, forced odd.
+    win = max(5, n // 50)
+    win = win if win % 2 == 1 else win + 1
+
+    # Stage 1: median filter — robust to heavy-tailed outlier spikes.
+    denoised = medfilt(signal, kernel_size=win)
+
+    # Stage 2: Savitzky-Golay — polynomial smooth preserving peaks.
+    # polyorder=3 (cubic) handles peaks well; clamp to win-1 for safety.
+    polyorder = min(3, win - 1)
+    denoised = savgol_filter(denoised, window_length=win, polyorder=polyorder)
+
+    return denoised
+
+
 def _quantile_based_knots(
     n_knots: int,
     periodogram: Periodogram,
@@ -227,11 +261,9 @@ def _quantile_based_knots(
         # Too few points for gradient — fall back to uniform spacing.
         return np.linspace(float(freqs[0]), float(freqs[-1]), n_knots)
 
-    # Light smoothing: window ≈ 2 % of N, at least 5 bins.
-    window = max(5, n // 50)
-    smooth = uniform_filter1d(power, size=window, mode="nearest")
+    smooth = _adaptive_denoise(power)
 
-    # Absolute gradient of smoothed signal as the feature score.
+    # Absolute gradient of denoised signal as the feature score.
     # np.gradient uses central differences in the interior and one-sided
     # differences at the boundaries.
     # NOTE: the input may be signed (e.g. Cholesky theta components that

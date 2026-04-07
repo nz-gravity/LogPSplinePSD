@@ -92,6 +92,13 @@ def _get_frequency_count(data: Union[Periodogram, MultivarFFT]) -> int:
     return int(len(data.freq))
 
 
+def _max_config_n_knots(n_knots: int | dict[str, int]) -> int:
+    """Return the largest knot count implied by a model config."""
+    if isinstance(n_knots, int):
+        return int(n_knots)
+    return max(int(value) for value in n_knots.values())
+
+
 def _get_frequency_axis(
     data: Union[Periodogram, MultivarFFT],
 ) -> np.ndarray:
@@ -139,7 +146,8 @@ def _derive_vi_coarse_grain_config(
 ):
     vi_cfg = run_config.vi
     full_nfreq = _get_frequency_count(processed_data)
-    k_basis = int(run_config.model.n_knots + run_config.model.degree - 1)
+    max_n_knots = _max_config_n_knots(run_config.model.n_knots)
+    k_basis = int(max_n_knots + run_config.model.degree - 1)
 
     explicit_cfg = _normalize_coarse_grain_config(
         vi_cfg.coarse_grain_config_vi

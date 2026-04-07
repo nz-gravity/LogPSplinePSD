@@ -246,6 +246,7 @@ def save_eigenvalue_separation_plot(
     cholesky_matrix: np.ndarray | None = None,
     cholesky_jitter: float = 1e-12,
     max_cholesky_jitter: float = 1e-4,
+    component_knots: dict[str, np.ndarray] | None = None,
     dpi: int = 200,
 ) -> None:
     """Save an eigenvalue separation plot (ratios + eigenvalues).
@@ -262,6 +263,12 @@ def save_eigenvalue_separation_plot(
             frequency.
         cholesky_jitter: Initial diagonal regularization used if Cholesky fails.
         max_cholesky_jitter: Maximum diagonal regularization before giving up.
+        component_knots: Optional mapping from component label to an array of
+            knot positions in frequency space.  Keys should match the subplot
+            labels used in the component grid, e.g.
+            ``{"LogDelta11": array, "Re(Theta12)": array, "Im(Theta21)": array}``.
+            When provided, knot locations are drawn as vertical tick marks on
+            each matching subplot.
         dpi: Figure DPI for saved image.
     """
 
@@ -375,24 +382,44 @@ def save_eigenvalue_separation_plot(
                 if row == col:
                     y = log_delta_sq[:, row]
                     label = f"LogDelta{row+1}{col+1}"
-                    color = f"C{row % 10}"
+                    color = f"tab:blue"
                 elif row < col:
                     y = np.real(theta[:, col, row])
                     label = f"Re(Theta{row+1}{col+1})"
                     pair_idx = row * (2 * p - row - 1) // 2 + (col - row - 1)
-                    color = f"C{(pair_idx + p) % 10}"
+                    color = f"tab:orange"
                 else:
                     y = np.imag(theta[:, row, col])
                     label = f"Im(Theta{row+1}{col+1})"
                     pair_idx = col * (2 * p - col - 1) // 2 + (row - col - 1)
-                    color = f"C{(pair_idx + p) % 10}"
+                    color = f"tab:red"
 
                 _shade_excluded_bands(ax, add_label=False)
                 if use_log_x:
                     ax.semilogx(freq, y, color=color, lw=1.2)
                 else:
                     ax.plot(freq, y, color=color, lw=1.2)
-                ax.set_title(label, fontsize=8)
+
+                # Draw knot locations as vertical tick marks if provided.
+                if component_knots is not None and label in component_knots:
+                    knot_freq = np.asarray(component_knots[label], dtype=float)
+                    ylo, yhi = np.nanmin(y), np.nanmax(y)
+                    knot_y = ylo - 0.08 * (yhi - ylo) if yhi > ylo else ylo
+                    ax.plot(
+                        knot_freq,
+                        np.full_like(knot_freq, knot_y),
+                        marker="|",
+                        color="tab:green",
+                        ms=6,
+                        mew=1.0,
+                        ls="none",
+                        alpha=0.7,
+                        zorder=5,
+                    )
+                    n_k = len(knot_freq)
+                    ax.set_title(f"{label}  (K={n_k})", fontsize=8)
+                else:
+                    ax.set_title(label, fontsize=8)
                 ax.grid(True, which="both", alpha=0.2)
 
                 if row < p - 1:
@@ -429,11 +456,62 @@ def save_eigenvalue_separation_plot(
     plt.close(fig)
 
 
+def extract_component_knots(
+    spline_model: object,
+    freq: np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Extract per-component knot positions from a MultivariateLogPSplines model.
+
+    Returns a dict whose keys match the subplot labels used by
+    :func:`save_eigenvalue_separation_plot` (e.g. ``"LogDelta11"``,
+    ``"Re(Theta12)"``, ``"Im(Theta21)"``), and whose values are 1-D arrays
+    of knot positions in frequency space.
+
+    Args:
+        spline_model: A ``MultivariateLogPSplines`` instance.
+        freq: Frequency array (same grid the model was built on).
+
+    Returns:
+        Mapping from component label to knot frequency array.
+    """
+    freq = np.asarray(freq, dtype=float)
+    f_min, f_max = float(freq[0]), float(freq[-1])
+    result: dict[str, np.ndarray] = {}
+
+    p = int(spline_model.p)
+
+    # Diagonal: LogDelta{j+1}{j+1}
+    for j in range(p):
+        model = spline_model.diagonal_models[j]
+        knots_norm = np.asarray(model.knots, dtype=float)
+        result[f"LogDelta{j+1}{j+1}"] = f_min + knots_norm * (f_max - f_min)
+
+    # Off-diagonal theta pairs
+    theta_pairs = [(j, l) for j in range(1, p) for l in range(j)]
+    for j, l in theta_pairs:
+        # Re(Theta) — shown in upper triangle where row < col,
+        # with row=l, col=j (since l < j).
+        re_model = spline_model.get_theta_model("re", j, l)
+        knots_norm = np.asarray(re_model.knots, dtype=float)
+        re_freq = f_min + knots_norm * (f_max - f_min)
+        result[f"Re(Theta{l+1}{j+1})"] = re_freq
+
+        # Im(Theta) — shown in lower triangle where row > col,
+        # with row=j, col=l (since j > l).
+        im_model = spline_model.get_theta_model("im", j, l)
+        knots_norm = np.asarray(im_model.knots, dtype=float)
+        im_freq = f_min + knots_norm * (f_max - f_min)
+        result[f"Im(Theta{j+1}{l+1})"] = im_freq
+
+    return result
+
+
 __all__ = [
     "EigenvalueSeparationDiagnostics",
     "_raw_psd_to_model_components",
     "eig_ratios",
     "eigenvalue_separation_diagnostics",
+    "extract_component_knots",
     "ordered_eigvals_hermitian",
     "ratio_summary_string",
     "save_eigenvalue_separation_plot",

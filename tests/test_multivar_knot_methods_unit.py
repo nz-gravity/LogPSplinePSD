@@ -386,10 +386,12 @@ def test_multivar_density_assigns_distinct_re_im_knot_vectors(monkeypatch):
         diag_scores = [np.ones(n_freq, dtype=np.float64) for _ in range(p)]
 
         # Force different density concentration so re/im knot vectors should differ.
+        # Use broad bumps (not single spikes) so the adaptive denoiser
+        # recognises them as genuine features rather than noise.
         re_score = np.ones(n_freq, dtype=np.float64)
         im_score = np.ones(n_freq, dtype=np.float64)
-        re_score[8] = 100.0
-        im_score[52] = 100.0
+        re_score[6:12] = 50.0
+        im_score[50:56] = 50.0
         return diag_scores, [re_score], [im_score]
 
     monkeypatch.setattr(

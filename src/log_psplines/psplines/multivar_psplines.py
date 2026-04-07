@@ -77,96 +77,15 @@ class MultivarComponentSpec:
     score: Optional[np.ndarray] = None
 
 
-def _coerce_positive_knot_count(value: object, *, label: str) -> int:
-    """Return a validated knot count."""
-    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
-        raise TypeError(
-            f"{label} must be an integer knot count, got {type(value).__name__}."
-        )
-    count = int(value)
-    if count < 2:
-        raise ValueError(f"{label} must be >= 2, got {count}.")
-    return count
-
-
-def _component_knot_family_name(key: MultivarComponentKey) -> str:
-    """Return the family-level knot override key for a component."""
-    if key.family == "delta":
-        return "delta"
-    assert key.part is not None
-    return f"theta_{key.part}"
-
-
-def _expected_component_order_for_p(p: int) -> list[MultivarComponentKey]:
-    """Return the canonical multivariate component ordering for dimension ``p``."""
-    order = [MultivarComponentKey("delta", j) for j in range(p)]
-    for j in range(1, p):
-        for l in range(j):
-            order.append(MultivarComponentKey("theta", j, l=l, part="re"))
-    for j in range(1, p):
-        for l in range(j):
-            order.append(MultivarComponentKey("theta", j, l=l, part="im"))
-    return order
-
-
-def _resolve_component_knot_counts(
-    *,
+def _resolve_family_knot_counts(
     n_knots: int | Mapping[object, object],
-    p: int,
-) -> dict[MultivarComponentKey, int]:
-    """Resolve scalar or per-family knot specifications for a p-variate model.
+) -> dict[str, int]:
+    """Return knot counts for delta, theta_re, and theta_im families."""
+    if isinstance(n_knots, Mapping):
+        return {key: int(n_knots[key]) for key in _MULTIVAR_KNOT_FAMILY_KEYS}
 
-    ``n_knots`` can be:
-
-    - a single integer, applied to every Cholesky component;
-    - a mapping with exactly the family keys ``"delta"``, ``"theta_re"``,
-      and ``"theta_im"``.
-    """
-    expected_order = _expected_component_order_for_p(p)
-    if isinstance(n_knots, (int, np.integer)) and not isinstance(
-        n_knots, bool
-    ):
-        count = _coerce_positive_knot_count(n_knots, label="n_knots")
-        return {key: count for key in expected_order}
-
-    if not isinstance(n_knots, Mapping):
-        raise TypeError(
-            "n_knots must be either a single integer or a mapping of "
-            "multivariate knot families to integers."
-        )
-    if not n_knots:
-        raise ValueError("n_knots mapping cannot be empty.")
-
-    family_counts: dict[str, int] = {}
-    for raw_key, raw_value in n_knots.items():
-        if not isinstance(raw_key, str):
-            raise TypeError("n_knots mapping keys must be strings.")
-        key_name = raw_key.strip().lower()
-        count = _coerce_positive_knot_count(
-            raw_value, label=f"n_knots[{key_name!r}]"
-        )
-        if key_name not in _MULTIVAR_KNOT_FAMILY_KEYS:
-            allowed = ", ".join(_MULTIVAR_KNOT_FAMILY_KEYS)
-            raise ValueError(
-                f"Unsupported n_knots mapping key '{raw_key}'. "
-                f"Allowed keys are: {allowed}."
-            )
-        family_counts[key_name] = count
-
-    missing: list[str] = []
-    for key in _MULTIVAR_KNOT_FAMILY_KEYS:
-        if key not in family_counts:
-            missing.append(key)
-    if missing:
-        raise ValueError(
-            "n_knots mapping must define all multivariate knot families: "
-            f"{_MULTIVAR_KNOT_FAMILY_KEYS}. Missing: {missing}."
-        )
-
-    return {
-        key: family_counts[_component_knot_family_name(key)]
-        for key in expected_order
-    }
+    count = int(n_knots)
+    return {key: count for key in _MULTIVAR_KNOT_FAMILY_KEYS}
 
 
 def _build_component_knots(
@@ -378,9 +297,7 @@ class MultivariateLogPSplines:
 
         N = fft_data.N
         p = fft_data.p
-        component_knot_counts = _resolve_component_knot_counts(
-            n_knots=n_knots, p=p
-        )
+        family_knot_counts = _resolve_family_knot_counts(n_knots)
 
         # Create frequency grid for knot placement (normalized to [0,1])
         freq = np.asarray(fft_data.freq, dtype=np.float64)
@@ -439,7 +356,7 @@ class MultivariateLogPSplines:
             )
             knots_diag = _build_component_knots(
                 freq=freq,
-                n_knots=component_knot_counts[delta_key],
+                n_knots=family_knot_counts["delta"],
                 score=score_diag,
                 n_freq=N,
                 knot_kwargs=knot_kwargs,
@@ -505,14 +422,14 @@ class MultivariateLogPSplines:
                 theta_im_init = np.imag(theta_emp[:, j_idx, l_idx])
                 knots_theta_re = _build_component_knots(
                     freq=freq,
-                    n_knots=component_knot_counts[theta_re_key],
+                    n_knots=family_knot_counts["theta_re"],
                     score=score_theta_re,
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
                 )
                 knots_theta_im = _build_component_knots(
                     freq=freq,
-                    n_knots=component_knot_counts[theta_im_key],
+                    n_knots=family_knot_counts["theta_im"],
                     score=score_theta_im,
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
@@ -550,16 +467,14 @@ class MultivariateLogPSplines:
         )
 
     @property
-    def n_knots(self) -> int:
-        """Representative knot count from the first diagonal component."""
-        first_key = self.component_order[0]
-        return len(self.component_specs[first_key].model.knots)
+    def n_knots(self) -> int | list[list[int]]:
+        """Knot counts per Cholesky entry, or one int when all are equal."""
+        return self._component_count_matrix("n_knots")
 
     @property
-    def n_basis(self) -> int:
-        """Representative basis count from the first registered component."""
-        first_key = self.component_order[0]
-        return self.component_specs[first_key].model.n_basis
+    def n_basis(self) -> int | list[list[int]]:
+        """Basis counts per Cholesky entry, or one int when all are equal."""
+        return self._component_count_matrix("n_basis")
 
     @property
     def n_theta(self) -> int:
@@ -696,6 +611,42 @@ class MultivariateLogPSplines:
             all_penalties.append(model.penalty_matrix)
 
         return all_bases, all_penalties
+
+    def _component_count_matrix(
+        self, quantity: Literal["n_knots", "n_basis"]
+    ) -> int | list[list[int]]:
+        """Return component counts as a matrix matching the Cholesky layout."""
+        matrix = [[0 for _ in range(self.p)] for _ in range(self.p)]
+        counts: list[int] = []
+
+        for j in range(self.p):
+            diag_model = self.component_specs[self.delta_key(j)].model
+            value = (
+                int(len(diag_model.knots))
+                if quantity == "n_knots"
+                else int(diag_model.n_basis)
+            )
+            matrix[j][j] = value
+            counts.append(value)
+
+        for j, l in self.theta_pairs:
+            re_model = self.get_theta_model("re", j, l)
+            im_model = self.get_theta_model("im", j, l)
+            re_value = (
+                int(len(re_model.knots))
+                if quantity == "n_knots"
+                else int(re_model.n_basis)
+            )
+            im_value = (
+                int(len(im_model.knots))
+                if quantity == "n_knots"
+                else int(im_model.n_basis)
+            )
+            matrix[j][l] = re_value
+            matrix[l][j] = im_value
+            counts.extend([re_value, im_value])
+
+        return counts[0] if len(set(counts)) == 1 else matrix
 
     def compute_design_weights(
         self,

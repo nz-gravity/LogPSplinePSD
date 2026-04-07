@@ -177,6 +177,28 @@ def test_multivar_invalid_knot_methods_raise_clear_error(method: str):
         )
 
 
+def test_multivar_non_cholesky_scoring_is_ignored():
+    fft_data = _make_fft_data()
+    model_default = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=8,
+        degree=3,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+    )
+    model_with_scoring = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=8,
+        degree=3,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density", "scoring": "spectral"},
+    )
+    np.testing.assert_allclose(
+        model_default.diagonal_models[0].knots,
+        model_with_scoring.diagonal_models[0].knots,
+    )
+
+
 def test_multivar_density_allows_component_specific_diagonal_knots():
     fft_data = _make_fft_data_channel_specific_peaks()
     model = MultivariateLogPSplines.from_multivar_fft(
@@ -219,14 +241,8 @@ def test_multivar_density_uses_fixed_basis_count_per_component():
 
     component_models = (
         model.diagonal_models
-        + [
-            model.offdiag_re_models[pair]
-            for pair in model.theta_pairs
-        ]
-        + [
-            model.offdiag_im_models[pair]
-            for pair in model.theta_pairs
-        ]
+        + [model.offdiag_re_models[pair] for pair in model.theta_pairs]
+        + [model.offdiag_im_models[pair] for pair in model.theta_pairs]
     )
     knot_sizes = {
         int(component.knots.shape[0]) for component in component_models
@@ -271,8 +287,12 @@ def test_multivar_density_scoring_uses_channel_space_wishart(
         captured["Y_np"] = np.asarray(Y_np, dtype=np.complex128)
         diag_scores = [np.ones(n_freq, dtype=np.float64) for _ in range(p)]
         n_theta = p * (p - 1) // 2
-        offdiag_re = [np.ones(n_freq, dtype=np.float64) for _ in range(n_theta)]
-        offdiag_im = [np.ones(n_freq, dtype=np.float64) for _ in range(n_theta)]
+        offdiag_re = [
+            np.ones(n_freq, dtype=np.float64) for _ in range(n_theta)
+        ]
+        offdiag_im = [
+            np.ones(n_freq, dtype=np.float64) for _ in range(n_theta)
+        ]
         return diag_scores, offdiag_re, offdiag_im
 
     monkeypatch.setattr(
@@ -285,7 +305,7 @@ def test_multivar_density_scoring_uses_channel_space_wishart(
         n_knots=6,
         degree=2,
         diffMatrixOrder=2,
-        knot_kwargs={"method": "density", "scoring": "cholesky"},
+        knot_kwargs={"method": "density"},
     )
 
     assert (
@@ -343,7 +363,7 @@ def test_multivar_density_assigns_distinct_re_im_knot_vectors(monkeypatch):
         n_knots=10,
         degree=2,
         diffMatrixOrder=2,
-        knot_kwargs={"method": "density", "scoring": "cholesky"},
+        knot_kwargs={"method": "density"},
     )
 
     knots_re = np.round(np.asarray(model.offdiag_re_models[(1, 0)].knots), 12)

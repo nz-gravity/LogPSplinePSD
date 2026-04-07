@@ -222,8 +222,6 @@ def _quantile_based_knots(
         power = power - parametric_model
         power = power + np.abs(np.min(power))
 
-    power = np.maximum(power, 1e-12)
-
     n = power.size
     if n < 3:
         # Too few points for gradient — fall back to uniform spacing.
@@ -236,16 +234,19 @@ def _quantile_based_knots(
     # Absolute gradient of smoothed signal as the feature score.
     # np.gradient uses central differences in the interior and one-sided
     # differences at the boundaries.
+    # NOTE: the input may be signed (e.g. Cholesky theta components that
+    # oscillate around zero).  Taking |grad| is correct regardless of sign;
+    # we do NOT clamp negative values beforehand because that would create
+    # artificial gradient spikes at zero crossings.
     gradient = np.abs(np.gradient(smooth, freqs))
     gradient = np.nan_to_num(gradient, nan=0.0, posinf=0.0, neginf=0.0)
 
-    # Add a uniform floor anchored to the signal scale (not the gradient scale)
-    # so that floating-point noise in the gradient of a flat signal cannot
-    # create spurious non-uniformity.  Floor = 1 % of mean smoothed signal
-    # ensures featureless regions still receive approximately uniform knots,
-    # while genuine spectral features (whose gradient exceeds the floor) still
-    # attract extra knots.
-    signal_scale = float(np.mean(smooth))
+    # Add a uniform floor anchored to the signal scale (not the gradient
+    # scale) so that floating-point noise in the gradient of a flat signal
+    # cannot create spurious non-uniformity.  Use mean(|smooth|) rather
+    # than mean(smooth) so that signed signals with mean ≈ 0 still get a
+    # sensible floor.
+    signal_scale = float(np.mean(np.abs(smooth)))
     floor = 0.01 * signal_scale if signal_scale > 0.0 else 1.0
     z = gradient + floor
     z = z / z.sum()
@@ -265,32 +266,22 @@ def multivar_psd_knot_scores(
     Y_np: np.ndarray,
     Nb: int,
     p: int,
-    *,
-    scoring: str = "cholesky",
-    u_re: np.ndarray | None = None,
-    u_im: np.ndarray | None = None,
 ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
-    """Compute per-component knot placement scores from an empirical PSD matrix.
+    """Compute per-component knot scores from an empirical PSD matrix.
 
-    Two scoring strategies are available:
+    Scores are the model-native Cholesky components of the empirical PSD
+    (``Y_np / Nb``), returned as signed (not absolute) values so that
+    downstream gradient-based knot placement sees genuine shape transitions
+    rather than artificial kinks at zero crossings:
 
-    ``"cholesky"`` (default)
-        Cholesky-decomposes the empirical PSD (Y_np / Nb) to extract the
-        model-native components (LogDelta, ReTheta, ImTheta) and returns their
-        absolute values as scores for quantile-based knot placement.
-
-    ``"spectral"``
-        Uses raw spectral energy: diagonal score is the sum of squared Fourier
-        coefficients per channel, and each off-diagonal component score is the
-        absolute cross-spectral magnitude for its channel pair.
+    - diagonal scores: ``log_delta_sq`` (signed, real)
+    - off-diagonal real scores: ``real(theta)`` (signed)
+    - off-diagonal imaginary scores: ``imag(theta)`` (signed)
 
     Args:
         Y_np: (N, p, p) complex Wishart matrix (sum of outer products).
         Nb: Number of blocks used to form Y_np.
         p: Number of channels.
-        scoring: ``"cholesky"`` or ``"spectral"``.
-        u_re: (N, Nb, p) real DFT coefficients — required for ``"spectral"``.
-        u_im: (N, Nb, p) imaginary DFT coefficients — required for ``"spectral"``.
 
     Returns:
         diagonal_scores: List of p arrays of shape (N,), one per channel.
@@ -299,44 +290,13 @@ def multivar_psd_knot_scores(
         offdiag_im_scores: List of arrays of shape (N,), one per
             theta_im_{j,l} component in lower-triangular order.
     """
-    scoring = scoring.strip().lower()
-
-    if scoring == "cholesky":
-        log_delta_sq, theta = psd_to_cholesky_components(
-            Y_np / max(int(Nb), 1)
-        )
-        diagonal_scores = [np.abs(log_delta_sq[:, i]) for i in range(p)]
-        offdiag_re_scores = [
-            np.abs(np.real(theta[:, i, j])) for i in range(1, p) for j in range(i)
-        ]
-        offdiag_im_scores = [
-            np.abs(np.imag(theta[:, i, j])) for i in range(1, p) for j in range(i)
-        ]
-
-    elif scoring == "spectral":
-        if u_re is None or u_im is None:
-            raise ValueError(
-                "u_re and u_im are required for scoring='spectral'"
-            )
-        u_re_np = np.asarray(u_re, dtype=np.float64)
-        u_im_np = np.asarray(u_im, dtype=np.float64)
-        diagonal_scores = [
-            np.sum(
-                np.square(u_re_np[:, :, i]) + np.square(u_im_np[:, :, i]),
-                axis=1,
-            )
-            for i in range(p)
-        ]
-        offdiag_re_scores = [
-            np.abs(np.real(Y_np[:, i, j])) for i in range(1, p) for j in range(i)
-        ]
-        offdiag_im_scores = [
-            np.abs(np.imag(Y_np[:, i, j])) for i in range(1, p) for j in range(i)
-        ]
-
-    else:
-        raise ValueError(
-            f"Unknown knot scoring '{scoring}'. Use 'cholesky' or 'spectral'."
-        )
+    log_delta_sq, theta = psd_to_cholesky_components(Y_np / max(int(Nb), 1))
+    diagonal_scores = [log_delta_sq[:, i].copy() for i in range(p)]
+    offdiag_re_scores = [
+        np.real(theta[:, i, j]).copy() for i in range(1, p) for j in range(i)
+    ]
+    offdiag_im_scores = [
+        np.imag(theta[:, i, j]).copy() for i in range(1, p) for j in range(i)
+    ]
 
     return diagonal_scores, offdiag_re_scores, offdiag_im_scores

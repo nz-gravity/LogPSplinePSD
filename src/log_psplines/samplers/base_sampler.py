@@ -56,6 +56,7 @@ class SamplerConfig:
     posterior_psd_max_draws: int = 50  # Cap posterior PSD reconstructions
     compute_coherence_quantiles: bool = True  # Compute coherence bands
     compute_psis: bool = True  # Enable PSIS-LOO diagnostics
+    run_full_diagnostics: bool = True  # Run full post-sampling diagnostics
     # Cap ESS/Rhat/PSIS computations (posterior elements) to avoid OOM.
     mcmc_diag_max_elements: int = 250_000
     max_saved_draws: int = 1000  # Cap saved/diagnostic draws per chain
@@ -213,6 +214,9 @@ class BaseSampler(ABC):
         This runs regardless of whether ``outdir`` is set. Any diagnostic plots
         remain gated by the diagnostic modules via ``config.outdir``.
         """
+        if not bool(getattr(self.config, "run_full_diagnostics", True)):
+            logger.info("Skipping full diagnostics by configuration.")
+            return
         # Always run full diagnostics
         logger.debug("Running full diagnostics")
 
@@ -487,11 +491,16 @@ class BaseSampler(ABC):
         # Optionally skip heavy MCMC diagnostics plots/summaries.
         # Always plot diagnostics
         logger.debug("save_results: plotting diagnostics")
+        summary_mode = (
+            "full"
+            if bool(getattr(self.config, "run_full_diagnostics", True))
+            else "light"
+        )
         plot_diagnostics(
             idata_out,
             self.config.outdir,
             model=self.model,
-            summary_mode="full",
+            summary_mode=summary_mode,
             summary_position="end",
             true_psd=self.config.true_psd,
         )

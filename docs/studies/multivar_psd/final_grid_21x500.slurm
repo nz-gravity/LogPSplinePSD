@@ -46,7 +46,7 @@ OUTDIR=${OUTDIR:-out_var3_final_fg21}
 LABEL_PREFIX=${LABEL_PREFIX:-fg21}
 
 # Inference controls (empty -> script defaults from 3d_study.py)
-QUICK=${QUICK:-0}
+# Quick mode is intentionally disabled for this final sweep script.
 N_SAMPLES=${N_SAMPLES:-}
 N_WARMUP=${N_WARMUP:-}
 NUM_CHAINS=${NUM_CHAINS:-}
@@ -66,6 +66,11 @@ TASK_ID_OFFSET=${TASK_ID_OFFSET:-0}
 
 SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
 SLURM_JOB_ID=${SLURM_JOB_ID:-manual}
+
+if [[ "${QUICK:-0}" != "0" ]]; then
+    echo "QUICK mode is disabled in final_grid_21x500.slurm. Unset QUICK or use a non-final study script."
+    exit 1
+fi
 
 if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
     echo "Could not find python executable: ${PYTHON_BIN}"
@@ -281,9 +286,6 @@ for GLOBAL_ID in $(seq "${GLOBAL_START}" "${GLOBAL_END}"); do
         --label "${LABEL}"
     )
 
-    if [[ "${QUICK}" == "1" ]]; then
-        CMD+=(--quick)
-    fi
     if [[ -n "${N_SAMPLES}" ]]; then
         CMD+=(--n-samples "${N_SAMPLES}")
     fi

@@ -553,7 +553,6 @@ def simulation_study(
     coarse_nh_override: int | None = None,
     n_override: int | None = None,
     nb_override: int | None = None,
-    quick: bool = False,
     n_samples_override: int | None = None,
     n_warmup_override: int | None = None,
     num_chains_override: int | None = None,
@@ -581,40 +580,24 @@ def simulation_study(
         else (None if coarse_nh_override == 0 else int(coarse_nh_override))
     )
     n_samples = (
-        1000
-        if quick and n_samples_override is None
-        else (
-            DEFAULT_N_SAMPLES
-            if n_samples_override is None
-            else int(n_samples_override)
-        )
+        DEFAULT_N_SAMPLES
+        if n_samples_override is None
+        else int(n_samples_override)
     )
     n_warmup = (
-        1000
-        if quick and n_warmup_override is None
-        else (
-            DEFAULT_N_WARMUP
-            if n_warmup_override is None
-            else int(n_warmup_override)
-        )
+        DEFAULT_N_WARMUP
+        if n_warmup_override is None
+        else int(n_warmup_override)
     )
     num_chains = (
-        2
-        if quick and num_chains_override is None
-        else (
-            DEFAULT_NUM_CHAINS
-            if num_chains_override is None
-            else int(num_chains_override)
-        )
+        DEFAULT_NUM_CHAINS
+        if num_chains_override is None
+        else int(num_chains_override)
     )
     vi_steps = (
-        20_000
-        if quick and vi_steps_override is None
-        else (
-            DEFAULT_VI_STEPS
-            if vi_steps_override is None
-            else int(vi_steps_override)
-        )
+        DEFAULT_VI_STEPS
+        if vi_steps_override is None
+        else int(vi_steps_override)
     )
     if n_samples <= 0 or n_warmup <= 0:
         raise ValueError("n_samples and n_warmup must be positive.")
@@ -963,14 +946,6 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--quick",
-        action="store_true",
-        help=(
-            "Use lighter inference settings for exploratory runs "
-            "(defaults: 1000 warmup, 1000 samples, 2 chains, 20000 VI steps)."
-        ),
-    )
-    parser.add_argument(
         "--n-time",
         type=int,
         default=None,
@@ -1091,7 +1066,6 @@ if __name__ == "__main__":
             coarse_nh_override=args.coarse_nh,
             n_override=args.n_override,
             nb_override=args.nb_override,
-            quick=args.quick,
             n_samples_override=args.n_samples_override,
             n_warmup_override=args.n_warmup_override,
             num_chains_override=args.num_chains_override,

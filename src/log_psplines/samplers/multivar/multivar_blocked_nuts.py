@@ -241,11 +241,10 @@ def _blocked_channel_model(
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
 
-    numpyro.deterministic(f"log_delta_sq_{channel_label}", log_delta_sq_safe)
-    if n_theta_block > 0:
-        numpyro.deterministic(f"theta_re_{channel_label}", theta_re)
-        numpyro.deterministic(f"theta_im_{channel_label}", theta_im)
-
+    # log_delta_sq and theta_re/im are NOT registered as deterministic sites:
+    # doing so would cause JAX's lax.scan to preallocate (chains, draws, N_freq)
+    # buffers for every channel, consuming several GB at N_freq=8192.
+    # These fields are reconstructed from posterior weight samples in to_arviz.py.
     numpyro.deterministic(
         f"log_likelihood_block_{channel_label}", log_likelihood
     )
@@ -706,16 +705,13 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                     )
             block_stats = mcmc.get_extra_fields(group_by_chain=True)
 
-            deterministic_keys = [
-                f"log_delta_sq_{channel_index}",
-                f"theta_re_{channel_index}",
-                f"theta_im_{channel_index}",
-                f"log_likelihood_block_{channel_index}",
-            ]
-
-            for det_key in deterministic_keys:
-                if det_key in block_samples:
-                    block_stats[det_key] = block_samples.pop(det_key)
+            # Move only the scalar log_likelihood_block deterministic from
+            # block_samples into block_stats.  The large per-frequency
+            # deterministics (log_delta_sq, theta_re, theta_im) are no longer
+            # registered in the model, so they won't appear here.
+            ll_block_key = f"log_likelihood_block_{channel_index}"
+            if ll_block_key in block_samples:
+                block_stats[ll_block_key] = block_samples.pop(ll_block_key)
 
             if self.config.save_nuts_diagnostics:
                 diag_key_map = {
@@ -734,13 +730,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                         )
 
             combined_samples.update(block_samples)
-
-            # Deterministic PSD components are reconstructed from posterior
-            # weights during ArviZ conversion, so avoid assembling dense
-            # channel-stacked tensors here.
-            block_stats.pop(f"log_delta_sq_{channel_index}", None)
-            block_stats.pop(f"theta_re_{channel_index}", None)
-            block_stats.pop(f"theta_im_{channel_index}", None)
 
             block_log_likelihood = block_stats.pop(
                 f"log_likelihood_block_{channel_index}"

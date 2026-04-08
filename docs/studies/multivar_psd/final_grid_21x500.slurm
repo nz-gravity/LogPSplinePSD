@@ -1,35 +1,30 @@
 #!/bin/bash
-# Final sweep for N=16384 over the 21-condition (Nb, Nc) grid:
-#   - No coarse graining
-#   - Coarse graining only
-#   - Coarse graining + blocking
+# Final sweep for N=16384 over the 21-condition (Nb, Nc) grid.
 #
-# Task mapping:
-#   Global work items are indexed over (seed, condition) pairs.
-#   By default, each array task handles one global work item.
-#   You can process work serially in chunks by setting TASKS_PER_ARRAY_ITEM>1.
+# Strategy:
+#   - Global work items are indexed over (seed, condition) pairs.
+#   - Each array task processes TASKS_PER_ARRAY_ITEM work items serially.
+#   - Completed runs are skipped automatically if compact_run_summary.json exists.
+#   - Equivalent runs already present in OUTDIR are also skipped.
 #
 # Default sweep:
-#   seeds: 0..499 (500 total), conditions: 21
+#   seeds: 0..499 (500 total)
+#   conditions: 21
 #   total work items: 500 * 21 = 10500
 #
-# Submit example:
+# Default submission:
 #   sbatch docs/studies/multivar_psd/final_grid_21x500.slurm
 #
-# With throttling:
-#   sbatch --array=0-10499%200 docs/studies/multivar_psd/final_grid_21x500.slurm
-#
-# Serial-chunked mode example (6 array tasks, each runs 350 jobs serially):
-#   sbatch --array=0-5 \
-#     --export=SEEDS_TOTAL=100,TASKS_PER_ARRAY_ITEM=350 \
-#     docs/studies/multivar_psd/final_grid_21x500.slurm
+# Notes:
+#   - With TASKS_PER_ARRAY_ITEM=10, each array task handles 10 runs serially.
+#   - You can safely resubmit later; completed runs should be skipped.
 
 #SBATCH --job-name=var3_fg21
 #SBATCH --output=logs_fg21/job_%A_%a.out
 #SBATCH --error=logs_fg21/job_%A_%a.err
-#SBATCH --array=0-10499%200
-#SBATCH --time=2:00:00
-#SBATCH --mem=5G
+#SBATCH --array=0-1049%10
+#SBATCH --time=6:00:00
+#SBATCH --mem=4G
 #SBATCH --cpus-per-task=4
 
 module --force purge
@@ -45,7 +40,7 @@ STUDY_DIR=${STUDY_DIR:-${PROJECT_ROOT}/docs/studies/multivar_psd}
 
 MODE=${MODE:-large}
 N_TIME=${N_TIME:-16384}
-KNOTS=${KNOTS:-20}
+KNOTS=${KNOTS:-30}
 WINDOW=${WINDOW:-rect}
 OUTDIR=${OUTDIR:-out_var3_final_fg21}
 LABEL_PREFIX=${LABEL_PREFIX:-fg21}
@@ -60,13 +55,17 @@ VI_STEPS=${VI_STEPS:-}
 # Seed controls
 SEED_START=${SEED_START:-0}
 SEEDS_TOTAL=${SEEDS_TOTAL:-500}
+
 # Chunk controls
-# - TASKS_PER_ARRAY_ITEM: how many global work items each array task executes serially
-# - TASK_ID_OFFSET: global-item offset to support manual chunked submissions
-TASKS_PER_ARRAY_ITEM=${TASKS_PER_ARRAY_ITEM:-1}
+# TASKS_PER_ARRAY_ITEM:
+#   how many global work items each array task executes serially
+# TASK_ID_OFFSET:
+#   global-item offset to support manual partial resubmissions if needed
+TASKS_PER_ARRAY_ITEM=${TASKS_PER_ARRAY_ITEM:-10}
 TASK_ID_OFFSET=${TASK_ID_OFFSET:-0}
 
 SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID:-0}
+SLURM_JOB_ID=${SLURM_JOB_ID:-manual}
 
 if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
     echo "Could not find python executable: ${PYTHON_BIN}"
@@ -75,6 +74,13 @@ fi
 
 cd "${STUDY_DIR}"
 mkdir -p logs_fg21
+
+STATUS_DIR="${OUTDIR}/status"
+mkdir -p "${STATUS_DIR}"
+
+DONE_LOG="${STATUS_DIR}/done_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}.tsv"
+SKIP_LOG="${STATUS_DIR}/skipped_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}.tsv"
+FAIL_LOG="${STATUS_DIR}/failed_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}.tsv"
 
 # 21-condition grid (Nb, Nc) for N=16384 with minimum Nc=256.
 LABELS=(
@@ -212,16 +218,19 @@ for GLOBAL_ID in $(seq "${GLOBAL_START}" "${GLOBAL_END}"); do
     NB=${NBS[$COND_INDEX]}
     NC=${NCS[$COND_INDEX]}
 
-    LB=$((N_TIME / NB))
-    RAW_NELL=$((LB / 2))
-
     if (( N_TIME % NB != 0 )); then
         echo "Invalid geometry: N=${N_TIME} is not divisible by Nb=${NB}"
+        echo -e "${GLOBAL_ID}\t${SEED}\t${LABEL}\tbad_Nb" >> "${FAIL_LOG}"
         FAILED_ITEMS+=("global=${GLOBAL_ID},seed=${SEED},label=${LABEL},reason=bad_Nb")
         continue
     fi
+
+    LB=$((N_TIME / NB))
+    RAW_NELL=$((LB / 2))
+
     if (( RAW_NELL % NC != 0 )); then
         echo "Invalid geometry: N_ell=${RAW_NELL} is not divisible by Nc=${NC}"
+        echo -e "${GLOBAL_ID}\t${SEED}\t${LABEL}\tbad_Nc" >> "${FAIL_LOG}"
         FAILED_ITEMS+=("global=${GLOBAL_ID},seed=${SEED},label=${LABEL},reason=bad_Nc")
         continue
     fi
@@ -236,23 +245,25 @@ for GLOBAL_ID in $(seq "${GLOBAL_START}" "${GLOBAL_END}"); do
         NH_LABEL=Nh${COARSE_NH}
     fi
 
-    # 3d_study.py naming convention
+    # 3d_study.py naming convention:
     # outdir/seed_<seed>_<mode>_N<N>_K<K>_<window>_<nh_label><_NbX if Nb!=4>_<label>
     NB_SUFFIX=""
     if (( NB != 4 )); then
         NB_SUFFIX=_Nb${NB}
     fi
+
     RUN_DIR="${OUTDIR}/seed_${SEED}_${MODE}_N${N_TIME}_K${KNOTS}_${WINDOW}_${NH_LABEL}${NB_SUFFIX}_${LABEL}"
     RUN_SUMMARY="${RUN_DIR}/compact_run_summary.json"
 
     if [[ -f "${RUN_SUMMARY}" ]]; then
         echo "Skipping completed target run: ${RUN_SUMMARY}"
+        echo -e "${GLOBAL_ID}\t${SEED}\t${LABEL}\talready_has_summary" >> "${SKIP_LOG}"
         continue
     fi
 
-    # Smart resume: skip if equivalent run exists in the same OUTDIR.
     if already_done_equivalent "${OUTDIR}" "${SEED}" "${N_TIME}" "${NB}" "${COARSE_NH}"; then
         echo "Skipping equivalent existing run: seed=${SEED}, Nb=${NB}, Nh=${NH_DESC}"
+        echo -e "${GLOBAL_ID}\t${SEED}\t${LABEL}\tequivalent_exists" >> "${SKIP_LOG}"
         continue
     fi
 
@@ -286,7 +297,10 @@ for GLOBAL_ID in $(seq "${GLOBAL_START}" "${GLOBAL_END}"); do
         CMD+=(--vi-steps "${VI_STEPS}")
     fi
 
-    if ! "${CMD[@]}"; then
+    if "${CMD[@]}"; then
+        echo -e "${GLOBAL_ID}\t${SEED}\t${LABEL}\tsuccess" >> "${DONE_LOG}"
+    else
+        echo -e "${GLOBAL_ID}\t${SEED}\t${LABEL}\trun_failed" >> "${FAIL_LOG}"
         FAILED_ITEMS+=("global=${GLOBAL_ID},seed=${SEED},label=${LABEL}")
     fi
 done
@@ -296,3 +310,5 @@ if (( ${#FAILED_ITEMS[@]} > 0 )); then
     printf '  %s\n' "${FAILED_ITEMS[@]}"
     exit 1
 fi
+
+echo "Array task ${SLURM_ARRAY_TASK_ID} finished successfully."

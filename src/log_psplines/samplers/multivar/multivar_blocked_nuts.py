@@ -468,11 +468,11 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         return evaluate_log_density_batch
 
     def _channel_model_kwargs(self, channel_index: int) -> Dict[str, Any]:
-        theta_re_basis, theta_re_penalty = self._theta_component_arrays_for_channel(
-            channel_index, part="re"
+        theta_re_basis, theta_re_penalty = (
+            self._theta_component_arrays_for_channel(channel_index, part="re")
         )
-        theta_im_basis, theta_im_penalty = self._theta_component_arrays_for_channel(
-            channel_index, part="im"
+        theta_im_basis, theta_im_penalty = (
+            self._theta_component_arrays_for_channel(channel_index, part="im")
         )
         return {
             "channel_index": channel_index,
@@ -792,9 +792,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         combined_stats.update(
             {
-                "log_delta_sq": np.asarray(log_delta_sq),
-                "theta_re": np.asarray(theta_re_total),
-                "theta_im": np.asarray(theta_im_total),
                 "log_likelihood": np.asarray(log_likelihood_total),
             }
         )

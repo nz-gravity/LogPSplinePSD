@@ -51,6 +51,7 @@ typecheck = [
 dev = [
     "pytest",
     "pytest-cov",
+    "pytest-memray",
     "pytest-durations",
     "flake8>=5.0.4",
     "black>=22.12.0",

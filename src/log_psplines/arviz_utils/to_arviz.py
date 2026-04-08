@@ -708,6 +708,66 @@ def batch_spline_eval(
     return jnp.sum(basis[None, :, :] * weights_batch[:, None, :], axis=-1)
 
 
+def _select_evenly_spaced_indices(
+    n_total: int, n_keep: int
+) -> np.ndarray | None:
+    """Return evenly spaced indices for a capped posterior subset."""
+    if n_total <= 0 or n_keep <= 0 or n_total <= n_keep:
+        return None
+    return np.unique(
+        np.linspace(0, n_total - 1, num=n_keep, dtype=int, endpoint=True)
+    )
+
+
+def _flatten_posterior_draws(array: jnp.ndarray | np.ndarray) -> jnp.ndarray:
+    """Flatten leading chain/draw axes into a single sample axis."""
+    arr = jnp.asarray(array)
+    if arr.ndim <= 1:
+        return arr
+    if arr.ndim == 2:
+        return arr
+    return arr.reshape((-1,) + tuple(arr.shape[2:]))
+
+
+def _subset_weight_samples_for_psd(
+    samples: Dict[str, jnp.ndarray], n_keep: int
+) -> Dict[str, jnp.ndarray]:
+    """Return flattened weight samples capped to the draws needed for PSD summaries."""
+    weight_keys = [key for key in samples if str(key).startswith("weights_")]
+    if not weight_keys:
+        return {}
+
+    first_weights = jnp.asarray(samples[weight_keys[0]])
+    if first_weights.ndim >= 3:
+        n_total = int(first_weights.shape[0]) * int(first_weights.shape[1])
+    else:
+        n_total = int(first_weights.shape[0])
+    keep_idx = _select_evenly_spaced_indices(n_total, int(n_keep))
+
+    subset: Dict[str, jnp.ndarray] = {}
+    for key in weight_keys:
+        flat = _flatten_posterior_draws(samples[key])
+        if keep_idx is not None:
+            flat = flat[keep_idx]
+        subset[str(key)] = flat
+    return subset
+
+
+def _flatten_and_cap_posterior_array(
+    array: Optional[jnp.ndarray], n_keep: int
+) -> Optional[jnp.ndarray]:
+    """Flatten chain/draw axes and cap the sample axis when requested."""
+    if array is None:
+        return None
+    flat = _flatten_posterior_draws(array)
+    if flat.ndim == 0:
+        return flat
+    keep_idx = _select_evenly_spaced_indices(int(flat.shape[0]), int(n_keep))
+    if keep_idx is not None:
+        flat = flat[keep_idx]
+    return flat
+
+
 def _pack_model_component(
     model, prefix: str, data: Dict[str, Any], coords: Dict[str, Any]
 ) -> None:
@@ -772,47 +832,6 @@ def _compute_posterior_predictive_multivar(
     # Keep concise logging
     logger.debug("_compute_posterior_predictive_multivar: entry")
 
-    def _flatten_chain_dim(
-        array: Optional[jnp.ndarray],
-    ) -> Optional[jnp.ndarray]:
-        """Flatten chain dimension (if present) into the draw dimension."""
-        if array is None:
-            return None
-        arr = jnp.asarray(array)
-        if arr.ndim == 0:
-            return arr
-        if arr.ndim >= 3:
-            # Handle arrays with explicit chain dimension inserted by _prepare_samples_and_stats
-            if arr.shape[1] == fft_data.N:
-                return arr
-            if arr.shape[0] == 1:
-                arr = arr[0]
-            else:
-                arr = arr.reshape((-1,) + tuple(arr.shape[2:]))
-        elif arr.ndim == 2 and arr.shape[0] == 1:
-            arr = arr[0]
-        return arr
-
-    log_delta_sq = _flatten_chain_dim(sample_stats.get("log_delta_sq"))
-    theta_re = _flatten_chain_dim(sample_stats.get("theta_re"))
-    theta_im = _flatten_chain_dim(sample_stats.get("theta_im"))
-
-    if log_delta_sq is None:
-        log_delta_sq = _reconstruct_log_delta_sq(
-            samples, spline_model, fft_data
-        )
-
-    if theta_re is None:
-        theta_re = _reconstruct_theta_params(
-            samples, spline_model, fft_data, "re"
-        )
-
-    if theta_im is None:
-        theta_im = _reconstruct_theta_params(
-            samples, spline_model, fft_data, "im"
-        )
-
-    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
     # Fast-diagnostics controls from config
     n_draw_cap = 50
     compute_coh = fft_data.p > 1
@@ -831,6 +850,33 @@ def _compute_posterior_predictive_multivar(
                 compute_coh = bool(value)
         except Exception:
             pass
+
+    log_delta_sq = _flatten_and_cap_posterior_array(
+        sample_stats.get("log_delta_sq"), n_draw_cap
+    )
+    theta_re = _flatten_and_cap_posterior_array(
+        sample_stats.get("theta_re"), n_draw_cap
+    )
+    theta_im = _flatten_and_cap_posterior_array(
+        sample_stats.get("theta_im"), n_draw_cap
+    )
+
+    if log_delta_sq is None or theta_re is None or theta_im is None:
+        samples_for_psd = _subset_weight_samples_for_psd(samples, n_draw_cap)
+        if log_delta_sq is None:
+            log_delta_sq = _reconstruct_log_delta_sq(
+                samples_for_psd, spline_model, fft_data
+            )
+        if theta_re is None:
+            theta_re = _reconstruct_theta_params(
+                samples_for_psd, spline_model, fft_data, "re"
+            )
+        if theta_im is None:
+            theta_im = _reconstruct_theta_params(
+                samples_for_psd, spline_model, fft_data, "im"
+            )
+
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
     psd_real_q, psd_imag_q, coh_q = spline_model.compute_psd_quantiles(
         log_delta_sq,
         theta_re,
@@ -965,9 +1011,7 @@ def _compute_prior_predictive_multivar(
                         w_d_t = np.asarray(
                             design_weights.get(key, np.zeros(k_theta))
                         )
-                        prec_t = (
-                            phi_t * theta_penalty + 1e-6 * np.eye(k_theta)
-                        )
+                        prec_t = phi_t * theta_penalty + 1e-6 * np.eye(k_theta)
                         if tau is not None and key in design_weights:
                             prec_t += np.eye(k_theta) / tau**2
                         cov_t = np.linalg.inv(prec_t)
@@ -997,16 +1041,18 @@ def _reconstruct_log_delta_sq(
     """Reconstruct log_delta_sq from individual diagonal component samples."""
     all_bases, _ = spline_model.get_all_bases_and_penalties()
 
-    first_sample = next(iter(samples.values()))
-    n_chains = first_sample.shape[0]
-    n_samples = first_sample.shape[0] * first_sample.shape[1]
+    sample_key = next(
+        (key for key in samples if str(key).startswith("weights_delta_")),
+        next(iter(samples.keys())),
+    )
+    first_sample = _flatten_posterior_draws(samples[sample_key])
+    n_samples = int(first_sample.shape[0]) if first_sample.ndim else 1
     log_delta_components = []
 
     for j in range(fft_data.p):
         weights_key = f"weights_delta_{j}"
         if weights_key in samples:
-            weights_full = samples[weights_key]
-            weights = weights_full[0]
+            weights = _flatten_posterior_draws(samples[weights_key])
             log_delta_j = batch_spline_eval(all_bases[j], weights)
             log_delta_components.append(log_delta_j)
 
@@ -1023,8 +1069,12 @@ def _reconstruct_theta_params(
     param_type: str,
 ) -> jnp.ndarray:
     """Reconstruct theta parameters from samples."""
-    first_sample = next(iter(samples.values()))
-    n_samples = first_sample.shape[1]
+    sample_key = next(
+        (key for key in samples if str(key).startswith("weights_")),
+        next(iter(samples.keys())),
+    )
+    first_sample = _flatten_posterior_draws(samples[sample_key])
+    n_samples = int(first_sample.shape[0]) if first_sample.ndim else 1
     theta = jnp.zeros((n_samples, fft_data.N, max(1, spline_model.n_theta)))
     found = False
 
@@ -1033,8 +1083,7 @@ def _reconstruct_theta_params(
             key = f"weights_theta_{param_type}_{j}_{l}"
             if key not in samples:
                 continue
-            weights_full = samples[key]
-            weights = weights_full[0]
+            weights = _flatten_posterior_draws(samples[key])
             basis = jnp.asarray(
                 spline_model.get_theta_model(param_type, j, l).basis
             )
@@ -1047,8 +1096,7 @@ def _reconstruct_theta_params(
 
     key = f"weights_theta_{param_type}"
     if key in samples and spline_model.n_theta > 0:
-        weights_full = samples[key]
-        weights = weights_full[0]
+        weights = _flatten_posterior_draws(samples[key])
         first_j, first_l = spline_model.theta_pair_from_index(0)
         basis = jnp.asarray(
             spline_model.get_theta_model(param_type, first_j, first_l).basis

@@ -534,9 +534,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         2. Move per-block deterministics out of the ``samples`` dict into
            ``sample_stats`` and, for diagnostics, optionally rename NumPyro's
            NUTS fields with ``_channel_{j}`` suffixes.
-        3. Stack ``log_delta_sq_j`` across channels and place the theta blocks into
-           the correct positions of the global ``theta_re|im`` arrays.
-        4. Sum the block log-likelihoods to obtain the joint log-likelihood.
+          3. Sum the block log-likelihoods to obtain the joint log-likelihood.
         """
         logger.info(
             f"Blocked multivariate NUTS sampler [{self.device}] - {self.p} channels"
@@ -546,9 +544,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         combined_samples: Dict[str, np.ndarray] = {}
         combined_stats: Dict[str, np.ndarray] = {}
 
-        channel_log_delta = []
-        theta_re_total = None
-        theta_im_total = None
         log_likelihood_total = None
 
         total_runtime = 0.0
@@ -740,30 +735,12 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
             combined_samples.update(block_samples)
 
-            log_delta_channel = block_stats.pop(
-                f"log_delta_sq_{channel_index}"
-            )
-            channel_log_delta.append(log_delta_channel)
-
-            if theta_count > 0 and self.n_theta > 0:
-                theta_re_block = block_stats.pop(f"theta_re_{channel_index}")
-                theta_im_block = block_stats.pop(f"theta_im_{channel_index}")
-
-                if theta_re_total is None:
-                    n_chains, n_draws = theta_re_block.shape[:2]
-                    theta_re_total = jnp.zeros(
-                        (n_chains, n_draws, self.N, self.n_theta)
-                    )
-                    theta_im_total = jnp.zeros_like(theta_re_total)
-
-                theta_slice = slice(theta_start, theta_start + theta_count)
-                theta_re_total = theta_re_total.at[:, :, :, theta_slice].set(
-                    theta_re_block
-                )
-                assert theta_im_total is not None
-                theta_im_total = theta_im_total.at[:, :, :, theta_slice].set(
-                    theta_im_block
-                )
+            # Deterministic PSD components are reconstructed from posterior
+            # weights during ArviZ conversion, so avoid assembling dense
+            # channel-stacked tensors here.
+            block_stats.pop(f"log_delta_sq_{channel_index}", None)
+            block_stats.pop(f"theta_re_{channel_index}", None)
+            block_stats.pop(f"theta_im_{channel_index}", None)
 
             block_log_likelihood = block_stats.pop(
                 f"log_likelihood_block_{channel_index}"
@@ -781,14 +758,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             combined_stats.update(block_stats)
 
         self.runtime = total_runtime
-
-        log_delta_sq = jnp.stack(channel_log_delta, axis=-1)
-
-        if theta_re_total is None:
-            theta_re_total = jnp.zeros(
-                (log_delta_sq.shape[0], log_delta_sq.shape[1], self.N, 0)
-            )
-            theta_im_total = jnp.zeros_like(theta_re_total)
 
         combined_stats.update(
             {

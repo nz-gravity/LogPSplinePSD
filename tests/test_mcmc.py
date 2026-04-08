@@ -651,6 +651,7 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
     assert np.allclose(freq, expected_freq)
 
 
+@pytest.mark.memory
 def test_multivar_blocked_nuts_records_step_size():
     t, y = _synthetic_multivar_series()
     ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
@@ -684,6 +685,7 @@ def test_multivar_blocked_nuts_records_step_size():
     assert step_size_keys, "Blocked NUTS should record per-channel step size."
 
 
+@pytest.mark.memory
 def test_run_mcmc_multivar_disables_lnz_by_default():
     t, y = _synthetic_multivar_series()
     ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())

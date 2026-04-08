@@ -39,6 +39,13 @@ DEFAULT_VI_PSD_MAX_DRAWS = 256
 DEFAULT_POSTERIOR_PSD_MAX_DRAWS = 256
 DEFAULT_ALPHA_DELTA = 1.0
 DEFAULT_BETA_DELTA = 1.0
+DEFAULT_CHAIN_METHOD: Literal["parallel", "vectorized", "sequential"] = (
+    "parallel"
+)
+DEFAULT_SAVE_SAMPLER_OUTPUTS = False
+DEFAULT_SAVE_NUTS_DIAGNOSTICS = True
+DEFAULT_COMPUTE_PSIS = False
+DEFAULT_RUN_FULL_DIAGNOSTICS = False
 # Total Niter=8000 implemented as 4000 warmup + 4000 posterior samples.
 DEFAULT_N_SAMPLES = 4000
 DEFAULT_N_WARMUP = 4000
@@ -561,6 +568,13 @@ def simulation_study(
     tau: float | None = None,
     knot_scoring: str = "spectral",
     knot_method: str = "density",
+    chain_method: Literal[
+        "parallel", "vectorized", "sequential"
+    ] = DEFAULT_CHAIN_METHOD,
+    save_sampler_outputs: bool = DEFAULT_SAVE_SAMPLER_OUTPUTS,
+    save_nuts_diagnostics: bool = DEFAULT_SAVE_NUTS_DIAGNOSTICS,
+    compute_psis: bool = DEFAULT_COMPUTE_PSIS,
+    run_full_diagnostics: bool = DEFAULT_RUN_FULL_DIAGNOSTICS,
 ) -> None:
     cfg = MODE_CONFIG[mode]
     preset_N = int(cfg["N"])
@@ -655,6 +669,16 @@ def simulation_study(
         raise ValueError("Generated VAR samples contain non-finite values.")
     ts = MultivariateTimeseries(t=t, y=data)
 
+    sampler_outdir = outdir if save_sampler_outputs else None
+    if save_sampler_outputs:
+        logger.info(
+            f"Sampler outputs enabled; writing full artifacts to {outdir}"
+        )
+    else:
+        logger.info(
+            "Sampler outputs disabled for this study run; only compact study summaries will be saved."
+        )
+
     freq_true_hz = np.fft.rfftfreq(N, d=1.0 / DEFAULT_FS)[1:]
     true_psd = _calculate_true_var_psd_hz(
         freq_true_hz,
@@ -682,14 +706,16 @@ def simulation_study(
         n_samples=n_samples,
         n_warmup=n_warmup,
         num_chains=num_chains,
-        outdir=outdir,
+        outdir=sampler_outdir,
         verbose=True,
+        chain_method=chain_method,
         target_accept_prob=DEFAULT_TARGET_ACCEPT_PROB,
         max_tree_depth=DEFAULT_MAX_TREE_DEPTH,
         init_from_vi=DEFAULT_INIT_FROM_VI,
         vi_steps=vi_steps,
         vi_guide=DEFAULT_VI_GUIDE,
         vi_psd_max_draws=DEFAULT_VI_PSD_MAX_DRAWS,
+        posterior_psd_max_draws=DEFAULT_POSTERIOR_PSD_MAX_DRAWS,
         vi_lr=VI_LR,
         Nb=Nb,
         wishart_window=wishart_window,
@@ -698,6 +724,9 @@ def simulation_study(
         alpha_delta=DEFAULT_ALPHA_DELTA,
         beta_delta=DEFAULT_BETA_DELTA,
         compute_coherence_quantiles=True,
+        save_nuts_diagnostics=save_nuts_diagnostics,
+        compute_psis=compute_psis,
+        run_full_diagnostics=run_full_diagnostics,
         true_psd=(freq_true_hz, true_psd),
         max_save_bytes=20_000_000,
     )
@@ -1044,6 +1073,55 @@ if __name__ == "__main__":
             "Ignored when knot method is 'uniform'."
         ),
     )
+    parser.add_argument(
+        "--chain-method",
+        type=str,
+        choices=("parallel", "vectorized", "sequential"),
+        default=DEFAULT_CHAIN_METHOD,
+        dest="chain_method",
+        help=(
+            "NumPyro chain execution mode. Defaults to 'sequential' in this "
+            "study to reduce peak memory during post-sampling conversion."
+        ),
+    )
+    parser.add_argument(
+        "--save-sampler-outputs",
+        action="store_true",
+        dest="save_sampler_outputs",
+        help=(
+            "Enable full sampler artifacts (netcdf, diagnostics, plots). "
+            "Disabled by default because they can trigger large post-sampling "
+            "memory spikes on small Slurm allocations."
+        ),
+    )
+    parser.add_argument(
+        "--save-nuts-diagnostics",
+        action="store_true",
+        dest="save_nuts_diagnostics",
+        help=(
+            "Persist per-channel NUTS diagnostics such as accept_prob and "
+            "step_size. Disabled by default for lower memory usage."
+        ),
+    )
+    parser.add_argument(
+        "--compute-psis",
+        action="store_true",
+        dest="compute_psis",
+        help=(
+            "Enable PSIS-LOO diagnostics. Disabled by default in this study "
+            "to avoid extra post-sampling allocations."
+        ),
+    )
+    parser.add_argument(
+        "--run-full-diagnostics",
+        action="store_true",
+        dest="run_full_diagnostics",
+        help=(
+            "Enable the heavy post-sampling diagnostics pass. Disabled by "
+            "default because 3d_study already stores the lightweight truth-"
+            "comparison metrics needed for summary tables."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -1073,4 +1151,9 @@ if __name__ == "__main__":
             label=args.label,
             tau=args.tau,
             knot_method=args.knot_method,
+            chain_method=args.chain_method,
+            save_sampler_outputs=args.save_sampler_outputs,
+            save_nuts_diagnostics=args.save_nuts_diagnostics,
+            compute_psis=args.compute_psis,
+            run_full_diagnostics=args.run_full_diagnostics,
         )

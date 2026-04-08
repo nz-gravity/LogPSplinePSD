@@ -123,6 +123,7 @@ testpaths = ["tests"]
 addopts = "--durations=20 -s"
 markers = [
     "slow: slow integration or end-to-end tests",
+    "memory: tests commonly used for memory profiling runs",
 ]
 
 [tool.coverage.run]

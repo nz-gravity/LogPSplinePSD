@@ -4,6 +4,7 @@ import re
 import numpy as np
 import pytest
 
+from log_psplines.arviz_utils import get_multivar_posterior_psd_quantiles
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
@@ -183,14 +184,14 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
         config=run_cfg,
     )
 
-    print(idata)
-
     assert "posterior" in _idata_groups(idata)
-    assert "vi_posterior_psd" in _idata_groups(idata)
-    assert "posterior_psd" in _idata_groups(idata)
     assert any(
         name.startswith("weights_delta_") for name in idata.posterior.data_vars
     )
+    quantiles = get_multivar_posterior_psd_quantiles(
+        idata, n_keep=vi_cfg.vi_psd_max_draws
+    )
+    assert np.asarray(quantiles["real"]).shape[1] > 0
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd_matrix.png")
     assert os.path.exists(f"{outdir}/diagnostics/vi_elbo_trace.png")

@@ -1,5 +1,9 @@
 import numpy as np
 
+from log_psplines.arviz_utils import (
+    get_multivar_posterior_psd_quantiles,
+    get_multivar_vi_psd_quantiles,
+)
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.mcmc import (
     DiagnosticsConfig,
@@ -12,8 +16,16 @@ from log_psplines.mcmc import (
 
 
 def _diag_ratio(idata_vi, idata_nuts, channel_index):
-    vi_psd = idata_vi.vi_posterior_psd["psd_matrix_real"].sel(percentile=50)
-    nuts_psd = idata_nuts.posterior_psd["psd_matrix_real"].sel(percentile=50)
+    vi_quantiles = get_multivar_vi_psd_quantiles(idata_vi)
+    vi_idx50 = int(
+        np.argmin(np.abs(np.asarray(vi_quantiles["percentile"]) - 50.0))
+    )
+    vi_psd = np.asarray(vi_quantiles["real"])[vi_idx50]
+    nuts_quantiles = get_multivar_posterior_psd_quantiles(idata_nuts)
+    idx50 = int(
+        np.argmin(np.abs(np.asarray(nuts_quantiles["percentile"]) - 50.0))
+    )
+    nuts_psd = np.asarray(nuts_quantiles["real"])[idx50]
 
     vi_diag = np.asarray(vi_psd[:, channel_index, channel_index])
     nuts_diag = np.asarray(nuts_psd[:, channel_index, channel_index])

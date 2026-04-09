@@ -6,6 +6,9 @@ from typing import Dict, Optional
 
 import numpy as np
 
+from ..arviz_utils.from_arviz import (
+    get_multivar_psd_dataset,
+)
 from ._utils import as_scalar, khat_status
 from .psd_compare import _get_psd_dataset
 from .psd_compare import _run as _run_psd_compare
@@ -35,6 +38,11 @@ def _extract_losses(idata_vi) -> Optional[np.ndarray]:
 def _get_vi_psd_dataset(idata_vi):
     if idata_vi is None:
         return None
+    attrs = getattr(idata_vi, "attrs", {}) or {}
+    if str(attrs.get("data_type", "")).lower().startswith("multi"):
+        if bool(attrs.get("only_vi")) or hasattr(idata_vi, "vi_posterior"):
+            return get_multivar_psd_dataset(idata_vi, source="vi")
+        return None
     dataset = getattr(idata_vi, "vi_posterior_psd", None)
     if dataset is not None:
         return dataset
@@ -44,6 +52,9 @@ def _get_vi_psd_dataset(idata_vi):
 def _get_ref_psd_dataset(idata):
     if idata is None:
         return None
+    attrs = getattr(idata, "attrs", {}) or {}
+    if str(attrs.get("data_type", "")).lower().startswith("multi"):
+        return get_multivar_psd_dataset(idata, source="posterior")
     dataset = getattr(idata, "posterior_psd", None)
     if dataset is not None:
         return dataset

@@ -6,7 +6,11 @@ import numpy as np
 import pytest
 
 import log_psplines.samplers.multivar.multivar_blocked_nuts as blocked_nuts_mod
-from log_psplines.arviz_utils import get_weights
+from log_psplines.arviz_utils import (
+    get_multivar_posterior_psd_quantiles,
+    get_posterior_psd,
+    get_weights,
+)
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
 from log_psplines.datatypes.univar import Timeseries
 from log_psplines.example_datasets.ar_data import ARData
@@ -154,10 +158,11 @@ def test_multivar_mcmc(outdir, test_mode):
                 f"[{sampler_name}] LnZ by block: {idata.attrs['lnz_by_block']}, errors: {idata.attrs.get('lnz_err_by_block', np.nan)}"
             )
 
-        # check the posterior psd matrix shape
-        psd_matrix_real = idata.posterior_psd["psd_matrix_real"]
+        # check the lazily reconstructed posterior psd matrix shape
+        quantiles = get_multivar_posterior_psd_quantiles(idata, n_keep=2)
+        psd_matrix_real = np.asarray(quantiles["real"])
         psd_matrix_shape = psd_matrix_real.shape
-        freq_dim = psd_matrix_real.sizes["freq"]
+        freq_dim = np.asarray(quantiles["freq"]).shape[0]
         assert (
             psd_matrix_shape[1] == freq_dim
         ), "Posterior PSD frequency dimension mismatch."
@@ -226,7 +231,8 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
         vi_steps=10,
         vi_posterior_draws=6,
         vi_psd_max_draws=2,
-        only_vi=True,
+        init_from_vi=False,
+        only_vi=False,
     )
     run_cfg = RunMCMCConfig(
         n_samples=1,
@@ -245,16 +251,18 @@ def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
     assert "posterior" in _idata_groups(idata)
     assert idata.attrs.get("full_diagnostics_computed") == 1
     assert "full_diagnostics_timestamp" in idata.attrs
-    psd = idata.posterior_psd["psd_matrix_real"].sel(
-        percentile=50, method="nearest"
-    )
-    psd_vals = np.asarray(psd.values)
+    assert "posterior_psd" not in _idata_groups(idata)
+    quantiles = get_multivar_posterior_psd_quantiles(idata, n_keep=1)
+    idx50 = int(np.argmin(np.abs(np.asarray(quantiles["percentile"]) - 50.0)))
+    psd_vals = np.asarray(quantiles["real"])[idx50]
     assert psd_vals.ndim == 3
     assert np.allclose(
         psd_vals, np.swapaxes(psd_vals, 1, 2), rtol=1e-6, atol=1e-8
     )
     diag = np.diagonal(psd_vals, axis1=1, axis2=2)
     assert np.all(diag > 0.0)
+    for key in ("log_delta_sq", "theta_re", "theta_im"):
+        assert key not in idata.sample_stats.data_vars
 
 
 def test_multivar_blocked_lnz_aggregates_blocks(
@@ -333,6 +341,8 @@ def test_multivar_blocked_lnz_aggregates_blocks(
 
     assert len(morphz_calls) == 2
     assert len(captured_params) == 2
+    for key in ("log_delta_sq", "theta_re", "theta_im"):
+        assert key not in idata.sample_stats.data_vars
     assert idata.attrs.get("lnz") == pytest.approx(4.0)
     assert idata.attrs.get("lnz_err") == pytest.approx(np.sqrt(0.05))
     assert np.allclose(
@@ -555,7 +565,8 @@ def test_run_mcmc_coarse_grain_univariate_mcmc():
         data=ts_run,
         config=run_cfg,
     )
-    freq = np.asarray(idata.posterior_psd["freq"].values)
+    freq, _, _, _ = get_posterior_psd(idata)
+    freq = np.asarray(freq, dtype=float)
     assert freq.shape[0] == expected_freq.shape[0]
     assert np.allclose(freq, expected_freq)
 
@@ -646,7 +657,8 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
         data=ts_run,
         config=run_cfg,
     )
-    freq = np.asarray(idata.posterior_psd["freq"].values)
+    quantiles = get_multivar_posterior_psd_quantiles(idata, n_keep=2)
+    freq = np.asarray(quantiles["freq"], dtype=float)
     assert freq.shape[0] == expected_freq.shape[0]
     assert np.allclose(freq, expected_freq)
 

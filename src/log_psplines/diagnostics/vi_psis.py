@@ -49,7 +49,7 @@ def _psislw(log_weights: np.ndarray):  # type: ignore[no-redef]
 
 from ..logger import logger
 
-MIN_PSIS_DRAWS = 200
+PSIS_RECOMMENDED_DRAWS = 200
 
 
 def _interpret_khat(khat_max: float) -> Tuple[str, str]:
@@ -324,12 +324,12 @@ def _compute_psis_khat(
         n_draws = min(n_draws, int(latent_arr.shape[0]))
         if n_draws <= 0:
             return None
-        if n_draws < MIN_PSIS_DRAWS:
+        if n_draws < PSIS_RECOMMENDED_DRAWS:
             logger.warning(
-                f"Skipping PSIS k-hat: n_draws={int(n_draws)} < {MIN_PSIS_DRAWS}. "
-                "Increase vi_posterior_draws for a stable estimate."
+                "PSIS k-hat is being estimated from only "
+                + f"{int(n_draws)} VI draws; results may be noisy. "
+                + f"Use at least {PSIS_RECOMMENDED_DRAWS} draws for a more stable estimate."
             )
-            return None
 
         sample_tree = {k: v[:n_draws] for k, v in sample_tree.items()}
         latent_arr = latent_arr[:n_draws]

@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from log_psplines.arviz_utils import get_multivar_posterior_psd_quantiles
 from log_psplines.datatypes import MultivariateTimeseries, Timeseries
 from log_psplines.datatypes.multivar_utils import _interp_complex_matrix
 from log_psplines.example_datasets.varma_data import (
@@ -143,8 +144,10 @@ def test_multivar_scaling_matches_periodogram_and_truth(outdir):
         config=run_cfg,
     )
 
-    freq_grid = np.asarray(idata.posterior_psd["freq"].values)
-    psd_med = idata.posterior_psd["psd_matrix_real"].sel(percentile=50).values
+    quantiles = get_multivar_posterior_psd_quantiles(idata)
+    freq_grid = np.asarray(quantiles["freq"], dtype=float)
+    idx50 = int(np.argmin(np.abs(np.asarray(quantiles["percentile"]) - 50.0)))
+    psd_med = np.asarray(quantiles["real"])[idx50]
     periodogram = idata.observed_data["periodogram"].values
 
     true_psd_full = _calculate_true_varma_psd(

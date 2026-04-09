@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
+import log_psplines.arviz_utils.from_arviz as from_arviz_mod
 from log_psplines.arviz_utils.from_arviz import (
     get_multivar_ci_summary,
     get_periodogram,
@@ -80,30 +81,6 @@ def test_get_multivar_ci_summary_extracts_quantiles_and_truth():
     truth_real = np.ones((2, 2, 2), dtype=float) * 7.0
     truth_imag = np.ones((2, 2, 2), dtype=float) * -3.0
 
-    posterior_ds = xr.Dataset(
-        {
-            "psd_matrix_real": xr.DataArray(
-                psd_real,
-                coords={
-                    "percentile": percentiles,
-                    "freq": freqs,
-                    "channels": [0, 1],
-                    "channels2": [0, 1],
-                },
-                dims=("percentile", "freq", "channels", "channels2"),
-            ),
-            "psd_matrix_imag": xr.DataArray(
-                psd_imag,
-                coords={
-                    "percentile": percentiles,
-                    "freq": freqs,
-                    "channels": [0, 1],
-                    "channels2": [0, 1],
-                },
-                dims=("percentile", "freq", "channels", "channels2"),
-            ),
-        }
-    )
     truth_ds = xr.Dataset(
         {
             "psd_matrix_real": xr.DataArray(
@@ -128,10 +105,24 @@ def test_get_multivar_ci_summary_extracts_quantiles_and_truth():
     )
 
     idata = az.from_dict({})
-    idata["posterior_psd"] = xr.DataTree(dataset=posterior_ds)
     idata["truth_psd"] = xr.DataTree(dataset=truth_ds)
 
+    def _fake_quantiles(_idata, **kwargs):
+        return {
+            "freq": freqs,
+            "percentile": percentiles,
+            "real": psd_real,
+            "imag": psd_imag,
+            "coherence": None,
+        }
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        from_arviz_mod, "get_multivar_posterior_psd_quantiles", _fake_quantiles
+    )
+
     summary = get_multivar_ci_summary(idata)
+    monkeypatch.undo()
     np.testing.assert_allclose(summary["freq"], freqs)
     np.testing.assert_allclose(summary["psd_real_q05"], psd_real[0])
     np.testing.assert_allclose(summary["psd_real_q50"], psd_real[1])

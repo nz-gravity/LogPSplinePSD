@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
+from ..arviz_utils.from_arviz import get_multivar_posterior_psd_quantiles
 from ..logger import logger
 from ..plotting.base import (
     composite_images_vertical,
@@ -508,6 +509,13 @@ def _get_freqs(idata: az.InferenceData, model=None) -> np.ndarray:
             and "freq" in psd["psd_matrix_real"].coords
         ):
             return np.asarray(psd["psd_matrix_real"].coords["freq"])
+    attrs = getattr(idata, "attrs", {}) or {}
+    if str(attrs.get("data_type", "")).lower().startswith("multi"):
+        try:
+            quantiles = get_multivar_posterior_psd_quantiles(idata)
+            return np.asarray(quantiles["freq"], dtype=float)
+        except KeyError:
+            pass
     if model is not None and hasattr(model, "basis"):
         try:
             return np.arange(np.asarray(model.basis).shape[0])
@@ -570,24 +578,39 @@ def _build_multivar_truth_frequency_maps(
     idata: az.InferenceData, true_psd: Optional[np.ndarray]
 ) -> Optional[tuple[np.ndarray, list[str], np.ndarray, np.ndarray]]:
     psd_ds = getattr(idata, "posterior_psd", None)
-    if psd_ds is None or "psd_matrix_real" not in psd_ds:
-        return None
+    if psd_ds is not None and "psd_matrix_real" in psd_ds:
+        psd_real = np.asarray(psd_ds["psd_matrix_real"].values)
+        if psd_real.ndim != 4:
+            return None
+
+        freqs = np.asarray(
+            psd_ds["psd_matrix_real"].coords.get(
+                "freq", np.arange(psd_real.shape[1], dtype=float)
+            ),
+            dtype=float,
+        )
+        if freqs.ndim != 1 or freqs.size != psd_real.shape[1]:
+            return None
+        percentiles = np.asarray(
+            psd_ds["psd_matrix_real"].coords.get("percentile", []),
+            dtype=float,
+        )
+        if "psd_matrix_imag" in psd_ds:
+            psd_imag = np.asarray(psd_ds["psd_matrix_imag"].values)
+        else:
+            psd_imag = np.zeros_like(psd_real)
+    else:
+        try:
+            quantiles = get_multivar_posterior_psd_quantiles(idata)
+        except KeyError:
+            return None
+        psd_real = np.asarray(quantiles["real"], dtype=np.float64)
+        psd_imag = np.asarray(quantiles["imag"], dtype=np.float64)
+        freqs = np.asarray(quantiles["freq"], dtype=float)
+        percentiles = np.asarray(quantiles["percentile"], dtype=float)
 
     truth = _resolve_true_psd(idata, true_psd)
     if truth is None:
-        return None
-
-    psd_real = np.asarray(psd_ds["psd_matrix_real"].values)
-    if psd_real.ndim != 4:
-        return None
-
-    freqs = np.asarray(
-        psd_ds["psd_matrix_real"].coords.get(
-            "freq", np.arange(psd_real.shape[1], dtype=float)
-        ),
-        dtype=float,
-    )
-    if freqs.ndim != 1 or freqs.size != psd_real.shape[1]:
         return None
 
     truth_arr = np.asarray(truth)
@@ -605,25 +628,15 @@ def _build_multivar_truth_frequency_maps(
         )
         return None
 
-    percentiles = np.asarray(
-        psd_ds["psd_matrix_real"].coords.get("percentile", []), dtype=float
-    )
     if percentiles.size == 0:
         percentiles = np.arange(psd_real.shape[0], dtype=float)
 
     q50_real = extract_percentile(psd_real, percentiles, 50.0)
     q05_real = extract_percentile(psd_real, percentiles, 5.0)
     q95_real = extract_percentile(psd_real, percentiles, 95.0)
-
-    if "psd_matrix_imag" in psd_ds:
-        psd_imag = np.asarray(psd_ds["psd_matrix_imag"].values)
-        q50_imag = extract_percentile(psd_imag, percentiles, 50.0)
-        q05_imag = extract_percentile(psd_imag, percentiles, 5.0)
-        q95_imag = extract_percentile(psd_imag, percentiles, 95.0)
-    else:
-        q50_imag = np.zeros_like(q50_real)
-        q05_imag = np.zeros_like(q05_real)
-        q95_imag = np.zeros_like(q95_real)
+    q50_imag = extract_percentile(psd_imag, percentiles, 50.0)
+    q05_imag = extract_percentile(psd_imag, percentiles, 5.0)
+    q95_imag = extract_percentile(psd_imag, percentiles, 95.0)
 
     estimate = q50_real + 1j * q50_imag
     q05 = q05_real + 1j * q05_imag

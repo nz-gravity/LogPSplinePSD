@@ -444,15 +444,7 @@ def _create_multivar_inference_data(
     sample_shape = samples[first_sample_key].shape
     n_chains, n_draws = sample_shape[:2]
 
-    # Create posterior predictive summaries
-    percentiles, psd_real_q, psd_imag_q, coh_q = (
-        _compute_posterior_predictive_multivar(
-            samples, sample_stats, spline_model, fft_data, config
-        )
-    )
-    psd_real_q = np.asarray(psd_real_q, dtype=np.float64)
-    psd_imag_q = np.asarray(psd_imag_q, dtype=np.float64)
-    coh_q = np.asarray(coh_q, dtype=np.float64) if coh_q is not None else None
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float64)
 
     channel_stds = getattr(config, "channel_stds", None)
     factor_matrix = None
@@ -466,14 +458,6 @@ def _create_multivar_inference_data(
         scale_matrix = np.outer(channel_stds, channel_stds).astype(np.float64)
         factor_matrix = scale_matrix
         factor_4d = factor_matrix[None, None, :, :]
-        psd_real_q_rescaled = psd_real_q * factor_4d
-        psd_imag_q_rescaled = psd_imag_q * factor_4d
-    else:
-        psd_real_q_rescaled = psd_real_q
-        psd_imag_q_rescaled = psd_imag_q
-    coherence_q_rescaled = coh_q
-    scalar_factor = float(getattr(config, "scaling_factor", 1.0) or 1.0)
-
     # Compute and rescale observed cross-spectral density (periodogram)
     raw_psd = getattr(fft_data, "raw_psd", None)
     psd_has_global_scale = False
@@ -559,12 +543,8 @@ def _create_multivar_inference_data(
     dims.update(
         {
             "periodogram": ["freq", "channels", "channels2"],
-            "psd_matrix_real": ["percentile", "freq", "channels", "channels2"],
-            "psd_matrix_imag": ["percentile", "freq", "channels", "channels2"],
         }
     )
-    if coherence_q_rescaled is not None:
-        dims["coherence"] = ["percentile", "freq", "channels", "channels2"]
 
     attributes.update(
         {
@@ -615,47 +595,9 @@ def _create_multivar_inference_data(
     # ArviZ variants may ignore attrs in from_dict; enforce them explicitly.
     idata.attrs.update(attributes)
 
+    # Prior predictive PSD quantiles (only when shrinkage tau is set)
     import xarray as _xr
 
-    posterior_psd_vars = {
-        "psd_matrix_real": DataArray(
-            psd_real_q_rescaled,
-            dims=["percentile", "freq", "channels", "channels2"],
-            coords={
-                "percentile": coords["percentile"],
-                "freq": coords["freq"],
-                "channels": coords["channels"],
-                "channels2": coords["channels"],
-            },
-        ),
-        "psd_matrix_imag": DataArray(
-            psd_imag_q_rescaled,
-            dims=["percentile", "freq", "channels", "channels2"],
-            coords={
-                "percentile": coords["percentile"],
-                "freq": coords["freq"],
-                "channels": coords["channels"],
-                "channels2": coords["channels"],
-            },
-        ),
-    }
-    if coherence_q_rescaled is not None:
-        posterior_psd_vars["coherence"] = DataArray(
-            coherence_q_rescaled,
-            dims=["percentile", "freq", "channels", "channels2"],
-            coords={
-                "percentile": coords["percentile"],
-                "freq": coords["freq"],
-                "channels": coords["channels"],
-                "channels2": coords["channels"],
-            },
-        )
-
-    idata["posterior_psd"] = _xr.DataTree(
-        dataset=Dataset(posterior_psd_vars, coords=coords)
-    )
-
-    # Prior predictive PSD quantiles (only when shrinkage tau is set)
     tau = getattr(config, "tau", None)
     design_psd_cfg = getattr(config, "design_psd", None)
     if tau is not None and design_psd_cfg is not None:

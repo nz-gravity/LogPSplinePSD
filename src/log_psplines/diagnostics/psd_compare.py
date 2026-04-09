@@ -367,6 +367,9 @@ def compute_multivar_riae_diagnostics(
     diagnostics["riae_matrix"] = float(
         compute_matrix_riae(vi_psd, true_psd_real, freqs)
     )
+    diagnostics["l2_matrix"] = float(
+        compute_matrix_l2(vi_psd, true_psd_real, freqs)
+    )
 
     per_channel_riae = []
     for channel_idx in range(true_psd_real.shape[1]):
@@ -471,6 +474,13 @@ def compute_multivar_riae_diagnostics(
                 if q50_real is not None
                 else vi_psd
             )
+            diag_mask_2d = np.eye(q50_real_array.shape[1], dtype=bool)
+            diag_width = (
+                np.asarray(q95_real)[freq_idx, ...]
+                - np.asarray(q05_real)[freq_idx, ...]
+            )[:, diag_mask_2d]
+            diagnostics["ci_width_diag_mean"] = float(np.mean(diag_width))
+            diagnostics["ci_width"] = diagnostics["ci_width_diag_mean"]
             q05_im = q05_im[freq_idx, ...]
             q50_im = q50_im[freq_idx, ...]
             q95_im = q95_im[freq_idx, ...]

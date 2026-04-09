@@ -395,6 +395,8 @@ class MultivarBaseSampler(BaseSampler):
             "coherence_riae",
             "coverage",
             "ci_coverage",
+            "ci_width",
+            "ci_width_diag_mean",
             "coverage_interval",
             "coverage_level",
             "riae_matrix_errorbars",

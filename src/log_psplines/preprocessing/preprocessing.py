@@ -9,7 +9,7 @@ import numpy as np
 from ..datatypes import Periodogram
 from ..datatypes.multivar import EmpiricalPSD, MultivarFFT
 from ..logger import logger
-from .checks import _run_preprocessing_checks
+from .checks import _run_preprocessing_checks, _save_preprocessing_plot
 from .coarse_grain import (
     CoarseGrainConfig,
     _closest_divisor,
@@ -296,6 +296,11 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
         data,
         run_config,
         include_overlays=True,
+    )
+    _save_preprocessing_plot(
+        preproc_input.processed_data,
+        run_config,
+        spline_model=None,
     )
 
     coarse_vi_context = None

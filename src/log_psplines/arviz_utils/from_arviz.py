@@ -30,7 +30,10 @@ def _nearest_percentile_slice(
 
 def get_posterior_psd(idata: az.InferenceData):
     """Return (freqs, median_psd, lower, upper) from stored percentiles."""
-    psd = idata.posterior_psd["psd"]
+    posterior_psd = getattr(idata, "posterior_psd", None)
+    if posterior_psd is None or "psd" not in posterior_psd:
+        raise KeyError("InferenceData missing posterior_psd 'psd' variable.")
+    psd = posterior_psd["psd"]
 
     freqs = np.asarray(psd.coords["freq"].values)
     percentiles = np.asarray(psd.coords["percentile"].values)
@@ -383,6 +386,25 @@ def _compute_multivar_psd_quantiles(
     }
 
 
+def _rescale_multivar_psd_quantiles(
+    idata: az.InferenceData,
+    quantiles: dict[str, np.ndarray | None],
+) -> dict[str, np.ndarray | None]:
+    """Rescale multivariate PSD quantiles back to the physical data scale."""
+    attrs = getattr(idata, "attrs", {}) or {}
+    channel_stds = attrs.get("channel_stds")
+    if channel_stds is None:
+        return quantiles
+    channel_stds = np.asarray(channel_stds, dtype=np.float64)
+    factor_matrix = np.outer(channel_stds, channel_stds).astype(np.float64)
+    factor_4d = factor_matrix[None, None, :, :]
+    return {
+        **quantiles,
+        "real": np.asarray(quantiles["real"], dtype=np.float64) * factor_4d,
+        "imag": np.asarray(quantiles["imag"], dtype=np.float64) * factor_4d,
+    }
+
+
 def _get_multivar_sample_dataset(
     idata: az.InferenceData,
     sample_source: Literal["posterior", "vi"],
@@ -393,38 +415,62 @@ def _get_multivar_sample_dataset(
     return get_multivar_vi_posterior(idata)
 
 
+def _resolve_multivar_draw_cap(
+    idata: az.InferenceData,
+    sample_source: Literal["posterior", "vi"],
+    n_keep: int | None,
+) -> int | None:
+    """Resolve the default posterior/VI reconstruction cap from ``idata.attrs``."""
+    if n_keep is not None:
+        return int(n_keep)
+    attrs = getattr(idata, "attrs", {}) or {}
+    attr_name = (
+        "posterior_psd_max_draws"
+        if sample_source == "posterior"
+        else "vi_psd_max_draws"
+    )
+    value = attrs.get(attr_name, 50)
+    if value is None:
+        return None
+    return int(value)
+
+
 def _get_multivar_psd_quantiles_from_samples(
     idata: az.InferenceData,
     *,
     sample_source: Literal["posterior", "vi"],
-    n_keep: int,
+    n_keep: int | None,
     percentiles: tuple[float, ...],
     compute_coherence: bool,
     chunk_size: int,
     freq_idx: np.ndarray | list[int] | None,
 ) -> dict[str, np.ndarray | None]:
     """Reconstruct multivariate PSD quantiles from posterior-like samples."""
+    n_keep = _resolve_multivar_draw_cap(idata, sample_source, n_keep)
     spline_model = get_multivar_spline_model(idata)
     _, params = _get_multivar_reconstruction_inputs_from_dataset(
         _get_multivar_sample_dataset(idata, sample_source),
         spline_model,
         n_keep=n_keep,
     )
-    return _compute_multivar_psd_quantiles(
-        spline_model=spline_model,
-        params=params,
-        freq=_get_multivar_frequency_grid(idata),
-        percentiles=percentiles,
-        n_keep=n_keep,
-        compute_coherence=compute_coherence,
-        chunk_size=chunk_size,
-        freq_idx=freq_idx,
+    return _rescale_multivar_psd_quantiles(
+        idata,
+        _compute_multivar_psd_quantiles(
+            spline_model=spline_model,
+            params=params,
+            freq=_get_multivar_frequency_grid(idata),
+            percentiles=percentiles,
+            n_keep=n_keep,
+            compute_coherence=compute_coherence,
+            chunk_size=chunk_size,
+            freq_idx=freq_idx,
+        ),
     )
 
 
 def get_multivar_posterior_psd_quantiles(
     idata: az.InferenceData,
-    n_keep: int = 50,
+    n_keep: int | None = None,
     percentiles: tuple[float, ...] = (5.0, 50.0, 95.0),
     compute_coherence: bool = True,
     chunk_size: int = 2048,
@@ -462,7 +508,7 @@ def get_multivar_vi_posterior(idata: az.InferenceData) -> xr.Dataset:
 
 def get_multivar_vi_psd_quantiles(
     idata: az.InferenceData,
-    n_keep: int = 50,
+    n_keep: int | None = None,
     percentiles: tuple[float, ...] = (5.0, 50.0, 95.0),
     compute_coherence: bool = True,
     chunk_size: int = 2048,

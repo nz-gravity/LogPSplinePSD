@@ -567,14 +567,26 @@ def _relative_error_epsilon(values: np.ndarray) -> float:
 def _build_multivar_truth_frequency_maps(
     idata: az.InferenceData, true_psd: Optional[np.ndarray]
 ) -> Optional[tuple[np.ndarray, list[str], np.ndarray, np.ndarray]]:
-    try:
-        quantiles = get_multivar_posterior_psd_quantiles(idata)
-    except KeyError:
+    psd = getattr(idata, "posterior_psd", None)
+    if not _is_multivar(idata) and not (
+        psd is not None and "psd_matrix_real" in psd
+    ):
         return None
-    psd_real = np.asarray(quantiles["real"], dtype=np.float64)
-    psd_imag = np.asarray(quantiles["imag"], dtype=np.float64)
-    freqs = np.asarray(quantiles["freq"], dtype=float)
-    percentiles = np.asarray(quantiles["percentile"], dtype=float)
+    if psd is not None and "psd_matrix_real" in psd:
+        psd_real = np.asarray(psd["psd_matrix_real"].values, dtype=np.float64)
+        psd_imag = np.asarray(psd["psd_matrix_imag"].values, dtype=np.float64)
+        freqs = np.asarray(
+            psd["psd_matrix_real"].coords["freq"].values, dtype=float
+        )
+        percentiles = np.asarray(
+            psd["psd_matrix_real"].coords["percentile"].values, dtype=float
+        )
+    else:
+        quantiles = get_multivar_posterior_psd_quantiles(idata)
+        psd_real = np.asarray(quantiles["real"], dtype=np.float64)
+        psd_imag = np.asarray(quantiles["imag"], dtype=np.float64)
+        freqs = np.asarray(quantiles["freq"], dtype=float)
+        percentiles = np.asarray(quantiles["percentile"], dtype=float)
 
     truth = _resolve_true_psd(idata, true_psd)
     if truth is None:
@@ -3094,13 +3106,19 @@ def generate_diagnostics_summary(
         summary.extend(psd_band_lines)
 
     vi_metrics = {}
-    have_vi_psd = bool(getattr(idata, "attrs", {}).get("only_vi")) or hasattr(
-        idata, "vi_posterior"
+    have_vi_psd = (
+        bool(getattr(idata, "attrs", {}).get("only_vi"))
+        or hasattr(idata, "vi_posterior")
+        or hasattr(idata, "vi_posterior_psd")
     )
     if have_vi_psd:
         vi_psd_attrs = {}
         if hasattr(idata, "vi_posterior"):
             vi_psd_attrs = _attrs_like(getattr(idata, "vi_posterior", None))
+        elif hasattr(idata, "vi_posterior_psd"):
+            vi_psd_attrs = _attrs_like(
+                getattr(idata, "vi_posterior_psd", None)
+            )
         vi_metrics["riae"] = _pick_scalar(
             attrs.get("vi_riae_vs_truth"),
             attrs.get("vi_riae"),
@@ -3446,6 +3464,11 @@ def generate_vi_diagnostics_summary(
             diag_summary_path = os.path.join(outdir, "diagnostics_summary.txt")
             with open(diag_summary_path, "a") as f:
                 f.write("\n\n" + summary_text)
+            vi_summary_path = os.path.join(
+                outdir, "vi_diagnostics_summary.txt"
+            )
+            with open(vi_summary_path, "w") as f:
+                f.write(summary_text)
         except Exception:
             logger.debug(
                 "Could not append VI diagnostics summary to diagnostics_summary.txt.",

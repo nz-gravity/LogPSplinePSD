@@ -25,7 +25,7 @@ from ._utils import (
 
 def _get_psd_dataset(idata, idata_vi):
     """Return the first available PSD dataset from MCMC or VI idata."""
-    for source in (idata, idata_vi):
+    for source, prefer_vi in ((idata, False), (idata_vi, True)):
         if source is None:
             continue
         attrs = getattr(source, "attrs", {}) or {}
@@ -33,7 +33,9 @@ def _get_psd_dataset(idata, idata_vi):
             str(attrs.get("data_type", "")).lower().startswith("multi")
         )
         if is_multivar:
-            if bool(attrs.get("only_vi")) or hasattr(source, "vi_posterior"):
+            if prefer_vi and (
+                bool(attrs.get("only_vi")) or hasattr(source, "vi_posterior")
+            ):
                 return get_multivar_psd_dataset(source, source="vi")
             return get_multivar_psd_dataset(source, source="posterior")
         for name in ("vi_posterior_psd", "posterior_psd"):

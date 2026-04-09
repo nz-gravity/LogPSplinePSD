@@ -8,7 +8,6 @@ by ``n``.
 """
 
 import argparse
-import csv
 import json
 import os
 from typing import Literal
@@ -356,18 +355,6 @@ def _extract_run_metrics(
     return metrics
 
 
-def _save_metrics_summary(
-    outdir: str, metrics: dict[str, float | int | str]
-) -> None:
-    """Persist compact metrics as JSON."""
-    metrics_json = os.path.join(outdir, "metrics_summary.json")
-
-    with open(metrics_json, "w", encoding="utf-8") as f:
-        json.dump(metrics, f, indent=2, sort_keys=True)
-
-    logger.info(f"Saved compact metrics to {metrics_json}")
-
-
 def _extract_lnz_summary(idata) -> tuple[float, float]:
     """Best-effort extraction of total lnZ and its uncertainty."""
     attrs = getattr(idata, "attrs", {})
@@ -508,17 +495,11 @@ def _save_compact_run_summary(
     metrics["lnz_err"] = lnz_err
 
     out_json = os.path.join(outdir, "compact_run_summary.json")
-    out_csv = os.path.join(outdir, "compact_run_summary.csv")
 
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2, sort_keys=True)
 
-    with open(out_csv, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(metrics.keys()))
-        writer.writeheader()
-        writer.writerow(metrics)
-
-    logger.info(f"Saved compact run summary to {out_json} and {out_csv}")
+    logger.info(f"Saved compact run summary to {out_json}")
 
 
 def _prune_outputs_keep_psd_plot(outdir: str) -> None:
@@ -741,15 +722,6 @@ def simulation_study(
         run_mcmc_kwargs["design_psd"] = (freq_true_hz, true_psd)
         run_mcmc_kwargs["tau"] = tau
     idata = run_mcmc(**run_mcmc_kwargs)
-    metrics = _extract_run_metrics(
-        idata,
-        seed=seed,
-        mode=mode,
-        N=N,
-        Nb=Nb,
-        coarse_Nh=coarse_Nh,
-    )
-    _save_metrics_summary(outdir, metrics)
     _save_compact_ci_curves(outdir, idata)
     _save_compact_run_summary(
         outdir,

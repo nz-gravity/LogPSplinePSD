@@ -8,6 +8,7 @@ import pytest
 import log_psplines.samplers.multivar.multivar_blocked_nuts as blocked_nuts_mod
 from log_psplines.arviz_utils import (
     get_multivar_posterior_psd_quantiles,
+    get_posterior_psd,
     get_weights,
 )
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
@@ -564,8 +565,8 @@ def test_run_mcmc_coarse_grain_univariate_mcmc():
         data=ts_run,
         config=run_cfg,
     )
-    quantiles = get_multivar_posterior_psd_quantiles(idata, n_keep=2)
-    freq = np.asarray(quantiles["freq"], dtype=float)
+    freq, _, _, _ = get_posterior_psd(idata)
+    freq = np.asarray(freq, dtype=float)
     assert freq.shape[0] == expected_freq.shape[0]
     assert np.allclose(freq, expected_freq)
 

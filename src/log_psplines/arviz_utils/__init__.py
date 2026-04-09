@@ -9,6 +9,7 @@ from .from_arviz import (
     get_multivar_vi_posterior,
     get_multivar_vi_psd_quantiles,
     get_periodogram,
+    get_posterior_psd,
     get_spline_model,
     get_weights,
 )

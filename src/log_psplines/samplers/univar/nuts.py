@@ -44,7 +44,7 @@ class NUTSConfig(SamplerConfig):
     vi_steps: int = 1500
     vi_lr: float = 1e-2
     vi_guide: Optional[str] = None
-    vi_posterior_draws: int = 256
+    vi_posterior_draws: int = 50
     vi_progress_bar: Optional[bool] = None
 
 
@@ -126,7 +126,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             alpha_delta=self.config.alpha_delta,
             beta_delta=self.config.beta_delta,
         )
-        if coarse_sampler is not None and not vi_only_mode:
+        if coarse_sampler is not None:
             vi_artifacts = compute_coarse_vi_artifacts_univar(
                 self,
                 coarse_sampler=coarse_sampler,

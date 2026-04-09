@@ -16,6 +16,7 @@ def _run_preprocessing_checks(
     processed_data: Optional[Union[Periodogram, MultivarFFT]],
     config: RunMCMCConfig,
 ) -> None:
+    """Run eigenvalue separation warnings (lightweight, no plotting)."""
     if not isinstance(processed_data, MultivarFFT):
         return
     if processed_data.raw_psd is None:
@@ -27,10 +28,8 @@ def _run_preprocessing_checks(
     try:
         from ..diagnostics.preprocessing import (
             eigenvalue_separation_diagnostics,
-            save_eigenvalue_separation_plot,
         )
 
-        # Use hardcoded defaults
         min_lambda1_quantile = 0.05
         warn_threshold = 0.8
         warn_frac = 0.25
@@ -79,9 +78,50 @@ def _run_preprocessing_checks(
             if config.diagnostics.verbose and summaries is not None:
                 logger.info(f"Eigenvalue separation {summaries[key]}")
 
-        # Always save preprocessing plots
+    except Exception as exc:
+        logger.warning(f"Eigenvalue separation check failed: {exc}")
+
+
+def _save_preprocessing_plot(
+    processed_data: Optional[Union[Periodogram, MultivarFFT]],
+    config: RunMCMCConfig,
+    spline_model: object | None = None,
+) -> None:
+    """Save the preprocessing diagnostic plot, optionally with knot locations.
+
+    This should be called *after* the spline model is built so that the knot
+    locations shown on the plot are the exact same ones used by the sampler.
+
+    Args:
+        processed_data: The processed FFT data.
+        config: Run configuration.
+        spline_model: A ``MultivariateLogPSplines`` instance.  When provided,
+            knot positions are extracted and drawn on each component panel.
+    """
+    if not isinstance(processed_data, MultivarFFT):
+        return
+    if processed_data.raw_psd is None:
+        return
+
+    try:
+        from ..diagnostics.preprocessing import (
+            eigenvalue_separation_diagnostics,
+            extract_component_knots,
+            save_eigenvalue_separation_plot,
+        )
+
         if config.diagnostics.outdir is None:
             logger.warning("Skipping preprocessing plot save: outdir is None.")
+            return
+
+        freq = np.asarray(processed_data.freq, dtype=float)
+        diag = eigenvalue_separation_diagnostics(
+            freq=freq,
+            matrix=np.asarray(processed_data.raw_psd),
+            min_lambda1_quantile=0.05,
+        )
+        p = int(diag.eigvals_desc.shape[1])
+        if p < 2:
             return
 
         out_path = (
@@ -89,6 +129,7 @@ def _run_preprocessing_checks(
             / "diagnostics"
             / "preprocessing_eigenvalue_ratios.png"
         )
+
         nb = int(processed_data.Nb)
         nh = int(processed_data.Nh)
         n_coarse_or_retained = int(processed_data.N)
@@ -125,15 +166,27 @@ def _run_preprocessing_checks(
         excluded_bands = _normalize_excluded_frequency_bands(
             config.model.exclude_freq_bands
         )
+
+        # Extract knot positions from the built model.
+        comp_knots = None
+        if spline_model is not None:
+            try:
+                comp_knots = extract_component_knots(spline_model, freq)
+            except Exception as knot_exc:
+                logger.debug(
+                    f"Could not extract knot locations for plot: {knot_exc}"
+                )
+
         save_eigenvalue_separation_plot(
             diag,
             str(out_path),
-            warn_threshold=warn_threshold,
+            warn_threshold=0.8,
             info_text=info_text,
             excluded_bands=excluded_bands,
             cholesky_matrix=np.asarray(processed_data.raw_psd),
+            component_knots=comp_knots,
         )
         if config.diagnostics.verbose:
             logger.info(f"Saved preprocessing eigenvalue plot to {out_path}")
     except Exception as exc:
-        logger.warning(f"Eigenvalue separation check failed: {exc}")
+        logger.warning(f"Preprocessing plot save failed: {exc}")

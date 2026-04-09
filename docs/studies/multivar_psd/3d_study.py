@@ -8,7 +8,6 @@ by ``n``.
 """
 
 import argparse
-import csv
 import json
 import os
 from typing import Literal
@@ -18,6 +17,9 @@ os.environ.setdefault("XLA_FLAGS", "--xla_force_host_platform_device_count=4")
 import jax
 import numpy as np
 
+from log_psplines.arviz_utils.from_arviz import (
+    get_multivar_posterior_psd_quantiles,
+)
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 
@@ -39,6 +41,13 @@ DEFAULT_VI_PSD_MAX_DRAWS = 256
 DEFAULT_POSTERIOR_PSD_MAX_DRAWS = 256
 DEFAULT_ALPHA_DELTA = 1.0
 DEFAULT_BETA_DELTA = 1.0
+DEFAULT_CHAIN_METHOD: Literal["parallel", "vectorized", "sequential"] = (
+    "parallel"
+)
+DEFAULT_SAVE_SAMPLER_OUTPUTS = False
+DEFAULT_SAVE_NUTS_DIAGNOSTICS = True
+DEFAULT_COMPUTE_PSIS = False
+DEFAULT_RUN_FULL_DIAGNOSTICS = False
 # Total Niter=8000 implemented as 4000 warmup + 4000 posterior samples.
 DEFAULT_N_SAMPLES = 4000
 DEFAULT_N_WARMUP = 4000
@@ -209,22 +218,52 @@ def _extract_percentile_slice(
     return np.asarray(values[idx], dtype=np.float64)
 
 
+def _get_posterior_psd_quantiles(idata) -> dict[str, np.ndarray | None] | None:
+    """Return posterior PSD quantiles, reconstructing lazily when needed."""
+    psd_group = getattr(idata, "posterior_psd", None)
+    if (
+        psd_group is not None
+        and "psd_matrix_real" in psd_group
+        and "psd_matrix_imag" in psd_group
+    ):
+        return {
+            "freq": np.asarray(
+                psd_group.coords["freq"].values, dtype=np.float64
+            ),
+            "percentile": np.asarray(
+                psd_group.coords["percentile"].values, dtype=np.float64
+            ),
+            "real": np.asarray(
+                psd_group["psd_matrix_real"].values, dtype=np.float64
+            ),
+            "imag": np.asarray(
+                psd_group["psd_matrix_imag"].values, dtype=np.float64
+            ),
+            "coherence": (
+                np.asarray(psd_group["coherence"].values, dtype=np.float64)
+                if "coherence" in psd_group
+                else None
+            ),
+        }
+
+    try:
+        return get_multivar_posterior_psd_quantiles(idata)
+    except Exception as exc:
+        logger.warning(
+            f"Could not reconstruct posterior PSD quantiles from posterior weights: {exc}"
+        )
+        return None
+
+
 def _compute_ci_width_metrics(idata) -> dict[str, float]:
     """Compute CI-width summaries from posterior PSD/coherence quantiles."""
     metrics: dict[str, float] = {}
-    psd_group = getattr(idata, "posterior_psd", None)
-    if psd_group is None or "psd_matrix_real" not in psd_group:
+    quantiles = _get_posterior_psd_quantiles(idata)
+    if quantiles is None:
         return metrics
 
-    psd_real = np.asarray(
-        psd_group["psd_matrix_real"].values, dtype=np.float64
-    )
-    percentiles = np.asarray(
-        psd_group["psd_matrix_real"].coords.get(
-            "percentile", np.arange(psd_real.shape[0], dtype=float)
-        ),
-        dtype=np.float64,
-    )
+    psd_real = np.asarray(quantiles["real"], dtype=np.float64)
+    percentiles = np.asarray(quantiles["percentile"], dtype=np.float64)
     if psd_real.shape[0] < 2:
         return metrics
 
@@ -239,20 +278,12 @@ def _compute_ci_width_metrics(idata) -> dict[str, float]:
     offdiag_width = width_psd[:, offdiag_mask]
 
     metrics["ciw_psd_diag_mean"] = float(np.mean(diag_width))
-    metrics["ciw_psd_diag_median"] = float(np.median(diag_width))
-    metrics["ciw_psd_diag_max"] = float(np.max(diag_width))
     metrics["ciw_psd_offdiag_mean"] = float(np.mean(offdiag_width))
-    metrics["ciw_psd_offdiag_median"] = float(np.median(offdiag_width))
-    metrics["ciw_psd_offdiag_max"] = float(np.max(offdiag_width))
 
-    if "coherence" in psd_group:
-        coherence = np.asarray(psd_group["coherence"].values, dtype=np.float64)
-        coh_percentiles = np.asarray(
-            psd_group["coherence"].coords.get(
-                "percentile", np.arange(coherence.shape[0], dtype=float)
-            ),
-            dtype=np.float64,
-        )
+    coherence = quantiles.get("coherence")
+    if coherence is not None:
+        coherence = np.asarray(coherence, dtype=np.float64)
+        coh_percentiles = np.asarray(percentiles, dtype=np.float64)
         if coherence.shape[0] >= 2:
             coh_q05 = _extract_percentile_slice(
                 coherence, coh_percentiles, 5.0
@@ -263,8 +294,6 @@ def _compute_ci_width_metrics(idata) -> dict[str, float]:
             coh_width = np.maximum(coh_q95 - coh_q05, 0.0)
             coh_offdiag = coh_width[:, offdiag_mask]
             metrics["ciw_coh_offdiag_mean"] = float(np.mean(coh_offdiag))
-            metrics["ciw_coh_offdiag_median"] = float(np.median(coh_offdiag))
-            metrics["ciw_coh_offdiag_max"] = float(np.max(coh_offdiag))
 
     return metrics
 
@@ -280,8 +309,6 @@ def _extract_run_metrics(
 ) -> dict[str, float | int | str]:
     """Extract compact run-level metrics for downstream aggregation."""
     attrs = idata.attrs
-    vi_psd = getattr(idata, "vi_posterior_psd", None)
-    vi_attrs = getattr(vi_psd, "attrs", {})
     ess_raw = attrs.get("ess", np.nan)
     ess_arr = np.asarray(ess_raw, dtype=float)
     ess_median = float(np.nanmedian(ess_arr)) if ess_arr.size else float("nan")
@@ -301,46 +328,31 @@ def _extract_run_metrics(
         "ess_median": ess_median,
         "vi_riae_matrix": float(
             attrs.get(
-                "vi_riae_matrix_vs_truth",
-                attrs.get(
-                    "vi_riae_vs_truth",
-                    vi_attrs.get("riae_matrix", np.nan),
-                ),
+                "vi_riae_matrix",
+                attrs.get("vi_riae_vs_truth", np.nan),
             )
         ),
         "vi_l2_matrix": float(
             attrs.get(
-                "vi_l2_matrix_vs_truth",
-                vi_attrs.get("l2_matrix", np.nan),
+                "vi_l2_matrix",
+                np.nan,
             )
         ),
         "vi_coverage": float(
             attrs.get(
-                "vi_coverage_vs_truth",
-                vi_attrs.get("coverage", np.nan),
+                "vi_coverage",
+                attrs.get("vi_ci_coverage", np.nan),
             )
         ),
         "vi_ci_width": float(
             attrs.get(
-                "vi_ci_width_vs_truth",
-                vi_attrs.get("ci_width", np.nan),
+                "vi_ci_width",
+                attrs.get("vi_ci_width_diag_mean", np.nan),
             )
         ),
     }
     metrics.update(_compute_ci_width_metrics(idata))
     return metrics
-
-
-def _save_metrics_summary(
-    outdir: str, metrics: dict[str, float | int | str]
-) -> None:
-    """Persist compact metrics as JSON."""
-    metrics_json = os.path.join(outdir, "metrics_summary.json")
-
-    with open(metrics_json, "w", encoding="utf-8") as f:
-        json.dump(metrics, f, indent=2, sort_keys=True)
-
-    logger.info(f"Saved compact metrics to {metrics_json}")
 
 
 def _extract_lnz_summary(idata) -> tuple[float, float]:
@@ -358,28 +370,16 @@ def _extract_lnz_summary(idata) -> tuple[float, float]:
 
 def _save_compact_ci_curves(outdir: str, idata) -> None:
     """Save compact CI-vs-frequency arrays for plotting comparisons."""
-    psd_group = getattr(idata, "posterior_psd", None)
-    if psd_group is None:
-        raise ValueError("InferenceData has no posterior_psd group.")
-    if (
-        "psd_matrix_real" not in psd_group
-        or "psd_matrix_imag" not in psd_group
-    ):
+    quantiles = _get_posterior_psd_quantiles(idata)
+    if quantiles is None:
         raise ValueError(
-            "posterior_psd must contain psd_matrix_real and psd_matrix_imag."
+            "InferenceData has no posterior PSD quantiles and reconstruction failed."
         )
 
-    freq = np.asarray(psd_group.coords["freq"].values, dtype=np.float64)
-    percentiles = np.asarray(
-        psd_group.coords["percentile"].values, dtype=np.float64
-    )
-
-    psd_real = np.asarray(
-        psd_group["psd_matrix_real"].values, dtype=np.float64
-    )
-    psd_imag = np.asarray(
-        psd_group["psd_matrix_imag"].values, dtype=np.float64
-    )
+    freq = np.asarray(quantiles["freq"], dtype=np.float64)
+    percentiles = np.asarray(quantiles["percentile"], dtype=np.float64)
+    psd_real = np.asarray(quantiles["real"], dtype=np.float64)
+    psd_imag = np.asarray(quantiles["imag"], dtype=np.float64)
 
     q05_real = _extract_percentile_slice(psd_real, percentiles, 5.0)
     q50_real = _extract_percentile_slice(psd_real, percentiles, 50.0)
@@ -495,17 +495,11 @@ def _save_compact_run_summary(
     metrics["lnz_err"] = lnz_err
 
     out_json = os.path.join(outdir, "compact_run_summary.json")
-    out_csv = os.path.join(outdir, "compact_run_summary.csv")
 
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2, sort_keys=True)
 
-    with open(out_csv, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(metrics.keys()))
-        writer.writeheader()
-        writer.writerow(metrics)
-
-    logger.info(f"Saved compact run summary to {out_json} and {out_csv}")
+    logger.info(f"Saved compact run summary to {out_json}")
 
 
 def _prune_outputs_keep_psd_plot(outdir: str) -> None:
@@ -553,7 +547,6 @@ def simulation_study(
     coarse_nh_override: int | None = None,
     n_override: int | None = None,
     nb_override: int | None = None,
-    quick: bool = False,
     n_samples_override: int | None = None,
     n_warmup_override: int | None = None,
     num_chains_override: int | None = None,
@@ -562,6 +555,13 @@ def simulation_study(
     tau: float | None = None,
     knot_scoring: str = "spectral",
     knot_method: str = "density",
+    chain_method: Literal[
+        "parallel", "vectorized", "sequential"
+    ] = DEFAULT_CHAIN_METHOD,
+    save_sampler_outputs: bool = DEFAULT_SAVE_SAMPLER_OUTPUTS,
+    save_nuts_diagnostics: bool = DEFAULT_SAVE_NUTS_DIAGNOSTICS,
+    compute_psis: bool = DEFAULT_COMPUTE_PSIS,
+    run_full_diagnostics: bool = DEFAULT_RUN_FULL_DIAGNOSTICS,
 ) -> None:
     cfg = MODE_CONFIG[mode]
     preset_N = int(cfg["N"])
@@ -581,40 +581,24 @@ def simulation_study(
         else (None if coarse_nh_override == 0 else int(coarse_nh_override))
     )
     n_samples = (
-        1000
-        if quick and n_samples_override is None
-        else (
-            DEFAULT_N_SAMPLES
-            if n_samples_override is None
-            else int(n_samples_override)
-        )
+        DEFAULT_N_SAMPLES
+        if n_samples_override is None
+        else int(n_samples_override)
     )
     n_warmup = (
-        1000
-        if quick and n_warmup_override is None
-        else (
-            DEFAULT_N_WARMUP
-            if n_warmup_override is None
-            else int(n_warmup_override)
-        )
+        DEFAULT_N_WARMUP
+        if n_warmup_override is None
+        else int(n_warmup_override)
     )
     num_chains = (
-        2
-        if quick and num_chains_override is None
-        else (
-            DEFAULT_NUM_CHAINS
-            if num_chains_override is None
-            else int(num_chains_override)
-        )
+        DEFAULT_NUM_CHAINS
+        if num_chains_override is None
+        else int(num_chains_override)
     )
     vi_steps = (
-        20_000
-        if quick and vi_steps_override is None
-        else (
-            DEFAULT_VI_STEPS
-            if vi_steps_override is None
-            else int(vi_steps_override)
-        )
+        DEFAULT_VI_STEPS
+        if vi_steps_override is None
+        else int(vi_steps_override)
     )
     if n_samples <= 0 or n_warmup <= 0:
         raise ValueError("n_samples and n_warmup must be positive.")
@@ -672,6 +656,16 @@ def simulation_study(
         raise ValueError("Generated VAR samples contain non-finite values.")
     ts = MultivariateTimeseries(t=t, y=data)
 
+    sampler_outdir = outdir if save_sampler_outputs else None
+    if save_sampler_outputs:
+        logger.info(
+            f"Sampler outputs enabled; writing full artifacts to {outdir}"
+        )
+    else:
+        logger.info(
+            "Sampler outputs disabled for this study run; only compact study summaries will be saved."
+        )
+
     freq_true_hz = np.fft.rfftfreq(N, d=1.0 / DEFAULT_FS)[1:]
     true_psd = _calculate_true_var_psd_hz(
         freq_true_hz,
@@ -699,14 +693,16 @@ def simulation_study(
         n_samples=n_samples,
         n_warmup=n_warmup,
         num_chains=num_chains,
-        outdir=outdir,
+        outdir=sampler_outdir,
         verbose=True,
+        chain_method=chain_method,
         target_accept_prob=DEFAULT_TARGET_ACCEPT_PROB,
         max_tree_depth=DEFAULT_MAX_TREE_DEPTH,
         init_from_vi=DEFAULT_INIT_FROM_VI,
         vi_steps=vi_steps,
         vi_guide=DEFAULT_VI_GUIDE,
         vi_psd_max_draws=DEFAULT_VI_PSD_MAX_DRAWS,
+        posterior_psd_max_draws=DEFAULT_POSTERIOR_PSD_MAX_DRAWS,
         vi_lr=VI_LR,
         Nb=Nb,
         wishart_window=wishart_window,
@@ -715,6 +711,9 @@ def simulation_study(
         alpha_delta=DEFAULT_ALPHA_DELTA,
         beta_delta=DEFAULT_BETA_DELTA,
         compute_coherence_quantiles=True,
+        save_nuts_diagnostics=save_nuts_diagnostics,
+        compute_psis=compute_psis,
+        run_full_diagnostics=run_full_diagnostics,
         true_psd=(freq_true_hz, true_psd),
         max_save_bytes=20_000_000,
     )
@@ -723,15 +722,6 @@ def simulation_study(
         run_mcmc_kwargs["design_psd"] = (freq_true_hz, true_psd)
         run_mcmc_kwargs["tau"] = tau
     idata = run_mcmc(**run_mcmc_kwargs)
-    metrics = _extract_run_metrics(
-        idata,
-        seed=seed,
-        mode=mode,
-        N=N,
-        Nb=Nb,
-        coarse_Nh=coarse_Nh,
-    )
-    _save_metrics_summary(outdir, metrics)
     _save_compact_ci_curves(outdir, idata)
     _save_compact_run_summary(
         outdir,
@@ -963,14 +953,6 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--quick",
-        action="store_true",
-        help=(
-            "Use lighter inference settings for exploratory runs "
-            "(defaults: 1000 warmup, 1000 samples, 2 chains, 20000 VI steps)."
-        ),
-    )
-    parser.add_argument(
         "--n-time",
         type=int,
         default=None,
@@ -1069,6 +1051,55 @@ if __name__ == "__main__":
             "Ignored when knot method is 'uniform'."
         ),
     )
+    parser.add_argument(
+        "--chain-method",
+        type=str,
+        choices=("parallel", "vectorized", "sequential"),
+        default=DEFAULT_CHAIN_METHOD,
+        dest="chain_method",
+        help=(
+            "NumPyro chain execution mode. Defaults to 'sequential' in this "
+            "study to reduce peak memory during post-sampling conversion."
+        ),
+    )
+    parser.add_argument(
+        "--save-sampler-outputs",
+        action="store_true",
+        dest="save_sampler_outputs",
+        help=(
+            "Enable full sampler artifacts (netcdf, diagnostics, plots). "
+            "Disabled by default because they can trigger large post-sampling "
+            "memory spikes on small Slurm allocations."
+        ),
+    )
+    parser.add_argument(
+        "--save-nuts-diagnostics",
+        action="store_true",
+        dest="save_nuts_diagnostics",
+        help=(
+            "Persist per-channel NUTS diagnostics such as accept_prob and "
+            "step_size. Disabled by default for lower memory usage."
+        ),
+    )
+    parser.add_argument(
+        "--compute-psis",
+        action="store_true",
+        dest="compute_psis",
+        help=(
+            "Enable PSIS-LOO diagnostics. Disabled by default in this study "
+            "to avoid extra post-sampling allocations."
+        ),
+    )
+    parser.add_argument(
+        "--run-full-diagnostics",
+        action="store_true",
+        dest="run_full_diagnostics",
+        help=(
+            "Enable the heavy post-sampling diagnostics pass. Disabled by "
+            "default because 3d_study already stores the lightweight truth-"
+            "comparison metrics needed for summary tables."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -1091,13 +1122,16 @@ if __name__ == "__main__":
             coarse_nh_override=args.coarse_nh,
             n_override=args.n_override,
             nb_override=args.nb_override,
-            quick=args.quick,
             n_samples_override=args.n_samples_override,
             n_warmup_override=args.n_warmup_override,
             num_chains_override=args.num_chains_override,
             vi_steps_override=args.vi_steps_override,
             label=args.label,
             tau=args.tau,
-            knot_scoring=args.knot_scoring,
             knot_method=args.knot_method,
+            chain_method=args.chain_method,
+            save_sampler_outputs=args.save_sampler_outputs,
+            save_nuts_diagnostics=args.save_nuts_diagnostics,
+            compute_psis=args.compute_psis,
+            run_full_diagnostics=args.run_full_diagnostics,
         )

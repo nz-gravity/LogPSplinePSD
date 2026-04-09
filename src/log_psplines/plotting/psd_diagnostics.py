@@ -13,6 +13,7 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..arviz_utils.from_arviz import get_multivar_posterior_psd_quantiles
 from .base import interior_frequency_slice
 
 
@@ -35,26 +36,15 @@ def _complex_to_real(mat: np.ndarray) -> np.ndarray:
 def _extract_posterior_quantiles(
     idata,
 ) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
-    """Return (freq, q05, q50, q95) from idata.posterior_psd, or None."""
-    psd_group = getattr(idata, "posterior_psd", None)
-    if psd_group is None or "psd_matrix_real" not in psd_group:
+    """Return multivariate posterior (freq, q05, q50, q95), or None."""
+    try:
+        quantiles = get_multivar_posterior_psd_quantiles(idata)
+    except KeyError:
         return None
-
-    real_arr = np.asarray(
-        psd_group["psd_matrix_real"].values, dtype=np.float64
-    )
-    imag_arr = np.zeros_like(real_arr)
-    if "psd_matrix_imag" in psd_group:
-        imag_arr = np.asarray(
-            psd_group["psd_matrix_imag"].values, dtype=np.float64
-        )
-
-    pcts = np.asarray(
-        psd_group["psd_matrix_real"].coords.get("percentile", []), dtype=float
-    )
-    freq = np.asarray(
-        psd_group["psd_matrix_real"].coords.get("freq", []), dtype=float
-    )
+    real_arr = np.asarray(quantiles["real"], dtype=np.float64)
+    imag_arr = np.asarray(quantiles["imag"], dtype=np.float64)
+    pcts = np.asarray(quantiles["percentile"], dtype=float)
+    freq = np.asarray(quantiles["freq"], dtype=float)
 
     def _get(target: float) -> np.ndarray:
         idx = int(np.argmin(np.abs(pcts - target)))

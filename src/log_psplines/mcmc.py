@@ -6,6 +6,7 @@ import arviz as az
 
 from .datatypes.multivar import MultivariateTimeseries
 from .datatypes.univar import Timeseries
+from .preprocessing.checks import _save_preprocessing_plot
 from .preprocessing.configs import (
     DiagnosticsConfig,
     ModelConfig,
@@ -67,6 +68,15 @@ def run_mcmc(
         preproc_input.processed_data,
         preproc_input.run_config.model,
     )
+
+    # Save preprocessing plot *after* model build so it can show the actual
+    # knot locations used by the sampler (no duplicate computation).
+    _save_preprocessing_plot(
+        preproc_input.processed_data,
+        preproc_input.run_config,
+        spline_model=model,
+    )
+
     sampler_inputs = _build_sampler_inputs(
         preproc_input.processed_data,
         preproc_input.run_config,

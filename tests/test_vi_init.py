@@ -4,6 +4,7 @@ import re
 import numpy as np
 import pytest
 
+from log_psplines.arviz_utils import get_multivar_posterior_psd_quantiles
 from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
@@ -16,6 +17,7 @@ from log_psplines.mcmc import (
     VIConfig,
     run_mcmc,
 )
+from log_psplines.samplers.vi_init.guide import suggest_guide_block
 
 
 def _idata_groups(idata):
@@ -183,14 +185,20 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
         config=run_cfg,
     )
 
-    print(idata)
-
     assert "posterior" in _idata_groups(idata)
-    assert "vi_posterior_psd" in _idata_groups(idata)
-    assert "posterior_psd" in _idata_groups(idata)
     assert any(
         name.startswith("weights_delta_") for name in idata.posterior.data_vars
     )
+    quantiles = get_multivar_posterior_psd_quantiles(
+        idata, n_keep=vi_cfg.vi_psd_max_draws
+    )
+    assert np.asarray(quantiles["real"]).shape[1] > 0
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd_matrix.png")
     assert os.path.exists(f"{outdir}/diagnostics/vi_elbo_trace.png")
+
+
+def test_blocked_vi_guide_prefers_diag_for_small_blocks():
+    assert suggest_guide_block(5, 2, 5) == "diag"
+    assert suggest_guide_block(20, 3, 12) == "diag"
+    assert suggest_guide_block(120, 3, 20) == "lowrank:32"

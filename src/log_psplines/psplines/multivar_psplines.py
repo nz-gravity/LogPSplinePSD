@@ -1,5 +1,15 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Literal, Optional, Sequence, Tuple, cast
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    cast,
+)
 
 import jax
 import jax.numpy as jnp
@@ -13,6 +23,7 @@ from .knots_locator import init_knots, multivar_psd_knot_scores
 from .psplines import LogPSplines
 
 _MULTIVAR_ALLOWED_KNOT_METHODS = ("uniform", "log", "density")
+_MULTIVAR_KNOT_FAMILY_KEYS = ("delta", "theta_re", "theta_im")
 
 
 @dataclass(frozen=True)
@@ -66,11 +77,23 @@ class MultivarComponentSpec:
     score: Optional[np.ndarray] = None
 
 
+def _resolve_family_knot_counts(
+    n_knots: int | Mapping[object, object],
+) -> dict[str, int]:
+    """Return knot counts for delta, theta_re, and theta_im families."""
+    if isinstance(n_knots, Mapping):
+        return {key: int(n_knots[key]) for key in _MULTIVAR_KNOT_FAMILY_KEYS}
+
+    count = int(n_knots)
+    return {key: count for key in _MULTIVAR_KNOT_FAMILY_KEYS}
+
+
 def _build_component_knots(
     *,
     freq: np.ndarray,
     n_knots: int,
     score: np.ndarray,
+    guide_score: np.ndarray | None,
     n_freq: int,
     knot_kwargs: dict[str, object],
 ) -> np.ndarray:
@@ -93,7 +116,10 @@ def _build_component_knots(
         raise ValueError(
             f"score length must match n_freq={n_freq}, got {score_array.shape[0]}"
         )
-    score_array = np.maximum(score_array, 1e-12)
+    # Scores may be signed (e.g. Cholesky theta oscillating around zero).
+    # Clean NaN/inf but preserve sign so gradient-based placement sees
+    # genuine shape transitions, not artificial kinks at zero crossings.
+    score_array = np.nan_to_num(score_array, nan=0.0, posinf=0.0, neginf=0.0)
     knot_periodogram = Periodogram(
         freqs=np.asarray(freq, dtype=np.float64),
         power=score_array,
@@ -102,6 +128,11 @@ def _build_component_knots(
         n_knots=n_knots,
         periodogram=knot_periodogram,
         parametric_model=None,
+        guide_power=(
+            None
+            if guide_score is None
+            else np.asarray(guide_score, dtype=np.float64)
+        ),
         **{**knot_kwargs, "method": method},
     )
     return knots
@@ -178,8 +209,8 @@ class MultivariateLogPSplines:
     offdiag_im_models: Dict[Tuple[int, int], LogPSplines] = field(
         default_factory=dict
     )
-    component_specs: Dict[MultivarComponentKey, MultivarComponentSpec] = (
-        field(default_factory=dict, repr=False)
+    component_specs: Dict[MultivarComponentKey, MultivarComponentSpec] = field(
+        default_factory=dict, repr=False
     )
     component_order: List[MultivarComponentKey] = field(
         default_factory=list, repr=False
@@ -216,8 +247,12 @@ class MultivariateLogPSplines:
                         key_im
                     ].model
 
-        missing_re = [pair for pair in pairs if pair not in self.offdiag_re_models]
-        missing_im = [pair for pair in pairs if pair not in self.offdiag_im_models]
+        missing_re = [
+            pair for pair in pairs if pair not in self.offdiag_re_models
+        ]
+        missing_im = [
+            pair for pair in pairs if pair not in self.offdiag_im_models
+        ]
         if missing_re or missing_im:
             raise ValueError(
                 "Per-component off-diagonal models are incomplete. "
@@ -231,10 +266,11 @@ class MultivariateLogPSplines:
     def from_multivar_fft(
         cls,
         fft_data: MultivarFFT,
-        n_knots: int,
+        n_knots: int | Mapping[object, object],
         degree: int = 3,
         diffMatrixOrder: int = 2,
         knot_kwargs: dict[str, object] | None = None,
+        analytical_psd: np.ndarray | None = None,
     ) -> "MultivariateLogPSplines":
         """
         Factory method to construct multivariate P-spline model from FFT data.
@@ -243,8 +279,11 @@ class MultivariateLogPSplines:
         ----------
         fft_data : MultivarFFT
             Multivariate FFT data with real/imaginary components and design matrices
-        n_knots : int
-            Number of interior knots for P-spline basis
+        n_knots : int or mapping
+            Knot-count specification for the Cholesky components. Provide a
+            single integer to reuse the same number of knots for every
+            component, or a mapping with family counts for
+            ``"delta"``, ``"theta_re"``, and ``"theta_im"``.
         degree : int, default=3
             Polynomial degree of B-spline basis
         diffMatrixOrder : int, default=2
@@ -254,9 +293,17 @@ class MultivariateLogPSplines:
             Supported methods match univariate naming:
             ``method in {"uniform", "log", "density"}``.
             When omitted, defaults to ``method="density"``.
-            For ``method="density"``, the knot CDF is built from the
-            trace-equivalent Wishart energy ``sum(u_re**2 + u_im**2)``
-            computed per frequency.
+            For ``method="density"``, per-component knot scores are always
+            computed from the Cholesky parameterization of the channel-space
+            Wishart matrix.
+        analytical_psd : np.ndarray or tuple, optional
+            Known analytical PSD matrix (e.g. from a transfer function model).
+            Either an ``(N, p, p)`` array already on the FFT frequency grid,
+            or a ``(freq_ana, S_ana)`` tuple that will be interpolated to the
+            FFT grid automatically. When provided, the Cholesky components of
+            this matrix are used as guide signals for density-based knot
+            placement, so known analytical features can attract knots without
+            subtracting from the empirical scores.
 
         Returns
         -------
@@ -268,6 +315,7 @@ class MultivariateLogPSplines:
 
         N = fft_data.N
         p = fft_data.p
+        family_knot_counts = _resolve_family_knot_counts(n_knots)
 
         # Create frequency grid for knot placement (normalized to [0,1])
         freq = np.asarray(fft_data.freq, dtype=np.float64)
@@ -298,9 +346,14 @@ class MultivariateLogPSplines:
         Y_np = U_to_Y(u_complex_np)
         Nb = max(int(fft_data.Nb), 1)
 
-        knot_scoring = (
-            str(knot_kwargs.get("scoring", "cholesky")).strip().lower()
-        )
+        requested_scoring = knot_kwargs.get("scoring")
+        if requested_scoring is not None:
+            knot_kwargs = {
+                key: value
+                for key, value in knot_kwargs.items()
+                if key != "scoring"
+            }
+
         (
             diagonal_scores,
             offdiag_re_scores,
@@ -309,28 +362,79 @@ class MultivariateLogPSplines:
             Y_np,
             Nb,
             p,
-            scoring=knot_scoring,
-            u_re=u_re_np if knot_scoring == "spectral" else None,
-            u_im=u_im_np if knot_scoring == "spectral" else None,
         )
+
+        analytical_diagonal_scores: list[np.ndarray] | None = None
+        analytical_offdiag_re_scores: list[np.ndarray] | None = None
+        analytical_offdiag_im_scores: list[np.ndarray] | None = None
+
+        # Use analytical model Cholesky components as guide signals for
+        # density-based knot placement without modifying the empirical score.
+        if analytical_psd is not None:
+            if isinstance(analytical_psd, tuple):
+                from ..datatypes.multivar_utils import interp_matrix
+
+                freq_ana, S_ana = analytical_psd
+                analytical_psd = interp_matrix(
+                    np.asarray(freq_ana, dtype=np.float64),
+                    np.asarray(S_ana, dtype=np.complex128),
+                    freq,
+                )
+            analytical_psd = np.asarray(analytical_psd, dtype=np.complex128)
+            if analytical_psd.shape != (N, p, p):
+                raise ValueError(
+                    f"analytical_psd must have shape ({N}, {p}, {p}), "
+                    f"got {analytical_psd.shape}"
+                )
+            ana_log_delta, ana_theta = psd_to_cholesky_components(
+                analytical_psd
+            )
+            analytical_diagonal_scores = [
+                np.asarray(ana_log_delta[:, i], dtype=np.float64)
+                for i in range(p)
+            ]
+            analytical_offdiag_re_scores = []
+            analytical_offdiag_im_scores = []
+            for j in range(1, p):
+                for l in range(j):
+                    analytical_offdiag_re_scores.append(
+                        np.asarray(
+                            np.real(ana_theta[:, j, l]), dtype=np.float64
+                        )
+                    )
+                    analytical_offdiag_im_scores.append(
+                        np.asarray(
+                            np.imag(ana_theta[:, j, l]), dtype=np.float64
+                        )
+                    )
+
         component_scores: Dict[MultivarComponentKey, np.ndarray] = {}
 
         # Create diagonal models (one per channel), each with its own
         # knot placement and basis construction.
         diagonal_models = []
         for i in range(p):
+            delta_key = MultivarComponentKey("delta", i)
             score_diag = diagonal_scores[i]
-            component_scores[MultivarComponentKey("delta", i)] = np.asarray(
+            component_scores[delta_key] = np.asarray(
                 score_diag, dtype=np.float64
             )
             knots_diag = _build_component_knots(
                 freq=freq,
-                n_knots=n_knots,
+                n_knots=family_knot_counts["delta"],
                 score=score_diag,
+                guide_score=(
+                    None
+                    if analytical_diagonal_scores is None
+                    else analytical_diagonal_scores[i]
+                ),
                 n_freq=N,
                 knot_kwargs=knot_kwargs,
             )
 
+            # Keep initialization empirical for now. The analytical PSD may
+            # guide knot placement, but the starting spline target should still
+            # reflect the observed Wishart matrix on the retained grid.
             empirical_diag_power = np.real(Y_np[:, i, i]) / Nb
             empirical_diag_power = np.maximum(
                 empirical_diag_power, 1e-12
@@ -363,25 +467,29 @@ class MultivariateLogPSplines:
                     f"expected {len(theta_pairs)}, got {len(offdiag_im_scores)}."
                 )
 
-            # Empirical Cholesky theta for initialising spline weights.
+            # Keep theta initialization empirical for now. The analytical PSD
+            # may guide knot placement, but we do not inject it into the
+            # initial spline weights unless we intentionally add that policy.
             # The sampler evaluates theta = B @ w directly (no exp), so weights
             # must be initialised to reproduce the empirical theta values, not
             # their log-magnitude.
             _, theta_emp = psd_to_cholesky_components(Y_np / max(Nb, 1))
 
             for theta_idx, (j_idx, l_idx) in enumerate(theta_pairs):
+                theta_re_key = MultivarComponentKey(
+                    "theta", j_idx, l=l_idx, part="re"
+                )
+                theta_im_key = MultivarComponentKey(
+                    "theta", j_idx, l=l_idx, part="im"
+                )
                 score_theta_re = np.asarray(
                     offdiag_re_scores[theta_idx], dtype=np.float64
                 )
                 score_theta_im = np.asarray(
                     offdiag_im_scores[theta_idx], dtype=np.float64
                 )
-                component_scores[
-                    MultivarComponentKey("theta", j_idx, l=l_idx, part="re")
-                ] = score_theta_re
-                component_scores[
-                    MultivarComponentKey("theta", j_idx, l=l_idx, part="im")
-                ] = score_theta_im
+                component_scores[theta_re_key] = score_theta_re
+                component_scores[theta_im_key] = score_theta_im
                 # Use actual empirical theta components as initialisation targets.
                 # Re and Im are initialised independently so each spline starts
                 # from the correct signed value rather than a log-magnitude proxy.
@@ -389,33 +497,47 @@ class MultivariateLogPSplines:
                 theta_im_init = np.imag(theta_emp[:, j_idx, l_idx])
                 knots_theta_re = _build_component_knots(
                     freq=freq,
-                    n_knots=n_knots,
+                    n_knots=family_knot_counts["theta_re"],
                     score=score_theta_re,
+                    guide_score=(
+                        None
+                        if analytical_offdiag_re_scores is None
+                        else analytical_offdiag_re_scores[theta_idx]
+                    ),
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
                 )
                 knots_theta_im = _build_component_knots(
                     freq=freq,
-                    n_knots=n_knots,
+                    n_knots=family_knot_counts["theta_im"],
                     score=score_theta_im,
+                    guide_score=(
+                        None
+                        if analytical_offdiag_im_scores is None
+                        else analytical_offdiag_im_scores[theta_idx]
+                    ),
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
                 )
-                offdiag_re_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
-                    log_target=theta_re_init,
-                    knots=knots_theta_re,
-                    degree=degree,
-                    diff_matrix_order=diffMatrixOrder,
-                    n_freq=N,
-                    grid_points=freq_norm,
+                offdiag_re_models[(j_idx, l_idx)] = (
+                    _build_pspline_from_log_target(
+                        log_target=theta_re_init,
+                        knots=knots_theta_re,
+                        degree=degree,
+                        diff_matrix_order=diffMatrixOrder,
+                        n_freq=N,
+                        grid_points=freq_norm,
+                    )
                 )
-                offdiag_im_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
-                    log_target=theta_im_init,
-                    knots=knots_theta_im,
-                    degree=degree,
-                    diff_matrix_order=diffMatrixOrder,
-                    n_freq=N,
-                    grid_points=freq_norm,
+                offdiag_im_models[(j_idx, l_idx)] = (
+                    _build_pspline_from_log_target(
+                        log_target=theta_im_init,
+                        knots=knots_theta_im,
+                        degree=degree,
+                        diff_matrix_order=diffMatrixOrder,
+                        n_freq=N,
+                        grid_points=freq_norm,
+                    )
                 )
 
         return cls(
@@ -430,16 +552,14 @@ class MultivariateLogPSplines:
         )
 
     @property
-    def n_knots(self) -> int:
-        """Representative knot count from the first diagonal component."""
-        first_key = self.component_order[0]
-        return len(self.component_specs[first_key].model.knots)
+    def n_knots(self) -> int | list[list[int]]:
+        """Knot counts per Cholesky entry, or one int when all are equal."""
+        return self._component_count_matrix("n_knots")
 
     @property
-    def n_basis(self) -> int:
-        """Number of basis functions per component."""
-        first_key = self.component_order[0]
-        return self.component_specs[first_key].model.n_basis
+    def n_basis(self) -> int | list[list[int]]:
+        """Basis counts per Cholesky entry, or one int when all are equal."""
+        return self._component_count_matrix("n_basis")
 
     @property
     def n_theta(self) -> int:
@@ -576,6 +696,42 @@ class MultivariateLogPSplines:
             all_penalties.append(model.penalty_matrix)
 
         return all_bases, all_penalties
+
+    def _component_count_matrix(
+        self, quantity: Literal["n_knots", "n_basis"]
+    ) -> int | list[list[int]]:
+        """Return component counts as a matrix matching the Cholesky layout."""
+        matrix = [[0 for _ in range(self.p)] for _ in range(self.p)]
+        counts: list[int] = []
+
+        for j in range(self.p):
+            diag_model = self.component_specs[self.delta_key(j)].model
+            value = (
+                int(len(diag_model.knots))
+                if quantity == "n_knots"
+                else int(diag_model.n_basis)
+            )
+            matrix[j][j] = value
+            counts.append(value)
+
+        for j, l in self.theta_pairs:
+            re_model = self.get_theta_model("re", j, l)
+            im_model = self.get_theta_model("im", j, l)
+            re_value = (
+                int(len(re_model.knots))
+                if quantity == "n_knots"
+                else int(re_model.n_basis)
+            )
+            im_value = (
+                int(len(im_model.knots))
+                if quantity == "n_knots"
+                else int(im_model.n_basis)
+            )
+            matrix[j][l] = re_value
+            matrix[l][j] = im_value
+            counts.extend([re_value, im_value])
+
+        return counts[0] if len(set(counts)) == 1 else matrix
 
     def compute_design_weights(
         self,
@@ -874,9 +1030,16 @@ class MultivariateLogPSplines:
         return psd_percentiles, psd_imag_percentiles, coherence_percentiles
 
     def __repr__(self):
+        knot_counts = {
+            len(spec.model.knots) for spec in self.component_specs.values()
+        }
+        if len(knot_counts) == 1:
+            knot_label = str(next(iter(knot_counts)))
+        else:
+            knot_label = f"mixed[{min(knot_counts)}-{max(knot_counts)}]"
         return (
             f"MultivariateLogPSplines(channels={self.p}, "
-            f"knots={self.n_knots}, degree={self.degree}, "
+            f"knots={knot_label}, degree={self.degree}, "
             f"penaltyOrder={self.diffMatrixOrder}, N={self.N})"
         )
 

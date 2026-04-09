@@ -17,6 +17,7 @@ import numpyro
 import pytest
 from numpyro.infer.util import log_density
 
+from log_psplines.arviz_utils import get_multivar_posterior_psd_quantiles
 from log_psplines.datatypes import MultivariateTimeseries
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
@@ -271,28 +272,24 @@ def _run_var3(n: int, seed: int, **extra_kwargs):
 
 
 def _extract_metrics(idata) -> dict:
-    """Pull key scalars from idata.attrs and posterior_psd group."""
+    """Pull key scalars from idata.attrs and lazy posterior PSD quantiles."""
     attrs = idata.attrs
     m = {
         "riae_matrix": float(attrs.get("riae_matrix", float("nan"))),
         "coverage": float(attrs.get("coverage", float("nan"))),
     }
-    psd_group = getattr(idata, "posterior_psd", None)
-    if psd_group is not None and "psd_matrix_real" in psd_group:
-        psd_real = np.asarray(psd_group["psd_matrix_real"].values)
-        percentiles = np.asarray(
-            psd_group["psd_matrix_real"].coords.get("percentile", []),
-            dtype=float,
-        )
-        if psd_real.shape[0] >= 2:
-            idx05 = int(np.argmin(np.abs(percentiles - 5.0)))
-            idx95 = int(np.argmin(np.abs(percentiles - 95.0)))
-            width = np.maximum(psd_real[idx95] - psd_real[idx05], 0.0)
-            p = width.shape[1]
-            diag_mask = np.eye(p, dtype=bool)
-            offdiag_mask = ~diag_mask
-            m["ciw_diag_mean"] = float(np.mean(width[:, diag_mask]))
-            m["ciw_offdiag_mean"] = float(np.mean(width[:, offdiag_mask]))
+    quantiles = get_multivar_posterior_psd_quantiles(idata)
+    psd_real = np.asarray(quantiles["real"])
+    percentiles = np.asarray(quantiles["percentile"], dtype=float)
+    if psd_real.shape[0] >= 2:
+        idx05 = int(np.argmin(np.abs(percentiles - 5.0)))
+        idx95 = int(np.argmin(np.abs(percentiles - 95.0)))
+        width = np.maximum(psd_real[idx95] - psd_real[idx05], 0.0)
+        p = width.shape[1]
+        diag_mask = np.eye(p, dtype=bool)
+        offdiag_mask = ~diag_mask
+        m["ciw_diag_mean"] = float(np.mean(width[:, diag_mask]))
+        m["ciw_offdiag_mean"] = float(np.mean(width[:, offdiag_mask]))
     return m
 
 

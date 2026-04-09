@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Optional, Sequence
 
 import arviz as az
@@ -80,6 +81,17 @@ def save_inference_data(
     return outpath
 
 
+def _format_knot_counts(knot_counts: int | Mapping[str, int]) -> str:
+    """Return a compact string representation of family knot counts."""
+    if isinstance(knot_counts, Mapping):
+        return (
+            f"delta={int(knot_counts['delta'])}, "
+            f"theta_re={int(knot_counts['theta_re'])}, "
+            f"theta_im={int(knot_counts['theta_im'])}"
+        )
+    return str(int(knot_counts))
+
+
 def run_lisa_mcmc(
     ts: MultivariateTimeseries,
     *,
@@ -87,7 +99,7 @@ def run_lisa_mcmc(
     coarse_cfg: CoarseGrainConfig,
     freq_true: np.ndarray,
     S_true: np.ndarray,
-    K: int = 20,
+    K: int | dict[str, int] = 20,
     knot_method: str = "density",
     diff_order: int = 2,
     n_samples: int = 1000,
@@ -104,7 +116,7 @@ def run_lisa_mcmc(
     vi_guide: str = "diag",
     vi_posterior_draws: int = 1024,
     coarse_grain_config_vi: CoarseGrainConfig | None = None,
-    auto_coarse_vi: bool = False,
+    auto_coarse_vi: bool = True,
     auto_coarse_vi_target_nfreq: int = 192,
     fmin: float = FMIN,
     fmax: float = FMAX,
@@ -114,6 +126,7 @@ def run_lisa_mcmc(
     exclude_freq_bands: Sequence[tuple[float, float]] = (),
     tau: Optional[float] = None,
     only_vi: bool = False,
+    use_analytical_psd_for_knots: bool = True,
     outdir: str = ".",
     eta: float | str = "auto",
     eta_c: float = 2.0,
@@ -131,12 +144,19 @@ def run_lisa_mcmc(
     wishart_window : str or tuple or None
         Taper applied to each block before the Wishart likelihood FFT.
         None = rectangular, "hann", or ("tukey", alpha).
+    use_analytical_psd_for_knots : bool, default=True
+        When True, pass the known analytical PSD (``S_true``) to the knot
+        allocator as a guide signal so density-based knots can track known
+        transfer-function structure without subtracting it from the
+        empirical Cholesky scores.
     """
     true_psd_source = (freq_true, S_true)
     exclude_freq_bands_tuple = tuple(exclude_freq_bands)
+    analytical_psd = true_psd_source if use_analytical_psd_for_knots else None
 
     logger.info(
-        f"Running LISA MCMC: K={K}, knot_method={knot_method}, "
+        f"Running LISA MCMC: K={_format_knot_counts(K)}, "
+        f"knot_method={knot_method}, "
         f"diff_order={diff_order}, Nb={Nb}, chains={num_chains}, "
         f"warmup={n_warmup}, samples={n_samples}, "
         f"target_accept={target_accept}, max_tree_depth={max_tree_depth}, "
@@ -144,6 +164,7 @@ def run_lisa_mcmc(
         f"wishart_detrend={wishart_detrend}, "
         f"wishart_floor_fraction={wishart_floor_fraction}, "
         f"vi={'on' if vi else 'off'}, only_vi={only_vi}, "
+        f"auto_coarse_vi={'on' if auto_coarse_vi else 'off'}, "
         f"n_excluded_bands={len(exclude_freq_bands_tuple)}, tau={tau}."
     )
 
@@ -156,6 +177,7 @@ def run_lisa_mcmc(
         degree=2,
         diffMatrixOrder=diff_order,
         knot_kwargs=dict(method=knot_method),
+        analytical_psd=analytical_psd,
         outdir=outdir,
         verbose=True,
         coarse_grain_config=coarse_cfg,

@@ -47,6 +47,7 @@ def _build_model_from_data(
             degree=model_config.degree,
             diffMatrixOrder=model_config.diffMatrixOrder,
             knot_kwargs=model_config.knot_kwargs,
+            analytical_psd=model_config.analytical_psd,
         )
     raise ValueError(
         f"Unsupported processed data type: {type(processed_data)}."
@@ -159,19 +160,20 @@ def _build_univar_sampler(
         )
 
     nuts_extra_kwargs = _validate_extra_kwargs(NUTSConfig, run.extra_kwargs)
-    nuts_config = NUTSConfig(
+    nuts_config_kwargs = {
         **common_kwargs,
-        target_accept_prob=run.nuts.target_accept_prob,
-        max_tree_depth=run.nuts.max_tree_depth,
-        dense_mass=run.nuts.dense_mass,
-        init_from_vi=run.vi.init_from_vi,
-        vi_steps=run.vi.vi_steps,
-        vi_lr=run.vi.vi_lr,
-        vi_guide=run.vi.vi_guide,
-        vi_posterior_draws=run.vi.vi_posterior_draws,
-        vi_progress_bar=run.vi.vi_progress_bar,
+        "target_accept_prob": run.nuts.target_accept_prob,
+        "max_tree_depth": run.nuts.max_tree_depth,
+        "dense_mass": run.nuts.dense_mass,
+        "init_from_vi": run.vi.init_from_vi,
+        "vi_steps": run.vi.vi_steps,
+        "vi_lr": run.vi.vi_lr,
+        "vi_guide": run.vi.vi_guide,
+        "vi_posterior_draws": run.vi.vi_posterior_draws,
+        "vi_progress_bar": run.vi.vi_progress_bar,
         **nuts_extra_kwargs,
-    )
+    }
+    nuts_config = NUTSConfig(**nuts_config_kwargs)
     return NUTSSampler(data, model, nuts_config)
 
 
@@ -185,25 +187,26 @@ def _build_multivar_blocked_sampler(
     blocked_extra_kwargs = _validate_extra_kwargs(
         MultivarBlockedNUTSConfig, run.extra_kwargs
     )
-    blocked_config = MultivarBlockedNUTSConfig(
+    blocked_config_kwargs = {
         **common_kwargs,
-        target_accept_prob=run.nuts.target_accept_prob,
-        target_accept_prob_by_channel=run.nuts.target_accept_prob_by_channel,
-        max_tree_depth=run.nuts.max_tree_depth,
-        max_tree_depth_by_channel=run.nuts.max_tree_depth_by_channel,
-        dense_mass=run.nuts.dense_mass,
-        init_from_vi=run.vi.init_from_vi,
-        vi_steps=run.vi.vi_steps,
-        vi_lr=run.vi.vi_lr,
-        vi_guide=run.vi.vi_guide,
-        vi_posterior_draws=run.vi.vi_posterior_draws,
-        vi_progress_bar=run.vi.vi_progress_bar,
-        alpha_phi_theta=run.nuts.alpha_phi_theta,
-        beta_phi_theta=run.nuts.beta_phi_theta,
-        design_from_vi=run.nuts.design_from_vi,
-        design_from_vi_tau=run.nuts.design_from_vi_tau,
+        "target_accept_prob": run.nuts.target_accept_prob,
+        "target_accept_prob_by_channel": run.nuts.target_accept_prob_by_channel,
+        "max_tree_depth": run.nuts.max_tree_depth,
+        "max_tree_depth_by_channel": run.nuts.max_tree_depth_by_channel,
+        "dense_mass": run.nuts.dense_mass,
+        "init_from_vi": run.vi.init_from_vi,
+        "vi_steps": run.vi.vi_steps,
+        "vi_lr": run.vi.vi_lr,
+        "vi_guide": run.vi.vi_guide,
+        "vi_posterior_draws": run.vi.vi_posterior_draws,
+        "vi_progress_bar": run.vi.vi_progress_bar,
+        "alpha_phi_theta": run.nuts.alpha_phi_theta,
+        "beta_phi_theta": run.nuts.beta_phi_theta,
+        "design_from_vi": run.nuts.design_from_vi,
+        "design_from_vi_tau": run.nuts.design_from_vi_tau,
         **blocked_extra_kwargs,
-    )
+    }
+    blocked_config = MultivarBlockedNUTSConfig(**blocked_config_kwargs)
     return MultivarBlockedNUTSSampler(data, model, blocked_config)
 
 

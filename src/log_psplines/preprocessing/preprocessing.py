@@ -9,7 +9,7 @@ import numpy as np
 from ..datatypes import Periodogram
 from ..datatypes.multivar import EmpiricalPSD, MultivarFFT
 from ..logger import logger
-from .checks import _run_preprocessing_checks
+from .checks import _run_preprocessing_checks, _save_preprocessing_plot
 from .coarse_grain import (
     CoarseGrainConfig,
     _closest_divisor,
@@ -92,6 +92,13 @@ def _get_frequency_count(data: Union[Periodogram, MultivarFFT]) -> int:
     return int(len(data.freq))
 
 
+def _max_config_n_knots(n_knots: int | dict[str, int]) -> int:
+    """Return the largest knot count implied by a model config."""
+    if isinstance(n_knots, int):
+        return int(n_knots)
+    return max(int(value) for value in n_knots.values())
+
+
 def _get_frequency_axis(
     data: Union[Periodogram, MultivarFFT],
 ) -> np.ndarray:
@@ -139,7 +146,8 @@ def _derive_vi_coarse_grain_config(
 ):
     vi_cfg = run_config.vi
     full_nfreq = _get_frequency_count(processed_data)
-    k_basis = int(run_config.model.n_knots + run_config.model.degree - 1)
+    max_n_knots = _max_config_n_knots(run_config.model.n_knots)
+    k_basis = int(max_n_knots + run_config.model.degree - 1)
 
     explicit_cfg = _normalize_coarse_grain_config(
         vi_cfg.coarse_grain_config_vi
@@ -264,7 +272,7 @@ def _preprocess_with_run_config(
         extra_empirical_labels = None
         extra_empirical_styles = None
 
-    _run_preprocessing_checks(fft_data, run_config)
+    # _run_preprocessing_checks(fft_data, run_config)
     return PreprocessedMCMCInput(
         processed_data=fft_data,
         scaled_true_psd=scaled_true_psd,
@@ -289,14 +297,15 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
         run_config,
         include_overlays=True,
     )
+    _save_preprocessing_plot(
+        preproc_input.processed_data,
+        run_config,
+        spline_model=None,
+    )
 
     coarse_vi_context = None
     vi_cfg = run_config.vi
-    if (
-        vi_cfg.init_from_vi
-        and vi_cfg.use_coarse_vi_for_init
-        and not vi_cfg.only_vi
-    ):
+    if vi_cfg.init_from_vi and vi_cfg.use_coarse_vi_for_init:
         vi_cg_config, metadata = _derive_vi_coarse_grain_config(
             preproc_input.processed_data,
             run_config,

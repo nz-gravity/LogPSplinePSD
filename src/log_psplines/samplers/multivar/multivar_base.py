@@ -16,7 +16,7 @@ import jax
 import jax.numpy as jnp
 import morphZ
 import numpy as np
-from xarray import DataArray, Dataset
+from xarray import Dataset
 
 from ...datatypes import MultivarFFT
 from ...datatypes.multivar import EmpiricalPSD
@@ -121,7 +121,9 @@ class MultivarBaseSampler(BaseSampler):
             basis_shapes = ", ".join(
                 [f"{tuple(b.shape)}" for b in self.all_bases]
             )
-            logger.info(f"B-spline basis ({len(self.all_bases)} models): {basis_shapes}")
+            logger.info(
+                f"B-spline basis ({len(self.all_bases)} models): {basis_shapes}"
+            )
             total = self.N * self.Nh
             logger.info(
                 f"Applied coarse-grain counts; total effective count = {total}"
@@ -156,7 +158,7 @@ class MultivarBaseSampler(BaseSampler):
             # If VI diagnostics are attached, overlay VI quantiles on top of
             # the posterior bands (instead of treating VI as another empirical
             # curve which is drawn behind the posterior fill).
-            overlay_vi = bool(getattr(idata, "vi_posterior_psd", None))
+            overlay_vi = bool(getattr(self, "_vi_diagnostics", None))
             extra_empirical_psd = getattr(
                 self.config, "extra_empirical_psd", None
             )
@@ -289,39 +291,22 @@ class MultivarBaseSampler(BaseSampler):
         self, idata: az.InferenceData
     ) -> Optional[EmpiricalPSD]:
         """Extract VI PSD median as EmpiricalPSD for overlay plotting."""
-        if not hasattr(idata, "vi_posterior_psd"):
+        vi_diag = getattr(self, "_vi_diagnostics", None)
+        if not vi_diag:
             return None
-
-        vi_psd_group = idata.vi_posterior_psd
-        if "psd_matrix_real" not in vi_psd_group:
+        psd_quantiles = vi_diag.get("psd_quantiles")
+        if not psd_quantiles:
             return None
 
         try:
-            real_array = np.asarray(
-                vi_psd_group["psd_matrix_real"].values, dtype=np.float64
-            )
-            imag_array = np.asarray(
-                vi_psd_group["psd_matrix_imag"].values, dtype=np.float64
-            )
-            percentiles = np.asarray(
-                vi_psd_group["psd_matrix_real"].coords["percentile"].values
-            )
-
-            # Find the median (50th percentile)
-            median_idx = np.argmin(np.abs(percentiles - 50.0))
-            vi_psd_median = (
-                real_array[median_idx] + 1j * imag_array[median_idx]
-            )
-
-            freq = np.asarray(
-                vi_psd_group["psd_matrix_real"].coords["freq"].values,
-                dtype=np.float64,
-            )
+            vi_psd_median = np.asarray(
+                psd_quantiles["real"]["q50"], dtype=np.float64
+            ) + 1j * np.asarray(psd_quantiles["imag"]["q50"], dtype=np.float64)
             coherence = _get_coherence(vi_psd_median)
             channels = np.arange(vi_psd_median.shape[1])
 
             return EmpiricalPSD(
-                freq=freq,
+                freq=np.asarray(self.freq, dtype=np.float64),
                 psd=vi_psd_median,
                 coherence=coherence,
                 channels=channels,
@@ -366,97 +351,42 @@ class MultivarBaseSampler(BaseSampler):
             lnz=np.nan,
             lnz_err=np.nan,
         )
-        self._attach_vi_psd_group(idata, diagnostics)
+        self._attach_vi_group(idata, diagnostics)
         return idata
 
-    def _attach_vi_psd_group(
+    def _attach_vi_group(
         self, idata: az.InferenceData, diagnostics: Optional[Dict[str, Any]]
     ) -> None:
-        """Add VI PSD summaries to an auxiliary InferenceData group."""
+        """Add VI posterior samples to an auxiliary InferenceData group."""
 
         if not diagnostics:
             return
 
-        psd_quantiles = diagnostics.get("psd_quantiles")
-        channels = np.arange(self.p)
-        freq = np.asarray(self.freq, dtype=np.float32)
-        coords = {
-            "freq": freq,
-            "channels": channels,
-            "channels2": channels,
-        }
+        if bool(getattr(idata, "attrs", {}).get("only_vi")):
+            return
 
-        if psd_quantiles:
-            percentile_values: list[float] = []
-            real_entries = []
-            imag_entries = []
-            for label, percentile in [
-                ("q05", 5.0),
-                ("q50", 50.0),
-                ("q95", 95.0),
-            ]:
-                real_val = psd_quantiles.get("real", {}).get(label)
-                imag_val = psd_quantiles.get("imag", {}).get(label)
-                if real_val is None:
-                    continue
-                percentile_values.append(percentile)
-                real_entries.append(np.asarray(real_val))
-                if imag_val is not None:
-                    imag_entries.append(np.asarray(imag_val))
-                else:
-                    imag_entries.append(np.zeros_like(real_entries[-1]))
-            if not percentile_values:
-                return
-            real_array = np.stack(real_entries, axis=0)
-            imag_array = np.stack(imag_entries, axis=0)
-            percentiles = np.asarray(percentile_values, dtype=np.float32)
-        else:
-            median = diagnostics.get("psd_matrix")
-            if median is None:
-                return
-            real_array = np.asarray(median)[None, ...]
-            imag_array = np.zeros_like(real_array)
-            percentiles = np.asarray([50.0], dtype=np.float32)
+        vi_samples = diagnostics.get("vi_samples")
+        if not vi_samples:
+            return
 
-        data_vars = {
-            "psd_matrix_real": DataArray(
-                real_array,
-                dims=["percentile", "freq", "channels", "channels2"],
-                coords={**coords, "percentile": percentiles},
-            ),
-            "psd_matrix_imag": DataArray(
-                imag_array,
-                dims=["percentile", "freq", "channels", "channels2"],
-                coords={**coords, "percentile": percentiles},
-            ),
-        }
+        sample_vars = {}
+        coords: Dict[str, Any] = {}
+        dims: Dict[str, list[str]] = {}
+        for key, value in vi_samples.items():
+            if not str(key).startswith("weights_"):
+                continue
+            array = np.asarray(value)
+            if array.ndim != 2:
+                continue
+            component = str(key)[8:]
+            basis_dim = f"{component}_basis_dim"
+            coords[basis_dim] = np.arange(array.shape[-1])
+            dims[key] = ["draw", basis_dim]
+            sample_vars[key] = (dims[key], array)
+        if not sample_vars:
+            return
 
-        coherence_quantiles = diagnostics.get("coherence_quantiles")
-        if coherence_quantiles:
-            coh_entries = []
-            coh_percentile_values: list[float] = []
-            for label, percentile in [
-                ("q05", 5.0),
-                ("q50", 50.0),
-                ("q95", 95.0),
-            ]:
-                value = coherence_quantiles.get(label)
-                if value is None:
-                    continue
-                coh_entries.append(np.asarray(value))
-                coh_percentile_values.append(percentile)
-            if coh_entries:
-                coh_array = np.stack(coh_entries, axis=0)
-                coh_percentiles = np.asarray(
-                    coh_percentile_values, dtype=np.float32
-                )
-                data_vars["coherence"] = DataArray(
-                    coh_array,
-                    dims=["percentile", "freq", "channels", "channels2"],
-                    coords={**coords, "percentile": coh_percentiles},
-                )
-
-        dataset = Dataset(data_vars)
+        dataset = Dataset(sample_vars, coords=coords)
         attr_keys = [
             "riae_matrix",
             "l2_matrix",
@@ -465,20 +395,28 @@ class MultivarBaseSampler(BaseSampler):
             "coherence_riae",
             "coverage",
             "ci_coverage",
+            "ci_width",
+            "ci_width_diag_mean",
             "coverage_interval",
             "coverage_level",
             "riae_matrix_errorbars",
+            "psis_khat_max",
+            "psis_khat_status",
+            "psis_khat_threshold",
+            "guide",
         ]
-        attrs = {
-            key: diagnostics[key]
-            for key in attr_keys
-            if diagnostics.get(key) is not None
-        }
-        if attrs:
-            dataset.attrs.update(attrs)
+        for key in attr_keys:
+            value = diagnostics.get(key)
+            if value is not None:
+                dataset.attrs[key] = value
+
         import xarray as _xr
 
-        idata["vi_posterior_psd"] = _xr.DataTree(dataset=dataset)
+        idata["vi_posterior"] = _xr.DataTree(dataset=dataset)
+        for key in attr_keys:
+            value = diagnostics.get(key)
+            if value is not None:
+                idata.attrs[f"vi_{key}"] = value
 
     def _get_lnz(
         self, samples: Dict[str, Any], sample_stats: Dict[str, Any]

@@ -264,11 +264,10 @@ def _blocked_channel_model(
 
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
 
-    numpyro.deterministic(f"log_delta_sq_{channel_label}", log_delta_sq_safe)
-    if n_theta_block > 0:
-        numpyro.deterministic(f"theta_re_{channel_label}", theta_re)
-        numpyro.deterministic(f"theta_im_{channel_label}", theta_im)
-
+    # log_delta_sq and theta_re/im are NOT registered as deterministic sites:
+    # doing so would cause JAX's lax.scan to preallocate (chains, draws, N_freq)
+    # buffers for every channel, consuming several GB at N_freq=8192.
+    # These fields are reconstructed from posterior weight samples in to_arviz.py.
     numpyro.deterministic(
         f"log_likelihood_block_{channel_label}", log_likelihood
     )
@@ -298,7 +297,7 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     vi_steps: int = 1500
     vi_lr: float = 1e-2
     vi_guide: Optional[str] = None
-    vi_posterior_draws: int = 256
+    vi_posterior_draws: int = 50
     vi_progress_bar: Optional[bool] = None
 
     # Optional separate hyperparameters for off-diagonal theta P-spline blocks.
@@ -615,9 +614,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         2. Move per-block deterministics out of the ``samples`` dict into
            ``sample_stats`` and, for diagnostics, optionally rename NumPyro's
            NUTS fields with ``_channel_{j}`` suffixes.
-        3. Stack ``log_delta_sq_j`` across channels and place the theta blocks into
-           the correct positions of the global ``theta_re|im`` arrays.
-        4. Sum the block log-likelihoods to obtain the joint log-likelihood.
+          3. Sum the block log-likelihoods to obtain the joint log-likelihood.
         """
         logger.info(
             f"Blocked multivariate NUTS sampler [{self.device}] - {self.p} channels"
@@ -628,16 +625,13 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         combined_stats: Dict[str, np.ndarray] = {}
         warmup_attrs: Dict[str, float | int] = {}
 
-        channel_log_delta = []
-        theta_re_total = None
-        theta_im_total = None
         log_likelihood_total = None
 
         total_runtime = 0.0
 
         vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
         coarse_sampler = getattr(self, "_coarse_vi_sampler", None)
-        if coarse_sampler is not None and not vi_only_mode:
+        if coarse_sampler is not None:
             vi_setup = prepare_coarse_block_vi(
                 self,
                 coarse_sampler=coarse_sampler,
@@ -804,16 +798,13 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                     )
             block_stats = mcmc.get_extra_fields(group_by_chain=True)
 
-            deterministic_keys = [
-                f"log_delta_sq_{channel_index}",
-                f"theta_re_{channel_index}",
-                f"theta_im_{channel_index}",
-                f"log_likelihood_block_{channel_index}",
-            ]
-
-            for det_key in deterministic_keys:
-                if det_key in block_samples:
-                    block_stats[det_key] = block_samples.pop(det_key)
+            # Move only the scalar log_likelihood_block deterministic from
+            # block_samples into block_stats.  The large per-frequency
+            # deterministics (log_delta_sq, theta_re, theta_im) are no longer
+            # registered in the model, so they won't appear here.
+            ll_block_key = f"log_likelihood_block_{channel_index}"
+            if ll_block_key in block_samples:
+                block_stats[ll_block_key] = block_samples.pop(ll_block_key)
 
             if self.config.save_nuts_diagnostics:
                 diag_key_map = {
@@ -832,31 +823,6 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                         )
 
             combined_samples.update(block_samples)
-
-            log_delta_channel = block_stats.pop(
-                f"log_delta_sq_{channel_index}"
-            )
-            channel_log_delta.append(log_delta_channel)
-
-            if theta_count > 0 and self.n_theta > 0:
-                theta_re_block = block_stats.pop(f"theta_re_{channel_index}")
-                theta_im_block = block_stats.pop(f"theta_im_{channel_index}")
-
-                if theta_re_total is None:
-                    n_chains, n_draws = theta_re_block.shape[:2]
-                    theta_re_total = jnp.zeros(
-                        (n_chains, n_draws, self.N, self.n_theta)
-                    )
-                    theta_im_total = jnp.zeros_like(theta_re_total)
-
-                theta_slice = slice(theta_start, theta_start + theta_count)
-                theta_re_total = theta_re_total.at[:, :, :, theta_slice].set(
-                    theta_re_block
-                )
-                assert theta_im_total is not None
-                theta_im_total = theta_im_total.at[:, :, :, theta_slice].set(
-                    theta_im_block
-                )
 
             block_log_likelihood = block_stats.pop(
                 f"log_likelihood_block_{channel_index}"
@@ -881,19 +847,8 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             existing_attrs.update(warmup_attrs)
             self._extra_idata_attrs = existing_attrs
 
-        log_delta_sq = jnp.stack(channel_log_delta, axis=-1)
-
-        if theta_re_total is None:
-            theta_re_total = jnp.zeros(
-                (log_delta_sq.shape[0], log_delta_sq.shape[1], self.N, 0)
-            )
-            theta_im_total = jnp.zeros_like(theta_re_total)
-
         combined_stats.update(
             {
-                "log_delta_sq": np.asarray(log_delta_sq),
-                "theta_re": np.asarray(theta_re_total),
-                "theta_im": np.asarray(theta_im_total),
                 "log_likelihood": np.asarray(log_likelihood_total),
             }
         )

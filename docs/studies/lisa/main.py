@@ -23,6 +23,7 @@ import argparse
 import os
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 os.environ["XLA_FLAGS"] = os.environ.get(
@@ -67,10 +68,53 @@ from utils.preprocessing import (  # noqa: E402
 from utils.windows import window_slug, window_spec  # noqa: E402
 
 
+def _resolve_family_knot_counts(args) -> int | dict[str, int]:
+    """Resolve effective family knot counts from CLI arguments."""
+    overrides = {
+        "delta": args.K_delta,
+        "theta_re": args.K_theta_re,
+        "theta_im": args.K_theta_im,
+    }
+    if all(value is None for value in overrides.values()):
+        return int(args.K)
+
+    base = int(args.K)
+    return {
+        key: int(base if value is None else value)
+        for key, value in overrides.items()
+    }
+
+
+def _format_knot_counts(knot_counts: int | Mapping[str, int]) -> str:
+    """Return a readable knot-count description for logs and metrics."""
+    if isinstance(knot_counts, Mapping):
+        return (
+            f"delta={int(knot_counts['delta'])}, "
+            f"theta_re={int(knot_counts['theta_re'])}, "
+            f"theta_im={int(knot_counts['theta_im'])}"
+        )
+    return str(int(knot_counts))
+
+
+def _knot_slug_token(knot_counts: int | Mapping[str, int]) -> str:
+    """Return the knot-count token used in run slugs."""
+    if isinstance(knot_counts, Mapping):
+        counts = {key: int(value) for key, value in knot_counts.items()}
+        if len(set(counts.values())) == 1:
+            return f"k{next(iter(counts.values()))}"
+        return (
+            f"kdelta{counts['delta']}"
+            f"_ktre{counts['theta_re']}"
+            f"_ktim{counts['theta_im']}"
+        )
+    return f"k{int(knot_counts)}"
+
+
 def _build_run_slug(args) -> str:
     """Build a human-readable slug encoding all key run settings."""
     from utils.windows import window_slug, window_spec
 
+    knot_counts = _resolve_family_knot_counts(args)
     wishart_ws = window_spec(
         args.wishart_window, tukey_alpha=args.wishart_tukey_alpha
     )
@@ -84,7 +128,7 @@ def _build_run_slug(args) -> str:
         else "tauOff"
     )
     return (
-        f"k{args.K}"
+        f"{_knot_slug_token(knot_counts)}"
         f"_d{args.diff_order}"
         f"_km{args.knot_method}"
         f"_ww{window_slug(wishart_ws)}"
@@ -149,6 +193,33 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=20,
         help="Number of P-spline knots (default: 20).",
+    )
+    model_g.add_argument(
+        "--K-delta",
+        type=int,
+        default=None,
+        help=(
+            "Override knot count for diagonal log_delta_sq components only. "
+            "Defaults to --K when omitted."
+        ),
+    )
+    model_g.add_argument(
+        "--K-theta-re",
+        type=int,
+        default=None,
+        help=(
+            "Override knot count for real theta components only. "
+            "Defaults to --K when omitted."
+        ),
+    )
+    model_g.add_argument(
+        "--K-theta-im",
+        type=int,
+        default=None,
+        help=(
+            "Override knot count for imaginary theta components only. "
+            "Defaults to --K when omitted."
+        ),
     )
     model_g.add_argument(
         "--knot-method",
@@ -289,6 +360,7 @@ def parse_args() -> argparse.Namespace:
 
     # ── VI ────────────────────────────────────────────────────────────────────
     vi_g = parser.add_argument_group("vi")
+    parser.set_defaults(auto_coarse_vi=True)
     vi_g.add_argument(
         "--vi",
         action="store_true",
@@ -329,8 +401,14 @@ def parse_args() -> argparse.Namespace:
     vi_g.add_argument(
         "--auto-coarse-vi",
         action="store_true",
-        default=False,
+        dest="auto_coarse_vi",
         help="Enable coarse-to-fine VI warm start for large frequency grids.",
+    )
+    vi_g.add_argument(
+        "--no-auto-coarse-vi",
+        action="store_false",
+        dest="auto_coarse_vi",
+        help="Disable coarse-to-fine VI warm start.",
     )
     vi_g.add_argument(
         "--auto-coarse-vi-target-nfreq",
@@ -397,6 +475,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     t0 = time.time()
+    knot_counts = _resolve_family_knot_counts(args)
 
     run_slug = _build_run_slug(args)
     seed_dir = os.path.join(args.outdir, run_slug, f"seed_{args.seed}")
@@ -405,7 +484,8 @@ def main() -> None:
     logger.info(f"=== LISA sim study: seed={args.seed} ===")
     logger.info(f"Run slug: {run_slug}")
     logger.info(
-        f"Config: duration={args.duration_days}d, K={args.K}, "
+        f"Config: duration={args.duration_days}d, "
+        f"K={_format_knot_counts(knot_counts)}, "
         f"knot_method={args.knot_method}, diff_order={args.diff_order}, "
         f"block_days={args.block_days}, coarse_Nc={args.coarse_Nc}, "
         f"fmin={args.fmin}, fmax={args.fmax}, "
@@ -413,7 +493,9 @@ def main() -> None:
         f"wishart_window={args.wishart_window}, "
         f"wishart_detrend={args.wishart_detrend}, "
         f"wishart_floor_fraction={args.wishart_floor_fraction}, "
-        f"vi={'on' if args.vi else 'off'}, tau={args.tau}"
+        f"vi={'on' if args.vi else 'off'}, "
+        f"auto_coarse_vi={'on' if args.auto_coarse_vi else 'off'}, "
+        f"tau={args.tau}"
     )
 
     # Resolve window specs
@@ -507,7 +589,7 @@ def main() -> None:
         coarse_cfg=coarse_cfg,
         freq_true=freq_true,
         S_true=S_true,
-        K=args.K,
+        K=knot_counts,
         knot_method=args.knot_method,
         diff_order=args.diff_order,
         n_samples=args.n_samples,
@@ -540,6 +622,21 @@ def main() -> None:
     idata.attrs["runtime"] = runtime
     # Stash config in attrs for collect_results.py
     idata.attrs["K"] = args.K
+    idata.attrs["K_delta"] = (
+        knot_counts["delta"]
+        if isinstance(knot_counts, Mapping)
+        else int(knot_counts)
+    )
+    idata.attrs["K_theta_re"] = (
+        knot_counts["theta_re"]
+        if isinstance(knot_counts, Mapping)
+        else int(knot_counts)
+    )
+    idata.attrs["K_theta_im"] = (
+        knot_counts["theta_im"]
+        if isinstance(knot_counts, Mapping)
+        else int(knot_counts)
+    )
     idata.attrs["knot_method"] = args.knot_method
     idata.attrs["diff_order"] = args.diff_order
     idata.attrs["duration_days"] = args.duration_days
@@ -558,6 +655,21 @@ def main() -> None:
     )
     # Also record config fields in the metrics JSON
     metrics["K"] = args.K
+    metrics["K_delta"] = (
+        knot_counts["delta"]
+        if isinstance(knot_counts, Mapping)
+        else int(knot_counts)
+    )
+    metrics["K_theta_re"] = (
+        knot_counts["theta_re"]
+        if isinstance(knot_counts, Mapping)
+        else int(knot_counts)
+    )
+    metrics["K_theta_im"] = (
+        knot_counts["theta_im"]
+        if isinstance(knot_counts, Mapping)
+        else int(knot_counts)
+    )
     metrics["knot_method"] = args.knot_method
     metrics["diff_order"] = args.diff_order
     metrics["duration_days"] = args.duration_days

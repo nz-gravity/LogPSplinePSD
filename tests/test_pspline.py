@@ -60,7 +60,7 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     ), "Optimized weights should yield a higher log-likelihood than initial zeros."
     assert (
         runtime < 5
-    ), "Initialization should complete in less than 5 seconds."
+    ), f"Initialization should complete in less than 5 seconds, it took {runtime:.2f} seconds."
 
 
 def test_spline_basis(mock_pdgrm: Periodogram, outdir):

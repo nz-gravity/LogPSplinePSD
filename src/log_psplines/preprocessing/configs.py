@@ -48,11 +48,12 @@ FrequencyBand = Tuple[float, float]
 
 @dataclass(frozen=True)
 class ModelConfig:
-    n_knots: int = 10
+    n_knots: int | dict[str, int] = 10
     degree: int = 3
     diffMatrixOrder: int = 2
     knot_kwargs: dict[str, Any] = field(default_factory=dict)
     parametric_model: Optional[jnp.ndarray] = None
+    analytical_psd: Optional[np.ndarray] = None
     true_psd: TruePSDInput = None
     fmin: Optional[float] = None
     fmax: Optional[float] = None
@@ -75,9 +76,9 @@ class VIConfig:
     vi_steps: int = 1500
     vi_lr: float = 1e-2
     vi_guide: Optional[str] = None
-    vi_posterior_draws: int = 256
+    vi_posterior_draws: int = 50
     vi_progress_bar: Optional[bool] = None
-    vi_psd_max_draws: int = 64
+    vi_psd_max_draws: int = 50
     coarse_grain_config_vi: Optional[CoarseGrainConfig | dict] = None
     auto_coarse_vi: bool = False
     auto_coarse_vi_target_nfreq: int = 192

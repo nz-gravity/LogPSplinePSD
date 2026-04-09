@@ -24,7 +24,7 @@
 #SBATCH --error=logs_fg21/job_%A_%a.err
 #SBATCH --array=0-1049%10
 #SBATCH --time=6:00:00
-#SBATCH --mem=4G
+#SBATCH --mem=3G
 #SBATCH --cpus-per-task=4
 
 module --force purge

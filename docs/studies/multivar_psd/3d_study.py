@@ -18,6 +18,9 @@ os.environ.setdefault("XLA_FLAGS", "--xla_force_host_platform_device_count=4")
 import jax
 import numpy as np
 
+from log_psplines.arviz_utils.from_arviz import (
+    get_multivar_posterior_psd_quantiles,
+)
 from log_psplines.logger import logger, set_level
 from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
 
@@ -216,22 +219,52 @@ def _extract_percentile_slice(
     return np.asarray(values[idx], dtype=np.float64)
 
 
+def _get_posterior_psd_quantiles(idata) -> dict[str, np.ndarray | None] | None:
+    """Return posterior PSD quantiles, reconstructing lazily when needed."""
+    psd_group = getattr(idata, "posterior_psd", None)
+    if (
+        psd_group is not None
+        and "psd_matrix_real" in psd_group
+        and "psd_matrix_imag" in psd_group
+    ):
+        return {
+            "freq": np.asarray(
+                psd_group.coords["freq"].values, dtype=np.float64
+            ),
+            "percentile": np.asarray(
+                psd_group.coords["percentile"].values, dtype=np.float64
+            ),
+            "real": np.asarray(
+                psd_group["psd_matrix_real"].values, dtype=np.float64
+            ),
+            "imag": np.asarray(
+                psd_group["psd_matrix_imag"].values, dtype=np.float64
+            ),
+            "coherence": (
+                np.asarray(psd_group["coherence"].values, dtype=np.float64)
+                if "coherence" in psd_group
+                else None
+            ),
+        }
+
+    try:
+        return get_multivar_posterior_psd_quantiles(idata)
+    except Exception as exc:
+        logger.warning(
+            f"Could not reconstruct posterior PSD quantiles from posterior weights: {exc}"
+        )
+        return None
+
+
 def _compute_ci_width_metrics(idata) -> dict[str, float]:
     """Compute CI-width summaries from posterior PSD/coherence quantiles."""
     metrics: dict[str, float] = {}
-    psd_group = getattr(idata, "posterior_psd", None)
-    if psd_group is None or "psd_matrix_real" not in psd_group:
+    quantiles = _get_posterior_psd_quantiles(idata)
+    if quantiles is None:
         return metrics
 
-    psd_real = np.asarray(
-        psd_group["psd_matrix_real"].values, dtype=np.float64
-    )
-    percentiles = np.asarray(
-        psd_group["psd_matrix_real"].coords.get(
-            "percentile", np.arange(psd_real.shape[0], dtype=float)
-        ),
-        dtype=np.float64,
-    )
+    psd_real = np.asarray(quantiles["real"], dtype=np.float64)
+    percentiles = np.asarray(quantiles["percentile"], dtype=np.float64)
     if psd_real.shape[0] < 2:
         return metrics
 
@@ -246,20 +279,12 @@ def _compute_ci_width_metrics(idata) -> dict[str, float]:
     offdiag_width = width_psd[:, offdiag_mask]
 
     metrics["ciw_psd_diag_mean"] = float(np.mean(diag_width))
-    metrics["ciw_psd_diag_median"] = float(np.median(diag_width))
-    metrics["ciw_psd_diag_max"] = float(np.max(diag_width))
     metrics["ciw_psd_offdiag_mean"] = float(np.mean(offdiag_width))
-    metrics["ciw_psd_offdiag_median"] = float(np.median(offdiag_width))
-    metrics["ciw_psd_offdiag_max"] = float(np.max(offdiag_width))
 
-    if "coherence" in psd_group:
-        coherence = np.asarray(psd_group["coherence"].values, dtype=np.float64)
-        coh_percentiles = np.asarray(
-            psd_group["coherence"].coords.get(
-                "percentile", np.arange(coherence.shape[0], dtype=float)
-            ),
-            dtype=np.float64,
-        )
+    coherence = quantiles.get("coherence")
+    if coherence is not None:
+        coherence = np.asarray(coherence, dtype=np.float64)
+        coh_percentiles = np.asarray(percentiles, dtype=np.float64)
         if coherence.shape[0] >= 2:
             coh_q05 = _extract_percentile_slice(
                 coherence, coh_percentiles, 5.0
@@ -270,8 +295,6 @@ def _compute_ci_width_metrics(idata) -> dict[str, float]:
             coh_width = np.maximum(coh_q95 - coh_q05, 0.0)
             coh_offdiag = coh_width[:, offdiag_mask]
             metrics["ciw_coh_offdiag_mean"] = float(np.mean(coh_offdiag))
-            metrics["ciw_coh_offdiag_median"] = float(np.median(coh_offdiag))
-            metrics["ciw_coh_offdiag_max"] = float(np.max(coh_offdiag))
 
     return metrics
 
@@ -287,8 +310,6 @@ def _extract_run_metrics(
 ) -> dict[str, float | int | str]:
     """Extract compact run-level metrics for downstream aggregation."""
     attrs = idata.attrs
-    vi_psd = getattr(idata, "vi_posterior_psd", None)
-    vi_attrs = getattr(vi_psd, "attrs", {})
     ess_raw = attrs.get("ess", np.nan)
     ess_arr = np.asarray(ess_raw, dtype=float)
     ess_median = float(np.nanmedian(ess_arr)) if ess_arr.size else float("nan")
@@ -308,29 +329,26 @@ def _extract_run_metrics(
         "ess_median": ess_median,
         "vi_riae_matrix": float(
             attrs.get(
-                "vi_riae_matrix_vs_truth",
-                attrs.get(
-                    "vi_riae_vs_truth",
-                    vi_attrs.get("riae_matrix", np.nan),
-                ),
+                "vi_riae_matrix",
+                attrs.get("vi_riae_vs_truth", np.nan),
             )
         ),
         "vi_l2_matrix": float(
             attrs.get(
-                "vi_l2_matrix_vs_truth",
-                vi_attrs.get("l2_matrix", np.nan),
+                "vi_l2_matrix",
+                np.nan,
             )
         ),
         "vi_coverage": float(
             attrs.get(
-                "vi_coverage_vs_truth",
-                vi_attrs.get("coverage", np.nan),
+                "vi_coverage",
+                attrs.get("vi_ci_coverage", np.nan),
             )
         ),
         "vi_ci_width": float(
             attrs.get(
-                "vi_ci_width_vs_truth",
-                vi_attrs.get("ci_width", np.nan),
+                "vi_ci_width",
+                attrs.get("vi_ci_width_diag_mean", np.nan),
             )
         ),
     }
@@ -365,28 +383,16 @@ def _extract_lnz_summary(idata) -> tuple[float, float]:
 
 def _save_compact_ci_curves(outdir: str, idata) -> None:
     """Save compact CI-vs-frequency arrays for plotting comparisons."""
-    psd_group = getattr(idata, "posterior_psd", None)
-    if psd_group is None:
-        raise ValueError("InferenceData has no posterior_psd group.")
-    if (
-        "psd_matrix_real" not in psd_group
-        or "psd_matrix_imag" not in psd_group
-    ):
+    quantiles = _get_posterior_psd_quantiles(idata)
+    if quantiles is None:
         raise ValueError(
-            "posterior_psd must contain psd_matrix_real and psd_matrix_imag."
+            "InferenceData has no posterior PSD quantiles and reconstruction failed."
         )
 
-    freq = np.asarray(psd_group.coords["freq"].values, dtype=np.float64)
-    percentiles = np.asarray(
-        psd_group.coords["percentile"].values, dtype=np.float64
-    )
-
-    psd_real = np.asarray(
-        psd_group["psd_matrix_real"].values, dtype=np.float64
-    )
-    psd_imag = np.asarray(
-        psd_group["psd_matrix_imag"].values, dtype=np.float64
-    )
+    freq = np.asarray(quantiles["freq"], dtype=np.float64)
+    percentiles = np.asarray(quantiles["percentile"], dtype=np.float64)
+    psd_real = np.asarray(quantiles["real"], dtype=np.float64)
+    psd_imag = np.asarray(quantiles["imag"], dtype=np.float64)
 
     q05_real = _extract_percentile_slice(psd_real, percentiles, 5.0)
     q50_real = _extract_percentile_slice(psd_real, percentiles, 50.0)

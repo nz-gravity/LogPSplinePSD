@@ -633,12 +633,12 @@ def _vi_weights_to_log_delta_theta(
                         theta_re_eval = w_re @ basis_re.T
                         theta_im_eval = w_im @ basis_im.T
                     else:
-                        theta_re_eval = (
-                            jnp.einsum("nk,k->n", basis_re, w_re)[None, :]
-                        )
-                        theta_im_eval = (
-                            jnp.einsum("nk,k->n", basis_im, w_im)[None, :]
-                        )
+                        theta_re_eval = jnp.einsum("nk,k->n", basis_re, w_re)[
+                            None, :
+                        ]
+                        theta_im_eval = jnp.einsum("nk,k->n", basis_im, w_im)[
+                            None, :
+                        ]
                     theta_re = theta_re.at[:, :, theta_idx].set(theta_re_eval)
                     theta_im = theta_im.at[:, :, theta_idx].set(theta_im_eval)
     else:
@@ -911,11 +911,11 @@ def _build_block_model_args(
     beta_phi_theta: float,
 ) -> tuple:
     """Build the positional args tuple for ``_blocked_channel_model``."""
-    theta_re_basis, theta_re_penalty = sampler._theta_component_arrays_for_channel(
-        channel_index, part="re"
+    theta_re_basis, theta_re_penalty = (
+        sampler._theta_component_arrays_for_channel(channel_index, part="re")
     )
-    theta_im_basis, theta_im_penalty = sampler._theta_component_arrays_for_channel(
-        channel_index, part="im"
+    theta_im_basis, theta_im_penalty = (
+        sampler._theta_component_arrays_for_channel(channel_index, part="im")
     )
     return (
         channel_index,
@@ -1298,6 +1298,16 @@ def _assemble_blocked_vi_diagnostics(
             diagnostics["psd_quantiles"] = psd_quantiles
         if coherence_quantiles is not None:
             diagnostics["coherence_quantiles"] = coherence_quantiles
+        true_psd = diagnostics.get("true_psd")
+        if true_psd is not None and vi_psd_np is not None:
+            diagnostics.update(
+                compute_multivar_riae_diagnostics(
+                    vi_psd_np,
+                    np.real(np.asarray(true_psd)),
+                    np.asarray(sampler.freq, dtype=np.float64),
+                    psd_quantiles=psd_quantiles,
+                )
+            )
 
     if accum["vi_samples"]:
         diagnostics = diagnostics or {}

@@ -69,9 +69,13 @@ KEY_METRICS = [
     "coverage",
     "riae_matrix",
     "l2_matrix",
+    # Use the diagonal PSD CI width as the single NUTS CIW summary so it
+    # remains directly comparable to the scalar VI CI width.
+    "ciw_psd_diag_mean",
     "vi_coverage",
     "vi_riae_matrix",
     "vi_l2_matrix",
+    "vi_ci_width",
     "ess_median",
     "runtime",
 ]
@@ -142,6 +146,7 @@ def print_table(summary: pd.DataFrame) -> None:
             "vi_coverage_mean",
             "vi_riae_matrix_mean",
             "vi_l2_matrix_mean",
+            "vi_ci_width_mean",
         )
     )
 
@@ -150,13 +155,15 @@ def print_table(summary: pd.DataFrame) -> None:
     print("=" * 72)
     header = (
         f"  {'Mode':<12} {'N':>6} {'Nb':>4} {'Lb':>6} {'Nh':>5} {'N_ell':>6} {'Nc':>6} {'Seeds':>6}  "
-        f"{'Coverage':>10}  {'RIAE':>10}  {'L2':>10}"
+        f"{'Coverage':>10}  {'RIAE':>10}  {'L2':>10}  {'CIW':>10}"
     )
     if has_vi:
-        header += f"  {'VI Cov':>10}  {'VI RIAE':>10}  {'VI L2':>10}"
+        header += (
+            f"  {'VI Cov':>10}  {'VI RIAE':>10}  {'VI L2':>10}  {'VI CIW':>10}"
+        )
     header += f"  {'ESS':>8}"
     print(header)
-    print("  " + "-" * (116 if has_vi else 80))
+    print("  " + "-" * (142 if has_vi else 94))
 
     for _, row in summary.iterrows():
         lb_val = row.get("Lb", np.nan)
@@ -184,12 +191,16 @@ def print_table(summary: pd.DataFrame) -> None:
         riae_s = row.get("riae_matrix_std", float("nan"))
         l2 = row.get("l2_matrix_mean", float("nan"))
         l2_s = row.get("l2_matrix_std", float("nan"))
+        ciw = row.get("ciw_psd_diag_mean_mean", float("nan"))
+        ciw_s = row.get("ciw_psd_diag_mean_std", float("nan"))
         vi_cov = row.get("vi_coverage_mean", float("nan"))
         vi_cov_s = row.get("vi_coverage_std", float("nan"))
         vi_riae = row.get("vi_riae_matrix_mean", float("nan"))
         vi_riae_s = row.get("vi_riae_matrix_std", float("nan"))
         vi_l2 = row.get("vi_l2_matrix_mean", float("nan"))
         vi_l2_s = row.get("vi_l2_matrix_std", float("nan"))
+        vi_ciw = row.get("vi_ci_width_mean", float("nan"))
+        vi_ciw_s = row.get("vi_ci_width_std", float("nan"))
         ess = row.get("ess_median_mean", float("nan"))
         n_s = int(row.get("n_seeds", 0))
 
@@ -204,13 +215,15 @@ def print_table(summary: pd.DataFrame) -> None:
             f"{n_s:>6}  "
             f"{cov:>8.4f}±{cov_s:.3f}  "
             f"{riae:>8.4f}±{riae_s:.3f}  "
-            f"{l2:>8.4f}±{l2_s:.3f}"
+            f"{l2:>8.4f}±{l2_s:.3f}  "
+            f"{ciw:>8.4f}±{ciw_s:.3f}"
         )
         if has_vi:
             line += (
                 f"  {vi_cov:>8.4f}±{vi_cov_s:.3f}  "
                 f"{vi_riae:>8.4f}±{vi_riae_s:.3f}  "
-                f"{vi_l2:>8.4f}±{vi_l2_s:.3f}"
+                f"{vi_l2:>8.4f}±{vi_l2_s:.3f}  "
+                f"{vi_ciw:>8.4f}±{vi_ciw_s:.3f}"
             )
         line += f"  {ess:>8.0f}"
         print(line)

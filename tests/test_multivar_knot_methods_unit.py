@@ -461,3 +461,106 @@ def test_multivar_component_registry_tracks_all_components():
     spec = model.get_component_spec(key)
     assert spec.key == key
     assert spec.model is model.get_theta_model("im", 2, 1)
+
+
+def test_analytical_psd_guides_knot_placement():
+    """Analytical PSD guidance should change where density knots land."""
+    fft_data = _make_fft_data(n_freq=64, peak_index=16, peak_scale=10.0)
+
+    model_without = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=10,
+        degree=2,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+        analytical_psd=None,
+    )
+
+    # Build analytical PSD with a broad diagonal feature at a different
+    # frequency from the empirical peak so it acts as a guide signal.
+    freq = np.asarray(fft_data.freq, dtype=np.float64)
+    p = fft_data.p
+    S_analytical = np.zeros((freq.size, p, p), dtype=np.complex128)
+    bump = 1.0 + 12.0 * np.exp(-0.5 * ((freq - freq[48]) / 0.05) ** 2)
+    S_analytical[:, 0, 0] = bump
+    S_analytical[:, 1, 1] = 0.8 + 0.1 * bump
+
+    model_with = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=10,
+        degree=2,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+        analytical_psd=S_analytical,
+    )
+
+    knots_without = np.asarray(model_without.diagonal_models[0].knots)
+    knots_with = np.asarray(model_with.diagonal_models[0].knots)
+    # Knots should differ when the analytical guide is provided.
+    assert not np.allclose(knots_without, knots_with, atol=1e-6)
+
+
+def test_analytical_psd_does_not_modify_empirical_component_scores():
+    """Analytical PSD should guide knot placement without rewriting scores."""
+    fft_data = _make_fft_data(n_freq=48, peak_index=12, peak_scale=8.0)
+    freq = np.asarray(fft_data.freq, dtype=np.float64)
+    p = fft_data.p
+    S_analytical = np.zeros((freq.size, p, p), dtype=np.complex128)
+    bump = 1.0 + 6.0 * np.exp(-0.5 * ((freq - freq[30]) / 0.06) ** 2)
+    S_analytical[:, 0, 0] = bump
+    S_analytical[:, 1, 1] = 0.7 + 0.2 * bump
+    S_analytical[:, 1, 0] = 0.05 * bump
+    S_analytical[:, 0, 1] = np.conj(S_analytical[:, 1, 0])
+
+    model_without = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=8,
+        degree=2,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+        analytical_psd=None,
+    )
+    model_with = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=8,
+        degree=2,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+        analytical_psd=S_analytical,
+    )
+
+    assert (
+        model_without.component_scores.keys()
+        == model_with.component_scores.keys()
+    )
+    for key in model_without.component_scores:
+        np.testing.assert_allclose(
+            np.asarray(model_without.component_scores[key], dtype=np.float64),
+            np.asarray(model_with.component_scores[key], dtype=np.float64),
+            rtol=1e-10,
+            atol=1e-10,
+        )
+
+
+def test_analytical_psd_tuple_interpolation():
+    """Analytical PSD passed as (freq, S) tuple should be interpolated."""
+    fft_data = _make_fft_data(n_freq=64)
+    freq = np.asarray(fft_data.freq, dtype=np.float64)
+
+    # Build analytical PSD on a denser grid than the FFT data.
+    freq_dense = np.linspace(freq[0] * 0.9, freq[-1] * 1.1, 200)
+    p = fft_data.p
+    S_dense = np.zeros((200, p, p), dtype=np.complex128)
+    for i in range(p):
+        S_dense[:, i, i] = 1.0  # Simple identity-like PSD
+
+    # Should not raise — tuple is auto-interpolated.
+    model = MultivariateLogPSplines.from_multivar_fft(
+        fft_data=fft_data,
+        n_knots=8,
+        degree=2,
+        diffMatrixOrder=2,
+        knot_kwargs={"method": "density"},
+        analytical_psd=(freq_dense, S_dense),
+    )
+    assert model is not None

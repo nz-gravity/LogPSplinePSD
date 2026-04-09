@@ -53,6 +53,7 @@ class ModelConfig:
     diffMatrixOrder: int = 2
     knot_kwargs: dict[str, Any] = field(default_factory=dict)
     parametric_model: Optional[jnp.ndarray] = None
+    analytical_psd: Optional[np.ndarray] = None
     true_psd: TruePSDInput = None
     fmin: Optional[float] = None
     fmax: Optional[float] = None

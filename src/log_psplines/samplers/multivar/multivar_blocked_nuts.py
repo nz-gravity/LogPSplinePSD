@@ -549,7 +549,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
         vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
         coarse_sampler = getattr(self, "_coarse_vi_sampler", None)
-        if coarse_sampler is not None and not vi_only_mode:
+        if coarse_sampler is not None:
             vi_setup = prepare_coarse_block_vi(
                 self,
                 coarse_sampler=coarse_sampler,

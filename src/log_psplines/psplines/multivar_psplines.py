@@ -93,6 +93,7 @@ def _build_component_knots(
     freq: np.ndarray,
     n_knots: int,
     score: np.ndarray,
+    guide_score: np.ndarray | None,
     n_freq: int,
     knot_kwargs: dict[str, object],
 ) -> np.ndarray:
@@ -127,6 +128,11 @@ def _build_component_knots(
         n_knots=n_knots,
         periodogram=knot_periodogram,
         parametric_model=None,
+        guide_power=(
+            None
+            if guide_score is None
+            else np.asarray(guide_score, dtype=np.float64)
+        ),
         **{**knot_kwargs, "method": method},
     )
     return knots
@@ -264,6 +270,7 @@ class MultivariateLogPSplines:
         degree: int = 3,
         diffMatrixOrder: int = 2,
         knot_kwargs: dict[str, object] | None = None,
+        analytical_psd: np.ndarray | None = None,
     ) -> "MultivariateLogPSplines":
         """
         Factory method to construct multivariate P-spline model from FFT data.
@@ -289,6 +296,14 @@ class MultivariateLogPSplines:
             For ``method="density"``, per-component knot scores are always
             computed from the Cholesky parameterization of the channel-space
             Wishart matrix.
+        analytical_psd : np.ndarray or tuple, optional
+            Known analytical PSD matrix (e.g. from a transfer function model).
+            Either an ``(N, p, p)`` array already on the FFT frequency grid,
+            or a ``(freq_ana, S_ana)`` tuple that will be interpolated to the
+            FFT grid automatically. When provided, the Cholesky components of
+            this matrix are used as guide signals for density-based knot
+            placement, so known analytical features can attract knots without
+            subtracting from the empirical scores.
 
         Returns
         -------
@@ -348,6 +363,51 @@ class MultivariateLogPSplines:
             Nb,
             p,
         )
+
+        analytical_diagonal_scores: list[np.ndarray] | None = None
+        analytical_offdiag_re_scores: list[np.ndarray] | None = None
+        analytical_offdiag_im_scores: list[np.ndarray] | None = None
+
+        # Use analytical model Cholesky components as guide signals for
+        # density-based knot placement without modifying the empirical score.
+        if analytical_psd is not None:
+            if isinstance(analytical_psd, tuple):
+                from ..datatypes.multivar_utils import interp_matrix
+
+                freq_ana, S_ana = analytical_psd
+                analytical_psd = interp_matrix(
+                    np.asarray(freq_ana, dtype=np.float64),
+                    np.asarray(S_ana, dtype=np.complex128),
+                    freq,
+                )
+            analytical_psd = np.asarray(analytical_psd, dtype=np.complex128)
+            if analytical_psd.shape != (N, p, p):
+                raise ValueError(
+                    f"analytical_psd must have shape ({N}, {p}, {p}), "
+                    f"got {analytical_psd.shape}"
+                )
+            ana_log_delta, ana_theta = psd_to_cholesky_components(
+                analytical_psd
+            )
+            analytical_diagonal_scores = [
+                np.asarray(ana_log_delta[:, i], dtype=np.float64)
+                for i in range(p)
+            ]
+            analytical_offdiag_re_scores = []
+            analytical_offdiag_im_scores = []
+            for j in range(1, p):
+                for l in range(j):
+                    analytical_offdiag_re_scores.append(
+                        np.asarray(
+                            np.real(ana_theta[:, j, l]), dtype=np.float64
+                        )
+                    )
+                    analytical_offdiag_im_scores.append(
+                        np.asarray(
+                            np.imag(ana_theta[:, j, l]), dtype=np.float64
+                        )
+                    )
+
         component_scores: Dict[MultivarComponentKey, np.ndarray] = {}
 
         # Create diagonal models (one per channel), each with its own
@@ -363,10 +423,18 @@ class MultivariateLogPSplines:
                 freq=freq,
                 n_knots=family_knot_counts["delta"],
                 score=score_diag,
+                guide_score=(
+                    None
+                    if analytical_diagonal_scores is None
+                    else analytical_diagonal_scores[i]
+                ),
                 n_freq=N,
                 knot_kwargs=knot_kwargs,
             )
 
+            # Keep initialization empirical for now. The analytical PSD may
+            # guide knot placement, but the starting spline target should still
+            # reflect the observed Wishart matrix on the retained grid.
             empirical_diag_power = np.real(Y_np[:, i, i]) / Nb
             empirical_diag_power = np.maximum(
                 empirical_diag_power, 1e-12
@@ -399,7 +467,9 @@ class MultivariateLogPSplines:
                     f"expected {len(theta_pairs)}, got {len(offdiag_im_scores)}."
                 )
 
-            # Empirical Cholesky theta for initialising spline weights.
+            # Keep theta initialization empirical for now. The analytical PSD
+            # may guide knot placement, but we do not inject it into the
+            # initial spline weights unless we intentionally add that policy.
             # The sampler evaluates theta = B @ w directly (no exp), so weights
             # must be initialised to reproduce the empirical theta values, not
             # their log-magnitude.
@@ -429,6 +499,11 @@ class MultivariateLogPSplines:
                     freq=freq,
                     n_knots=family_knot_counts["theta_re"],
                     score=score_theta_re,
+                    guide_score=(
+                        None
+                        if analytical_offdiag_re_scores is None
+                        else analytical_offdiag_re_scores[theta_idx]
+                    ),
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
                 )
@@ -436,6 +511,11 @@ class MultivariateLogPSplines:
                     freq=freq,
                     n_knots=family_knot_counts["theta_im"],
                     score=score_theta_im,
+                    guide_score=(
+                        None
+                        if analytical_offdiag_im_scores is None
+                        else analytical_offdiag_im_scores[theta_idx]
+                    ),
                     n_freq=N,
                     knot_kwargs=knot_kwargs,
                 )

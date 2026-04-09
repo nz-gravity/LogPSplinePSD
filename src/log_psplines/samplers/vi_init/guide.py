@@ -19,16 +19,19 @@ def _suggest_guide(
     n_latents:
         Total number of latent variables.
     thresholds:
-        ``(flow_max, mvn_max)`` — use flow below the first, MVN below the
-        second, low-rank above.
+        ``(diag_max, mvn_max)`` — use a diagonal guide below the first, MVN
+        below the second, and low-rank above.
     rank_range:
         ``(min_rank, max_rank)`` clamp for the low-rank guide.
     rank_divisor:
         Divides ``n_latents`` to set the target rank.
     """
-    flow_max, mvn_max = thresholds
-    if n_latents <= flow_max:
-        return "flow:1"
+    diag_max, mvn_max = thresholds
+    # VI here is used to find a fast, stable warm start for NUTS rather than a
+    # highly expressive posterior approximation. Diagonal guides converge more
+    # predictably than flows on the blocked problems we care about.
+    if n_latents <= diag_max:
+        return "diag"
     if n_latents <= mvn_max:
         return "mvn"
 
@@ -61,6 +64,9 @@ def suggest_guide_block(
     total_latents = delta_basis_cols + 2
     if theta_count > 0:
         total_latents += theta_count * (theta_basis_cols + 2)
+    # Blocked VI is primarily an initializer, so favor the cheapest guide that
+    # still captures per-latent scale. This avoids auto-selecting flows for the
+    # small-to-moderate block sizes common in LISA and VAR examples.
     return _suggest_guide(
         total_latents,
         thresholds=(80, 160),

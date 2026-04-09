@@ -10,6 +10,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
+from ..arviz_utils.from_arviz import (
+    get_multivar_posterior_psd_quantiles,
+)
 from ..logger import logger
 from ..plotting.base import (
     composite_images_vertical,
@@ -492,22 +495,17 @@ def _create_ess_rhat_profiles(
 
 def _is_multivar(idata: az.InferenceData) -> bool:
     attrs = getattr(idata, "attrs", {}) or {}
-    if str(attrs.get("data_type", "")).lower().startswith("multi"):
-        return True
-    psd = getattr(idata, "posterior_psd", None)
-    return psd is not None and "psd_matrix_real" in psd
+    return str(attrs.get("data_type", "")).lower().startswith("multi")
 
 
 def _get_freqs(idata: az.InferenceData, model=None) -> np.ndarray:
+    attrs = getattr(idata, "attrs", {}) or {}
+    if str(attrs.get("data_type", "")).lower().startswith("multi"):
+        quantiles = get_multivar_posterior_psd_quantiles(idata)
+        return np.asarray(quantiles["freq"], dtype=float)
     psd = getattr(idata, "posterior_psd", None)
-    if psd is not None:
-        if "psd" in psd and "freq" in psd["psd"].coords:
-            return np.asarray(psd["psd"].coords["freq"])
-        if (
-            "psd_matrix_real" in psd
-            and "freq" in psd["psd_matrix_real"].coords
-        ):
-            return np.asarray(psd["psd_matrix_real"].coords["freq"])
+    if psd is not None and "psd" in psd and "freq" in psd["psd"].coords:
+        return np.asarray(psd["psd"].coords["freq"])
     if model is not None and hasattr(model, "basis"):
         try:
             return np.arange(np.asarray(model.basis).shape[0])
@@ -569,25 +567,29 @@ def _relative_error_epsilon(values: np.ndarray) -> float:
 def _build_multivar_truth_frequency_maps(
     idata: az.InferenceData, true_psd: Optional[np.ndarray]
 ) -> Optional[tuple[np.ndarray, list[str], np.ndarray, np.ndarray]]:
-    psd_ds = getattr(idata, "posterior_psd", None)
-    if psd_ds is None or "psd_matrix_real" not in psd_ds:
+    psd = getattr(idata, "posterior_psd", None)
+    if not _is_multivar(idata) and not (
+        psd is not None and "psd_matrix_real" in psd
+    ):
         return None
+    if psd is not None and "psd_matrix_real" in psd:
+        psd_real = np.asarray(psd["psd_matrix_real"].values, dtype=np.float64)
+        psd_imag = np.asarray(psd["psd_matrix_imag"].values, dtype=np.float64)
+        freqs = np.asarray(
+            psd["psd_matrix_real"].coords["freq"].values, dtype=float
+        )
+        percentiles = np.asarray(
+            psd["psd_matrix_real"].coords["percentile"].values, dtype=float
+        )
+    else:
+        quantiles = get_multivar_posterior_psd_quantiles(idata)
+        psd_real = np.asarray(quantiles["real"], dtype=np.float64)
+        psd_imag = np.asarray(quantiles["imag"], dtype=np.float64)
+        freqs = np.asarray(quantiles["freq"], dtype=float)
+        percentiles = np.asarray(quantiles["percentile"], dtype=float)
 
     truth = _resolve_true_psd(idata, true_psd)
     if truth is None:
-        return None
-
-    psd_real = np.asarray(psd_ds["psd_matrix_real"].values)
-    if psd_real.ndim != 4:
-        return None
-
-    freqs = np.asarray(
-        psd_ds["psd_matrix_real"].coords.get(
-            "freq", np.arange(psd_real.shape[1], dtype=float)
-        ),
-        dtype=float,
-    )
-    if freqs.ndim != 1 or freqs.size != psd_real.shape[1]:
         return None
 
     truth_arr = np.asarray(truth)
@@ -605,25 +607,15 @@ def _build_multivar_truth_frequency_maps(
         )
         return None
 
-    percentiles = np.asarray(
-        psd_ds["psd_matrix_real"].coords.get("percentile", []), dtype=float
-    )
     if percentiles.size == 0:
         percentiles = np.arange(psd_real.shape[0], dtype=float)
 
     q50_real = extract_percentile(psd_real, percentiles, 50.0)
     q05_real = extract_percentile(psd_real, percentiles, 5.0)
     q95_real = extract_percentile(psd_real, percentiles, 95.0)
-
-    if "psd_matrix_imag" in psd_ds:
-        psd_imag = np.asarray(psd_ds["psd_matrix_imag"].values)
-        q50_imag = extract_percentile(psd_imag, percentiles, 50.0)
-        q05_imag = extract_percentile(psd_imag, percentiles, 5.0)
-        q95_imag = extract_percentile(psd_imag, percentiles, 95.0)
-    else:
-        q50_imag = np.zeros_like(q50_real)
-        q05_imag = np.zeros_like(q05_real)
-        q95_imag = np.zeros_like(q95_real)
+    q50_imag = extract_percentile(psd_imag, percentiles, 50.0)
+    q05_imag = extract_percentile(psd_imag, percentiles, 5.0)
+    q95_imag = extract_percentile(psd_imag, percentiles, 95.0)
 
     estimate = q50_real + 1j * q50_imag
     q05 = q05_real + 1j * q05_imag
@@ -3114,9 +3106,19 @@ def generate_diagnostics_summary(
         summary.extend(psd_band_lines)
 
     vi_metrics = {}
-    have_vi_psd = hasattr(idata, "vi_posterior_psd")
+    have_vi_psd = (
+        bool(getattr(idata, "attrs", {}).get("only_vi"))
+        or hasattr(idata, "vi_posterior")
+        or hasattr(idata, "vi_posterior_psd")
+    )
     if have_vi_psd:
-        vi_psd_attrs = _attrs_like(getattr(idata, "vi_posterior_psd", None))
+        vi_psd_attrs = {}
+        if hasattr(idata, "vi_posterior"):
+            vi_psd_attrs = _attrs_like(getattr(idata, "vi_posterior", None))
+        elif hasattr(idata, "vi_posterior_psd"):
+            vi_psd_attrs = _attrs_like(
+                getattr(idata, "vi_posterior_psd", None)
+            )
         vi_metrics["riae"] = _pick_scalar(
             attrs.get("vi_riae_vs_truth"),
             attrs.get("vi_riae"),
@@ -3135,14 +3137,9 @@ def generate_diagnostics_summary(
             attrs.get("vi_ci_width_diag_mean"),
         )
         if not any(value is not None for value in vi_metrics.values()):
-
-            class _VIOnlyIDATA:
-                def __init__(self, vi_posterior_psd):
-                    self.vi_posterior_psd = vi_posterior_psd
-
             vi_psd_metrics = _run_psd_compare(
                 idata=None,
-                idata_vi=_VIOnlyIDATA(getattr(idata, "vi_posterior_psd")),
+                idata_vi=idata,
                 truth=attrs.get("true_psd"),
                 psd_ref=attrs.get("true_psd"),
             )
@@ -3467,6 +3464,11 @@ def generate_vi_diagnostics_summary(
             diag_summary_path = os.path.join(outdir, "diagnostics_summary.txt")
             with open(diag_summary_path, "a") as f:
                 f.write("\n\n" + summary_text)
+            vi_summary_path = os.path.join(
+                outdir, "vi_diagnostics_summary.txt"
+            )
+            with open(vi_summary_path, "w") as f:
+                f.write(summary_text)
         except Exception:
             logger.debug(
                 "Could not append VI diagnostics summary to diagnostics_summary.txt.",

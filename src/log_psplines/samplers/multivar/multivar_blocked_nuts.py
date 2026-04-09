@@ -274,7 +274,7 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     vi_steps: int = 1500
     vi_lr: float = 1e-2
     vi_guide: Optional[str] = None
-    vi_posterior_draws: int = 256
+    vi_posterior_draws: int = 50
     vi_progress_bar: Optional[bool] = None
 
     # Optional separate hyperparameters for off-diagonal theta P-spline blocks.

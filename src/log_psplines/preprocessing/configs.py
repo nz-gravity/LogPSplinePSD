@@ -75,9 +75,9 @@ class VIConfig:
     vi_steps: int = 1500
     vi_lr: float = 1e-2
     vi_guide: Optional[str] = None
-    vi_posterior_draws: int = 256
+    vi_posterior_draws: int = 50
     vi_progress_bar: Optional[bool] = None
-    vi_psd_max_draws: int = 64
+    vi_psd_max_draws: int = 50
     coarse_grain_config_vi: Optional[CoarseGrainConfig | dict] = None
     auto_coarse_vi: bool = False
     auto_coarse_vi_target_nfreq: int = 192

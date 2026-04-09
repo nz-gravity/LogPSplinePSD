@@ -49,7 +49,7 @@ class SamplerConfig:
     )
     true_psd: Optional[jnp.ndarray] = None  # True PSD for diagnostics
     vi_psd_max_draws: int = (
-        64  # Cap PSD reconstructions from VI/posterior draws
+        50  # Cap PSD reconstructions from VI/posterior draws
     )
     only_vi: bool = False  # Skip MCMC and rely on VI draws only
     # Fast-diagnostics controls
@@ -287,12 +287,12 @@ class BaseSampler(ABC):
         attrs["full_diagnostics_timestamp"] = datetime.now(UTC).isoformat()
 
     def _attach_vi_group_safe(self, idata: az.InferenceData) -> None:
-        """Attach optional VI diagnostics to the InferenceData object."""
+        """Attach optional VI samples to the InferenceData object."""
         vi_diag = getattr(self, "_vi_diagnostics", None)
-        if not vi_diag or not hasattr(self, "_attach_vi_psd_group"):
+        if not vi_diag or not hasattr(self, "_attach_vi_group"):
             return
         try:
-            self._attach_vi_psd_group(idata, vi_diag)
+            self._attach_vi_group(idata, vi_diag)
         except Exception as exc:  # pragma: no cover - best-effort hook
             logger.warning(f"Could not attach VI diagnostics: {exc}")
 

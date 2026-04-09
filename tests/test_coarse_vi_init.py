@@ -1,6 +1,7 @@
 import jax
 import numpy as np
 
+from log_psplines.arviz_utils import get_multivar_posterior_psd_quantiles
 from log_psplines.datatypes.univar import Timeseries
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.mcmc import (
@@ -244,18 +245,14 @@ def test_multivariate_var2_3d_coarse_vi_warm_start_invariants():
 
     assert int(idata.attrs.get("coarse_vi_attempted", 0)) == 1
     assert int(idata.attrs.get("coarse_vi_success", 0)) == 1
-    assert idata.posterior_psd.sizes["freq"] == full_preproc.processed_data.N
+    quantiles = get_multivar_posterior_psd_quantiles(idata)
+    assert (
+        np.asarray(quantiles["freq"]).shape[0] == full_preproc.processed_data.N
+    )
 
-    psd_real = np.asarray(
-        idata.posterior_psd["psd_matrix_real"]
-        .sel(percentile=50, method="nearest")
-        .values
-    )
-    coherence = np.asarray(
-        idata.posterior_psd["coherence"]
-        .sel(percentile=50, method="nearest")
-        .values
-    )
+    idx50 = int(np.argmin(np.abs(np.asarray(quantiles["percentile"]) - 50.0)))
+    psd_real = np.asarray(quantiles["real"])[idx50]
+    coherence = np.asarray(quantiles["coherence"])[idx50]
 
     assert np.all(np.isfinite(psd_real))
     assert np.allclose(psd_real, np.swapaxes(psd_real, 1, 2), atol=1e-6)

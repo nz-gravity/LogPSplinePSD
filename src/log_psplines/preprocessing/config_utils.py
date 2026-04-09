@@ -42,6 +42,7 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
         "exclude_freq_bands",
         "true_psd",
         "parametric_model",
+        "analytical_psd",
     }
     nuts_fields = {
         "target_accept_prob",

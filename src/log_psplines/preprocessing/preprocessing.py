@@ -305,11 +305,7 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
 
     coarse_vi_context = None
     vi_cfg = run_config.vi
-    if (
-        vi_cfg.init_from_vi
-        and vi_cfg.use_coarse_vi_for_init
-        and not vi_cfg.only_vi
-    ):
+    if vi_cfg.init_from_vi and vi_cfg.use_coarse_vi_for_init:
         vi_cg_config, metadata = _derive_vi_coarse_grain_config(
             preproc_input.processed_data,
             run_config,

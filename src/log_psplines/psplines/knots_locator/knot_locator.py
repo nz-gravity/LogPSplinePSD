@@ -65,6 +65,7 @@ def init_knots(
     n_knots: int,
     periodogram: Periodogram,
     parametric_model: np.ndarray | None = None,
+    guide_power: np.ndarray | None = None,
     method: str = "density",
     knots: np.ndarray | None = None,
     **kwargs,
@@ -97,6 +98,7 @@ def init_knots(
         freqs=np.asarray(periodogram.freqs),
         power=np.asarray(periodogram.power),
         parametric_model=parametric_model,
+        guide_power=guide_power,
         method=method,
         knots=knots,
         **kwargs,
@@ -108,6 +110,7 @@ def _init_knots_from_arrays(
     freqs: np.ndarray,
     power: np.ndarray,
     parametric_model: np.ndarray | None = None,
+    guide_power: np.ndarray | None = None,
     method: str = "density",
     knots: np.ndarray | None = None,
     **kwargs,
@@ -148,7 +151,11 @@ def _init_knots_from_arrays(
         elif method == "density":
             periodogram = Periodogram(freqs=freqs, power=power)
             knots = _quantile_based_knots(
-                n_knots, periodogram, parametric_model
+                n_knots,
+                periodogram,
+                parametric_model,
+                guide_power=guide_power,
+                guide_strength=float(kwargs.get("guide_strength", 1.0)),
             )
 
         elif method == "lvk":
@@ -260,13 +267,19 @@ def _quantile_based_knots(
     n_knots: int,
     periodogram: Periodogram,
     parametric_model: np.ndarray | None = None,
+    *,
+    guide_power: np.ndarray | None = None,
+    guide_strength: float = 1.0,
 ) -> np.ndarray:
     """Place knots at equal quantiles of a gradient-based spectral feature score.
 
     Knot density is proportional to the absolute gradient of the denoised
     score signal, plus a small uniform floor so that flat regions still
-    receive some knots.  All processing is in linear frequency — the space
-    where the B-spline basis is evaluated.
+    receive some knots. When ``guide_power`` is provided, its gradient is
+    added as an auxiliary guide signal so known analytical features can pull
+    knots toward them without subtracting from or flattening the empirical
+    score. All processing is in linear frequency — the space where the
+    B-spline basis is evaluated.
     """
     power = np.asarray(periodogram.power, dtype=np.float64)
     freqs = np.asarray(periodogram.freqs, dtype=np.float64)
@@ -283,6 +296,25 @@ def _quantile_based_knots(
 
     gradient = np.abs(np.gradient(smooth, freqs))
     gradient = np.nan_to_num(gradient, nan=0.0, posinf=0.0, neginf=0.0)
+
+    if guide_power is not None:
+        guide = np.asarray(guide_power, dtype=np.float64)
+        if guide.shape != power.shape:
+            raise ValueError(
+                "guide_power must match periodogram power shape, "
+                f"got {guide.shape} vs {power.shape}"
+            )
+        guide_smooth = _adaptive_denoise(guide)
+        guide_gradient = np.abs(np.gradient(guide_smooth, freqs))
+        guide_gradient = np.nan_to_num(
+            guide_gradient, nan=0.0, posinf=0.0, neginf=0.0
+        )
+        guide_scale = float(np.mean(guide_gradient))
+        grad_scale = float(np.mean(gradient))
+        if guide_scale > 0.0:
+            if grad_scale > 0.0:
+                guide_gradient = guide_gradient * (grad_scale / guide_scale)
+            gradient = gradient + float(guide_strength) * guide_gradient
 
     # Uniform floor so featureless regions still get some knots.
     signal_scale = float(np.mean(np.abs(smooth)))

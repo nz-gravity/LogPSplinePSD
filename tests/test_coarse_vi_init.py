@@ -59,6 +59,23 @@ def test_preprocess_builds_explicit_coarse_vi_context():
     )
 
 
+def test_preprocess_builds_explicit_coarse_vi_context_in_only_vi_mode():
+    data = ARData(order=2, duration=2.0, fs=128, sigma=0.5, seed=8).ts
+    cfg = RunMCMCConfig(
+        model=ModelConfig(n_knots=5),
+        diagnostics=DiagnosticsConfig(verbose=False, compute_lnz=False),
+        vi=VIConfig(
+            only_vi=True,
+            coarse_grain_config_vi={"enabled": True, "Nh": 4, "Nc": None},
+        ),
+    )
+
+    preproc = _preprocess_data(data, config=cfg)
+
+    assert preproc.coarse_vi_context is not None
+    assert preproc.coarse_vi_context.metadata["coarse_vi_mode"] == "config"
+
+
 def test_preprocess_adjusts_explicit_coarse_vi_nc_to_divisor():
     data = ARData(order=2, duration=2.0, fs=128, sigma=0.5, seed=10).ts
     cfg = RunMCMCConfig(
@@ -260,6 +277,36 @@ def test_multivariate_var2_3d_coarse_vi_warm_start_invariants():
     assert np.all(diag > 0.0)
     assert np.nanmin(coherence) >= -1e-8
     assert np.nanmax(coherence) <= 1.0 + 1e-8
+
+
+def test_multivariate_coarse_vi_only_vi_records_transfer_attrs():
+    n = 128
+    ts = MultivariateTimeseries(
+        t=np.arange(n, dtype=np.float64),
+        y=_simulate_var2_3d(n, seed=12),
+    )
+    cfg = RunMCMCConfig(
+        n_samples=1,
+        n_warmup=1,
+        num_chains=1,
+        Nb=2,
+        model=ModelConfig(n_knots=5),
+        diagnostics=DiagnosticsConfig(verbose=False, compute_lnz=False),
+        vi=VIConfig(
+            only_vi=True,
+            vi_steps=20,
+            vi_lr=1e-2,
+            vi_posterior_draws=8,
+            coarse_grain_config_vi=CoarseGrainConfig(
+                enabled=True, Nh=4, Nc=None
+            ),
+        ),
+    )
+
+    idata = run_mcmc(ts, config=cfg)
+
+    assert bool(idata.attrs.get("only_vi")) is True
+    assert int(idata.attrs.get("coarse_vi_attempted", 0)) == 1
 
 
 def test_multivariate_auto_coarse_vi_uses_max_component_basis_size():

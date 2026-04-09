@@ -126,7 +126,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             alpha_delta=self.config.alpha_delta,
             beta_delta=self.config.beta_delta,
         )
-        if coarse_sampler is not None and not vi_only_mode:
+        if coarse_sampler is not None:
             vi_artifacts = compute_coarse_vi_artifacts_univar(
                 self,
                 coarse_sampler=coarse_sampler,

@@ -17,6 +17,7 @@ from log_psplines.mcmc import (
     VIConfig,
     run_mcmc,
 )
+from log_psplines.samplers.vi_init.guide import suggest_guide_block
 
 
 def _idata_groups(idata):
@@ -195,3 +196,9 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
     assert _mean_divergence(idata) < 0.5
     assert os.path.exists(f"{outdir}/diagnostics/vi_initial_psd_matrix.png")
     assert os.path.exists(f"{outdir}/diagnostics/vi_elbo_trace.png")
+
+
+def test_blocked_vi_guide_prefers_diag_for_small_blocks():
+    assert suggest_guide_block(5, 2, 5) == "diag"
+    assert suggest_guide_block(20, 3, 12) == "diag"
+    assert suggest_guide_block(120, 3, 20) == "lowrank:32"

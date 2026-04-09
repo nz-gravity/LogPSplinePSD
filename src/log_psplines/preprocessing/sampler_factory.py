@@ -47,6 +47,7 @@ def _build_model_from_data(
             degree=model_config.degree,
             diffMatrixOrder=model_config.diffMatrixOrder,
             knot_kwargs=model_config.knot_kwargs,
+            analytical_psd=model_config.analytical_psd,
         )
     raise ValueError(
         f"Unsupported processed data type: {type(processed_data)}."

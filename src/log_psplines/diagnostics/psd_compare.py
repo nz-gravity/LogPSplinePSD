@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Dict, Optional
 
 import numpy as np
-import xarray as xr
 from scipy.integrate import simpson
 
-from ..arviz_utils.from_arviz import get_multivar_posterior_psd_quantiles
+from ..arviz_utils.from_arviz import (
+    get_multivar_psd_dataset,
+)
 from ._utils import (
     compute_ci_coverage_multivar,
     compute_ci_coverage_multivar_detailed,
@@ -27,7 +28,15 @@ def _get_psd_dataset(idata, idata_vi):
     for source in (idata, idata_vi):
         if source is None:
             continue
-        for name in ("posterior_psd", "vi_posterior_psd"):
+        attrs = getattr(source, "attrs", {}) or {}
+        is_multivar = (
+            str(attrs.get("data_type", "")).lower().startswith("multi")
+        )
+        if is_multivar:
+            if bool(attrs.get("only_vi")) or hasattr(source, "vi_posterior"):
+                return get_multivar_psd_dataset(source, source="vi")
+            return get_multivar_psd_dataset(source, source="posterior")
+        for name in ("vi_posterior_psd", "posterior_psd"):
             dataset = (
                 source.get(name)
                 if isinstance(source, dict)
@@ -35,48 +44,6 @@ def _get_psd_dataset(idata, idata_vi):
             )
             if dataset is not None:
                 return dataset
-        attrs = getattr(source, "attrs", {}) or {}
-        if str(attrs.get("data_type", "")).lower().startswith("multi"):
-            try:
-                quantiles = get_multivar_posterior_psd_quantiles(source)
-            except KeyError:
-                continue
-            coords = {
-                "percentile": np.asarray(quantiles["percentile"]),
-                "freq": np.asarray(quantiles["freq"]),
-            }
-            dataset = xr.Dataset(
-                {
-                    "psd_matrix_real": xr.DataArray(
-                        np.asarray(quantiles["real"]),
-                        dims=(
-                            "percentile",
-                            "freq",
-                            "channels",
-                            "channels2",
-                        ),
-                        coords=coords,
-                    ),
-                    "psd_matrix_imag": xr.DataArray(
-                        np.asarray(quantiles["imag"]),
-                        dims=(
-                            "percentile",
-                            "freq",
-                            "channels",
-                            "channels2",
-                        ),
-                        coords=coords,
-                    ),
-                },
-                coords=coords,
-            )
-            if quantiles["coherence"] is not None:
-                dataset["coherence"] = xr.DataArray(
-                    np.asarray(quantiles["coherence"]),
-                    dims=("percentile", "freq", "channels", "channels2"),
-                    coords=coords,
-                )
-            return dataset
     return None
 
 

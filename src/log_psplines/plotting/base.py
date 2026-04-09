@@ -141,6 +141,8 @@ def extract_plotting_data(
     """
     from ..arviz_utils import (
         get_multivar_posterior_psd_quantiles,
+        get_multivar_prior_psd_quantiles,
+        get_multivar_vi_psd_quantiles,
         get_periodogram,
         get_spline_model,
         get_weights,
@@ -212,36 +214,54 @@ def extract_plotting_data(
             added = True
         return added
 
-    if hasattr(idata, "posterior_psd"):
+    attrs = getattr(idata, "attrs", {}) or {}
+    is_multivar = str(attrs.get("data_type", "")).lower().startswith("multi")
+    if is_multivar:
+        quantiles = get_multivar_posterior_psd_quantiles(idata)
+        data["frequencies"] = np.asarray(quantiles["freq"], dtype=float)
+        data["posterior_psd_matrix_quantiles"] = {
+            "percentile": np.asarray(quantiles["percentile"], dtype=float),
+            "real": np.asarray(quantiles["real"], dtype=np.float64),
+            "imag": np.asarray(quantiles["imag"], dtype=np.float64),
+            "coherence": (
+                np.asarray(quantiles["coherence"], dtype=np.float64)
+                if quantiles["coherence"] is not None
+                else None
+            ),
+        }
+        if bool(attrs.get("only_vi")) or hasattr(idata, "vi_posterior"):
+            vi_quantiles = get_multivar_vi_psd_quantiles(idata)
+            data["vi_psd_matrix_quantiles"] = {
+                "percentile": np.asarray(
+                    vi_quantiles["percentile"], dtype=float
+                ),
+                "real": np.asarray(vi_quantiles["real"], dtype=np.float64),
+                "imag": np.asarray(vi_quantiles["imag"], dtype=np.float64),
+                "coherence": (
+                    np.asarray(vi_quantiles["coherence"], dtype=np.float64)
+                    if vi_quantiles["coherence"] is not None
+                    else None
+                ),
+            }
+        if (
+            attrs.get("tau") is not None
+            and attrs.get("design_psd") is not None
+        ):
+            prior_quantiles = get_multivar_prior_psd_quantiles(idata)
+            data["prior_psd_matrix_quantiles"] = {
+                "percentile": np.asarray(
+                    prior_quantiles["percentile"], dtype=float
+                ),
+                "real": np.asarray(prior_quantiles["real"], dtype=np.float64),
+                "imag": np.asarray(prior_quantiles["imag"], dtype=np.float64),
+                "coherence": None,
+            }
+    elif hasattr(idata, "posterior_psd"):
+        if hasattr(idata, "vi_posterior_psd"):
+            _maybe_set_psd_quantiles(idata.vi_posterior_psd, "vi")
+        if hasattr(idata, "prior_psd"):
+            _maybe_set_psd_quantiles(idata.prior_psd, "prior")
         _maybe_set_psd_quantiles(idata.posterior_psd, "posterior")
-    if hasattr(idata, "vi_posterior_psd"):
-        _maybe_set_psd_quantiles(idata.vi_posterior_psd, "vi")
-    if hasattr(idata, "prior_psd"):
-        _maybe_set_psd_quantiles(idata.prior_psd, "prior")
-
-    if "posterior_psd_matrix_quantiles" not in data:
-        attrs = getattr(idata, "attrs", {}) or {}
-        if str(attrs.get("data_type", "")).lower().startswith("multi"):
-            try:
-                quantiles = get_multivar_posterior_psd_quantiles(idata)
-            except KeyError:
-                quantiles = None
-            if quantiles is not None:
-                data["frequencies"] = np.asarray(
-                    quantiles["freq"], dtype=float
-                )
-                data["posterior_psd_matrix_quantiles"] = {
-                    "percentile": np.asarray(
-                        quantiles["percentile"], dtype=float
-                    ),
-                    "real": np.asarray(quantiles["real"], dtype=np.float64),
-                    "imag": np.asarray(quantiles["imag"], dtype=np.float64),
-                    "coherence": (
-                        np.asarray(quantiles["coherence"], dtype=np.float64)
-                        if quantiles["coherence"] is not None
-                        else None
-                    ),
-                }
 
     idata_attrs = getattr(idata, "attrs", {}) or {}
     only_vi_mode = bool(idata_attrs.get("only_vi"))

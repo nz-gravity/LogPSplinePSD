@@ -3,13 +3,16 @@ from __future__ import annotations
 """Extract data and derived summaries from ArviZ ``InferenceData`` objects."""
 
 from types import SimpleNamespace
+from typing import Literal
 
 import arviz as az
 import numpy as np
+import xarray as xr
 
 from ..datatypes import Periodogram
 from ..psplines import LogPSplines, MultivariateLogPSplines
 from .to_arviz import (
+    _compute_prior_predictive_multivar,
     _flatten_posterior_draws,
     _reconstruct_log_delta_sq,
     _reconstruct_theta_params,
@@ -27,12 +30,7 @@ def _nearest_percentile_slice(
 
 def get_posterior_psd(idata: az.InferenceData):
     """Return (freqs, median_psd, lower, upper) from stored percentiles."""
-
-    try:
-        posterior_psd = getattr(idata, "posterior_psd")
-        psd = posterior_psd["psd"]
-    except (AttributeError, KeyError, TypeError):
-        raise KeyError("InferenceData missing posterior_psd 'psd' variable.")
+    psd = idata.posterior_psd["psd"]
 
     freqs = np.asarray(psd.coords["freq"].values)
     percentiles = np.asarray(psd.coords["percentile"].values)
@@ -49,7 +47,6 @@ def get_posterior_psd(idata: az.InferenceData):
 
 def get_multivar_ci_summary(
     idata: az.InferenceData,
-    posterior_group: str = "posterior_psd",
     truth_group: str = "truth_psd",
 ) -> dict[str, np.ndarray]:
     """Extract multivariate PSD quantiles and truth arrays for plotting.
@@ -60,50 +57,20 @@ def get_multivar_ci_summary(
     - ``psd_imag_q05/q50/q95``: ``(F, C, C)``
     - ``true_psd_real/true_psd_imag``: ``(F, C, C)``
     """
-    try:
-        truth = getattr(idata, truth_group)
-        true_real = np.asarray(truth["psd_matrix_real"].values)
-        true_imag = np.asarray(truth["psd_matrix_imag"].values)
-    except (AttributeError, KeyError, TypeError) as exc:
-        raise KeyError(
-            f"InferenceData missing '{truth_group}' group."
-        ) from exc
+    truth = getattr(idata, truth_group)
+    true_real = np.asarray(truth["psd_matrix_real"].values)
+    true_imag = np.asarray(truth["psd_matrix_imag"].values)
 
-    posterior = getattr(idata, posterior_group, None)
-    if posterior is not None and "psd_matrix_real" in posterior:
-        try:
-            psd_real = np.asarray(posterior["psd_matrix_real"].values)
-            psd_imag = np.asarray(posterior["psd_matrix_imag"].values)
-            coherence = (
-                np.asarray(posterior["coherence"].values)
-                if "coherence" in posterior
-                else None
-            )
-            percentiles = np.asarray(
-                posterior["psd_matrix_real"].coords["percentile"].values,
-                dtype=float,
-            )
-            freq = np.asarray(
-                posterior["psd_matrix_real"].coords["freq"].values,
-                dtype=float,
-            )
-        except (KeyError, TypeError) as exc:
-            raise KeyError(
-                "InferenceData missing multivariate PSD variables required for plotting."
-            ) from exc
-    elif posterior_group == "posterior_psd":
-        quantiles = get_multivar_posterior_psd_quantiles(idata)
-        psd_real = np.asarray(quantiles["real"])
-        psd_imag = np.asarray(quantiles["imag"])
-        coherence = (
-            np.asarray(quantiles["coherence"])
-            if quantiles["coherence"] is not None
-            else None
-        )
-        percentiles = np.asarray(quantiles["percentile"], dtype=float)
-        freq = np.asarray(quantiles["freq"], dtype=float)
-    else:
-        raise KeyError(f"InferenceData missing '{posterior_group}' group.")
+    quantiles = get_multivar_posterior_psd_quantiles(idata)
+    psd_real = np.asarray(quantiles["real"])
+    psd_imag = np.asarray(quantiles["imag"])
+    coherence = (
+        np.asarray(quantiles["coherence"])
+        if quantiles["coherence"] is not None
+        else None
+    )
+    percentiles = np.asarray(quantiles["percentile"], dtype=float)
+    freq = np.asarray(quantiles["freq"], dtype=float)
 
     result = {
         "freq": freq,
@@ -131,15 +98,8 @@ def get_multivar_ci_summary(
 
 def get_spline_model(idata: az.InferenceData) -> LogPSplines:
     """Extract spline model from inference data, handling different data structures."""
-    try:
-        dataset = idata["spline_model"]
-        return LogPSplines.from_storage_dataset(dataset)
-    except KeyError:
-        # For VI or other data structures where spline_model is not available
-        # Return None or a default - let the calling function handle this
-        raise KeyError(
-            "No variable named 'knots'. Spline model data not available in idata."
-        )
+    dataset = idata["spline_model"]
+    return LogPSplines.from_storage_dataset(dataset)
 
 
 def get_weights(
@@ -161,48 +121,26 @@ def get_weights(
     jnp.ndarray
         Weight samples, shape (n_samples_thinned, n_weights)
     """
-    try:
-        # Get weight samples and flatten chains
-        weight_samples = idata[
-            "posterior"
-        ].weights.values  # (chains, draws, n_weights)
-        weight_samples = weight_samples.reshape(
-            -1, weight_samples.shape[-1]
-        )  # (chains*draws, n_weights)
-
-        # Thin samples
-        return weight_samples[::thin]
-    except (KeyError, AttributeError):
-        # For VI or other data structures where weights are not available
-        raise KeyError("No weights data available in posterior")
+    weight_samples = idata["posterior"].weights.values
+    weight_samples = weight_samples.reshape(-1, weight_samples.shape[-1])
+    return weight_samples[::thin]
 
 
 def get_periodogram(idata: az.InferenceData) -> Periodogram:
     """Extract periodogram from inference data, handling different data structures."""
-    try:
-        return Periodogram(
-            power=np.array(idata["observed_data"]["periodogram"].values),
-            freqs=np.array(
-                idata["observed_data"]["periodogram"].coords["freq"].values
-            ),
-        )
-    except KeyError:
-        # For VI or other data structures where periodogram is not available
-        raise KeyError(
-            "No variable named 'periodogram'. Observed data should include "
-            "['freq', 'channels', 'periodogram']."
-        )
+    return Periodogram(
+        power=np.array(idata["observed_data"]["periodogram"].values),
+        freqs=np.array(
+            idata["observed_data"]["periodogram"].coords["freq"].values
+        ),
+    )
 
 
 def get_multivar_spline_model(
     idata: az.InferenceData,
 ) -> MultivariateLogPSplines:
     """Rehydrate a multivariate spline model from ``idata['spline_model']``."""
-    try:
-        dataset = idata["spline_model"]
-    except KeyError as exc:
-        raise KeyError("InferenceData is missing 'spline_model'.") from exc
-
+    dataset = idata["spline_model"]
     if hasattr(dataset, "ds"):
         dataset = dataset.ds
 
@@ -264,19 +202,12 @@ def get_multivar_cholesky_params(
     - ``theta_re``: ``(S, F, n_theta)``
     - ``theta_im``: ``(S, F, n_theta)``
     """
-    posterior = getattr(idata, "posterior", None)
-    if posterior is None:
-        raise KeyError("InferenceData is missing posterior samples.")
-
+    posterior = idata.posterior
     weight_samples = {
         str(name): np.asarray(var.values)
         for name, var in posterior.data_vars.items()
         if str(name).startswith("weights_")
     }
-    if not weight_samples:
-        raise KeyError(
-            "InferenceData posterior does not contain weight samples."
-        )
 
     flat_samples = {
         key: _flatten_posterior_draws(value)
@@ -313,102 +244,132 @@ def get_multivar_cholesky_params(
     }
 
 
-def _get_multivar_frequency_grid(
-    idata: az.InferenceData,
-    n_freq: int,
-) -> np.ndarray:
+def _get_multivar_frequency_grid(idata: az.InferenceData) -> np.ndarray:
     """Return the multivariate retained frequency grid from ``idata``."""
-    observed = getattr(idata, "observed_data", None)
-    if observed is not None and "periodogram" in observed:
-        try:
-            return np.asarray(
-                observed["periodogram"].coords["freq"].values, dtype=float
+    return np.asarray(
+        idata["observed_data"]["periodogram"].coords["freq"].values,
+        dtype=float,
+    )
+
+
+def _get_multivar_reconstruction_inputs_from_dataset(
+    posterior: xr.Dataset,
+    spline_model: MultivariateLogPSplines,
+    *,
+    n_keep: int | None,
+) -> tuple[MultivariateLogPSplines, dict[str, np.ndarray]]:
+    """Return the spline model and capped Cholesky parameters."""
+    weight_samples = {
+        str(name): np.asarray(var.values)
+        for name, var in posterior.data_vars.items()
+        if str(name).startswith("weights_")
+    }
+
+    flat_samples = {
+        key: _flatten_posterior_draws(value)
+        for key, value in weight_samples.items()
+    }
+    first_key = next(iter(flat_samples))
+    keep_idx = None
+    if n_keep is not None and int(n_keep) > 0:
+        keep_idx = _select_evenly_spaced_indices(
+            int(flat_samples[first_key].shape[0]),
+            int(n_keep),
+        )
+        if keep_idx is not None:
+            flat_samples = {
+                key: value[keep_idx] for key, value in flat_samples.items()
+            }
+
+    fft_stub = SimpleNamespace(N=spline_model.N, p=spline_model.p)
+    params = {
+        "log_delta_sq": np.asarray(
+            _reconstruct_log_delta_sq(flat_samples, spline_model, fft_stub)
+        ),
+        "theta_re": np.asarray(
+            _reconstruct_theta_params(
+                flat_samples, spline_model, fft_stub, "re"
             )
-        except Exception:
-            pass
-
-    attrs = getattr(idata, "attrs", {}) or {}
-    if hasattr(attrs, "get"):
-        try:
-            freq = attrs.get("frequencies")
-            if freq is not None:
-                arr = np.asarray(freq, dtype=float)
-                if arr.ndim == 1 and arr.size == n_freq:
-                    return arr
-        except Exception:
-            pass
-
-    return np.arange(n_freq, dtype=float)
+        ),
+        "theta_im": np.asarray(
+            _reconstruct_theta_params(
+                flat_samples, spline_model, fft_stub, "im"
+            )
+        ),
+    }
+    return spline_model, params
 
 
-def get_multivar_posterior_psd_quantiles(
-    idata: az.InferenceData,
-    n_keep: int = 50,
-    percentiles: tuple[float, ...] = (5.0, 50.0, 95.0),
-    compute_coherence: bool = True,
-    chunk_size: int = 2048,
-    freq_idx: np.ndarray | list[int] | None = None,
+def _quantiles_to_multivar_dataset(
+    quantiles: dict[str, np.ndarray | None],
+) -> xr.Dataset:
+    """Materialize multivariate PSD quantiles into an ``xarray.Dataset``."""
+    coords = {
+        "percentile": np.asarray(quantiles["percentile"], dtype=float),
+        "freq": np.asarray(quantiles["freq"], dtype=float),
+    }
+    n_channels = int(np.asarray(quantiles["real"]).shape[-1])
+    coords["channels"] = np.arange(n_channels)
+    coords["channels2"] = np.arange(n_channels)
+
+    dataset = xr.Dataset(
+        {
+            "psd_matrix_real": xr.DataArray(
+                np.asarray(quantiles["real"], dtype=np.float64),
+                dims=("percentile", "freq", "channels", "channels2"),
+                coords=coords,
+            ),
+            "psd_matrix_imag": xr.DataArray(
+                np.asarray(quantiles["imag"], dtype=np.float64),
+                dims=("percentile", "freq", "channels", "channels2"),
+                coords=coords,
+            ),
+        },
+        coords=coords,
+    )
+    if quantiles["coherence"] is not None:
+        dataset["coherence"] = xr.DataArray(
+            np.asarray(quantiles["coherence"], dtype=np.float64),
+            dims=("percentile", "freq", "channels", "channels2"),
+            coords=coords,
+        )
+    return dataset
+
+
+def _compute_multivar_psd_quantiles(
+    *,
+    spline_model: MultivariateLogPSplines,
+    params: dict[str, np.ndarray],
+    freq: np.ndarray,
+    percentiles: tuple[float, ...],
+    n_keep: int | None,
+    compute_coherence: bool,
+    chunk_size: int,
+    freq_idx: np.ndarray | list[int] | None,
 ) -> dict[str, np.ndarray | None]:
-    """Return multivariate PSD/coherence quantiles from stored or reconstructed draws.
-
-    Returned arrays follow the plotting/diagnostics layout:
-    - ``percentile``: ``(Q,)``
-    - ``freq``: ``(F,)``
-    - ``real`` / ``imag``: ``(Q, F, p, p)``
-    - ``coherence``: ``(Q, F, p, p)`` or ``None``
-    """
-    posterior_psd = getattr(idata, "posterior_psd", None)
+    """Compute multivariate PSD quantiles from reconstructed parameters."""
     percentiles_arr = np.asarray(percentiles, dtype=float)
-
-    if posterior_psd is not None and "psd_matrix_real" in posterior_psd:
-        real_q = np.asarray(posterior_psd["psd_matrix_real"].values)
-        imag_q = np.asarray(posterior_psd["psd_matrix_imag"].values)
-        coherence_q = (
-            np.asarray(posterior_psd["coherence"].values)
-            if "coherence" in posterior_psd
-            else None
-        )
-        freq = np.asarray(
-            posterior_psd["psd_matrix_real"].coords["freq"].values,
-            dtype=float,
-        )
-        stored_percentiles = np.asarray(
-            posterior_psd["psd_matrix_real"].coords["percentile"].values,
-            dtype=float,
-        )
-        if stored_percentiles.shape == percentiles_arr.shape and np.allclose(
-            stored_percentiles, percentiles_arr
-        ):
-            percentiles_arr = stored_percentiles
-        else:
-            percentiles_arr = stored_percentiles
-    else:
-        params = get_multivar_cholesky_params(idata, n_keep=n_keep)
-        spline_model = get_multivar_spline_model(idata)
-        n_samples_max = (
-            int(n_keep)
-            if n_keep is not None and int(n_keep) > 0
-            else int(params["log_delta_sq"].shape[0])
-        )
-        real_q, imag_q, coherence_q = spline_model.compute_psd_quantiles(
-            params["log_delta_sq"],
-            params["theta_re"],
-            params["theta_im"],
-            percentiles=percentiles_arr,
-            n_samples_max=n_samples_max,
-            chunk_size=chunk_size,
-            compute_coherence=bool(compute_coherence),
-        )
-        freq = _get_multivar_frequency_grid(idata, spline_model.N)
-
+    n_samples_max = (
+        int(n_keep)
+        if n_keep is not None and int(n_keep) > 0
+        else int(params["log_delta_sq"].shape[0])
+    )
+    real_q, imag_q, coherence_q = spline_model.compute_psd_quantiles(
+        params["log_delta_sq"],
+        params["theta_re"],
+        params["theta_im"],
+        percentiles=percentiles_arr,
+        n_samples_max=n_samples_max,
+        chunk_size=chunk_size,
+        compute_coherence=bool(compute_coherence),
+    )
     if freq_idx is not None:
         idx = np.asarray(freq_idx, dtype=int)
-        freq = freq[idx]
+        freq = np.asarray(freq)[idx]
         real_q = np.asarray(real_q)[:, idx, ...]
         imag_q = np.asarray(imag_q)[:, idx, ...]
         if coherence_q is not None:
             coherence_q = np.asarray(coherence_q)[:, idx, ...]
-
     return {
         "percentile": np.asarray(percentiles_arr, dtype=float),
         "freq": np.asarray(freq, dtype=float),
@@ -420,6 +381,163 @@ def get_multivar_posterior_psd_quantiles(
             else None
         ),
     }
+
+
+def _get_multivar_sample_dataset(
+    idata: az.InferenceData,
+    sample_source: Literal["posterior", "vi"],
+) -> xr.Dataset:
+    """Return the multivariate sample dataset for the requested source."""
+    if sample_source == "posterior":
+        return idata.posterior
+    return get_multivar_vi_posterior(idata)
+
+
+def _get_multivar_psd_quantiles_from_samples(
+    idata: az.InferenceData,
+    *,
+    sample_source: Literal["posterior", "vi"],
+    n_keep: int,
+    percentiles: tuple[float, ...],
+    compute_coherence: bool,
+    chunk_size: int,
+    freq_idx: np.ndarray | list[int] | None,
+) -> dict[str, np.ndarray | None]:
+    """Reconstruct multivariate PSD quantiles from posterior-like samples."""
+    spline_model = get_multivar_spline_model(idata)
+    _, params = _get_multivar_reconstruction_inputs_from_dataset(
+        _get_multivar_sample_dataset(idata, sample_source),
+        spline_model,
+        n_keep=n_keep,
+    )
+    return _compute_multivar_psd_quantiles(
+        spline_model=spline_model,
+        params=params,
+        freq=_get_multivar_frequency_grid(idata),
+        percentiles=percentiles,
+        n_keep=n_keep,
+        compute_coherence=compute_coherence,
+        chunk_size=chunk_size,
+        freq_idx=freq_idx,
+    )
+
+
+def get_multivar_posterior_psd_quantiles(
+    idata: az.InferenceData,
+    n_keep: int = 50,
+    percentiles: tuple[float, ...] = (5.0, 50.0, 95.0),
+    compute_coherence: bool = True,
+    chunk_size: int = 2048,
+    freq_idx: np.ndarray | list[int] | None = None,
+) -> dict[str, np.ndarray | None]:
+    """Return multivariate PSD/coherence quantiles reconstructed from posterior draws.
+
+    Returned arrays follow the plotting/diagnostics layout:
+    - ``percentile``: ``(Q,)``
+    - ``freq``: ``(F,)``
+    - ``real`` / ``imag``: ``(Q, F, p, p)``
+    - ``coherence``: ``(Q, F, p, p)`` or ``None``
+    """
+    return _get_multivar_psd_quantiles_from_samples(
+        idata,
+        sample_source="posterior",
+        n_keep=n_keep,
+        percentiles=percentiles,
+        compute_coherence=compute_coherence,
+        chunk_size=chunk_size,
+        freq_idx=freq_idx,
+    )
+
+
+def get_multivar_vi_posterior(idata: az.InferenceData) -> xr.Dataset:
+    """Return the multivariate VI posterior sample dataset."""
+    attrs = getattr(idata, "attrs", {}) or {}
+    if bool(attrs.get("only_vi")):
+        return idata.posterior
+    vi_posterior = idata["vi_posterior"]
+    if hasattr(vi_posterior, "ds"):
+        return vi_posterior.ds
+    return vi_posterior
+
+
+def get_multivar_vi_psd_quantiles(
+    idata: az.InferenceData,
+    n_keep: int = 50,
+    percentiles: tuple[float, ...] = (5.0, 50.0, 95.0),
+    compute_coherence: bool = True,
+    chunk_size: int = 2048,
+    freq_idx: np.ndarray | list[int] | None = None,
+) -> dict[str, np.ndarray | None]:
+    """Return multivariate VI PSD/coherence quantiles reconstructed lazily."""
+    return _get_multivar_psd_quantiles_from_samples(
+        idata,
+        sample_source="vi",
+        n_keep=n_keep,
+        percentiles=percentiles,
+        compute_coherence=compute_coherence,
+        chunk_size=chunk_size,
+        freq_idx=freq_idx,
+    )
+
+
+def get_multivar_prior_psd_quantiles(
+    idata: az.InferenceData,
+    n_prior_draws: int = 500,
+    seed: int = 42,
+) -> dict[str, np.ndarray | None]:
+    """Return multivariate prior PSD quantiles reconstructed lazily."""
+    attrs = getattr(idata, "attrs", {}) or {}
+    freq = _get_multivar_frequency_grid(idata)
+    spline_model = get_multivar_spline_model(idata)
+    fft_stub = SimpleNamespace(
+        N=spline_model.N,
+        p=spline_model.p,
+        freq=freq,
+        scaling_factor=float(attrs.get("scaling_factor", 1.0) or 1.0),
+    )
+    config_stub = SimpleNamespace(
+        tau=attrs["tau"],
+        design_psd=np.asarray(attrs["design_psd"]),
+        channel_stds=attrs.get("channel_stds"),
+        alpha_phi=float(attrs.get("alpha_phi", 1.0)),
+        beta_phi=float(attrs.get("beta_phi", 1e-4)),
+        alpha_delta=float(attrs.get("alpha_delta", 1.0)),
+        beta_delta=float(attrs.get("beta_delta", 1.0)),
+    )
+    real_q, imag_q = _compute_prior_predictive_multivar(
+        spline_model,
+        fft_stub,
+        config_stub,
+        n_prior_draws=n_prior_draws,
+        seed=seed,
+    )
+    channel_stds = attrs.get("channel_stds")
+    if channel_stds is not None:
+        channel_stds = np.asarray(channel_stds, dtype=np.float64)
+        factor_matrix = np.outer(channel_stds, channel_stds).astype(np.float64)
+        factor_4d = factor_matrix[None, None, :, :]
+        real_q = np.asarray(real_q) * factor_4d
+        imag_q = np.asarray(imag_q) * factor_4d
+    return {
+        "percentile": np.asarray([5.0, 50.0, 95.0], dtype=float),
+        "freq": np.asarray(freq, dtype=float),
+        "real": np.asarray(real_q, dtype=np.float64),
+        "imag": np.asarray(imag_q, dtype=np.float64),
+        "coherence": None,
+    }
+
+
+def get_multivar_psd_dataset(
+    idata: az.InferenceData,
+    source: Literal["posterior", "vi", "prior"] = "posterior",
+) -> xr.Dataset:
+    """Return lazily reconstructed multivariate PSD quantiles as a dataset."""
+    quantiles_fn = {
+        "posterior": get_multivar_posterior_psd_quantiles,
+        "vi": get_multivar_vi_psd_quantiles,
+        "prior": get_multivar_prior_psd_quantiles,
+    }[source]
+    return _quantiles_to_multivar_dataset(quantiles_fn(idata))
 
 
 def get_posterior_ci(idata: az.InferenceData, n_max=500):

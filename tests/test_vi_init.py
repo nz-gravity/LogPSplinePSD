@@ -184,10 +184,7 @@ def test_multivariate_blocked_vi_initialisation_smoke(outdir):
         config=run_cfg,
     )
 
-    print(idata)
-
     assert "posterior" in _idata_groups(idata)
-    assert "vi_posterior_psd" in _idata_groups(idata)
     assert any(
         name.startswith("weights_delta_") for name in idata.posterior.data_vars
     )

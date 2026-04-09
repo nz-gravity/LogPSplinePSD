@@ -595,46 +595,7 @@ def _create_multivar_inference_data(
     # ArviZ variants may ignore attrs in from_dict; enforce them explicitly.
     idata.attrs.update(attributes)
 
-    # Prior predictive PSD quantiles (only when shrinkage tau is set)
     import xarray as _xr
-
-    tau = getattr(config, "tau", None)
-    design_psd_cfg = getattr(config, "design_psd", None)
-    if tau is not None and design_psd_cfg is not None:
-        prior_real_q, prior_imag_q = _compute_prior_predictive_multivar(
-            spline_model,
-            fft_data,
-            config,
-        )
-        if factor_matrix is not None:
-            factor_4d = factor_matrix[None, None, :, :]
-            prior_real_q = prior_real_q * factor_4d
-            prior_imag_q = prior_imag_q * factor_4d
-        prior_psd_vars = {
-            "psd_matrix_real": DataArray(
-                prior_real_q,
-                dims=["percentile", "freq", "channels", "channels2"],
-                coords={
-                    "percentile": coords["percentile"],
-                    "freq": coords["freq"],
-                    "channels": coords["channels"],
-                    "channels2": coords["channels"],
-                },
-            ),
-            "psd_matrix_imag": DataArray(
-                prior_imag_q,
-                dims=["percentile", "freq", "channels", "channels2"],
-                coords={
-                    "percentile": coords["percentile"],
-                    "freq": coords["freq"],
-                    "channels": coords["channels"],
-                    "channels2": coords["channels"],
-                },
-            ),
-        }
-        idata["prior_psd"] = _xr.DataTree(
-            dataset=Dataset(prior_psd_vars, coords=coords)
-        )
 
     idata["spline_model"] = _xr.DataTree(
         dataset=_pack_spline_model_multivar(spline_model)

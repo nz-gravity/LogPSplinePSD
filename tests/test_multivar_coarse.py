@@ -4,6 +4,7 @@ import warnings
 import numpy as np
 import pytest
 
+from log_psplines.arviz_utils import get_multivar_posterior_psd_quantiles
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.mcmc import (
     DiagnosticsConfig,
@@ -87,21 +88,29 @@ def test_multivar_coarse_vs_full(outdir, test_mode):
     )
 
     # Sanity checks on shapes
-    psd_full = idata_full.posterior_psd["psd_matrix_real"]
-    psd_coarse = idata_coarse.posterior_psd["psd_matrix_real"]
-    nfreq_full = psd_full.sizes["freq"]
-    nfreq_coarse = psd_coarse.sizes["freq"]
+    q_full = get_multivar_posterior_psd_quantiles(idata_full)
+    q_coarse = get_multivar_posterior_psd_quantiles(idata_coarse)
+    psd_full = np.asarray(q_full["real"])
+    psd_coarse = np.asarray(q_coarse["real"])
+    nfreq_full = np.asarray(q_full["freq"]).shape[0]
+    nfreq_coarse = np.asarray(q_coarse["freq"]).shape[0]
     assert nfreq_coarse <= nfreq_full
     # Coarse graining should reduce frequency count unless very small n
     if nfreq_full > 32:
         assert nfreq_coarse < nfreq_full
 
     # Compare median PSD along diagonal channels on the coarse grid
-    q50_full = psd_full.sel(percentile=50).values  # (freq, p, p)
-    q50_coarse = psd_coarse.sel(percentile=50).values
+    idx50_full = int(
+        np.argmin(np.abs(np.asarray(q_full["percentile"]) - 50.0))
+    )
+    idx50_coarse = int(
+        np.argmin(np.abs(np.asarray(q_coarse["percentile"]) - 50.0))
+    )
+    q50_full = psd_full[idx50_full]
+    q50_coarse = psd_coarse[idx50_coarse]
 
-    freqs_full = np.asarray(idata_full.posterior_psd["freq"].values)
-    freqs_coarse = np.asarray(idata_coarse.posterior_psd["freq"].values)
+    freqs_full = np.asarray(q_full["freq"], dtype=float)
+    freqs_coarse = np.asarray(q_coarse["freq"], dtype=float)
 
     from log_psplines.mcmc import _interp_psd_array
 

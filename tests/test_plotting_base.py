@@ -86,6 +86,42 @@ def test_extract_plotting_data_uses_vi_fallback(monkeypatch):
     )
 
 
+def test_extract_plotting_data_reconstructs_multivar_quantiles(monkeypatch):
+    freq = np.array([0.1, 0.2], dtype=float)
+    real = np.ones((3, freq.size, 2, 2), dtype=float)
+    imag = np.zeros_like(real)
+    coherence = np.full_like(real, 0.25)
+
+    def _lazy_quantiles(idata, **kwargs):
+        return {
+            "percentile": np.array([5.0, 50.0, 95.0], dtype=float),
+            "freq": freq,
+            "real": real,
+            "imag": imag,
+            "coherence": coherence,
+        }
+
+    monkeypatch.setattr(
+        arviz_utils,
+        "get_multivar_posterior_psd_quantiles",
+        _lazy_quantiles,
+    )
+
+    idata = DummyIdata(posterior_psd=None, vi_posterior_psd=None)
+    idata.attrs["data_type"] = "multivariate"
+
+    results = plotting_base.extract_plotting_data(idata)
+
+    assert "posterior_psd_matrix_quantiles" in results
+    np.testing.assert_allclose(results["frequencies"], freq)
+    np.testing.assert_allclose(
+        results["posterior_psd_matrix_quantiles"]["real"], real
+    )
+    np.testing.assert_allclose(
+        results["posterior_psd_matrix_quantiles"]["coherence"], coherence
+    )
+
+
 def test_plot_psd_matrix_overlays_vi_coherence(tmp_path):
     freq = np.array([0.1, 0.2, 0.4], dtype=float)
     real = np.ones((3, freq.size, 2, 2), dtype=float)

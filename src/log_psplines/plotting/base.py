@@ -140,6 +140,7 @@ def extract_plotting_data(
         Dictionary containing extracted data
     """
     from ..arviz_utils import (
+        get_multivar_posterior_psd_quantiles,
         get_periodogram,
         get_spline_model,
         get_weights,
@@ -217,6 +218,30 @@ def extract_plotting_data(
         _maybe_set_psd_quantiles(idata.vi_posterior_psd, "vi")
     if hasattr(idata, "prior_psd"):
         _maybe_set_psd_quantiles(idata.prior_psd, "prior")
+
+    if "posterior_psd_matrix_quantiles" not in data:
+        attrs = getattr(idata, "attrs", {}) or {}
+        if str(attrs.get("data_type", "")).lower().startswith("multi"):
+            try:
+                quantiles = get_multivar_posterior_psd_quantiles(idata)
+            except KeyError:
+                quantiles = None
+            if quantiles is not None:
+                data["frequencies"] = np.asarray(
+                    quantiles["freq"], dtype=float
+                )
+                data["posterior_psd_matrix_quantiles"] = {
+                    "percentile": np.asarray(
+                        quantiles["percentile"], dtype=float
+                    ),
+                    "real": np.asarray(quantiles["real"], dtype=np.float64),
+                    "imag": np.asarray(quantiles["imag"], dtype=np.float64),
+                    "coherence": (
+                        np.asarray(quantiles["coherence"], dtype=np.float64)
+                        if quantiles["coherence"] is not None
+                        else None
+                    ),
+                }
 
     idata_attrs = getattr(idata, "attrs", {}) or {}
     only_vi_mode = bool(idata_attrs.get("only_vi"))

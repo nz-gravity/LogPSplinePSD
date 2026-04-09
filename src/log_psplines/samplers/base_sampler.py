@@ -49,7 +49,7 @@ class SamplerConfig:
     )
     true_psd: Optional[jnp.ndarray] = None  # True PSD for diagnostics
     vi_psd_max_draws: int = (
-        64  # Cap PSD reconstructions from VI/posterior draws
+        50  # Cap PSD reconstructions from VI/posterior draws
     )
     only_vi: bool = False  # Skip MCMC and rely on VI draws only
     # Fast-diagnostics controls

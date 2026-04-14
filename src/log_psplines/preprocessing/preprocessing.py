@@ -225,6 +225,46 @@ def _derive_vi_coarse_grain_config(
     }
 
 
+def _build_coarse_vi_context_from_preprocessed(
+    preproc_input: PreprocessedMCMCInput,
+    *,
+    vi_cg_config: CoarseGrainConfig,
+    metadata: dict[str, object] | None,
+) -> CoarseVIContext:
+    """Build a coarse-VI context from the final analysis grid.
+
+    This applies additional coarse graining to the already-preprocessed
+    analysis data. Doing so keeps the coarse-VI grid consistent with any
+    post-coarse-grain frequency exclusions already present in
+    ``preproc_input.processed_data``.
+    """
+    coarse_processed_data, coarse_scaled_true_psd = (
+        _coarse_grain_processed_data(
+            preproc_input.processed_data,
+            _normalize_coarse_grain_config(vi_cg_config),
+            preproc_input.scaled_true_psd,
+        )
+    )
+    assert (
+        coarse_processed_data is not None
+    ), "Coarse graining should preserve non-None processed data."
+    coarse_scaled_true_psd = _align_true_psd_to_freq(
+        coarse_scaled_true_psd,
+        coarse_processed_data,
+    )
+    return CoarseVIContext(
+        processed_data=coarse_processed_data,
+        scaled_true_psd=coarse_scaled_true_psd,
+        sampler_type=preproc_input.sampler_type,
+        metadata={
+            **(metadata or {}),
+            "coarse_vi_attempted": 0,
+            "coarse_vi_success": 0,
+            "coarse_vi_nfreq": _get_frequency_count(coarse_processed_data),
+        },
+    )
+
+
 def _preprocess_with_run_config(
     data,
     run_config: RunMCMCConfig,
@@ -311,27 +351,10 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
             run_config,
         )
         if vi_cg_config is not None and vi_cg_config.enabled:
-            vi_run_config = replace(
-                run_config,
-                coarse_grain_config=vi_cg_config,
-            )
-            coarse_input = _preprocess_with_run_config(
-                data,
-                vi_run_config,
-                include_overlays=False,
-            )
-            coarse_vi_context = CoarseVIContext(
-                processed_data=coarse_input.processed_data,
-                scaled_true_psd=coarse_input.scaled_true_psd,
-                sampler_type=coarse_input.sampler_type,
-                metadata={
-                    **(metadata or {}),
-                    "coarse_vi_attempted": 0,
-                    "coarse_vi_success": 0,
-                    "coarse_vi_nfreq": _get_frequency_count(
-                        coarse_input.processed_data
-                    ),
-                },
+            coarse_vi_context = _build_coarse_vi_context_from_preprocessed(
+                preproc_input,
+                vi_cg_config=vi_cg_config,
+                metadata=metadata,
             )
             if run_config.diagnostics.verbose:
                 coarse_nfreq = coarse_vi_context.metadata["coarse_vi_nfreq"]

@@ -698,6 +698,43 @@ def test_multivar_blocked_nuts_records_step_size():
 
 
 @pytest.mark.memory
+def test_multivar_blocked_nuts_records_sampling_eta_attrs():
+    t, y = _synthetic_multivar_series()
+    ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
+
+    model_cfg = ModelConfig(
+        n_knots=4,
+        degree=3,
+        diffMatrixOrder=2,
+    )
+    diagnostics_cfg = DiagnosticsConfig(verbose=False)
+    vi_cfg = VIConfig(init_from_vi=False)
+    run_cfg = RunMCMCConfig(
+        n_samples=1,
+        n_warmup=2,
+        num_chains=1,
+        Nb=4,
+        model=model_cfg,
+        diagnostics=diagnostics_cfg,
+        vi=vi_cfg,
+        extra_kwargs={"eta": "auto", "eta_c": 2.0},
+    )
+    idata = run_mcmc(
+        data=ts_run,
+        config=run_cfg,
+    )
+
+    eta_keys = sorted(
+        key
+        for key in idata.attrs
+        if str(key).startswith("sampling_eta_channel_")
+    )
+    assert eta_keys, "Blocked NUTS should record per-channel sampling eta."
+    for key in eta_keys:
+        assert float(idata.attrs[key]) == pytest.approx(0.5)
+
+
+@pytest.mark.memory
 def test_run_mcmc_multivar_disables_lnz_by_default():
     t, y = _synthetic_multivar_series()
     ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())

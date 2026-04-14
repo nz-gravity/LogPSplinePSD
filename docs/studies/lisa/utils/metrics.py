@@ -18,6 +18,23 @@ from log_psplines.diagnostics import psd_compare
 from log_psplines.logger import logger
 
 
+def _get_psd_group(idata):
+    """Return the PSD quantile dataset for either univariate or multivariate idata.
+
+    For univariate runs ``posterior_psd`` is pre-computed and attached directly.
+    For multivariate runs quantiles are computed lazily from posterior samples via
+    ``get_multivar_psd_dataset``; ``idata.posterior_psd`` does not exist in that
+    case, so we must go through ``psd_compare._get_psd_dataset``.
+    """
+    try:
+        psd_group = psd_compare._get_psd_dataset(idata, None)
+        if psd_group is not None:
+            return psd_group
+    except Exception:
+        pass
+    return getattr(idata, "posterior_psd", None)
+
+
 def _extract_percentile_slice(
     values: np.ndarray, percentiles: np.ndarray, target: float
 ) -> np.ndarray:
@@ -29,7 +46,7 @@ def _extract_percentile_slice(
 def _compute_ci_width_metrics(idata) -> dict[str, float]:
     """Compute CI-width summaries from posterior PSD quantiles."""
     metrics: dict[str, float] = {}
-    psd_group = getattr(idata, "posterior_psd", None)
+    psd_group = _get_psd_group(idata)
     if psd_group is None or "psd_matrix_real" not in psd_group:
         return metrics
 
@@ -132,7 +149,7 @@ def _extract_run_metrics(
     }
 
     # PSD accuracy metrics
-    psd_group = getattr(idata, "posterior_psd", None)
+    psd_group = _get_psd_group(idata)
     if psd_group is not None:
         freq_plot = np.asarray(psd_group["freq"].values)
         true_psd_phys = interp_matrix(
@@ -207,7 +224,7 @@ def _extract_run_metrics(
 
 def _save_compact_ci_curves(outdir: str, idata, freq_true, S_true) -> None:
     """Save compact CI-vs-frequency arrays for later visualization."""
-    psd_group = getattr(idata, "posterior_psd", None)
+    psd_group = _get_psd_group(idata)
     if psd_group is None:
         logger.warning("No posterior_psd group; skipping CI curves.")
         return

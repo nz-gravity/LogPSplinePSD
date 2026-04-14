@@ -14,6 +14,9 @@ from log_psplines.mcmc import (
 )
 from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 from log_psplines.preprocessing.preprocessing import _preprocess_data
+from log_psplines.samplers.vi_init.adapters import (
+    _rescale_multivar_psd_for_diagnostics,
+)
 from log_psplines.samplers.vi_init.mixin import VIInitialisationArtifacts
 
 
@@ -338,3 +341,67 @@ def test_multivariate_auto_coarse_vi_uses_max_component_basis_size():
     metadata = preproc.coarse_vi_context.metadata
     assert metadata["coarse_vi_mode"] == "auto"
     assert metadata["coarse_vi_basis_target_floor"] == 110
+
+
+def test_preprocess_explicit_coarse_vi_survives_post_coarse_exclusion():
+    n = 128
+    ts = MultivariateTimeseries(
+        t=np.arange(n, dtype=np.float64),
+        y=_simulate_var2_3d(n, seed=31),
+    )
+    base_cfg = RunMCMCConfig(
+        Nb=2,
+        model=ModelConfig(n_knots=5),
+        diagnostics=DiagnosticsConfig(verbose=False, compute_lnz=False),
+    )
+    base_preproc = _preprocess_data(ts, config=base_cfg)
+    freq = np.asarray(base_preproc.processed_data.freq, dtype=np.float64)
+    band = (
+        float(freq[0] - 1e-12),
+        float(freq[1] + 1e-12),
+    )
+
+    cfg = RunMCMCConfig(
+        Nb=2,
+        model=ModelConfig(
+            n_knots=5,
+            exclude_freq_bands=(band,),
+        ),
+        diagnostics=DiagnosticsConfig(verbose=False, compute_lnz=False),
+        vi=VIConfig(
+            coarse_grain_config_vi=CoarseGrainConfig(
+                enabled=True,
+                Nc=5,
+                Nh=None,
+            ),
+        ),
+    )
+
+    preproc = _preprocess_data(ts, config=cfg)
+
+    assert preproc.coarse_vi_context is not None
+    metadata = preproc.coarse_vi_context.metadata
+    assert metadata["coarse_vi_mode"] == "config"
+    full_nfreq = int(metadata["coarse_vi_full_nfreq"])
+    coarse_nfreq = int(metadata["coarse_vi_nfreq"])
+    assert full_nfreq == len(preproc.processed_data.freq)
+    assert full_nfreq % coarse_nfreq == 0
+
+
+def test_rescale_multivar_psd_for_diagnostics_uses_channel_stds():
+    class DummyFFT:
+        channel_stds = np.array([2.0, 3.0], dtype=np.float64)
+
+    class DummySampler:
+        fft_data = DummyFFT()
+
+    psd = np.ones((4, 2, 2), dtype=np.complex128)
+    rescaled = _rescale_multivar_psd_for_diagnostics(DummySampler(), psd)
+    expected = (
+        np.ones((4, 2, 2), dtype=np.complex128)
+        * np.array(
+            [[4.0, 6.0], [6.0, 9.0]],
+            dtype=np.complex128,
+        )[None, :, :]
+    )
+    np.testing.assert_allclose(rescaled, expected)

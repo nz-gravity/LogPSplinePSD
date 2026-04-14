@@ -120,6 +120,7 @@ def plot_vi_initial_psd_univariate(
     psd_quantiles: Optional[Dict[str, np.ndarray]] = None,
     coarse_vi_freq: Optional[np.ndarray] = None,
     coarse_vi_psd: Optional[np.ndarray] = None,
+    coarse_vi_label: Optional[str] = None,
 ) -> None:
     """Plot the PSD implied by the VI mean weights for the univariate model."""
     # Validate inputs
@@ -145,7 +146,11 @@ def plot_vi_initial_psd_univariate(
         show_parametric=bool(
             spline_model
         ),  # Only show parametric if spline_model exists
-        model_label="VI Mean",
+        model_label=(
+            "VI Posterior Median (Fine Grid)"
+            if psd_quantiles
+            else "VI Mean (Fine Grid)"
+        ),
         model_color=COLORS["model"],
         data_color=COLORS["data"],
         model_ci=(
@@ -169,13 +174,13 @@ def plot_vi_initial_psd_univariate(
             ls="--",
             lw=1.5,
             alpha=0.8,
-            label="Coarse VI",
+            label=coarse_vi_label or "Coarse-Grid VI Fit",
         )
         ax.legend(loc="best", frameon=False)
 
     # Customize title and styling for VI context
     ax.set_title(
-        "Variational Inference: Initial PSD Estimate",
+        "VI Warm-Start Diagnostic",
         fontsize=14,
         fontweight="bold",
     )
@@ -209,6 +214,7 @@ def plot_vi_initial_psd_matrix(
     show_csd_magnitude: bool = False,
     coarse_vi_freq: Optional[np.ndarray] = None,
     coarse_vi_psd: Optional[np.ndarray] = None,
+    coarse_vi_label: Optional[str] = None,
     **plot_kwargs,
 ) -> None:
     """Plot diagonal auto-spectra implied by VI means for multivariate models."""
@@ -237,7 +243,7 @@ def plot_vi_initial_psd_matrix(
             coherence=np.zeros((n_coarse, p, p)),
         )
         extra_psd = [coarse_empirical]
-        extra_labels = ["Coarse VI"]
+        extra_labels = [coarse_vi_label or "Coarse-Grid VI Fit"]
         extra_styles = [
             {"color": "tab:orange", "ls": "--", "lw": 1.5, "alpha": 0.8}
         ]
@@ -247,6 +253,7 @@ def plot_vi_initial_psd_matrix(
         outdir=os.path.dirname(outfile),
         filename=os.path.basename(outfile),
         freq=freq,
+        label="VI Posterior Median (Fine Grid)",
         empirical_psd=empirical_psd,
         extra_empirical_psd=extra_psd,
         extra_empirical_labels=extra_labels,
@@ -414,6 +421,7 @@ def save_vi_diagnostics_univariate(
             psd_quantiles=psd_quantiles,
             coarse_vi_freq=diagnostics.get("coarse_vi_freq"),
             coarse_vi_psd=diagnostics.get("coarse_vi_psd"),
+            coarse_vi_label=diagnostics.get("coarse_vi_label"),
         )
 
 
@@ -542,4 +550,5 @@ def save_vi_diagnostics_multivariate(
             show_csd_magnitude=False,
             coarse_vi_freq=diagnostics.get("coarse_vi_freq"),
             coarse_vi_psd=diagnostics.get("coarse_vi_psd"),
+            coarse_vi_label=diagnostics.get("coarse_vi_label"),
         )

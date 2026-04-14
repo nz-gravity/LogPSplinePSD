@@ -167,6 +167,27 @@ def _extract_true_psd(
     return psd
 
 
+def _extract_psd_q50(
+    diagnostics: Optional[Dict[str, Any]],
+) -> Optional[np.ndarray]:
+    """Return the VI PSD posterior median when quantiles are available."""
+    if not diagnostics:
+        return None
+    psd_quantiles = diagnostics.get("psd_quantiles")
+    if not isinstance(psd_quantiles, dict):
+        return None
+
+    real_q50 = psd_quantiles.get("real", {}).get("q50")
+    imag_q50 = psd_quantiles.get("imag", {}).get("q50")
+    if real_q50 is not None and imag_q50 is not None:
+        return np.asarray(real_q50) + 1j * np.asarray(imag_q50)
+
+    q50 = psd_quantiles.get("q50")
+    if q50 is not None:
+        return np.asarray(q50)
+    return None
+
+
 def _coarse_vi_metadata(sampler) -> Dict[str, Any]:
     metadata = dict(getattr(sampler, "_coarse_vi_metadata", {}) or {})
     metadata.setdefault("coarse_vi_attempted", 0)
@@ -199,6 +220,7 @@ def _strip_coarse_vi_plot_arrays(
         "psd_matrix",
         "psd_matrix_complex",
         "coherence_quantiles",
+        "coarse_vi_label",
     ):
         out.pop(key, None)
     return out
@@ -275,6 +297,14 @@ def _extract_multivar_design_psd(diagnostics: Optional[Dict[str, Any]]):
         if real_q50 is not None and imag_q50 is not None:
             return np.asarray(real_q50) + 1j * np.asarray(imag_q50)
     return None
+
+
+def _rescale_multivar_psd_for_diagnostics(
+    sampler,
+    psd: np.ndarray,
+) -> np.ndarray:
+    """Map internal multivariate PSD arrays onto the physical plotting scale."""
+    return np.asarray(_make_psd_rescaler(sampler)(np.asarray(psd)))
 
 
 def _ensure_positive_definite_psd(
@@ -408,9 +438,11 @@ def compute_coarse_vi_artifacts_univar(
     coarse_artifacts = compute_vi_artifacts_univar(coarse_sampler, model=model)
     coarse_diag = coarse_artifacts.diagnostics or {}
 
-    coarse_psd = coarse_diag.get("psd")
+    coarse_psd = _extract_psd_q50(coarse_diag)
+    coarse_label = "Coarse-Grid VI Posterior Median"
     if coarse_psd is None:
-        coarse_psd = (coarse_diag.get("psd_quantiles") or {}).get("q50")
+        coarse_psd = coarse_diag.get("psd")
+        coarse_label = "Coarse-Grid VI Mean"
 
     if coarse_psd is None or not _validate_positive_finite_psd(coarse_psd):
         logger.warning(
@@ -469,6 +501,7 @@ def compute_coarse_vi_artifacts_univar(
             diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
             diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
             diagnostics["coarse_vi_psd"] = np.asarray(coarse_psd)
+            diagnostics["coarse_vi_label"] = coarse_label
             coarse_losses = coarse_diag.get("losses")
             if coarse_losses is not None:
                 diagnostics["coarse_losses"] = np.asarray(coarse_losses)
@@ -496,6 +529,7 @@ def compute_coarse_vi_artifacts_univar(
         diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
         diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
         diagnostics["coarse_vi_psd"] = np.asarray(coarse_psd)
+        diagnostics["coarse_vi_label"] = coarse_label
         coarse_losses = coarse_diag.get("losses")
         if coarse_losses is not None:
             diagnostics["coarse_losses"] = np.asarray(coarse_losses)
@@ -1647,13 +1681,26 @@ def prepare_coarse_block_vi(
             merged_diagnostics["coarse_vi_attempted"] = 1
             merged_diagnostics["coarse_vi_success"] = 1
             merged_diagnostics["psd_matrix_complex"] = fine_design
-            merged_diagnostics["psd_matrix"] = np.real(fine_design)
+            merged_diagnostics["psd_matrix"] = np.real(
+                _rescale_multivar_psd_for_diagnostics(sampler, fine_design)
+            )
             merged_diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
             merged_diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
-            merged_diagnostics["coarse_vi_psd"] = np.real(
-                np.asarray(coarse_design, dtype=np.complex128)
-            )
             coarse_losses = coarse_diag.get("losses")
+            coarse_plot_psd = _extract_psd_q50(coarse_diag)
+            if coarse_plot_psd is not None:
+                merged_diagnostics["coarse_vi_psd"] = np.real(coarse_plot_psd)
+                merged_diagnostics["coarse_vi_label"] = (
+                    "Coarse-Grid VI Posterior Median"
+                )
+            else:
+                merged_diagnostics["coarse_vi_psd"] = np.real(
+                    _rescale_multivar_psd_for_diagnostics(
+                        coarse_sampler,
+                        np.asarray(coarse_design, dtype=np.complex128),
+                    )
+                )
+                merged_diagnostics["coarse_vi_label"] = "Coarse-Grid VI Mean"
             if coarse_losses is not None:
                 merged_diagnostics["coarse_losses"] = np.asarray(coarse_losses)
             return BlockVIArtifacts(
@@ -1678,13 +1725,26 @@ def prepare_coarse_block_vi(
         merged_diagnostics["coarse_vi_attempted"] = 1
         merged_diagnostics["coarse_vi_success"] = 1
         merged_diagnostics["psd_matrix_complex"] = fine_design
-        merged_diagnostics["psd_matrix"] = np.real(fine_design)
+        merged_diagnostics["psd_matrix"] = np.real(
+            _rescale_multivar_psd_for_diagnostics(sampler, fine_design)
+        )
         merged_diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
         merged_diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
-        merged_diagnostics["coarse_vi_psd"] = np.real(
-            np.asarray(coarse_design, dtype=np.complex128)
-        )
         coarse_diag = coarse_setup.diagnostics or {}
+        coarse_plot_psd = _extract_psd_q50(coarse_diag)
+        if coarse_plot_psd is not None:
+            merged_diagnostics["coarse_vi_psd"] = np.real(coarse_plot_psd)
+            merged_diagnostics["coarse_vi_label"] = (
+                "Coarse-Grid VI Posterior Median"
+            )
+        else:
+            merged_diagnostics["coarse_vi_psd"] = np.real(
+                _rescale_multivar_psd_for_diagnostics(
+                    coarse_sampler,
+                    np.asarray(coarse_design, dtype=np.complex128),
+                )
+            )
+            merged_diagnostics["coarse_vi_label"] = "Coarse-Grid VI Mean"
         coarse_losses = coarse_diag.get("losses")
         if coarse_losses is not None:
             merged_diagnostics["coarse_losses"] = np.asarray(coarse_losses)

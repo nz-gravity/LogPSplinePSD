@@ -306,6 +306,7 @@ def _extract_run_metrics(
     N: int,
     Nb: int,
     coarse_Nh: int | None,
+    eta: float | str | None = None,
 ) -> dict[str, float | int | str]:
     """Extract compact run-level metrics for downstream aggregation."""
     attrs = idata.attrs
@@ -313,12 +314,18 @@ def _extract_run_metrics(
     ess_arr = np.asarray(ess_raw, dtype=float)
     ess_median = float(np.nanmedian(ess_arr)) if ess_arr.size else float("nan")
 
+    # Try to get eta from attrs first, fall back to passed value
+    eta_value = attrs.get("sampling_eta_channel_0", eta)
+    if eta_value is None:
+        eta_value = attrs.get("eta", "auto")
+
     metrics: dict[str, float | int | str] = {
         "seed": int(seed),
         "mode": str(mode),
         "N": int(N),
         "Nb": int(Nb),
         "Nh": "OFF" if coarse_Nh is None else int(coarse_Nh),
+        "eta": eta_value,
         "riae_matrix": float(
             attrs.get("riae_matrix", attrs.get("riae", np.nan))
         ),
@@ -479,6 +486,7 @@ def _save_compact_run_summary(
     N: int,
     Nb: int,
     coarse_Nh: int | None,
+    eta: float | str | None = None,
 ) -> None:
     """Save compact scalar summaries for later comparison tables."""
     metrics = _extract_run_metrics(
@@ -488,6 +496,7 @@ def _save_compact_run_summary(
         N=N,
         Nb=Nb,
         coarse_Nh=coarse_Nh,
+        eta=eta,
     )
 
     lnz, lnz_err = _extract_lnz_summary(idata)
@@ -562,6 +571,7 @@ def simulation_study(
     save_nuts_diagnostics: bool = DEFAULT_SAVE_NUTS_DIAGNOSTICS,
     compute_psis: bool = DEFAULT_COMPUTE_PSIS,
     run_full_diagnostics: bool = DEFAULT_RUN_FULL_DIAGNOSTICS,
+    eta_override: float | str | None = None,
 ) -> None:
     cfg = MODE_CONFIG[mode]
     preset_N = int(cfg["N"])
@@ -717,6 +727,8 @@ def simulation_study(
         true_psd=(freq_true_hz, true_psd),
         max_save_bytes=20_000_000,
     )
+    if eta_override is not None:
+        run_mcmc_kwargs["eta"] = eta_override
     if tau is not None:
         # Use the true PSD as design target with the given shrinkage scale.
         run_mcmc_kwargs["design_psd"] = (freq_true_hz, true_psd)
@@ -731,6 +743,7 @@ def simulation_study(
         N=N,
         Nb=Nb,
         coarse_Nh=coarse_Nh,
+        eta=eta_override,
     )
     # _prune_outputs_keep_psd_plot(outdir)
 
@@ -1100,8 +1113,32 @@ if __name__ == "__main__":
             "comparison metrics needed for summary tables."
         ),
     )
+    parser.add_argument(
+        "--eta",
+        type=str,
+        default=None,
+        dest="eta_override",
+        help=(
+            "Override η-tempering parameter: 'auto' (compute from Nb×Nh), "
+            "or a float like '1.0' (no tempering) or '0.5' (tempering). "
+            "Default: None (use sampler default, which is 'auto')."
+        ),
+    )
 
     args = parser.parse_args()
+
+    # Parse eta argument: can be "auto" or a float.
+    eta_override = None
+    if args.eta_override is not None:
+        if args.eta_override.lower() == "auto":
+            eta_override = "auto"
+        else:
+            try:
+                eta_override = float(args.eta_override)
+            except ValueError:
+                raise ValueError(
+                    f"--eta must be 'auto' or a float (got '{args.eta_override}')"
+                )
 
     # Normalise the window argument: "rect"/"none" → no taper; "tukey_0.1" → tuple.
     wishart_window: str | tuple | None = _parse_window(args.window)
@@ -1134,4 +1171,5 @@ if __name__ == "__main__":
             save_nuts_diagnostics=args.save_nuts_diagnostics,
             compute_psis=args.compute_psis,
             run_full_diagnostics=args.run_full_diagnostics,
+            eta_override=eta_override,
         )

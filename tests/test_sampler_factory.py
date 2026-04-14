@@ -45,7 +45,12 @@ def test_univar_extra_kwargs_can_override_common_sampler_fields():
 
 def test_multivar_extra_kwargs_can_override_common_sampler_fields():
     run_config = RunMCMCConfig(
-        extra_kwargs={"compute_psis": False, "target_accept_prob": 0.93}
+        extra_kwargs={
+            "compute_psis": False,
+            "target_accept_prob": 0.93,
+            "eta": "auto",
+            "eta_c": 2.5,
+        }
     )
     factory_config = SamplerFactoryConfig(
         sampler_type="multivar_blocked_nuts",
@@ -83,3 +88,5 @@ def test_multivar_extra_kwargs_can_override_common_sampler_fields():
 
     assert config.compute_psis is False
     assert config.target_accept_prob == 0.93
+    assert config.eta == "auto"
+    assert config.eta_c == 2.5

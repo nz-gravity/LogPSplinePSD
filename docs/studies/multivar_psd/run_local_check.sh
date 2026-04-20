@@ -29,6 +29,15 @@ export N_WARMUP=1000
 export NUM_CHAINS=4
 export VI_STEPS=50000
 
+# Keep full sampler artifacts for this local comparison so PSD matrix plots
+# are available for side-by-side eta inspection.
+export SAVE_SAMPLER_OUTPUTS="${SAVE_SAMPLER_OUTPUTS:-1}"
+
+# Allow a smaller seed window for quick local visual checks while keeping the
+# original 20-seed sweep as the default.
+export SEED_START="${SEED_START:-0}"
+export SEED_END="${SEED_END:-19}"
+
 export OUTDIR="out_var3_eta_validation"
 export WINDOW="rect"
 export KNOTS="30"
@@ -57,32 +66,52 @@ run_condition() {
 
     echo ""
     echo "=== seed=${SEED}  Nb=${NB}  Nh=${COARSE_NH}  eta=${ETA} ==="
-    "${PYTHON_BIN}" 3d_study.py "${SEED}" "${MODE}" \
-        --K "${KNOTS}" \
-        --window "${WINDOW}" \
-        --outdir "${OUTDIR}" \
-        --n-time "${N_TIME}" \
-        --nb-override "${NB}" \
-        --coarse-nh "${COARSE_NH}" \
-        --label "eta${ETA_LABEL}" \
-        --n-samples "${N_SAMPLES}" \
-        --n-warmup "${N_WARMUP}" \
-        --num-chains "${NUM_CHAINS}" \
-        --vi-steps "${VI_STEPS}" \
-        --eta "${ETA}"
+    if [[ "${SAVE_SAMPLER_OUTPUTS}" == "1" ]]; then
+        "${PYTHON_BIN}" 3d_study.py "${SEED}" "${MODE}" \
+            --K "${KNOTS}" \
+            --window "${WINDOW}" \
+            --outdir "${OUTDIR}" \
+            --n-time "${N_TIME}" \
+            --nb-override "${NB}" \
+            --coarse-nh "${COARSE_NH}" \
+            --label "eta${ETA_LABEL}" \
+            --n-samples "${N_SAMPLES}" \
+            --n-warmup "${N_WARMUP}" \
+            --num-chains "${NUM_CHAINS}" \
+            --vi-steps "${VI_STEPS}" \
+            --eta "${ETA}" \
+            --save-sampler-outputs
+    else
+        "${PYTHON_BIN}" 3d_study.py "${SEED}" "${MODE}" \
+            --K "${KNOTS}" \
+            --window "${WINDOW}" \
+            --outdir "${OUTDIR}" \
+            --n-time "${N_TIME}" \
+            --nb-override "${NB}" \
+            --coarse-nh "${COARSE_NH}" \
+            --label "eta${ETA_LABEL}" \
+            --n-samples "${N_SAMPLES}" \
+            --n-warmup "${N_WARMUP}" \
+            --num-chains "${NUM_CHAINS}" \
+            --vi-steps "${VI_STEPS}" \
+            --eta "${ETA}"
+    fi
 }
 
-# Run 20 seeds with eta=1.0 (no tempering)
-echo "========== Running eta=1.0 (no tempering) =========="
-for SEED in {0..19}; do
-    run_condition "${SEED}" "1.0" "1p0"
-done
+
 
 # Run 20 seeds with eta='auto' (adaptive tempering)
 echo ""
 echo "========== Running eta='auto' (adaptive tempering) =========="
-for SEED in {0..19}; do
+for ((SEED=SEED_START; SEED<=SEED_END; SEED++)); do
     run_condition "${SEED}" "auto" "auto"
+done
+
+
+# Run 20 seeds with eta=1.0 (no tempering)
+echo "========== Running eta=1.0 (no tempering) =========="
+for ((SEED=SEED_START; SEED<=SEED_END; SEED++)); do
+    run_condition "${SEED}" "1.0" "1p0"
 done
 
 echo ""
@@ -136,4 +165,8 @@ for eta in sorted(eta_groups.keys(), key=lambda x: (isinstance(x, str), x)):
     rhat_max  = np.nanmax(rhats)
 
     print(f"{str(eta):>8} {len(group):>3} {cov_mean:>7.4f}±{cov_std:.4f} {riae_mean:>7.4f}±{riae_std:.4f} {rhat_max:>8.4f}")
+
+print("\n=== PSD matrix plots ===")
+for plot_path in sorted(Path("out_var3_eta_validation").glob("**/psd_matrix.png")):
+    print(plot_path)
 PY

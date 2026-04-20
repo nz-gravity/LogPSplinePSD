@@ -943,15 +943,29 @@ def _build_block_model_args(
     channel_index: int,
     alpha_phi_theta: float,
     beta_phi_theta: float,
-) -> tuple:
-    """Build the positional args tuple for ``_blocked_channel_model``."""
+) -> tuple[tuple, dict]:
+    """Build positional args and keyword args for ``_blocked_channel_model``.
+
+    Returns
+    -------
+    model_args : tuple
+        Positional arguments up to and including ``Nh``.
+    model_kwargs : dict
+        Keyword-only arguments: ``enbw`` and ``eta``.
+
+        VI always uses ``eta_vi = min(1, 1 / (Nb × Nh))``, independent of the
+        NUTS ``config.eta``.  This softens the Whittle likelihood during ELBO
+        optimization, avoiding an excessively sharp curvature that can stall
+        the optimizer.  The NUTS posterior is unaffected — VI only provides the
+        warm-start initialization.
+    """
     theta_re_basis, theta_re_penalty = (
         sampler._theta_component_arrays_for_channel(channel_index, part="re")
     )
     theta_im_basis, theta_im_penalty = (
         sampler._theta_component_arrays_for_channel(channel_index, part="im")
     )
-    return (
+    model_args = (
         channel_index,
         sampler.u_re[:, channel_index, :],
         sampler.u_im[:, channel_index, :],
@@ -973,6 +987,12 @@ def _build_block_model_args(
         sampler.Nb,
         sampler.Nh,
     )
+    eta_vi = min(1.0, 1.0 / float(sampler.Nb * sampler.Nh))
+    model_kwargs = {
+        "enbw": float(sampler.enbw),
+        "eta": eta_vi,
+    }
+    return model_args, model_kwargs
 
 
 def _build_block_init_values(
@@ -1038,6 +1058,7 @@ def _run_single_block_vi(
     block_model: Callable[..., Any],
     vi_key: jax.Array,
     model_args: tuple[Any, ...],
+    model_kwargs: Dict[str, Any],
     guide_spec: str,
     progress_bar: bool,
     init_values: Dict[str, jnp.ndarray],
@@ -1049,6 +1070,7 @@ def _run_single_block_vi(
         vi_steps=sampler.config.vi_steps,
         optimizer_lr=sampler.config.vi_lr,
         model_args=model_args,
+        model_kwargs=model_kwargs,
         guide=guide_spec,
         posterior_draws=sampler.config.vi_posterior_draws,
         progress_bar=progress_bar,
@@ -1067,6 +1089,7 @@ def _run_single_block_vi(
         vi_steps=min(int(sampler.config.vi_steps), 2000),
         optimizer_lr=min(float(sampler.config.vi_lr), 1e-3),
         model_args=model_args,
+        model_kwargs=model_kwargs,
         guide="diag",
         posterior_draws=sampler.config.vi_posterior_draws,
         progress_bar=progress_bar,
@@ -1082,6 +1105,7 @@ def _accumulate_block_vi_diagnostics(
     vi_result,
     block_model,
     model_args: tuple,
+    model_kwargs: Dict[str, Any],
     channel_index: int,
     theta_start: int,
     theta_count: int,
@@ -1102,7 +1126,7 @@ def _accumulate_block_vi_diagnostics(
     psis_diag = _compute_psis_khat(
         model=block_model,
         model_args=model_args,
-        model_kwargs={},
+        model_kwargs=model_kwargs,
         guide=vi_result.guide,
         guide_params=vi_result.params,
         vi_samples=vi_result.samples,
@@ -1382,6 +1406,28 @@ def _vi_means_are_usable(means: Dict[str, Any]) -> bool:
     return True
 
 
+def _sanitize_vi_init_values(
+    values: Optional[Dict[str, Any]],
+    *,
+    delta_floor: float = 1e-10,
+) -> Optional[Dict[str, jnp.ndarray]]:
+    """Return VI init values with positivity enforced for ``delta_*`` sites.
+
+    Auto-guide draws are constrained, but very small positive values can still
+    underflow to exact zeros in float32.  Clamp ``delta_*`` entries to a tiny
+    positive floor so ``init_to_value`` remains valid.
+    """
+    if not values:
+        return None
+    out: Dict[str, jnp.ndarray] = {}
+    for name, value in values.items():
+        arr = jnp.asarray(value)
+        if str(name).startswith("delta_"):
+            arr = jnp.maximum(arr, jnp.asarray(delta_floor, dtype=arr.dtype))
+        out[name] = arr
+    return out
+
+
 def _block_site_names(channel_index: int) -> list[str]:
     """Return the VI sample site names for a single blocked channel."""
     names = [f"weights_delta_{channel_index}"]
@@ -1490,12 +1536,12 @@ def prepare_block_vi(
             if init_overrides and channel_index in init_overrides:
                 init_values.update(init_overrides[channel_index])
 
-            model_args = _build_block_model_args(
+            model_args, model_kwargs = _build_block_model_args(
                 sampler, channel_index, alpha_phi_theta, beta_phi_theta
             )
             block_log_posterior_fn = build_log_density_fn(
                 partial(block_model, *model_args),
-                {},
+                model_kwargs,
             )
 
             vi_result, losses_arr = _run_single_block_vi(
@@ -1503,6 +1549,7 @@ def prepare_block_vi(
                 block_model=block_model,
                 vi_key=vi_key,
                 model_args=model_args,
+                model_kwargs=model_kwargs,
                 guide_spec=guide_spec,
                 progress_bar=progress_bar,
                 init_values=init_values,
@@ -1513,25 +1560,30 @@ def prepare_block_vi(
                 for name, value in (vi_result.means or {}).items()
             }
             default_init_values = dict(init_values)
+            vi_median = _median_vi_values(
+                draws={
+                    name: jnp.asarray(value)
+                    for name, value in (vi_result.samples or {}).items()
+                },
+            )
+            vi_candidate = _sanitize_vi_init_values(vi_median)
+            if not _vi_means_are_usable(vi_candidate or {}):
+                vi_candidate = _sanitize_vi_init_values(vi_means)
             if losses_arr.size and not np.isfinite(losses_arr[-1]):
                 logger.warning(
                     f"VI returned a non-finite ELBO for block {channel_index} "
                     f"(guide={vi_result.guide_name}); skipping VI-based init."
                 )
-            elif not _vi_means_are_usable(vi_means):
+            elif vi_candidate is None or not _vi_means_are_usable(
+                vi_candidate
+            ):
                 logger.warning(
-                    f"VI produced invalid mean parameters for block {channel_index} "
+                    f"VI produced invalid init parameters for block {channel_index} "
                     f"(guide={vi_result.guide_name}); skipping VI-based init."
                 )
             else:
-                vi_median = _median_vi_values(
-                    draws={
-                        name: jnp.asarray(value)
-                        for name, value in (vi_result.samples or {}).items()
-                    },
-                )
                 init_strategies[channel_index] = select_vi_or_default_init(
-                    vi_values=vi_median,
+                    vi_values=vi_candidate,
                     default_values=default_init_values,
                     log_posterior_fn=lambda vals, fn=block_log_posterior_fn: float(
                         fn({k: jnp.asarray(v) for k, v in vals.items()})
@@ -1544,6 +1596,7 @@ def prepare_block_vi(
                 vi_result=vi_result,
                 block_model=block_model,
                 model_args=model_args,
+                model_kwargs=model_kwargs,
                 channel_index=channel_index,
                 theta_start=theta_start,
                 theta_count=theta_count,

@@ -121,16 +121,10 @@ def _blocked_channel_model(
         ``0 < eta < 1`` flatten the likelihood surface, producing wider
         credible intervals.
 
-        When the sampler config sets ``eta="auto"`` (the default), the
-        resolved value passed here is ``min(1, n_basis * Nb * Nh / N_freq)``
-        where ``n_basis`` is the number of B-spline basis functions,
-        ``Nb`` the Wishart degrees of freedom, ``Nh`` the coarse-grain
-        multiplicity, and ``N_freq`` the post-coarse-graining bin count.  This corrects for the Whittle pseudo-
-        likelihood overstating Fisher information when ``N_freq`` >>
-        ``n_basis`` (Grünwald "Safe Bayes" / generalized posterior).
-        The correction is analogous to the ENBW factor: both account
-        for the effective number of independent observations being
-        smaller than the raw bin count.
+        The default is ``1.0`` (standard Whittle posterior).  The correct
+        value is problem-specific and should be determined via a coverage
+        study.  Values in (0, 1) widen the posterior; a common starting
+        range is η ∈ {0.0625, 0.125, 0.25} depending on Nb and Nh.
 
     Notes
     -----
@@ -318,22 +312,18 @@ class MultivarBlockedNUTSConfig(SamplerConfig):
     design_from_vi_tau: float = 10.0
 
     # η-tempering (generalized posterior / Safe Bayes correction).
-    # Corrects over-concentration of the Whittle pseudo-likelihood when the
-    # smooth P-spline model has far fewer effective parameters than frequency
-    # bins.  The Whittle likelihood treats each coarse-grained bin as
-    # carrying Nb×Nh independent Wishart replications, inflating the Fisher
-    # information far beyond what the smooth P-spline model can resolve.
+    # Scales the Whittle log-likelihood by η before inference, widening the
+    # posterior when η < 1.  Useful when the smooth P-spline model has far
+    # fewer effective parameters than frequency bins, causing the Whittle
+    # likelihood to over-concentrate the posterior.
     #
-    # - ``"auto"`` (default): η = min(1, c / (Nb × Nh)), where c is set by
-    #   ``eta_c``.  Empirically validated on VAR(2) simulations (coverage
-    #   study, seeds 0-99, multiple Nb/Nh configurations).
-    # - ``1.0``: no correction (standard Whittle posterior, legacy behaviour).
-    # - Any float in (0, 1]: manual override for investigation.
-    eta: float | str = "auto"
-    # Scaling constant for the auto-eta formula: η = min(1, eta_c / (Nb×Nh)).
-    # Default c=2 targets ~90% coverage.  Increase for wider CIs (more
-    # conservative), decrease for tighter CIs.
-    eta_c: float = 2.0
+    # Default is 1.0 (standard Whittle posterior, no correction).  The right
+    # value is problem-specific — it depends on N, Nb, Nh, K, and the signal
+    # structure — and must be calibrated via a coverage study.  Values in
+    # (0, 1) widen the posterior; values closer to 0 give very wide CIs and
+    # increase divergences.  A common starting point for exploration is
+    # η ∈ {0.0625, 0.125, 0.25} depending on the coarse-graining setup.
+    eta: float = 1.0
 
     def __post_init__(self):
         super().__post_init__()
@@ -476,43 +466,11 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         return "multivariate_blocked_nuts"
 
     def _resolve_eta(self, channel_index: int) -> float:
-        return self._resolve_eta_value(self.config.eta, channel_index)
-
-    def _resolve_eta_value(
-        self,
-        eta_value: float | str | None,
-        channel_index: int,
-    ) -> float:
-        """Resolve the eta config value to a concrete float for a channel.
-
-        When ``eta="auto"``, compute the correction factor from model
-        dimensions using the empirically validated scaling rule::
-
-            η = min(1, c / (Nb × Nh))
-
-        where ``c`` is ``config.eta_c`` (default 2), ``Nb`` is the Bartlett
-        segment count (Wishart DOF), and ``Nh`` is the coarse-graining
-        multiplicity.  The product ``Nb × Nh`` controls the effective sample
-        size per coarse-grained frequency bin in the Whittle likelihood;
-        dividing by it re-calibrates the posterior width to achieve nominal
-        coverage.
-
-        This formula was validated on VAR(2) simulations across multiple
-        ``Nb``, ``Nh``, and ``n_basis`` configurations.  Notably, ``n_basis``
-        is *not* a first-order term — the dominant over-concentration scales
-        with the data replication factor ``Nb × Nh``, not the model dimension.
-        """
-        raw = self.config.eta if eta_value is None else eta_value
-        if isinstance(raw, str) and raw == "auto":
-            c = self.config.eta_c
-            eta = min(1.0, c / float(self.Nb * self.Nh))
-            if channel_index == 0 and eta_value in (None, self.config.eta):
-                logger.info(
-                    f"eta='auto': c={c}, Nb={self.Nb}, Nh={self.Nh} -> "
-                    f"eta = min(1, {c}/({self.Nb}*{self.Nh})) = {eta:.4f}",
-                )
-            return eta
-        return float(raw)
+        """Return the configured eta value as a float."""
+        eta = float(self.config.eta)
+        if channel_index == 0:
+            logger.info(f"eta={eta:.4f}")
+        return eta
 
     def _get_channel_setting(
         self,

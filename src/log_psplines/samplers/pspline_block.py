@@ -83,13 +83,25 @@ def sample_pspline_block(
         provided. Smaller values pull the posterior more strongly toward the
         design.
     """
+    # Sample log(delta) for geometry: Gamma with small concentration (alpha_delta=1e-4)
+    # is heavily concentrated near zero, giving NUTS poor gradient signal in natural
+    # scale. Reparameterizing identically to the phi treatment below.
+    log_delta_base = dist.Normal(0.0, 1.0)
+    log_delta = numpyro.sample(delta_name, log_delta_base)
+    delta = jnp.exp(log_delta)
     delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
-    delta = numpyro.sample(delta_name, delta_dist)
+    log_prior_delta = (
+        delta_dist.log_prob(delta) + log_delta
+    )  # +log_delta is the Jacobian
+    numpyro.factor(
+        f"{delta_name}_prior",
+        log_prior_delta - log_delta_base.log_prob(log_delta),
+    )
 
     # We sample eta = log(phi) for geometry, but the model prior is on
     # phi | delta ~ Gamma(alpha_phi, delta * beta_phi). The factor below
     # converts the simple base density on eta into that exact transformed prior.
-    delta_safe = jnp.maximum(delta, jnp.asarray(1e-12, dtype=delta.dtype))
+    delta_safe = delta  # exp is always positive; no floor guard needed
     log_phi_base = dist.Normal(0.0, 1.0)
     log_phi = numpyro.sample(phi_name, log_phi_base)
     phi = jnp.exp(log_phi)
@@ -148,9 +160,12 @@ def pspline_hyperparameter_initials(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Return default initial values for delta and phi hyperparameters."""
 
-    delta_init = jnp.asarray(alpha_delta / beta_delta)
+    # delta is now sampled as log_delta ~ Normal(0,1), so the initial value is
+    # log(E[delta]) = log(alpha_delta / beta_delta).
+    delta_mean = alpha_delta / beta_delta
+    delta_init = jnp.asarray(jnp.log(jnp.asarray(delta_mean)))
     if divide_phi_by_delta:
-        phi_init = jnp.asarray(alpha_phi / (beta_phi * delta_init))
+        phi_init = jnp.asarray(alpha_phi / (beta_phi * delta_mean))
     else:
         phi_init = jnp.asarray(alpha_phi / beta_phi)
     return delta_init, phi_init

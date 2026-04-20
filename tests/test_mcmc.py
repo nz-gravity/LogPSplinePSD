@@ -717,7 +717,7 @@ def test_multivar_blocked_nuts_records_sampling_eta_attrs():
         model=model_cfg,
         diagnostics=diagnostics_cfg,
         vi=vi_cfg,
-        extra_kwargs={"eta": "auto", "eta_c": 2.0},
+        extra_kwargs={"eta": 0.25},
     )
     idata = run_mcmc(
         data=ts_run,
@@ -731,7 +731,7 @@ def test_multivar_blocked_nuts_records_sampling_eta_attrs():
     )
     assert eta_keys, "Blocked NUTS should record per-channel sampling eta."
     for key in eta_keys:
-        assert float(idata.attrs[key]) == pytest.approx(0.5)
+        assert float(idata.attrs[key]) == pytest.approx(0.25)
 
 
 @pytest.mark.memory

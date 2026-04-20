@@ -48,8 +48,7 @@ def test_multivar_extra_kwargs_can_override_common_sampler_fields():
         extra_kwargs={
             "compute_psis": False,
             "target_accept_prob": 0.93,
-            "eta": "auto",
-            "eta_c": 2.5,
+            "eta": 0.125,
         }
     )
     factory_config = SamplerFactoryConfig(
@@ -88,5 +87,4 @@ def test_multivar_extra_kwargs_can_override_common_sampler_fields():
 
     assert config.compute_psis is False
     assert config.target_accept_prob == 0.93
-    assert config.eta == "auto"
-    assert config.eta_c == 2.5
+    assert config.eta == 0.125

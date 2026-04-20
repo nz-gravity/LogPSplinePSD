@@ -6,13 +6,17 @@ each coarse-grained frequency bin as carrying `Nb * Nh` independent
 Wishart replications, which over-concentrates the posterior when the
 smooth P-spline model has far fewer effective parameters.
 
-## Validated formula
+## Current auto-eta default
 
 ```
 eta = min(1, c / (Nb * Nh))     # c = 2 default
 ```
 
 Implemented in `MultivarBlockedNUTSConfig.eta` / `eta_c`.
+
+Empirical support for `c=2` came from the original VAR study with `Nb=4`
+and `Nh ∈ {1,2,4}`, plus the later LISA sanity check.  Extrapolation to
+larger `Nb` should be treated as provisional until re-checked directly.
 
 ## Key findings (VAR(2) simulation, seeds 0-99)
 
@@ -83,6 +87,13 @@ structure).  Requires null excision and sufficient knots (K=50).
 | 1    | 0.958   | 0.930 | 0.943 | 1.000 | 0.071 | 0           |
 | 2    | 0.961   | 0.934 | 0.950 | 1.000 | 0.071 | 0           |
 
+### Test 7: Nb extrapolation
+
+Focused local re-validation for `Nb ∈ {4, 8, 16}` at fixed `N=16384`,
+`Nh=2`, `K=30`.  This is intended to answer whether the `1 / (Nb * Nh)`
+scaling still behaves sensibly once `Nb` moves beyond the original
+`Nb=4` study.
+
 ## Warmup-only tempering (removed)
 
 We tested a two-stage scheme: adapt NUTS at a low eta during warmup,
@@ -117,6 +128,9 @@ python eta_validation_study.py test5 --seeds 0-4
 # Test 6: LISA sanity check — non-VAR coloured noise with analytic truth PSD
 python eta_validation_study.py test6 --seeds 0-2
 
+# Test 7: Nb extrapolation — one seed each by default for local checks
+python eta_validation_study.py test7 --seeds 0
+
 # Run all + generate plots
 python eta_validation_study.py all --seeds 0-4
 python eta_validation_study.py plots
@@ -130,3 +144,4 @@ python eta_validation_study.py plots
 | test4 | Can we derive c analytically from tr(P), tr(B'B)?     | Compares empirical c=2, edf-based, no tempering  |
 | test5 | Does tempering help all element types equally?         | 3 Nb/Nh configs, auto vs eta=1, per-element cov  |
 | test6 | Does c=2 work on LISA XYZ noise (non-VAR)?            | 7-day LISA, Nb=7, Nh=4, K=50, null excision      |
+| test7 | Does the rule extrapolate past Nb=4 at fixed Nh=2?   | Nb={4,8,16}, K=30, auto + manual eta sweep       |

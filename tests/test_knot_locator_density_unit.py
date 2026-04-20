@@ -1,6 +1,8 @@
 import numpy as np
 
-from log_psplines.psplines.knots_locator import knot_locator as knot_locator_mod
+from log_psplines.psplines.knots_locator import (
+    knot_locator as knot_locator_mod,
+)
 
 
 def test_density_knots_enforce_fixed_count_with_endpoint_tolerance(
@@ -14,6 +16,7 @@ def test_density_knots_enforce_fixed_count_with_endpoint_tolerance(
         n_knots: int,
         periodogram,
         parametric_model=None,
+        **kwargs,
     ) -> np.ndarray:
         # Intentionally include near-endpoint and near-duplicate values.
         return np.array(

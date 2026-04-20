@@ -1,4 +1,5 @@
-"""η-tempering validation study: robustness across K, element types, and LISA data.
+"""η-tempering validation study: robustness across K, element types, LISA data,
+and Nb extrapolation.
 
 Tests whether η = c / (Nb × Nh) with c=2 generalises beyond the original
 VAR(2) p=3 configuration.
@@ -29,12 +30,19 @@ test6 : LISA sanity check
     analytic LISA noise PSD as truth.  Checks that eta="auto" produces
     reasonable coverage on real (non-VAR) coloured noise.
 
+test7 : Nb extrapolation at fixed Nh
+    Re-checks the ``eta = c / (Nb × Nh)`` rule outside the original
+    phase-2/3 validation range by sweeping ``Nb ∈ {4, 8, 16}`` at fixed
+    ``Nh=2`` and ``K=30``.  Includes ``eta="auto"``, ``eta=1`` and a small
+    manual grid for the larger-``Nb`` regimes.
+
 Usage
 -----
     python eta_validation_study.py test3 --seeds 0-4
     python eta_validation_study.py test4 --seeds 0-4
     python eta_validation_study.py test5 --seeds 0-4
     python eta_validation_study.py test6 --seeds 0-2
+    python eta_validation_study.py test7 --seeds 0
     python eta_validation_study.py all --seeds 0-4
     python eta_validation_study.py plots
 """
@@ -135,6 +143,18 @@ LISA_COARSE_NH = 4  # coarse-grain by averaging Nh=4 adjacent bins
 LISA_NULL_EXCISION = True  # remove bins near TDI transfer function nulls
 LISA_FMIN = 1e-4
 LISA_FMAX = 1e-1
+
+# ── Test 7: Nb extrapolation ─────────────────────────────────────────────────
+
+TEST7_N = 16384
+TEST7_NB_VALUES = [4, 8, 16]
+TEST7_NH = 2
+TEST7_K = 30
+TEST7_ETA_GRID_BY_NB: dict[int, list[float | str]] = {
+    4: ["auto", 0.125, 0.2, 0.3, 0.5, 1.0],
+    8: ["auto", 0.125, 0.2, 0.3, 0.5, 1.0],
+    16: ["auto", 0.125, 0.2, 0.25, 0.3, 0.5, 1.0],
+}
 
 # ── Data generation ──────────────────────────────────────────────────────────
 
@@ -679,6 +699,36 @@ def _test5_specs(seeds: list[int]) -> list[RunSpec]:
     return specs
 
 
+def _eta_label(value: float | str) -> str:
+    if isinstance(value, str):
+        return value
+    return f"{float(value):.3f}".rstrip("0").rstrip(".")
+
+
+def _test7_specs(seeds: list[int]) -> list[RunSpec]:
+    specs = []
+    for Nb in TEST7_NB_VALUES:
+        for eta in TEST7_ETA_GRID_BY_NB[Nb]:
+            eta_value = eta
+            eta_c = 2.0 if eta == "auto" else float(eta) * Nb * TEST7_NH
+            label = f"Nb{Nb}_eta{_eta_label(eta)}"
+            for seed in seeds:
+                specs.append(
+                    RunSpec(
+                        test="test7",
+                        seed=seed,
+                        N=TEST7_N,
+                        Nb=Nb,
+                        Nh=TEST7_NH,
+                        n_knots=TEST7_K,
+                        eta=eta_value,
+                        eta_c=eta_c,
+                        label=label,
+                    )
+                )
+    return specs
+
+
 # ── Run phases ───────────────────────────────────────────────────────────────
 
 
@@ -969,6 +1019,22 @@ def run_test6(
     return rows
 
 
+def run_test7(
+    seeds: list[int], *, outdir: str = OUT, force: bool = False
+) -> list[dict]:
+    specs = _test7_specs(seeds)
+    rows = [
+        _run_var_single(spec, outdir=outdir, force=force) for spec in specs
+    ]
+    test_dir = HERE / outdir / "test7"
+    _write_csv(test_dir / "test7_per_seed.csv", rows)
+    _print_summary(
+        rows,
+        "Test 7: Nb extrapolation sweep (fixed N=16384, Nh=2, K=30)",
+    )
+    return rows
+
+
 # ── Plotting ─────────────────────────────────────────────────────────────────
 
 
@@ -1137,6 +1203,49 @@ def plot_results(*, outdir: str = OUT) -> None:
         plt.close(fig)
         logger.info(f"Saved test6_lisa.png")
 
+    # ── Test 7 plots: Nb extrapolation ──────────────────────────────────
+    t7 = [r for r in rows if r.get("test") == "test7"]
+    if t7:
+        nb_values = sorted({int(r["Nb"]) for r in t7})
+        fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+
+        for Nb in nb_values:
+            subset = [r for r in t7 if int(r["Nb"]) == Nb]
+            subset = sorted(
+                subset, key=lambda row: float(row.get("eta_effective", np.nan))
+            )
+            eta_vals = [
+                float(row.get("eta_effective", np.nan)) for row in subset
+            ]
+            cov_vals = [float(row.get("coverage", np.nan)) for row in subset]
+            ciw_vals = [
+                float(row.get("ciw_diag_median", np.nan)) for row in subset
+            ]
+            div_vals = [
+                float(row.get("divergences", np.nan)) for row in subset
+            ]
+            axes[0].plot(eta_vals, cov_vals, "o-", lw=2, label=f"Nb={Nb}")
+            axes[1].plot(eta_vals, ciw_vals, "o-", lw=2, label=f"Nb={Nb}")
+            axes[2].plot(eta_vals, div_vals, "o-", lw=2, label=f"Nb={Nb}")
+
+        axes[0].axhline(0.9, ls="--", color="grey")
+        axes[0].set_ylabel("Coverage")
+        axes[0].set_xlabel("η effective")
+        axes[0].set_title("Coverage vs η")
+        axes[1].set_ylabel("CI width (diag)")
+        axes[1].set_xlabel("η effective")
+        axes[1].set_title("CI width vs η")
+        axes[2].set_ylabel("Divergences")
+        axes[2].set_xlabel("η effective")
+        axes[2].set_title("Divergences vs η")
+        for ax in axes:
+            ax.legend(fontsize=8)
+
+        fig.tight_layout()
+        fig.savefig(plot_dir / "test7_nb_extrapolation.png", dpi=150)
+        plt.close(fig)
+        logger.info("Saved test7_nb_extrapolation.png")
+
     logger.info(f"All plots saved to {plot_dir}")
 
 
@@ -1163,7 +1272,7 @@ def main() -> None:
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    for name in ("test3", "test4", "test5", "test6", "all"):
+    for name in ("test3", "test4", "test5", "test6", "test7", "all"):
         sp = sub.add_parser(name)
         sp.add_argument("--seeds", type=str, default="0-4")
         sp.add_argument("--force", action="store_true")
@@ -1190,11 +1299,14 @@ def main() -> None:
         run_test5(seeds, outdir=outdir, force=force)
     elif args.cmd == "test6":
         run_test6(seeds, outdir=outdir, force=force)
+    elif args.cmd == "test7":
+        run_test7(seeds, outdir=outdir, force=force)
     elif args.cmd == "all":
         run_test3(seeds, outdir=outdir, force=force)
         run_test4(seeds, outdir=outdir, force=force)
         run_test5(seeds, outdir=outdir, force=force)
         run_test6(seeds, outdir=outdir, force=force)
+        run_test7(seeds, outdir=outdir, force=force)
         plot_results(outdir=outdir)
 
 

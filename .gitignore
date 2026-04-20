@@ -175,6 +175,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+graphify-out
 
 # Translations
 *.mo

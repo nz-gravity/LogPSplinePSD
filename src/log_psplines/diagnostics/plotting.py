@@ -586,8 +586,9 @@ def _build_multivar_truth_frequency_maps(
     if not _is_multivar(idata):
         return None
     quantiles = get_multivar_posterior_psd_quantiles(idata)
-    psd_real = np.asarray(quantiles["real"], dtype=np.float64)
-    psd_imag = np.asarray(quantiles["imag"], dtype=np.float64)
+    psd_quantiles = np.asarray(
+        quantiles["spectral_density"], dtype=np.complex128
+    )
     freqs = np.asarray(quantiles["freq"], dtype=float)
     percentiles = np.asarray(quantiles["percentile"], dtype=float)
 
@@ -602,7 +603,7 @@ def _build_multivar_truth_frequency_maps(
         )
         return None
 
-    n_channels = int(psd_real.shape[2])
+    n_channels = int(psd_quantiles.shape[2])
     if truth_arr.shape[1:] != (n_channels, n_channels):
         logger.info(
             "Diagnostics plot: truth-aware PSD map skipped "
@@ -611,8 +612,10 @@ def _build_multivar_truth_frequency_maps(
         return None
 
     if percentiles.size == 0:
-        percentiles = np.arange(psd_real.shape[0], dtype=float)
+        percentiles = np.arange(psd_quantiles.shape[0], dtype=float)
 
+    psd_real = np.asarray(psd_quantiles.real, dtype=np.float64)
+    psd_imag = np.asarray(psd_quantiles.imag, dtype=np.float64)
     q50_real = extract_percentile(psd_real, percentiles, 50.0)
     q05_real = extract_percentile(psd_real, percentiles, 5.0)
     q95_real = extract_percentile(psd_real, percentiles, 95.0)

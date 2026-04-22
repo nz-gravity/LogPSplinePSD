@@ -161,8 +161,9 @@ def _quantiles_to_ci_dict(
 ) -> dict:
     """Convert stored quantiles into CI dictionaries."""
     percentiles = np.asarray(quantiles["percentile"])
-    real_q = np.asarray(quantiles["real"])
-    imag_q = np.asarray(quantiles["imag"])
+    posterior_psd_q = np.asarray(quantiles["spectral_density"])
+    real_q = np.asarray(posterior_psd_q.real, dtype=np.float64)
+    imag_q = np.asarray(posterior_psd_q.imag, dtype=np.float64)
     coh_q = quantiles.get("coherence")
 
     def _grab(arr: np.ndarray, target: float) -> np.ndarray:

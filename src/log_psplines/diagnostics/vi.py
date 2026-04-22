@@ -36,17 +36,17 @@ def _psd_variance_from_ds(psd_ds) -> Optional[float]:
     if psd_ds is None:
         return None
     freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
-    spectral_density = np.asarray(psd_ds["spectral_density"].values)
+    posterior_psd = np.asarray(psd_ds["spectral_density"].values)
     diag = np.real(
-        spectral_density[
+        posterior_psd[
             :,
             :,
-            np.arange(spectral_density.shape[2]),
-            np.arange(spectral_density.shape[2]),
+            np.arange(posterior_psd.shape[2]),
+            np.arange(posterior_psd.shape[2]),
             :,
         ]
     )
-    diag = diag.reshape(-1, spectral_density.shape[2], freqs.size)
+    diag = diag.reshape(-1, posterior_psd.shape[2], freqs.size)
     q50 = np.percentile(diag, 50.0, axis=0)
     variances = np.trapezoid(q50, freqs, axis=-1)
     return float(np.mean(variances))

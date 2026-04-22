@@ -41,14 +41,13 @@ def _extract_posterior_quantiles(
         quantiles = get_multivar_posterior_psd_quantiles(idata)
     except KeyError:
         return None
-    real_arr = np.asarray(quantiles["real"], dtype=np.float64)
-    imag_arr = np.asarray(quantiles["imag"], dtype=np.float64)
+    psd_arr = np.asarray(quantiles["spectral_density"], dtype=np.complex128)
     pcts = np.asarray(quantiles["percentile"], dtype=float)
     freq = np.asarray(quantiles["freq"], dtype=float)
 
     def _get(target: float) -> np.ndarray:
         idx = int(np.argmin(np.abs(pcts - target)))
-        return real_arr[idx] + 1j * imag_arr[idx]  # (N, p, p) complex
+        return psd_arr[idx]
 
     if pcts.size < 3:
         return None

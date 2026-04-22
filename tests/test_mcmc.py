@@ -199,18 +199,23 @@ def test_mcmc_multivar(outdir):
     ), "Coarse-grained frequencies do not match."
 
     # Verify PSD matrix structure for multivariate
-    psd_real = np.asarray(quantiles["real"])
-    psd_shape = psd_real.shape
+    spectral_density = np.asarray(
+        quantiles["spectral_density"], dtype=np.complex128
+    )
+    psd_shape = spectral_density.shape
     assert psd_shape[1] == freq.shape[0], "PSD frequency dimension mismatch."
     assert psd_shape[2:] == (2, 2), "PSD matrix should be 2x2 per frequency."
 
     # Verify Hermitian and positive definite
     idx50 = int(np.argmin(np.abs(np.asarray(quantiles["percentile"]) - 50.0)))
-    psd_median = psd_real[idx50]
-    diag = np.diagonal(psd_median, axis1=1, axis2=2)
+    psd_median = spectral_density[idx50]
+    diag = np.real(np.diagonal(psd_median, axis1=1, axis2=2))
     assert np.all(diag > 0.0), "PSD diagonal elements should be positive."
     assert np.allclose(
-        psd_median, np.swapaxes(psd_median, 1, 2), rtol=1e-6, atol=1e-8
+        psd_median,
+        np.swapaxes(psd_median.conj(), 1, 2),
+        rtol=1e-6,
+        atol=1e-8,
     ), "PSD should be Hermitian."
 
     print(f"++++ multivariate MCMC test COMPLETE ++++")

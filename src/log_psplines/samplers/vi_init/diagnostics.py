@@ -31,8 +31,8 @@ def _make_psd_rescaler(sampler) -> Callable[[np.ndarray], np.ndarray]:
         getattr(sampler, "fft_data", None), "channel_stds", None
     )
     if channel_stds is not None:
-        channel_stds = np.asarray(channel_stds, dtype=np.float32)
-        factor_matrix = np.outer(channel_stds, channel_stds).astype(np.float32)
+        channel_stds = np.asarray(channel_stds, dtype=np.float64)
+        factor_matrix = np.outer(channel_stds, channel_stds).astype(np.float64)
         return lambda arr: arr * factor_matrix
     return lambda arr: arr
 
@@ -44,16 +44,8 @@ def _build_psd_quantiles_dict(
 ) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
     """Build psd_quantiles and coherence_quantiles dictionaries."""
     psd_quantiles: Dict[str, Any] = {
-        "real": {
-            "q05": psd_real_q[0],
-            "q50": psd_real_q[1],
-            "q95": psd_real_q[2],
-        },
-        "imag": {
-            "q05": psd_imag_q[0],
-            "q50": psd_imag_q[1],
-            "q95": psd_imag_q[2],
-        },
+        "posterior_psd": np.asarray(psd_real_q, dtype=np.float64)
+        + 1j * np.asarray(psd_imag_q, dtype=np.float64),
     }
     coherence_quantiles = None
     if coh_percentiles is not None:
@@ -107,7 +99,11 @@ def _reconstruct_psd_quantiles_from_draws(
     psd_quantiles, coherence_quantiles = _build_psd_quantiles_dict(
         psd_real_q, psd_imag_q, coh_percentiles
     )
-    return psd_quantiles, coherence_quantiles, psd_quantiles["real"]["q50"]
+    return (
+        psd_quantiles,
+        coherence_quantiles,
+        np.asarray(psd_quantiles["posterior_psd"][1], dtype=np.complex128),
+    )
 
 
 def _to_np(x) -> np.ndarray:
@@ -144,15 +140,15 @@ def _extract_psd_q50(
     psd_quantiles = diagnostics.get("psd_quantiles")
     if not isinstance(psd_quantiles, dict):
         return None
-
-    real_q50 = psd_quantiles.get("real", {}).get("q50")
-    imag_q50 = psd_quantiles.get("imag", {}).get("q50")
-    if real_q50 is not None and imag_q50 is not None:
-        return np.asarray(real_q50) + 1j * np.asarray(imag_q50)
-
-    q50 = psd_quantiles.get("q50")
-    if q50 is not None:
-        return np.asarray(q50)
+    posterior_psd = psd_quantiles.get("posterior_psd")
+    if posterior_psd is not None:
+        posterior_psd = np.asarray(posterior_psd, dtype=np.complex128)
+        if posterior_psd.ndim >= 1:
+            return (
+                posterior_psd[1]
+                if posterior_psd.shape[0] >= 3
+                else posterior_psd
+            )
     return None
 
 
@@ -204,18 +200,19 @@ def _extract_multivar_design_psd(diagnostics: Optional[Dict[str, Any]]):
 
     psd_quantiles = diagnostics.get("psd_quantiles")
     if psd_quantiles:
-        real_q50 = (
-            psd_quantiles.get("real", {}).get("q50")
+        posterior_psd = (
+            psd_quantiles.get("posterior_psd")
             if isinstance(psd_quantiles, dict)
             else None
         )
-        imag_q50 = (
-            psd_quantiles.get("imag", {}).get("q50")
-            if isinstance(psd_quantiles, dict)
-            else None
-        )
-        if real_q50 is not None and imag_q50 is not None:
-            return np.asarray(real_q50) + 1j * np.asarray(imag_q50)
+        if posterior_psd is not None:
+            posterior_psd = np.asarray(posterior_psd, dtype=np.complex128)
+            if posterior_psd.ndim >= 1:
+                return (
+                    posterior_psd[1]
+                    if posterior_psd.shape[0] >= 3
+                    else posterior_psd
+                )
     return None
 
 

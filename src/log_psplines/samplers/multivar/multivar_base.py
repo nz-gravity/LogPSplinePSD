@@ -357,9 +357,12 @@ class MultivarBaseSampler(BaseSampler):
             return None
 
         try:
-            vi_psd_median = np.asarray(
-                psd_quantiles["real"]["q50"], dtype=np.float64
-            ) + 1j * np.asarray(psd_quantiles["imag"]["q50"], dtype=np.float64)
+            vi_psd_all = np.asarray(
+                psd_quantiles["posterior_psd"], dtype=np.complex128
+            )
+            vi_psd_median = (
+                vi_psd_all[1] if vi_psd_all.shape[0] >= 3 else vi_psd_all
+            )
             coherence = _get_coherence(vi_psd_median)
             channels = np.arange(vi_psd_median.shape[1])
 

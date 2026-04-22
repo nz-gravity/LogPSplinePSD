@@ -10,7 +10,6 @@ import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import (
     Any,
@@ -33,7 +32,6 @@ from arviz_stats.base import array_stats
 
 from ..arviz_utils._datatree import require_dataset as _require_dataset
 from ..arviz_utils._datatree import select_draw_slice as _select_draw_slice
-from ..diagnostics import run_all_diagnostics
 from ..logger import logger
 
 ChainMethod = Literal["parallel", "vectorized", "sequential"]
@@ -477,80 +475,9 @@ class BaseSampler(ABC):
         return idata
 
     def _cache_full_diagnostics(self, idata: xr.DataTree) -> None:
-        """Compute scalar diagnostics and store them in ``idata.attrs``.
-
-        This runs regardless of whether ``outdir`` is set. Any diagnostic plots
-        remain gated by the diagnostic modules via ``config.outdir``.
-        """
-        if not bool(getattr(self.config, "run_full_diagnostics", True)):
-            logger.info("Skipping full diagnostics by configuration.")
-            return
-        # Always run full diagnostics
-        logger.debug("Running full diagnostics")
-
-        attrs = idata.attrs
-
-        true_psd = getattr(self.config, "true_psd", None)
-        idata_vi = getattr(self, "_vi_diagnostics", None)
-
-        try:
-            logger.debug("Full diagnostics: run_all_diagnostics starting")
-            results = run_all_diagnostics(
-                idata=idata,
-                config=self.config,
-                psd_ref=true_psd,
-                idata_vi=idata_vi,
-            )
-            logger.debug("Full diagnostics: run_all_diagnostics finished")
-        except Exception as exc:  # pragma: no cover - best-effort hook
-            if getattr(self.config, "verbose", False):
-                logger.warning(f"Full diagnostics computation failed: {exc}")
-            return
-
-        canonical_keys = {
-            "riae",
-            "riae_matrix",
-            "l2_matrix",
-            "coverage",
-            "coverage_diag",
-            "coverage_offdiag_re",
-            "coverage_offdiag_im",
-            "coverage_coherence",
-            "ci_width",
-            "coherence_riae",
-            "riae_diag_mean",
-            "riae_diag_max",
-            "riae_offdiag",
-            "riae_offdiag_re",
-            "riae_offdiag_im",
-            "ci_width_diag_mean",
-        }
-
-        for module, metrics in (results or {}).items():
-            if not metrics:
-                continue
-            for key, val in metrics.items():
-                try:
-                    fval = float(val)
-                except Exception:
-                    continue
-                if not np.isfinite(fval):
-                    continue
-
-                out_key = key if key in canonical_keys else f"{module}_{key}"
-
-                if out_key in canonical_keys and out_key in attrs:
-                    try:
-                        existing = float(attrs.get(out_key))
-                        if np.isfinite(existing):
-                            continue
-                    except Exception:
-                        pass
-
-                attrs[out_key] = fval
-
-        attrs["full_diagnostics_computed"] = 1
-        attrs["full_diagnostics_timestamp"] = datetime.now(UTC).isoformat()
+        """Legacy hook retained for API stability; no extra diagnostics."""
+        del idata
+        return
 
     def _compute_chain_summaries(
         self, idata: xr.DataTree
@@ -634,19 +561,6 @@ class BaseSampler(ABC):
             logger.info(
                 f"  Rhat ≤ 1.01: {(rhat_vals <= 1.01).mean() * 100:.1f}%"
             )
-
-        riae = attrs.get("riae")
-        if riae is not None:
-            errorbars = attrs.get("riae_errorbars", [])
-            if len(errorbars) >= 5:
-                iqr_half = (errorbars[3] - errorbars[1]) / 2.0
-                logger.info(f"  RIAE: {riae:.3f} ± {iqr_half:.3f}")
-            else:
-                logger.info(f"  RIAE: {riae:.3f}")
-
-        riae_matrix = attrs.get("riae_matrix")
-        if riae_matrix is not None:
-            logger.info(f"  RIAE (matrix): {riae_matrix:.3f}")
 
     def _maybe_save_outputs(self, idata: xr.DataTree) -> None:
         """Persist sampler outputs when an output directory is configured."""
@@ -740,25 +654,37 @@ class BaseSampler(ABC):
                 f"{self.config.outdir}/inference_data.nc", engine="h5netcdf"
             )
             logger.info("save_results: wrote inference_data.nc")
-        # Optionally skip heavy MCMC diagnostics plots/summaries.
-        # Always plot diagnostics
-        logger.debug("save_results: plotting diagnostics")
-        from ..diagnostics.plotting import plot_diagnostics
+        diagnostics_dir = Path(self.config.outdir) / "diagnostics"
+        diagnostics_dir.mkdir(parents=True, exist_ok=True)
 
-        summary_mode = (
-            "full"
-            if bool(getattr(self.config, "run_full_diagnostics", True))
-            else "light"
-        )
-        plot_diagnostics(
-            idata_out,
-            self.config.outdir,
-            model=self.model,
-            summary_mode=summary_mode,
-            summary_position="end",
-            true_psd=self.config.true_psd,
-        )
-        logger.debug("save_results: plotting diagnostics done")
+        logger.debug("save_results: writing minimal diagnostics")
+        try:
+            from ..diagnostics import (
+                build_nuts_summary_table,
+                plot_factor_traces,
+            )
+
+            nuts_summary = build_nuts_summary_table(idata_out)
+            nuts_summary.to_csv(
+                diagnostics_dir / "nuts_summary.csv", index=False
+            )
+
+            for factor in nuts_summary["factor"]:
+                fig = plot_factor_traces(idata_out, factor=str(factor))
+                fig.savefig(
+                    diagnostics_dir / f"trace_factor_{factor}.png",
+                    dpi=150,
+                    bbox_inches="tight",
+                )
+                import matplotlib.pyplot as plt
+
+                plt.close(fig)
+        except Exception as exc:  # pragma: no cover
+            logger.warning(
+                f"Could not save minimal NUTS diagnostics: {exc}",
+                exc_info=True,
+            )
+        logger.debug("save_results: minimal diagnostics done")
         t0 = time.perf_counter()
         logger.debug("Writing summary_statistics.csv...")
         if not skip_heavy:

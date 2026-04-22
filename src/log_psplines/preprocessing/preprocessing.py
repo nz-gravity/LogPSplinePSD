@@ -9,6 +9,7 @@ import numpy as np
 from ..datatypes import Periodogram
 from ..datatypes.multivar import EmpiricalPSD, MultivarFFT
 from ..logger import logger
+from ..samplers.vi_init import VIWarmStartPlan
 from .checks import _run_preprocessing_checks, _save_preprocessing_plot
 from .coarse_grain import (
     CoarseGrainConfig,
@@ -75,15 +76,7 @@ class PreprocessedMCMCInput:
     extra_empirical_labels: list[str] | None
     extra_empirical_styles: list[dict] | None
     run_config: RunMCMCConfig
-    coarse_vi_context: Optional["CoarseVIContext"] = None
-
-
-@dataclass(frozen=True)
-class CoarseVIContext:
-    processed_data: Union[Periodogram, MultivarFFT]
-    scaled_true_psd: Optional[np.ndarray]
-    sampler_type: SamplerName
-    metadata: dict[str, object]
+    vi_warm_start_plan: Optional[VIWarmStartPlan] = None
 
 
 def _get_frequency_count(data: Union[Periodogram, MultivarFFT]) -> int:
@@ -225,12 +218,12 @@ def _derive_vi_coarse_grain_config(
     }
 
 
-def _build_coarse_vi_context_from_preprocessed(
+def _build_coarse_vi_warm_start_plan_from_preprocessed(
     preproc_input: PreprocessedMCMCInput,
     *,
     vi_cg_config: CoarseGrainConfig,
     metadata: dict[str, object] | None,
-) -> CoarseVIContext:
+) -> VIWarmStartPlan:
     """Build a coarse-VI context from the final analysis grid.
 
     This applies additional coarse graining to the already-preprocessed
@@ -252,16 +245,31 @@ def _build_coarse_vi_context_from_preprocessed(
         coarse_scaled_true_psd,
         coarse_processed_data,
     )
-    return CoarseVIContext(
+    model_cfg = preproc_input.run_config.model
+    parametric_model_arr: np.ndarray | None = None
+    if model_cfg.parametric_model is not None:
+        parametric_model_arr = np.asarray(model_cfg.parametric_model)
+
+    analytical_psd_arr: np.ndarray | None = None
+    if model_cfg.analytical_psd is not None:
+        analytical_psd_arr = np.asarray(model_cfg.analytical_psd)
+
+    return VIWarmStartPlan(
+        strategy="coarse_vi",
         processed_data=coarse_processed_data,
         scaled_true_psd=coarse_scaled_true_psd,
-        sampler_type=preproc_input.sampler_type,
         metadata={
             **(metadata or {}),
             "coarse_vi_attempted": 0,
             "coarse_vi_success": 0,
             "coarse_vi_nfreq": _get_frequency_count(coarse_processed_data),
         },
+        model_n_knots=model_cfg.n_knots,
+        model_degree=int(model_cfg.degree),
+        model_diff_matrix_order=int(model_cfg.diffMatrixOrder),
+        model_knot_kwargs=dict(model_cfg.knot_kwargs or {}),
+        model_parametric_model=parametric_model_arr,
+        model_analytical_psd=analytical_psd_arr,
     )
 
 
@@ -343,7 +351,7 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
         spline_model=None,
     )
 
-    coarse_vi_context = None
+    vi_warm_start_plan = None
     vi_cfg = run_config.vi
     if vi_cfg.init_from_vi and vi_cfg.use_coarse_vi_for_init:
         vi_cg_config, metadata = _derive_vi_coarse_grain_config(
@@ -351,18 +359,20 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
             run_config,
         )
         if vi_cg_config is not None and vi_cg_config.enabled:
-            coarse_vi_context = _build_coarse_vi_context_from_preprocessed(
-                preproc_input,
-                vi_cg_config=vi_cg_config,
-                metadata=metadata,
+            vi_warm_start_plan = (
+                _build_coarse_vi_warm_start_plan_from_preprocessed(
+                    preproc_input,
+                    vi_cg_config=vi_cg_config,
+                    metadata=metadata,
+                )
             )
             if run_config.diagnostics.verbose:
-                coarse_nfreq = coarse_vi_context.metadata["coarse_vi_nfreq"]
+                coarse_nfreq = vi_warm_start_plan.metadata["coarse_vi_nfreq"]
                 logger.info(
                     "Using a separate coarse VI grid for warm start: "
-                    f"mode={coarse_vi_context.metadata['coarse_vi_mode']}, "
-                    f"N_full={coarse_vi_context.metadata['coarse_vi_full_nfreq']}, "
+                    f"mode={vi_warm_start_plan.metadata['coarse_vi_mode']}, "
+                    f"N_full={vi_warm_start_plan.metadata['coarse_vi_full_nfreq']}, "
                     f"N_vi={coarse_nfreq}"
                 )
 
-    return replace(preproc_input, coarse_vi_context=coarse_vi_context)
+    return replace(preproc_input, vi_warm_start_plan=vi_warm_start_plan)

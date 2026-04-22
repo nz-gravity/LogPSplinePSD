@@ -19,6 +19,7 @@ from .diagnostics import (
     _validate_positive_finite_psd,
 )
 from .mixin import VIInitialisationArtifacts
+from .plan import VIWarmStartPlan, build_coarse_sampler_from_plan
 from .runner import compute_vi_artifacts_univar
 from .transfer import coarse_vi_metadata, mark_coarse_vi
 
@@ -26,11 +27,12 @@ from .transfer import coarse_vi_metadata, mark_coarse_vi
 def compute_coarse_vi_artifacts_univar(
     sampler,
     *,
-    coarse_sampler,
+    warm_start_plan: VIWarmStartPlan,
     model: Callable[..., Any],
 ) -> VIInitialisationArtifacts:
     """VI-coarse -> transfer -> VI-fine for univariate models."""
-    metadata = coarse_vi_metadata(sampler)
+    metadata = coarse_vi_metadata(warm_start_plan)
+    coarse_sampler = build_coarse_sampler_from_plan(sampler, warm_start_plan)
     coarse_artifacts = compute_vi_artifacts_univar(coarse_sampler, model=model)
     coarse_diag = coarse_artifacts.diagnostics or {}
 

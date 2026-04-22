@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from .plan import VIWarmStartPlan
 
-def coarse_vi_metadata(sampler) -> Dict[str, Any]:
-    """Return normalized metadata stored on samplers for coarse VI runs."""
-    metadata = dict(getattr(sampler, "_coarse_vi_metadata", {}) or {})
+
+def coarse_vi_metadata(
+    warm_start_plan: VIWarmStartPlan | None = None,
+) -> Dict[str, Any]:
+    """Return normalized metadata for coarse VI runs."""
+    metadata = dict(
+        (warm_start_plan.metadata if warm_start_plan else {}) or {}
+    )
     metadata.setdefault("coarse_vi_attempted", 0)
     metadata.setdefault("coarse_vi_success", 0)
     return metadata

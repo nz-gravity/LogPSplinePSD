@@ -55,6 +55,7 @@ from ..vi_init.blocked import (
 from ..vi_init.diagnostics import (
     _extract_multivar_design_psd,
 )
+from ..vi_init.plan import VIWarmStartPlan
 from .multivar_base import MultivarBaseSampler
 
 
@@ -563,6 +564,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         n_warmup: int = 500,
         *,
         only_vi: bool = False,
+        vi_warm_start_plan: VIWarmStartPlan | None = None,
         **kwargs,
     ) -> xr.DataTree:
         """Run the blocked inference and assemble results.
@@ -590,11 +592,10 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         total_runtime = 0.0
 
         vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
-        coarse_sampler = getattr(self, "_coarse_vi_sampler", None)
-        if coarse_sampler is not None:
+        if vi_warm_start_plan is not None:
             vi_setup = prepare_coarse_block_vi(
                 self,
-                coarse_sampler=coarse_sampler,
+                warm_start_plan=vi_warm_start_plan,
                 block_model=_blocked_channel_model,
             )
         else:
@@ -605,7 +606,9 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             )
         self._vi_diagnostics = vi_setup.diagnostics
         vi_diag = self._vi_diagnostics or {}
-        warm_start_method = "coarse_vi" if coarse_sampler is not None else "vi"
+        warm_start_method = (
+            "coarse_vi" if vi_warm_start_plan is not None else "vi"
+        )
         self._extra_idata_attrs = {
             "inference_method": "vi" if vi_only_mode else "nuts",
             "posterior_source": "vi" if vi_only_mode else "nuts",
@@ -830,35 +833,30 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         self, diagnostics: Optional[Dict[str, Any]]
     ) -> xr.DataTree:
         self._reset_lnz_details()
-        if not diagnostics:
-            raise ValueError(
+        vi_samples = diagnostics.get("vi_samples") if diagnostics else None
+
+        def _normalize_samples(
+            samples: Dict[str, jnp.ndarray],
+        ) -> Dict[str, jnp.ndarray]:
+            normalized = dict(samples)
+            for key in list(normalized):
+                if key.startswith("phi"):
+                    normalized[key] = jnp.exp(normalized[key])
+            return normalized
+
+        return self._assemble_vi_only_inference_data(
+            diagnostics=diagnostics,
+            posterior_draws=vi_samples,
+            means=None,
+            site_filter=lambda name: name.startswith(
+                ("weights_", "phi_", "delta_")
+            ),
+            normalize_samples=_normalize_samples,
+            no_diagnostics_error=(
                 "Variational-only mode is unavailable because VI diagnostics "
                 "were not recorded. Ensure init_from_vi is True."
-            )
-
-        vi_samples = diagnostics.get("vi_samples")
-        if vi_samples:
-            sample_dict = {
-                name: jnp.asarray(array)
-                for name, array in vi_samples.items()
-                if name.startswith(("weights_", "phi_", "delta_"))
-            }
-        else:
-            raise ValueError(
+            ),
+            no_samples_error=(
                 "Blocked VI diagnostics do not include posterior draws for the parameters."
-            )
-
-        if not sample_dict:
-            raise ValueError(
-                "No variational posterior draws were recorded for the model parameters."
-            )
-
-        samples = dict(sample_dict)
-        for key in list(samples):
-            if key.startswith("phi"):
-                samples[key] = jnp.exp(samples[key])
-
-        self.runtime = 0.0
-        idata = self._create_vi_inference_data(samples, {}, diagnostics)
-        self._cache_full_diagnostics(idata)
-        return idata
+            ),
+        )

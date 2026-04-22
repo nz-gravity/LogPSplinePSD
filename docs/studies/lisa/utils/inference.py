@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Optional, Sequence
 
-import arviz as az
 import numpy as np
 import xarray as xr
 
@@ -20,13 +19,16 @@ FMAX = 1e-1
 
 
 def attach_truth_psd_group(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     *,
     freq_true: np.ndarray,
     S_true: np.ndarray,
-) -> az.InferenceData:
+) -> xr.DataTree:
     """Attach truth PSD on the posterior frequency grid to ``idata``."""
-    posterior_psd = getattr(idata, "posterior_psd", None)
+    posterior_psd_group = getattr(idata, "posterior_psd", None)
+    posterior_psd = getattr(
+        posterior_psd_group, "dataset", posterior_psd_group
+    )
     if posterior_psd is None or "freq" not in posterior_psd.coords:
         logger.warning("posterior_psd missing; cannot attach truth_psd group.")
         return idata
@@ -69,7 +71,7 @@ def attach_truth_psd_group(
 
 
 def save_inference_data(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     *,
     outdir: str,
     filename: str = "inference_data.nc",
@@ -130,7 +132,7 @@ def run_lisa_mcmc(
     outdir: str = ".",
     eta: float | str = "auto",
     eta_c: float = 2.0,
-) -> az.InferenceData:
+) -> xr.DataTree:
     """Run multivariate MCMC on LISA data.
 
     Parameters

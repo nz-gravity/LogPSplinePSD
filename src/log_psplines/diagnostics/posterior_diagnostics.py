@@ -4,21 +4,23 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
+from arviz_base import from_dict
+from arviz_plots import plot_rank, plot_trace
+from arviz_stats import ess, rhat
 
 
 def summarize_existing_mcmc_metrics(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
 ) -> Tuple[float, float, float]:
     """Summarize global convergence diagnostics already computed by ArviZ.
 
     Parameters
     ----------
     idata
-        An :class:`arviz.InferenceData` object containing posterior draws.
+        An ``xarray.DataTree`` object containing posterior draws.
 
     Returns
     -------
@@ -26,11 +28,11 @@ def summarize_existing_mcmc_metrics(
         ``(max_rhat, min_ess, median_ess)`` across all parameters.
     """
 
-    rhat = az.rhat(idata)
-    ess = az.ess(idata)
+    rhat_result = rhat(idata)
+    ess_result = ess(idata)
 
-    rhat_values = np.asarray(rhat.to_array())
-    ess_values = np.asarray(ess.to_array())
+    rhat_values = np.asarray(rhat_result.to_array())
+    ess_values = np.asarray(ess_result.to_array())
 
     return (
         float(np.nanmax(rhat_values)),
@@ -198,7 +200,7 @@ def _select_weight_vars(
 
 def _collect_functional_idata(
     psd_functionals: Mapping[str, np.ndarray],
-) -> Optional[az.InferenceData]:
+) -> Optional[xr.DataTree]:
     if not psd_functionals:
         return None
 
@@ -247,13 +249,11 @@ def _collect_functional_idata(
     if not posterior_dict:
         return None
 
-    return az.from_dict(
-        {"posterior": posterior_dict}, coords=coords, dims=dims
-    )
+    return from_dict({"posterior": posterior_dict}, coords=coords, dims=dims)
 
 
 def plot_subset_traces_and_ranks(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     psd_functionals: Mapping[str, np.ndarray],
     weight_subset: Optional[Sequence[str]] = None,
 ) -> List[plt.Figure]:
@@ -290,12 +290,12 @@ def plot_subset_traces_and_ranks(
     figs: List[plt.Figure] = []
 
     if var_names:
-        figs.append(az.plot_trace(idata, var_names=var_names))
-        figs.append(az.plot_rank(idata, var_names=var_names))
+        figs.append(plot_trace(idata, var_names=var_names))
+        figs.append(plot_rank(idata, var_names=var_names))
 
     func_idata = _collect_functional_idata(psd_functionals)
     if func_idata is not None:
-        figs.append(az.plot_trace(func_idata))
-        figs.append(az.plot_rank(func_idata))
+        figs.append(plot_trace(func_idata))
+        figs.append(plot_rank(func_idata))
 
     return figs

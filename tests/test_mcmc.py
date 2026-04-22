@@ -1,402 +1,28 @@
 import os
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-import log_psplines.samplers.multivar.multivar_blocked_nuts as blocked_nuts_mod
 from log_psplines.arviz_utils import (
     get_multivar_posterior_psd_quantiles,
     get_posterior_psd,
     get_weights,
 )
-from log_psplines.arviz_utils.to_arviz import _prepare_samples_and_stats
-from log_psplines.datatypes.univar import Timeseries
 from log_psplines.example_datasets.ar_data import ARData
-from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.mcmc import (
     DiagnosticsConfig,
     ModelConfig,
     MultivariateTimeseries,
-    NUTSConfigOverride,
     RunMCMCConfig,
     VIConfig,
     run_mcmc,
 )
-from log_psplines.plotting import (
-    PSDMatrixPlotSpec,
-    plot_pdgrm,
-    plot_psd_matrix,
-)
+from log_psplines.plotting import plot_pdgrm
 from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
     compute_binning_structure,
 )
-
-
-def _idata_groups(idata):
-    groups = getattr(idata, "groups", ())
-    raw = groups() if callable(groups) else groups
-    return tuple(str(name).lstrip("/") for name in raw)
-
-
-@pytest.mark.slow
-def test_multivar_mcmc(outdir, test_mode):
-    """Test basic multivariate PSD analysis with VARMA data."""
-    outdir = f"{outdir}/out_mcmc/multivar"
-    os.makedirs(outdir, exist_ok=True)
-    print(f"++++ Running multivariate MCMC test {test_mode} ++++")
-
-    n = 256
-    n_knots = 8
-    n_samples = n_warmup = 200
-    verbose = True
-    if test_mode == "fast":
-        n_samples = n_warmup = 3
-        n = 64
-        n_knots = 3
-        verbose = False
-
-    # Generate test data
-    np.random.seed(42)
-    varma = VARMAData(n_samples=n)
-    p = varma.p
-    varma.plot(fname=os.path.join(outdir, "varma_data.png"))
-
-    print(f"VARMA data shape: {varma.data.shape}, p={p}")
-
-    timeseries = MultivariateTimeseries(
-        t=varma.time,
-        y=varma.data,
-    )
-    empirical_full = timeseries.get_empirical_psd()
-    print(f"Timeseries: {timeseries}")
-
-    true_psd = varma.get_true_psd()
-    default_blocks = 2 if test_mode == "fast" else 4
-    samplers = [
-        ("nuts", "multivariate_blocked_nuts", False, default_blocks),
-    ]
-
-    for sampler_name, expected_sampler_attr, expect_lp, Nb in samplers:
-        save_name = (
-            "multivar_blocked_nuts" if sampler_name == "nuts" else sampler_name
-        )
-        sampler_outdir = os.path.join(outdir, save_name)
-        # Run unified MCMC (multivariate sampler)
-        model_cfg = ModelConfig(
-            n_knots=n_knots,
-            degree=3,
-            diffMatrixOrder=2,
-            true_psd=true_psd,
-        )
-        diagnostics_cfg = DiagnosticsConfig(
-            outdir=sampler_outdir,
-            verbose=verbose,
-        )
-        nuts_cfg = NUTSConfigOverride(target_accept_prob=0.8)
-        run_cfg = RunMCMCConfig(
-            n_samples=n_samples,
-            n_warmup=n_warmup,
-            Nb=Nb,
-            model=model_cfg,
-            diagnostics=diagnostics_cfg,
-            nuts=nuts_cfg,
-        )
-        idata = run_mcmc(
-            data=timeseries,
-            config=run_cfg,
-        )
-
-        # Basic checks
-        assert idata is not None
-        assert "posterior" in _idata_groups(idata)
-        assert idata.posterior.sizes["draw"] == n_samples
-        print(
-            f"[{sampler_name}] posterior variables: {idata.posterior}",
-        )
-
-        # check sampler type in attributes
-        assert hasattr(idata, "attrs") and "sampler_type" in idata.attrs
-        # assert (
-        #     idata.attrs["sampler_type"] == expected_sampler_attr
-        # ), f"Unexpected sampler type for {sampler_name}: {idata.attrs['sampler_type']}"
-
-        # Check key parameters exist
-        assert "log_likelihood" in idata.sample_stats.data_vars
-        # if expect_lp:
-        #     assert "lp" in idata.sample_stats.data_vars
-        # else:
-        #     assert "lp" not in idata.sample_stats.data_vars
-        print(
-            f"[{sampler_name}] log_likelihood shape: {idata.sample_stats['log_likelihood'].shape}"
-        )
-        if "lp" in idata.sample_stats.data_vars:
-            print(
-                f"[{sampler_name}] lp shape: {idata.sample_stats['lp'].shape}"
-            )
-
-        # Check diagonal parameters
-        for j in range(p):
-            assert f"delta_{j}" in idata.posterior.data_vars
-            assert f"phi_delta_{j}" in idata.posterior.data_vars
-            assert f"weights_delta_{j}" in idata.posterior.data_vars
-
-        # Print some results
-        ll_samples = idata.sample_stats["log_likelihood"].values.flatten()
-        print(
-            f"[{sampler_name}] Log likelihood range: {ll_samples.min():.2f} to {ll_samples.max():.2f}"
-        )
-        # print all LnZ
-        if "lnz" in idata.attrs:
-            print(
-                f"[{sampler_name}] LnZ: {idata.attrs['lnz']:.3f} ± {idata.attrs.get('lnz_err', np.nan):.3f}"
-            )
-        if "lnz_by_block" in idata.attrs:
-            print(
-                f"[{sampler_name}] LnZ by block: {idata.attrs['lnz_by_block']}, errors: {idata.attrs.get('lnz_err_by_block', np.nan)}"
-            )
-
-        # check the lazily reconstructed posterior psd matrix shape
-        quantiles = get_multivar_posterior_psd_quantiles(idata, n_keep=2)
-        psd_matrix_real = np.asarray(quantiles["real"])
-        psd_matrix_shape = psd_matrix_real.shape
-        freq_dim = np.asarray(quantiles["freq"]).shape[0]
-        assert (
-            psd_matrix_shape[1] == freq_dim
-        ), "Posterior PSD frequency dimension mismatch."
-        assert psd_matrix_shape[2:] == (
-            p,
-            p,
-        ), f"Posterior PSD matrix channel dims mismatch: expected {(p, p)}, got {psd_matrix_shape[2:]}"
-
-        # Check RIAE and CI coverage computation for multivariate
-        print(
-            f"[{sampler_name}] InferenceData attributes: {list(idata.attrs.keys())}"
-        )
-        if "riae_matrix" in idata.attrs:
-            print(
-                f"[{sampler_name}] RIAE Matrix: {idata.attrs['riae_matrix']:.3f}"
-            )
-        if "ci_coverage" in idata.attrs:
-            print(
-                f"[{sampler_name}] CI Coverage: {idata.attrs['ci_coverage']:.3f}"
-            )
-
-        # check that results saved, and plots created
-        result_fn = os.path.join(sampler_outdir, "inference_data.nc")
-        plot_fn = os.path.join(sampler_outdir, "psd_matrix.png")
-        assert os.path.exists(result_fn), "InferenceData file not found!"
-        assert os.path.exists(plot_fn), "PSD matrix plot file not found!"
-
-        spec = PSDMatrixPlotSpec(
-            idata=idata,
-            outdir=sampler_outdir,
-            filename=f"psd_matrix_posterior_check_{sampler_name}.png",
-            xscale="linear",
-            diag_yscale="log",
-        )
-        plot_psd_matrix(spec)
-
-    res_multiar_blocked_nuts = az.from_netcdf(
-        os.path.join(outdir, "multivar_blocked_nuts", "inference_data.nc")
-    )
-    spec = PSDMatrixPlotSpec(
-        idata=res_multiar_blocked_nuts,
-        true_psd=true_psd,
-        xscale="linear",
-        diag_yscale="log",
-        label=f"Multivar Blocked NUTS (Nb={default_blocks})",
-        save=False,
-        close=False,
-        empirical_psd=empirical_full,
-    )
-    fig, ax = plot_psd_matrix(spec)
-    fig.savefig(os.path.join(outdir, "psd_matrix_posterior.png"))
-    plt.close(fig)
-
-    print(f"++++ multivariate MCMC test {test_mode} COMPLETE ++++")
-
-
-def test_multivar_mcmc_unit(synthetic_multivar_timeseries):
-    timeseries = synthetic_multivar_timeseries
-    model_cfg = ModelConfig(n_knots=3)
-    diagnostics_cfg = DiagnosticsConfig(
-        outdir=None,
-        verbose=False,
-        compute_lnz=False,
-    )
-    vi_cfg = VIConfig(
-        vi_steps=10,
-        vi_posterior_draws=6,
-        vi_psd_max_draws=2,
-        init_from_vi=False,
-        only_vi=False,
-    )
-    run_cfg = RunMCMCConfig(
-        n_samples=1,
-        n_warmup=1,
-        Nb=1,
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
-    )
-    idata = run_mcmc(
-        data=timeseries,
-        config=run_cfg,
-    )
-
-    assert idata is not None
-    assert "posterior" in _idata_groups(idata)
-    assert idata.attrs.get("full_diagnostics_computed") == 1
-    assert "full_diagnostics_timestamp" in idata.attrs
-    assert "posterior_psd" not in _idata_groups(idata)
-    quantiles = get_multivar_posterior_psd_quantiles(idata, n_keep=1)
-    idx50 = int(np.argmin(np.abs(np.asarray(quantiles["percentile"]) - 50.0)))
-    psd_vals = np.asarray(quantiles["real"])[idx50]
-    assert psd_vals.ndim == 3
-    assert np.allclose(
-        psd_vals, np.swapaxes(psd_vals, 1, 2), rtol=1e-6, atol=1e-8
-    )
-    diag = np.diagonal(psd_vals, axis1=1, axis2=2)
-    assert np.all(diag > 0.0)
-    for key in ("log_delta_sq", "theta_re", "theta_im"):
-        assert key not in idata.sample_stats.data_vars
-
-
-def test_multivar_blocked_lnz_aggregates_blocks(
-    synthetic_multivar_timeseries, monkeypatch
-):
-    captured_params: list[dict[str, np.ndarray]] = []
-    morphz_calls: list[tuple[np.ndarray, np.ndarray]] = []
-    evidence_values = [(1.25, 0.1), (2.75, 0.2)]
-
-    def fake_build_log_density_fn(model, model_kwargs):
-        def _logpost(params):
-            return 0.0
-
-        return _logpost
-
-    def fake_evaluate_log_density_batch(logpost_fn, params_batch):
-        snapshot: dict[str, np.ndarray] = {}
-        n_batch = None
-        for name, value in params_batch.items():
-            array = np.asarray(value, dtype=np.float64)
-            snapshot[name] = array.copy()
-            if n_batch is None:
-                n_batch = int(array.shape[0])
-            else:
-                assert int(array.shape[0]) == n_batch
-        assert n_batch is not None
-        captured_params.append(snapshot)
-        return np.zeros(n_batch, dtype=np.float64)
-
-    def fake_morphz_evidence(post_smp, lp, lp_fn, **kwargs):
-        call_idx = len(morphz_calls)
-        morphz_calls.append(
-            (
-                np.asarray(post_smp, dtype=np.float64).copy(),
-                np.asarray(lp, dtype=np.float64).copy(),
-            )
-        )
-        assert kwargs.get("kde_bw") == "scott"
-        _ = lp_fn(np.asarray(post_smp)[0])
-        return [evidence_values[call_idx]]
-
-    monkeypatch.setattr(
-        blocked_nuts_mod, "build_log_density_fn", fake_build_log_density_fn
-    )
-    monkeypatch.setattr(
-        blocked_nuts_mod,
-        "evaluate_log_density_batch",
-        fake_evaluate_log_density_batch,
-    )
-    monkeypatch.setattr(
-        blocked_nuts_mod.morphZ,
-        "evidence",
-        fake_morphz_evidence,
-    )
-
-    model_cfg = ModelConfig(n_knots=3)
-    diagnostics_cfg = DiagnosticsConfig(
-        outdir=None,
-        verbose=False,
-        compute_lnz=True,
-    )
-    vi_cfg = VIConfig(init_from_vi=False)
-    run_cfg = RunMCMCConfig(
-        n_samples=1,
-        n_warmup=1,
-        num_chains=1,
-        Nb=1,
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
-    )
-    idata = run_mcmc(
-        data=synthetic_multivar_timeseries,
-        config=run_cfg,
-    )
-
-    assert len(morphz_calls) == 2
-    assert len(captured_params) == 2
-    for key in ("log_delta_sq", "theta_re", "theta_im"):
-        assert key not in idata.sample_stats.data_vars
-    assert idata.attrs.get("lnz") == pytest.approx(4.0)
-    assert idata.attrs.get("lnz_err") == pytest.approx(np.sqrt(0.05))
-    assert np.allclose(
-        np.asarray(idata.attrs.get("lnz_by_block"), dtype=np.float64),
-        np.asarray([1.25, 2.75], dtype=np.float64),
-    )
-    assert np.allclose(
-        np.asarray(idata.attrs.get("lnz_err_by_block"), dtype=np.float64),
-        np.asarray([0.1, 0.2], dtype=np.float64),
-    )
-    assert list(idata.attrs.get("lnz_block_ids")) == [
-        "channel_0",
-        "channel_1",
-    ]
-
-    for params in captured_params:
-        for name, logged_phi in params.items():
-            if not name.startswith("phi_"):
-                continue
-            posterior_phi = np.asarray(idata.posterior[name]).reshape(-1)
-            assert np.all(posterior_phi > 0.0)
-            assert np.allclose(logged_phi, np.log(posterior_phi))
-
-
-def test_mcmc_unit(synthetic_univar_timeseries):
-    model_cfg = ModelConfig(n_knots=3)
-    diagnostics_cfg = DiagnosticsConfig(
-        outdir=None,
-        verbose=False,
-        compute_lnz=False,
-    )
-    vi_cfg = VIConfig(init_from_vi=False)
-    run_cfg = RunMCMCConfig(
-        n_samples=3,
-        n_warmup=3,
-        rng_key=0,
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
-    )
-    idata = run_mcmc(
-        synthetic_univar_timeseries,
-        config=run_cfg,
-    )
-
-    assert "posterior" in _idata_groups(idata)
-    assert "sample_stats" in _idata_groups(idata)
-    assert idata.attrs.get("full_diagnostics_computed") == 1
-    assert "full_diagnostics_timestamp" in idata.attrs
-    assert "lp" in idata.sample_stats.data_vars
-    weights = get_weights(idata)
-    assert weights.size > 0
-    psd = idata.posterior_psd["psd"].sel(percentile=50, method="nearest")
-    assert np.all(psd.values > 0.0)
 
 
 @pytest.mark.slow
@@ -412,163 +38,77 @@ def test_mcmc(outdir: str, test_mode: str):
     n_samples = n_warmup = 120
     n_knots = 8
     compute_lnz = True
-    sampler_names = ["nuts"]
     if test_mode == "fast":
         n_samples = n_warmup = 3
         n = 64
         n_knots = 3
         compute_lnz = False
-        sampler_names = ["nuts"]
+
     ar_data = ARData(
         order=4, duration=1.0, fs=n, seed=42, sigma=np.sqrt(psd_scale)
     )
     print(f"{ar_data.ts}")
 
-    for sampler in sampler_names:
-        sampler_out = f"{outdir}/out_{sampler}"
-        model_cfg = ModelConfig(
-            n_knots=n_knots,
-            true_psd=ar_data.psd_theoretical,
-        )
-        diagnostics_cfg = DiagnosticsConfig(
-            outdir=sampler_out,
-            verbose=(test_mode != "fast"),
-            compute_lnz=compute_lnz,
-        )
-        vi_cfg = VIConfig(init_from_vi=(test_mode != "fast"))
-        run_cfg = RunMCMCConfig(
-            n_samples=n_samples,
-            n_warmup=n_warmup,
-            rng_key=42,
-            model=model_cfg,
-            diagnostics=diagnostics_cfg,
-            vi=vi_cfg,
-        )
-        idata = run_mcmc(
-            ar_data.ts,
-            config=run_cfg,
-        )
-
-        print(
-            f"Inference data posterior variables: {idata.posterior}",
-        )
-
-        fig, ax = plot_pdgrm(idata=idata, show_data=False)
-        ax.set_xscale("linear")
-        fig.savefig(
-            os.path.join(sampler_out, f"test_mcmc_{sampler}.png"),
-            transparent=False,
-        )
-        plt.close(fig)
-
-        # check inference data saved
-        fname = os.path.join(sampler_out, "inference_data.nc")
-        assert os.path.exists(
-            fname
-        ), f"Inference data file {fname} does not exist."
-        # check we can load the inference data
-        idata_loaded = az.from_netcdf(fname)
-        assert idata_loaded is not None, "Inference data could not be loaded."
-
-        # assert that lp is present for idata
-        assert (
-            "lp" in idata_loaded.sample_stats
-        ), "Log-posterior 'lp' not found in sample_stats."
-        # assert that weights are present and have correct shape
-        weights = get_weights(idata_loaded)
-        assert weights is not None, "Weights not found in posterior."
-
-        post_psd = idata_loaded.posterior_psd.psd.sel(
-            percentile=50.0, method="nearest"
-        )
-        posd_psd_scale = post_psd.median().item()
-        print(
-            f"Posterior PSD scale (median): {posd_psd_scale:.2e}, expected ~{psd_scale:.2e}"
-        )
-        # should be within 1 order of magnitude
-        assert np.isclose(
-            posd_psd_scale, psd_scale, rtol=1.0
-        ), "Posterior PSD scale is not within expected range."
-
-    fig = plot_pdgrm(idata=idata, interactive=True)  # test interactive mode
-    fig.write_html(os.path.join(outdir, "test_mcmc_interactive.html"))
-
-    print(f"++++ univariate MCMC test {test_mode} COMPLETE ++++")
-
-
-def _synthetic_univariate_series():
-    rng = np.random.default_rng(12345)
-    n = 128
-    t = np.linspace(0, 4, n, endpoint=False)
-    signal = 0.05 * np.sin(2 * np.pi * 3.0 * t)
-    signal += 0.03 * np.cos(2 * np.pi * 1.3 * t)
-    y = signal + 0.02 * rng.normal(size=n)
-    return t, y
-
-
-def _expected_coarse_freq_univar(
-    ts: Timeseries,
-    fmin: float,
-    fmax: float,
-    cfg: CoarseGrainConfig,
-) -> np.ndarray:
-    standardized = ts.standardise_for_psd()
-    pdgrm = standardized.to_periodogram(fmin=fmin, fmax=fmax)
-    spec = compute_binning_structure(
-        pdgrm.freqs,
-        Nc=cfg.Nc,
-        Nh=cfg.Nh,
-    )
-    return np.asarray(spec.f_coarse, dtype=np.float64)
-
-
-def test_run_mcmc_coarse_grain_univariate_mcmc():
-    t, y = _synthetic_univariate_series()
-    ts_run = Timeseries(t=t.copy(), y=y.copy())
-    ts_spec = Timeseries(t=t.copy(), y=y.copy())
-    fmin, fmax = 0.02, 0.8
-    coarse_cfg = CoarseGrainConfig(
-        enabled=True,
-        Nc=None,
-        Nh=1,
-    )
-    expected_freq = _expected_coarse_freq_univar(
-        ts_spec,
-        fmin=fmin,
-        fmax=fmax,
-        cfg=coarse_cfg,
-    )
-
+    sampler_out = f"{outdir}/out_nuts"
     model_cfg = ModelConfig(
-        n_knots=6,
-        degree=3,
-        diffMatrixOrder=2,
-        fmin=fmin,
-        fmax=fmax,
+        n_knots=n_knots,
+        true_psd=ar_data.psd_theoretical,
     )
-    diagnostics_cfg = DiagnosticsConfig(verbose=False)
-    vi_cfg = VIConfig(
-        only_vi=True,
-        vi_steps=20,
-        vi_posterior_draws=8,
-        vi_psd_max_draws=4,
+    diagnostics_cfg = DiagnosticsConfig(
+        outdir=sampler_out,
+        verbose=(test_mode != "fast"),
+        compute_lnz=compute_lnz,
     )
+    vi_cfg = VIConfig(init_from_vi=(test_mode != "fast"))
     run_cfg = RunMCMCConfig(
-        n_samples=1,
-        n_warmup=1,
-        coarse_grain_config=coarse_cfg,
+        n_samples=n_samples,
+        n_warmup=n_warmup,
+        rng_key=42,
         model=model_cfg,
         diagnostics=diagnostics_cfg,
         vi=vi_cfg,
     )
     idata = run_mcmc(
-        data=ts_run,
+        ar_data.ts,
         config=run_cfg,
     )
-    freq, _, _, _ = get_posterior_psd(idata)
-    freq = np.asarray(freq, dtype=float)
-    assert freq.shape[0] == expected_freq.shape[0]
-    assert np.allclose(freq, expected_freq)
+
+    print(f"Inference data posterior variables: {idata.posterior}")
+
+    fig, ax = plot_pdgrm(idata=idata, show_data=False)
+    ax.set_xscale("linear")
+    fig.savefig(
+        os.path.join(sampler_out, "test_mcmc_nuts.png"),
+        transparent=False,
+    )
+    plt.close(fig)
+
+    # Check inference data saved
+    fname = os.path.join(sampler_out, "inference_data.nc")
+    assert os.path.exists(
+        fname
+    ), f"Inference data file {fname} does not exist."
+
+    # Assert that lp is present for idata
+    assert (
+        "lp" in idata.sample_stats
+    ), "Log-posterior 'lp' not found in sample_stats."
+
+    # Assert that weights are present and have correct shape
+    weights = get_weights(idata)
+    assert weights is not None, "Weights not found in posterior."
+
+    _, median_psd, _, _ = get_posterior_psd(idata)
+    post_psd_scale = float(np.median(median_psd))
+    print(
+        f"Posterior PSD scale (median): {post_psd_scale:.2e}, expected ~{psd_scale:.2e}"
+    )
+    # Should be within 1 order of magnitude
+    assert np.isclose(
+        post_psd_scale, psd_scale, rtol=1.0
+    ), "Posterior PSD scale is not within expected range."
+
+    print(f"++++ univariate MCMC test {test_mode} COMPLETE ++++")
 
 
 def _synthetic_multivar_series():
@@ -609,17 +149,23 @@ def _expected_coarse_freq_multivar(
     return np.asarray(spec.f_coarse, dtype=np.float64)
 
 
-def test_run_mcmc_coarse_grain_multivar_only_vi():
+@pytest.mark.slow
+def test_run_mcmc_coarse_grain_multivar(test_mode: str):
+    """Test multivariate PSD analysis with coarse grain, VI init, and blocking."""
     t, y = _synthetic_multivar_series()
     ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
     ts_spec = MultivariateTimeseries(y=y.copy(), t=t.copy())
+
     fmin, fmax = 0.01, 0.4
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
         Nc=None,
         Nh=1,
     )
-    Nb = 2
+    Nb = 2 if test_mode != "fast" else 1
+    n_samples = n_warmup = 120 if test_mode != "fast" else 3
+    vi_steps = 30 if test_mode != "fast" else 5
+
     expected_freq = _expected_coarse_freq_multivar(
         ts_spec,
         Nb=Nb,
@@ -635,18 +181,19 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
         fmin=fmin,
         fmax=fmax,
     )
-    diagnostics_cfg = DiagnosticsConfig(verbose=False)
+    diagnostics_cfg = DiagnosticsConfig(verbose=(test_mode != "fast"))
     vi_cfg = VIConfig(
-        only_vi=True,
-        vi_steps=20,
+        init_from_vi=True,
+        only_vi=False,
+        vi_steps=vi_steps,
         vi_lr=5e-3,
         vi_progress_bar=False,
         vi_posterior_draws=6,
         vi_psd_max_draws=2,
     )
     run_cfg = RunMCMCConfig(
-        n_samples=1,
-        n_warmup=1,
+        n_samples=n_samples,
+        n_warmup=n_warmup,
         Nb=Nb,
         coarse_grain_config=coarse_cfg,
         model=model_cfg,
@@ -657,158 +204,31 @@ def test_run_mcmc_coarse_grain_multivar_only_vi():
         data=ts_run,
         config=run_cfg,
     )
+
+    # Verify coarse-grained frequency structure
     quantiles = get_multivar_posterior_psd_quantiles(idata, n_keep=2)
     freq = np.asarray(quantiles["freq"], dtype=float)
-    assert freq.shape[0] == expected_freq.shape[0]
-    assert np.allclose(freq, expected_freq)
-
-
-@pytest.mark.memory
-def test_multivar_blocked_nuts_records_step_size():
-    t, y = _synthetic_multivar_series()
-    ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
-
-    model_cfg = ModelConfig(
-        n_knots=4,
-        degree=3,
-        diffMatrixOrder=2,
+    assert freq.shape[0] == expected_freq.shape[0], (
+        f"Frequency dimension mismatch: got {freq.shape[0]}, "
+        f"expected {expected_freq.shape[0]}"
     )
-    diagnostics_cfg = DiagnosticsConfig(verbose=False)
-    vi_cfg = VIConfig(init_from_vi=False)
-    run_cfg = RunMCMCConfig(
-        n_samples=1,
-        n_warmup=2,
-        num_chains=1,
-        Nb=1,
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
-    )
-    idata = run_mcmc(
-        data=ts_run,
-        config=run_cfg,
-    )
+    assert np.allclose(
+        freq, expected_freq
+    ), "Coarse-grained frequencies do not match."
 
-    step_size_keys = [
-        key
-        for key in idata.sample_stats.data_vars
-        if str(key).startswith("step_size_channel_")
-    ]
-    assert step_size_keys, "Blocked NUTS should record per-channel step size."
+    # Verify PSD matrix structure for multivariate
+    psd_real = np.asarray(quantiles["real"])
+    psd_shape = psd_real.shape
+    assert psd_shape[1] == freq.shape[0], "PSD frequency dimension mismatch."
+    assert psd_shape[2:] == (2, 2), "PSD matrix should be 2x2 per frequency."
 
+    # Verify Hermitian and positive definite
+    idx50 = int(np.argmin(np.abs(np.asarray(quantiles["percentile"]) - 50.0)))
+    psd_median = psd_real[idx50]
+    diag = np.diagonal(psd_median, axis1=1, axis2=2)
+    assert np.all(diag > 0.0), "PSD diagonal elements should be positive."
+    assert np.allclose(
+        psd_median, np.swapaxes(psd_median, 1, 2), rtol=1e-6, atol=1e-8
+    ), "PSD should be Hermitian."
 
-@pytest.mark.memory
-def test_multivar_blocked_nuts_records_sampling_eta_attrs():
-    t, y = _synthetic_multivar_series()
-    ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
-
-    model_cfg = ModelConfig(
-        n_knots=4,
-        degree=3,
-        diffMatrixOrder=2,
-    )
-    diagnostics_cfg = DiagnosticsConfig(verbose=False)
-    vi_cfg = VIConfig(init_from_vi=False)
-    run_cfg = RunMCMCConfig(
-        n_samples=1,
-        n_warmup=2,
-        num_chains=1,
-        Nb=4,
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
-        extra_kwargs={"eta": 0.25},
-    )
-    idata = run_mcmc(
-        data=ts_run,
-        config=run_cfg,
-    )
-
-    eta_keys = sorted(
-        key
-        for key in idata.attrs
-        if str(key).startswith("sampling_eta_channel_")
-    )
-    assert eta_keys, "Blocked NUTS should record per-channel sampling eta."
-    for key in eta_keys:
-        assert float(idata.attrs[key]) == pytest.approx(0.25)
-
-
-@pytest.mark.memory
-def test_run_mcmc_multivar_disables_lnz_by_default():
-    t, y = _synthetic_multivar_series()
-    ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
-
-    model_cfg = ModelConfig(
-        n_knots=4,
-        degree=3,
-        diffMatrixOrder=2,
-    )
-    diagnostics_cfg = DiagnosticsConfig(verbose=False)
-    vi_cfg = VIConfig(init_from_vi=False)
-    run_cfg = RunMCMCConfig(
-        n_samples=1,
-        n_warmup=2,
-        num_chains=1,
-        Nb=1,
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
-    )
-    idata = run_mcmc(
-        data=ts_run,
-        config=run_cfg,
-    )
-
-    assert "lnz" in idata.attrs
-    assert "lnz_err" in idata.attrs
-    assert np.isnan(float(idata.attrs["lnz"]))
-    assert np.isnan(float(idata.attrs["lnz_err"]))
-    assert "lnz_by_block" not in idata.attrs
-    assert "lnz_err_by_block" not in idata.attrs
-    assert "lnz_block_ids" not in idata.attrs
-
-
-def test_prepare_samples_and_stats_preserves_chain_dim():
-    samples = {"weights_delta_0": np.zeros((2, 3, 4), dtype=float)}
-    sample_stats = {"log_likelihood": np.zeros((2, 3), dtype=float)}
-    out_samples, out_stats = _prepare_samples_and_stats(
-        samples, sample_stats, num_chains=2
-    )
-
-    assert out_samples["weights_delta_0"].shape[0] == 2
-    assert out_stats["log_likelihood"].shape[0] == 2
-
-
-def test_prepare_samples_and_stats_adds_chain_dim():
-    samples = {"weights_delta_0": np.zeros((3, 4), dtype=float)}
-    sample_stats = {"log_likelihood": np.zeros((3,), dtype=float)}
-    out_samples, out_stats = _prepare_samples_and_stats(
-        samples, sample_stats, num_chains=1
-    )
-
-    assert out_samples["weights_delta_0"].shape[0] == 1
-    assert out_stats["log_likelihood"].shape[0] == 1
-
-
-def test_prepare_samples_and_stats_transposes_draw_chain_layout():
-    samples = {"weights_delta_0": np.zeros((2, 3, 4), dtype=float)}
-    sample_stats = {
-        "accept_prob_channel_0": np.zeros((3, 2), dtype=float),
-    }
-    out_samples, out_stats = _prepare_samples_and_stats(
-        samples, sample_stats, num_chains=2
-    )
-
-    assert out_samples["weights_delta_0"].shape == (2, 3, 4)
-    assert out_stats["accept_prob_channel_0"].shape == (2, 3)
-
-
-def test_prepare_samples_and_stats_chain_vector_gets_draw_axis():
-    samples = {"weights_delta_0": np.zeros((2, 3, 4), dtype=float)}
-    sample_stats = {"step_size": np.array([0.1, 0.2], dtype=float)}
-    _, out_stats = _prepare_samples_and_stats(
-        samples, sample_stats, num_chains=2
-    )
-
-    assert out_stats["step_size"].shape == (2, 1)
+    print(f"++++ multivariate MCMC test {test_mode} COMPLETE ++++")

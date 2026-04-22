@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional, Tuple
 
-import arviz as az
 import jax
 import jax.numpy as jnp
 import numpy as np

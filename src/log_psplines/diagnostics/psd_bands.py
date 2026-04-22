@@ -31,7 +31,53 @@ def _run(
 
     metrics: Dict[str, float] = {}
 
-    if "psd" in psd_ds:
+    if "spectral_density" in psd_ds:
+        freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
+        spectral_density = np.asarray(psd_ds["spectral_density"].values)
+        spectral_density = spectral_density.reshape(
+            -1,
+            spectral_density.shape[2],
+            spectral_density.shape[3],
+            spectral_density.shape[4],
+        )
+        diag = np.real(
+            spectral_density[
+                :,
+                np.arange(spectral_density.shape[1]),
+                np.arange(spectral_density.shape[1]),
+                :,
+            ]
+        )
+
+        if diag.shape[1] == 1:
+            q50 = np.percentile(diag[:, 0, :], 50.0, axis=0)
+            metrics["variance_median"] = _variance_from_psd(q50, freqs)
+            q05 = np.percentile(diag[:, 0, :], 5.0, axis=0)
+            q95 = np.percentile(diag[:, 0, :], 95.0, axis=0)
+            metrics["variance_ci_width"] = float(
+                _variance_from_psd(q95, freqs) - _variance_from_psd(q05, freqs)
+            )
+        else:
+            q50 = np.percentile(diag, 50.0, axis=0)
+            variances = simpson(q50, x=freqs, axis=-1)
+            metrics["variance_median_mean"] = float(np.mean(variances))
+            q05 = np.percentile(diag, 5.0, axis=0)
+            q95 = np.percentile(diag, 95.0, axis=0)
+            var_low = simpson(q05, x=freqs, axis=-1)
+            var_high = simpson(q95, x=freqs, axis=-1)
+            metrics["variance_ci_width_mean"] = float(
+                np.mean(var_high - var_low)
+            )
+            coherence = np.asarray(psd_ds["coherence"].values).reshape(
+                -1,
+                spectral_density.shape[1],
+                spectral_density.shape[2],
+                spectral_density.shape[3],
+            )
+            coh_q50 = np.percentile(coherence, 50.0, axis=0)
+            metrics["coherence_median_max"] = float(np.nanmax(np.abs(coh_q50)))
+
+    elif "psd" in psd_ds:
         psd = psd_ds["psd"]
         freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
         percentiles = np.asarray(psd.coords.get("percentile", []), dtype=float)

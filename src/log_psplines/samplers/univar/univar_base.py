@@ -6,17 +6,16 @@ Base class for univariate PSD samplers.
 
 import tempfile
 import time
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-import arviz as az
 import jax
 import jax.numpy as jnp
 import morphZ
 import numpy as np
+import xarray as xr
 from xarray import DataArray, Dataset
 
-from ...arviz_utils.to_arviz import results_to_arviz
+from ...arviz_utils.to_arviz import _pack_spline_model
 from ...datatypes import Periodogram
 from ...logger import logger
 from ...plotting import (
@@ -67,11 +66,17 @@ class UnivarBaseSampler(BaseSampler):
             raise ValueError("spline_model.weights must be initialized.")
         self.n_weights = len(self.spline_model.weights)
         self.log_pdgrm = jnp.log(self.periodogram.power)
+        self.log_pdgrm_np = np.asarray(self.log_pdgrm, dtype=np.float64)
         self.penalty_matrix = jnp.array(self.spline_model.penalty_matrix)
         self.basis_matrix = jnp.asarray(
             self.spline_model.basis, dtype=jnp.float32
         )
+        self.basis_matrix_np = np.asarray(self.basis_matrix, dtype=np.float64)
         self.log_parametric = jnp.array(self.spline_model.log_parametric_model)
+        self.log_parametric_np = np.asarray(
+            self.log_parametric, dtype=np.float64
+        )
+        self.freq_coords = np.asarray(self.periodogram.freqs, dtype=np.float32)
         Nh = getattr(self.periodogram, "Nh", 1)
         if isinstance(Nh, bool) or not isinstance(Nh, (int, np.integer)):
             raise TypeError("periodogram.Nh must be a positive integer")
@@ -90,7 +95,69 @@ class UnivarBaseSampler(BaseSampler):
     def data_type(self) -> str:
         return "univariate"
 
-    def _save_plots(self, idata: az.InferenceData) -> None:
+    def _arviz_coords(self) -> Dict[str, Any]:
+        return {
+            "freq": self.freq_coords,
+            "weight_dim": np.arange(self.n_weights),
+        }
+
+    def _arviz_dims(
+        self, samples: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, list[str]]:
+        return {"weights": ["weight_dim"]}
+
+    def _attach_custom_groups(
+        self,
+        idata: xr.DataTree,
+        *,
+        samples: Dict[str, Any],
+        sample_stats: Dict[str, Any],
+    ) -> None:
+        weights = np.asarray(samples["weights"], dtype=np.float64)
+        observed_power = np.asarray(
+            self.periodogram.power, dtype=np.float64
+        ) * float(self.config.scaling_factor)
+        log_psd = (
+            np.einsum("fk,cdk->cdf", self.basis_matrix_np, weights)
+            + self.log_parametric_np[None, None, :]
+        )
+        pointwise_log_likelihood = -0.5 * (
+            float(self.Nh) * log_psd
+            + np.exp(self.log_pdgrm_np[None, None, :] - log_psd)
+        )
+        freq_coords = {"freq": self.freq_coords}
+
+        idata["observed_data"] = xr.DataTree(
+            dataset=Dataset(
+                {
+                    "periodogram": DataArray(
+                        observed_power,
+                        dims=["freq"],
+                        coords=freq_coords,
+                    )
+                }
+            )
+        )
+        idata["log_likelihood"] = xr.DataTree(
+            dataset=Dataset(
+                {
+                    "periodogram": DataArray(
+                        pointwise_log_likelihood.astype(np.float32),
+                        dims=["chain", "draw", "freq"],
+                        coords={
+                            "chain": np.arange(weights.shape[0]),
+                            "draw": np.arange(weights.shape[1]),
+                            "freq": self.freq_coords,
+                        },
+                    )
+                }
+            )
+        )
+        idata["spline_model"] = xr.DataTree(
+            dataset=_pack_spline_model(self.spline_model)
+        )
+
+    def _save_plots(self, idata: xr.DataTree) -> None:
         """Save univariate-specific plots."""
         t0 = time.perf_counter()
         logger.info("save_plots(univar): plotting posterior predictive")
@@ -200,71 +267,57 @@ class UnivarBaseSampler(BaseSampler):
             "Concrete sampler must implement _compute_log_posterior"
         )
 
-    def _create_vi_inference_data(
-        self,
-        samples: Dict[str, jnp.ndarray],
-        sample_stats: Dict[str, jnp.ndarray],
-        diagnostics: Optional[Dict[str, Any]],
-    ) -> az.InferenceData:
-        """Convert VI samples to ArviZ and attach VI-specific diagnostics."""
-
-        idata = self._create_inference_data(
-            samples,
-            sample_stats,
-            lnz=np.nan,
-            lnz_err=np.nan,
-        )
-
-        self._attach_vi_psd_group(idata, diagnostics)
-        return idata
-
-    def _attach_vi_psd_group(
-        self, idata: az.InferenceData, diagnostics: Optional[Dict[str, Any]]
+    def _attach_vi_group(
+        self, idata: xr.DataTree, diagnostics: Optional[Dict[str, Any]]
     ) -> None:
-        """Store VI PSD quantiles in a dedicated ArviZ group."""
+        """Store optional VI posterior draws and diagnostics."""
 
         if not diagnostics:
             return
 
-        psd_quantiles = diagnostics.get("psd_quantiles")
-        freq = np.asarray(self.periodogram.freqs, dtype=np.float32)
-        if psd_quantiles:
-            entries = []
-            perc = []
-            for label, percentile in [
-                ("q05", 5.0),
-                ("q50", 50.0),
-                ("q95", 95.0),
-            ]:
-                value = psd_quantiles.get(label)
-                if value is None:
+        if bool(idata.attrs.get("only_vi")):
+            return
+
+        vi_samples = diagnostics.get("vi_samples")
+        if vi_samples:
+            sample_vars = {}
+            coords: Dict[str, Any] = {"chain": np.arange(1)}
+            for key, value in vi_samples.items():
+                if key not in {"weights", "phi", "delta"}:
                     continue
-                entries.append(np.asarray(value))
-                perc.append(percentile)
-            if not entries:
-                return
-            psd_array = np.stack(entries, axis=0)
-            percentiles = np.asarray(perc, dtype=np.float32)
-        else:
-            psd = diagnostics.get("psd")
-            if psd is None:
-                return
-            psd_array = np.asarray(psd)[None, :]
-            percentiles = np.asarray([50.0], dtype=np.float32)
+                array = np.asarray(value)
+                if array.ndim == 1:
+                    array = (
+                        array[None, :, None]
+                        if key != "weights"
+                        else array[None, ...]
+                    )
+                if key == "weights":
+                    if array.ndim != 2:
+                        continue
+                    array = array[None, ...]
+                    coords["weight_dim"] = np.arange(array.shape[-1])
+                    sample_vars[key] = (
+                        ["chain", "draw", "weight_dim"],
+                        array,
+                    )
+                else:
+                    sample_vars[key] = (
+                        ["chain", "draw"],
+                        array.reshape(1, -1),
+                    )
+            self._attach_vi_posterior_dataset(idata, sample_vars, coords)
 
-        dataset = Dataset(
-            {
-                "psd": DataArray(
-                    psd_array,
-                    dims=["percentile", "freq"],
-                    coords={
-                        "percentile": percentiles,
-                        "freq": freq,
-                    },
-                )
-            }
+        self._attach_vi_sample_stats(
+            idata,
+            diagnostics,
+            attr_keys=(
+                "guide",
+                "riae",
+                "coverage",
+                "ci_width",
+                "psis_khat_max",
+                "psis_khat_status",
+                "psis_khat_threshold",
+            ),
         )
-
-        import xarray as _xr
-
-        idata["vi_posterior_psd"] = _xr.DataTree(dataset=dataset)

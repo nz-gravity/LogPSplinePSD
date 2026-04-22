@@ -8,10 +8,10 @@ import time
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-import arviz as az
 import jax.numpy as jnp
 import numpy as np
 import numpyro
+import xarray as xr
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
@@ -115,7 +115,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         *,
         only_vi: bool = False,
         **kwargs,
-    ) -> az.InferenceData:
+    ) -> xr.DataTree:
         """Run NUTS sampling."""
         vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
         coarse_sampler = getattr(self, "_coarse_vi_sampler", None)
@@ -166,18 +166,29 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         self.rng_key = vi_artifacts.rng_key
         self._vi_diagnostics = vi_artifacts.diagnostics
         vi_diag = self._vi_diagnostics or {}
+        warm_start_method = "coarse_vi" if coarse_sampler is not None else "vi"
         self._extra_idata_attrs = {
-            key: vi_diag[key]
-            for key in (
-                "coarse_vi_attempted",
-                "coarse_vi_success",
-                "coarse_vi_mode",
-                "coarse_vi_full_nfreq",
-                "coarse_vi_nfreq",
-                "coarse_vi_target_nfreq",
-            )
-            if key in vi_diag
+            "inference_method": "vi" if vi_only_mode else "nuts",
+            "posterior_source": "vi" if vi_only_mode else "nuts",
+            "warm_start_method": warm_start_method,
+            "vi_guide": vi_diag.get("guide")
+            or getattr(self.config, "vi_guide", None)
+            or "vi",
         }
+        self._extra_idata_attrs.update(
+            {
+                key: vi_diag[key]
+                for key in (
+                    "coarse_vi_attempted",
+                    "coarse_vi_success",
+                    "coarse_vi_mode",
+                    "coarse_vi_full_nfreq",
+                    "coarse_vi_nfreq",
+                    "coarse_vi_target_nfreq",
+                )
+                if key in vi_diag
+            }
+        )
         self._save_vi_diagnostics()
 
         if vi_only_mode:
@@ -266,7 +277,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         if "phi" in samples:
             samples["phi"] = jnp.exp(samples["phi"])
 
-        return self.to_arviz(samples, stats)
+        return self.to_arviz(samples, stats, mcmc=mcmc)
 
     def _default_init_strategy(self):
         default_values = default_init_values_univar(
@@ -280,7 +291,7 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
 
     def _vi_only_inference_data(
         self, vi_artifacts: "VIInitialisationArtifacts"
-    ) -> az.InferenceData:
+    ) -> xr.DataTree:
         diagnostics = vi_artifacts.diagnostics or {}
         posterior_draws = vi_artifacts.posterior_draws or diagnostics.get(
             "vi_samples"

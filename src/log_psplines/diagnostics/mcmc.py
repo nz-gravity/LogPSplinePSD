@@ -5,17 +5,41 @@ from __future__ import annotations
 import re
 from typing import Callable, Dict
 
-import arviz as az
 import numpy as np
 import xarray as xr
+from arviz_stats.base import array_stats
 
-from ..arviz_utils.rhat import extract_rhat_values
 from ..logger import logger
 from ._utils import khat_status
 
 DEFAULT_MCMC_DIAG_MAX_ELEMENTS = 250_000
 DEFAULT_MCMC_DIAG_WEIGHT_POINTS = 6
 DEFAULT_MCMC_DIAG_MAX_DRAWS = 500
+
+
+def _require_dataset(idata: xr.DataTree, group: str) -> xr.Dataset:
+    dataset = idata[group].dataset
+    if dataset is None:
+        raise TypeError(f"DataTree group '{group}' must contain a dataset.")
+    return dataset
+
+
+def _has_group(idata: xr.DataTree, group: str) -> bool:
+    return group in idata.children
+
+
+def _select_draw_slice(idata: xr.DataTree, draw_slice: slice) -> xr.DataTree:
+    out = xr.DataTree()
+    out.attrs.update(dict(idata.attrs))
+    for name, group in idata.children.items():
+        dataset = group.dataset
+        if dataset is None:
+            out[name] = group
+            continue
+        if "draw" in dataset.dims:
+            dataset = dataset.sel(draw=draw_slice)
+        out[name] = xr.DataTree(dataset=dataset)
+    return out
 
 
 def _metric_from_attr_or_compute(
@@ -27,7 +51,7 @@ def _metric_from_attr_or_compute(
     compute_metrics: Callable[[np.ndarray], Dict[str, float]],
 ) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
-    attrs = getattr(idata, "attrs", {}) or {}
+    attrs = idata.attrs or {}
 
     attr_values = attrs.get(attr_key)
     if attr_values is not None:
@@ -47,19 +71,18 @@ def _metric_from_attr_or_compute(
     return metrics
 
 
-def _posterior_from_idata(idata):
-    if hasattr(idata, "posterior"):
-        return getattr(idata, "posterior", None)
-    if hasattr(idata, "data_vars"):
-        return idata
-    return None
+def _posterior_from_idata(idata: xr.DataTree) -> xr.Dataset:
+    return _require_dataset(idata, "posterior")
 
 
 def _safe_rhat_values(posterior) -> np.ndarray:
     values = []
     for var in posterior.data_vars.values():
+        arr = np.asarray(var)
+        if arr.ndim < 2 or arr.shape[0] < 2:
+            continue
         try:
-            arr = np.asarray(az.rhat(var))
+            arr = np.asarray(array_stats.rhat(arr, chain_axis=0, draw_axis=1))
         except Exception:
             continue
         arr = arr[np.isfinite(arr)]
@@ -73,8 +96,18 @@ def _safe_rhat_values(posterior) -> np.ndarray:
 def _safe_ess_values(posterior, *, method: str) -> np.ndarray:
     values = []
     for var in posterior.data_vars.values():
+        arr = np.asarray(var)
+        if arr.ndim < 2:
+            continue
         try:
-            arr = np.asarray(az.ess(var, method=method))
+            arr = np.asarray(
+                array_stats.ess(
+                    arr,
+                    method=method,
+                    chain_axis=0,
+                    draw_axis=1,
+                )
+            )
         except Exception:
             continue
         arr = arr[np.isfinite(arr)]
@@ -86,7 +119,7 @@ def _safe_ess_values(posterior, *, method: str) -> np.ndarray:
 
 
 def _compute_rhat(idata, *, skip_compute: bool = False) -> Dict[str, float]:
-    attrs = getattr(idata, "attrs", {}) or {}
+    attrs = idata.attrs or {}
     if attrs.get("rhat") is not None:
         return _metric_from_attr_or_compute(
             idata,
@@ -95,7 +128,7 @@ def _compute_rhat(idata, *, skip_compute: bool = False) -> Dict[str, float]:
                 "rhat_max": float(np.max(vals)),
                 "rhat_mean": float(np.mean(vals)),
             },
-            compute_fn=lambda: extract_rhat_values(idata),
+            compute_fn=lambda: _safe_rhat_values(_posterior_from_idata(idata)),
             compute_metrics=lambda vals: {
                 "rhat_max": float(np.max(vals)),
                 "rhat_mean": float(np.mean(vals)),
@@ -116,7 +149,7 @@ def _compute_rhat(idata, *, skip_compute: bool = False) -> Dict[str, float]:
 
 
 def _compute_ess(idata, *, skip_compute: bool = False) -> Dict[str, float]:
-    attrs = getattr(idata, "attrs", {}) or {}
+    attrs = idata.attrs or {}
     has_ess_attr = (
         attrs.get("ess") is not None or attrs.get("ess_tail") is not None
     )
@@ -150,51 +183,34 @@ def _compute_ess(idata, *, skip_compute: bool = False) -> Dict[str, float]:
 
 
 def _estimate_posterior_elements(idata) -> int:
-    posterior = getattr(idata, "posterior", None)
-    if posterior is None and hasattr(idata, "data_vars"):
-        posterior = idata
-    if posterior is None:
-        return 0
+    posterior = _require_dataset(idata, "posterior")
     total = 0
     for var in posterior.data_vars.values():
-        try:
-            total += int(var.size)
-        except Exception:
-            continue
+        total += int(var.size)
     return int(total)
 
 
 def _thin_idata_draws(idata, *, step: int):
-    """Return a thinned InferenceData (every `step` draws), best-effort."""
+    """Return a thinned ``DataTree`` (every ``step`` draws)."""
     if step <= 1:
         return idata, False
-    try:
-        posterior = getattr(idata, "posterior", None)
-        if posterior is None and hasattr(idata, "data_vars"):
-            posterior = idata
-        if posterior is None or "draw" not in posterior.dims:
-            return idata, False
-        return idata.sel(draw=slice(None, None, int(step))), True
-    except Exception:
+    posterior = _require_dataset(idata, "posterior")
+    if "draw" not in posterior.dims:
         return idata, False
+    return _select_draw_slice(idata, slice(None, None, int(step))), True
 
 
 def _cap_idata_draws(idata, *, max_draws: int):
     if max_draws <= 0:
         return idata, False
-    try:
-        posterior = getattr(idata, "posterior", None)
-        if posterior is None and hasattr(idata, "data_vars"):
-            posterior = idata
-        if posterior is None or "draw" not in posterior.dims:
-            return idata, False
-        n_draws = int(posterior.sizes.get("draw", 0))
-        if n_draws <= max_draws:
-            return idata, False
-        start = max(0, n_draws - int(max_draws))
-        return idata.sel(draw=slice(start, None)), True
-    except Exception:
+    posterior = _require_dataset(idata, "posterior")
+    if "draw" not in posterior.dims:
         return idata, False
+    n_draws = int(posterior.sizes.get("draw", 0))
+    if n_draws <= max_draws:
+        return idata, False
+    start = max(0, n_draws - int(max_draws))
+    return _select_draw_slice(idata, slice(start, None)), True
 
 
 def _select_weight_indices(size: int, max_points: int) -> np.ndarray:
@@ -212,10 +228,7 @@ def _block_index_from_name(name: str) -> int | None:
     match = re.search(r"\d+", name)
     if not match:
         return None
-    try:
-        return int(match.group(0))
-    except Exception:
-        return None
+    return int(match.group(0))
 
 
 def _group_vars_by_block(posterior) -> dict[int, list[str]]:
@@ -266,7 +279,7 @@ def _posterior_counts(posterior) -> dict:
 
 
 def _log_posterior_summary(stage: str, posterior, weight_meta=None) -> None:
-    posterior_ds = _posterior_from_idata(posterior)
+    posterior_ds = posterior
     counts = _posterior_counts(posterior_ds)
     if not counts["vars"]:
         return
@@ -298,9 +311,7 @@ def _log_posterior_summary(stage: str, posterior, weight_meta=None) -> None:
 
 
 def _select_posterior_subset(idata):
-    posterior = getattr(idata, "posterior", None)
-    if posterior is None:
-        return None, {}
+    posterior = _require_dataset(idata, "posterior")
 
     subset = {}
     weight_meta: dict[str, dict[str, int]] = {}
@@ -327,24 +338,23 @@ def _select_posterior_subset(idata):
     if not subset:
         return None, {}
     # Reconstruct a DataTree-compatible idata with only the subset vars
-    subset_ds = xr.Dataset(subset, attrs=getattr(posterior, "attrs", {}))
+    subset_ds = xr.Dataset(subset, attrs=posterior.attrs)
     new_idata = xr.DataTree()
+    new_idata.attrs.update(dict(idata.attrs))
     new_idata["posterior"] = xr.DataTree(dataset=subset_ds)
     return new_idata, weight_meta
 
 
 def _compute_divergences(idata) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
-    if not hasattr(idata, "sample_stats"):
+    if not _has_group(idata, "sample_stats"):
         return metrics
+    sample_stats = _require_dataset(idata, "sample_stats")
 
-    div_keys = [key for key in idata.sample_stats if "diverging" in str(key)]
+    div_keys = [key for key in sample_stats if "diverging" in str(key)]
     values = []
     for key in div_keys:
-        try:
-            values.append(np.asarray(idata.sample_stats[key]))
-        except Exception:
-            continue
+        values.append(np.asarray(sample_stats[key]))
 
     if not values:
         return metrics
@@ -357,25 +367,21 @@ def _compute_divergences(idata) -> Dict[str, float]:
 
 def _compute_acceptance(idata) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
-    if not hasattr(idata, "sample_stats"):
+    if not _has_group(idata, "sample_stats"):
         return metrics
+    sample_stats = _require_dataset(idata, "sample_stats")
 
     for key in ("accept_prob", "acceptance_rate"):
-        if key in idata.sample_stats:
-            arr = np.asarray(idata.sample_stats[key])
+        if key in sample_stats:
+            arr = np.asarray(sample_stats[key])
             metrics["acceptance_rate_mean"] = float(np.mean(arr))
             return metrics
 
     channel_means = []
-    for key in idata.sample_stats:
+    for key in sample_stats:
         if not str(key).startswith("accept_prob_channel_"):
             continue
-        try:
-            channel_means.append(
-                float(np.mean(np.asarray(idata.sample_stats[key])))
-            )
-        except Exception:
-            continue
+        channel_means.append(float(np.mean(np.asarray(sample_stats[key]))))
 
     if channel_means:
         metrics["acceptance_rate_mean"] = float(np.mean(channel_means))
@@ -383,23 +389,18 @@ def _compute_acceptance(idata) -> Dict[str, float]:
 
 
 def _flatten_sample_stats(idata, key_prefix: str) -> np.ndarray:
-    if not hasattr(idata, "sample_stats"):
+    if not _has_group(idata, "sample_stats"):
         return np.array([])
+    sample_stats = _require_dataset(idata, "sample_stats")
 
-    if key_prefix in idata.sample_stats:
-        try:
-            return np.asarray(idata.sample_stats[key_prefix]).reshape(-1)
-        except Exception:
-            return np.array([])
+    if key_prefix in sample_stats:
+        return np.asarray(sample_stats[key_prefix]).reshape(-1)
 
     values = []
-    for key in idata.sample_stats:
+    for key in sample_stats:
         if not str(key).startswith(f"{key_prefix}_channel_"):
             continue
-        try:
-            values.append(np.asarray(idata.sample_stats[key]).reshape(-1))
-        except Exception:
-            continue
+        values.append(np.asarray(sample_stats[key]).reshape(-1))
     if not values:
         return np.array([])
     return np.concatenate(values)
@@ -417,20 +418,13 @@ def _compute_step_size(idata) -> Dict[str, float]:
 
 
 def _resolve_max_tree_depth(idata, config) -> int | None:
-    attrs = getattr(idata, "attrs", {}) or {}
-    max_td = None
-    try:
-        max_td = attrs.get("max_tree_depth")
-    except Exception:
-        max_td = None
+    attrs = idata.attrs or {}
+    max_td = attrs.get("max_tree_depth")
     if max_td is None and config is not None:
         max_td = getattr(config, "max_tree_depth", None)
     if max_td is None:
         return None
-    try:
-        return int(max_td)
-    except Exception:
-        return None
+    return int(max_td)
 
 
 def _compute_tree_depth_saturation(idata, config=None) -> Dict[str, float]:
@@ -448,6 +442,8 @@ def _compute_tree_depth_saturation(idata, config=None) -> Dict[str, float]:
         }
 
     num_steps = _flatten_sample_stats(idata, "num_steps")
+    if num_steps.size == 0:
+        num_steps = _flatten_sample_stats(idata, "n_steps")
     num_steps = num_steps[np.isfinite(num_steps)]
     if num_steps.size == 0:
         return {}
@@ -461,9 +457,20 @@ def _compute_tree_depth_saturation(idata, config=None) -> Dict[str, float]:
 
 def _compute_psis(idata) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
+    if not _has_group(idata, "log_likelihood"):
+        return metrics
     try:
-        loo_res = az.loo(idata, pointwise=True)
-        pareto = np.asarray(getattr(loo_res, "pareto_k", []))
+        log_likelihood = _require_dataset(idata, "log_likelihood")
+        values = []
+        for var in log_likelihood.data_vars.values():
+            arr = np.asarray(var)
+            if arr.ndim < 2:
+                continue
+            values.append(arr.reshape(arr.shape[0], arr.shape[1], -1))
+        if not values:
+            return metrics
+        stacked = np.concatenate(values, axis=-1)
+        _, pareto = array_stats.psislw(-stacked, axis=(0, 1))
         if pareto.size:
             khat_max = float(np.nanmax(pareto))
             status_code, _ = khat_status(khat_max)
@@ -488,13 +495,12 @@ def _run(
     if idata is None:
         return {}
 
-    attrs = getattr(idata, "attrs", {}) or {}
+    attrs = idata.attrs or {}
     compute_psis_flag = bool(attrs.get("compute_psis", True))
     summary_mode = "full"  # Always use full diagnostics mode
     light_mode = False
-    posterior_full = getattr(idata, "posterior", None)
-    if posterior_full is not None:
-        _log_posterior_summary("base posterior", posterior_full)
+    posterior_full = _require_dataset(idata, "posterior")
+    _log_posterior_summary("base posterior", posterior_full)
 
     idata_heavy, weight_meta = _select_posterior_subset(idata)
     heavy_available = idata_heavy is not None
@@ -516,7 +522,7 @@ def _run(
     if heavy_available:
         _log_posterior_summary(
             "filtered posterior",
-            getattr(idata_heavy, "posterior", None),
+            _require_dataset(idata_heavy, "posterior"),
             weight_meta,
         )
     max_elements = int(
@@ -539,7 +545,7 @@ def _run(
             if heavy_available:
                 _log_posterior_summary(
                     "thinned posterior",
-                    getattr(idata_heavy, "posterior", None),
+                    _require_dataset(idata_heavy, "posterior"),
                     weight_meta,
                 )
         else:
@@ -552,10 +558,7 @@ def _run(
 
     rhat_drop = 0
     if rhat_drop > 0:
-        try:
-            idata_heavy = idata_heavy.sel(draw=slice(rhat_drop, None))
-        except Exception:
-            pass
+        idata_heavy = _select_draw_slice(idata_heavy, slice(rhat_drop, None))
     # TODO: remove light_mode  option.
     if light_mode:
         logger.info("MCMC diagnostics: light mode, skipping ESS/PSIS compute.")
@@ -574,34 +577,28 @@ def _run(
         metrics.update(_compute_psis(idata_heavy))
 
     # Per-block ESS/Rhat (block index inferred from parameter names).
-    try:
-        posterior = getattr(idata_heavy, "posterior", None)
-        if posterior is not None:
-            blocks = _group_vars_by_block(posterior)
-            for block_idx, var_names in sorted(blocks.items()):
-                try:
-                    block_ds = posterior[var_names]
-                    block_idata = xr.DataTree()
-                    block_idata["posterior"] = xr.DataTree(dataset=block_ds)
-                    block_metrics = {}
-                    block_metrics.update(
-                        _compute_rhat(
-                            block_idata,
-                            skip_compute=skip_heavy or light_mode,
-                        )
-                    )
-                    block_metrics.update(
-                        _compute_ess(
-                            block_idata,
-                            skip_compute=skip_heavy or light_mode,
-                        )
-                    )
-                    for key, val in block_metrics.items():
-                        metrics[f"block_{block_idx}_{key}"] = val
-                except Exception:
-                    continue
-    except Exception:
-        pass
+    posterior = _require_dataset(idata_heavy, "posterior")
+    blocks = _group_vars_by_block(posterior)
+    for block_idx, var_names in sorted(blocks.items()):
+        block_ds = posterior[var_names]
+        block_idata = xr.DataTree()
+        block_idata.attrs.update(dict(idata_heavy.attrs))
+        block_idata["posterior"] = xr.DataTree(dataset=block_ds)
+        block_metrics = {}
+        block_metrics.update(
+            _compute_rhat(
+                block_idata,
+                skip_compute=skip_heavy or light_mode,
+            )
+        )
+        block_metrics.update(
+            _compute_ess(
+                block_idata,
+                skip_compute=skip_heavy or light_mode,
+            )
+        )
+        for key, val in block_metrics.items():
+            metrics[f"block_{block_idx}_{key}"] = val
     metrics.update(_compute_divergences(idata))
     metrics.update(_compute_acceptance(idata))
     metrics.update(_compute_step_size(idata))

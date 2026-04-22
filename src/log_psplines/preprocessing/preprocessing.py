@@ -104,8 +104,6 @@ def _apply_frequency_mask(
     data: Union[Periodogram, MultivarFFT],
     mask: np.ndarray,
 ) -> Union[Periodogram, MultivarFFT]:
-    if isinstance(data, Periodogram):
-        return data.apply_mask(mask)
     return data.apply_mask(mask)
 
 

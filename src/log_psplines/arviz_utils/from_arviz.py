@@ -10,6 +10,7 @@ import xarray as xr
 
 from ..datatypes import Periodogram
 from ..psplines import LogPSplines, MultivariateLogPSplines
+from ._datatree import require_dataset as _require_dataset
 from .to_arviz import (
     _compute_prior_predictive_multivar,
     _flatten_posterior_draws,
@@ -17,21 +18,6 @@ from .to_arviz import (
     _reconstruct_theta_params,
     _select_evenly_spaced_indices,
 )
-
-
-def _require_dataset(idata: xr.DataTree, group: str) -> xr.Dataset:
-    try:
-        candidate = idata[group]
-    except Exception:
-        candidate = getattr(idata, group, None)
-    if candidate is None:
-        raise KeyError(f"DataTree missing required group '{group}'.")
-    dataset = getattr(candidate, "dataset", None)
-    if dataset is None and isinstance(candidate, xr.Dataset):
-        dataset = candidate
-    if dataset is None:
-        raise TypeError(f"DataTree group '{group}' must contain a dataset.")
-    return dataset
 
 
 def _nearest_percentile_slice(
@@ -87,13 +73,6 @@ def get_sample_dataset(
     raise KeyError(
         "DataTree missing any supported sample group for source='best'."
     )
-
-
-def _sample_dataset_for_source(
-    idata: xr.DataTree, source: ResolvedSampleSource
-) -> xr.Dataset:
-    """Internal helper returning a dataset from a resolved sample source."""
-    return get_sample_dataset(idata, source=source)
 
 
 def _normalize_chain_draw_array(array: np.ndarray) -> np.ndarray:
@@ -189,7 +168,7 @@ def _compute_univar_psd_dataset(
     idata: xr.DataTree, source: ResolvedSampleSource
 ) -> xr.Dataset:
     """Reconstruct univariate PSD draws as a 1x1 spectral matrix dataset."""
-    posterior = _sample_dataset_for_source(idata, source)
+    posterior = get_sample_dataset(idata, source=source)
     model = get_spline_model(idata)
     weights = _normalize_chain_draw_array(
         np.asarray(posterior["weights"].values)
@@ -223,7 +202,7 @@ def _compute_multivar_psd_dataset(
     idata: xr.DataTree, source: ResolvedSampleSource
 ) -> xr.Dataset:
     """Reconstruct multivariate PSD/CSD draws from posterior-like weights."""
-    posterior = _sample_dataset_for_source(idata, source)
+    posterior = get_sample_dataset(idata, source=source)
     spline_model = get_multivar_spline_model(idata)
     sample_weight = next(
         np.asarray(var.values)
@@ -259,14 +238,6 @@ def _compute_multivar_psd_dataset(
         chain_count=chain_count,
         draw_count=draw_count,
     )
-
-
-def _resolved_source_for_psd(source: SampleSource) -> ResolvedSampleSource:
-    """Resolve and validate a PSD source for draw-level reconstruction."""
-    source = _canonical_sample_source(source)
-    if source not in {"posterior", "vi", "prior"}:
-        raise ValueError(f"Unsupported PSD source '{source}'.")
-    return source
 
 
 def _get_psd_dataset_from_source(
@@ -307,8 +278,9 @@ def get_psd_dataset(
         raise KeyError(
             "Unable to resolve PSD draws from source='best' for this DataTree."
         )
-    resolved = _resolved_source_for_psd(source)
-    return _get_psd_dataset_from_source(idata, resolved)
+    if source not in {"posterior", "vi", "prior"}:
+        raise ValueError(f"Unsupported PSD source '{source}'.")
+    return _get_psd_dataset_from_source(idata, source)
 
 
 def _quantiles_from_psd_draws(

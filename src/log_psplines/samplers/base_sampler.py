@@ -31,32 +31,13 @@ import xarray as xr
 from arviz_base import from_dict, from_numpyro
 from arviz_stats.base import array_stats
 
+from ..arviz_utils._datatree import require_dataset as _require_dataset
+from ..arviz_utils._datatree import select_draw_slice as _select_draw_slice
 from ..diagnostics import run_all_diagnostics
 from ..logger import logger
 
 ChainMethod = Literal["parallel", "vectorized", "sequential"]
 SampleArray = Union[jnp.ndarray, np.ndarray]
-
-
-def _require_dataset(idata: xr.DataTree, group: str) -> xr.Dataset:
-    dataset = idata[group].dataset
-    if dataset is None:
-        raise TypeError(f"DataTree group '{group}' must contain a dataset.")
-    return dataset
-
-
-def _select_draw_slice(idata: xr.DataTree, draw_slice: slice) -> xr.DataTree:
-    out = xr.DataTree()
-    out.attrs.update(dict(idata.attrs))
-    for name, group in idata.children.items():
-        dataset = group.dataset
-        if dataset is None:
-            out[name] = group
-            continue
-        if "draw" in dataset.dims:
-            dataset = dataset.sel(draw=draw_slice)
-        out[name] = xr.DataTree(dataset=dataset)
-    return out
 
 
 def _sanitize_attr_value(value: Any) -> Any | None:

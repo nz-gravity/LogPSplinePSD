@@ -9,7 +9,6 @@ from log_psplines.arviz_utils import (
     get_posterior_psd,
     get_weights,
 )
-from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.mcmc import (
     DiagnosticsConfig,
     ModelConfig,
@@ -25,12 +24,13 @@ from log_psplines.preprocessing.coarse_grain import (
 )
 
 
-@pytest.mark.slow
-def test_mcmc(outdir: str, test_mode: str):
+def test_mcmc_univar(outdir: str):
+    from log_psplines.example_datasets.ar_data import ARData
+
     outdir = os.path.join(outdir, "out_mcmc/univar")
     os.makedirs(outdir, exist_ok=True)
 
-    print(f"++++ Running univariate MCMC test {test_mode} ++++")
+    print(f"++++ Running univariate MCMC test ++++")
 
     psd_scale = 1  # e-42
 
@@ -38,11 +38,6 @@ def test_mcmc(outdir: str, test_mode: str):
     n_samples = n_warmup = 120
     n_knots = 8
     compute_lnz = True
-    if test_mode == "fast":
-        n_samples = n_warmup = 3
-        n = 64
-        n_knots = 3
-        compute_lnz = False
 
     ar_data = ARData(
         order=4, duration=1.0, fs=n, seed=42, sigma=np.sqrt(psd_scale)
@@ -56,10 +51,10 @@ def test_mcmc(outdir: str, test_mode: str):
     )
     diagnostics_cfg = DiagnosticsConfig(
         outdir=sampler_out,
-        verbose=(test_mode != "fast"),
+        verbose=True,
         compute_lnz=compute_lnz,
     )
-    vi_cfg = VIConfig(init_from_vi=(test_mode != "fast"))
+    vi_cfg = VIConfig(init_from_vi=True)
     run_cfg = RunMCMCConfig(
         n_samples=n_samples,
         n_warmup=n_warmup,
@@ -108,24 +103,7 @@ def test_mcmc(outdir: str, test_mode: str):
         post_psd_scale, psd_scale, rtol=1.0
     ), "Posterior PSD scale is not within expected range."
 
-    print(f"++++ univariate MCMC test {test_mode} COMPLETE ++++")
-
-
-def _synthetic_multivar_series():
-    rng = np.random.default_rng(67890)
-    n = 32
-    t = np.linspace(0, 4, n, endpoint=False)
-    base = np.stack(
-        (
-            np.sin(2 * np.pi * 0.25 * t),
-            np.cos(2 * np.pi * 0.3 * t),
-        ),
-        axis=1,
-    )
-    noise = 0.05 * rng.normal(size=base.shape)
-    y = base + noise
-    y[:, 1] += 0.2 * y[:, 0]
-    return t, y
+    print(f"++++ univariate MCMC test COMPLETE ++++")
 
 
 def _expected_coarse_freq_multivar(
@@ -149,25 +127,29 @@ def _expected_coarse_freq_multivar(
     return np.asarray(spec.f_coarse, dtype=np.float64)
 
 
-@pytest.mark.slow
-def test_run_mcmc_coarse_grain_multivar(test_mode: str):
+def test_mcmc_multivar(outdir):
     """Test multivariate PSD analysis with coarse grain, VI init, and blocking."""
-    t, y = _synthetic_multivar_series()
-    ts_run = MultivariateTimeseries(y=y.copy(), t=t.copy())
-    ts_spec = MultivariateTimeseries(y=y.copy(), t=t.copy())
+    from log_psplines.example_datasets.varma_data import VARMAData
 
-    fmin, fmax = 0.01, 0.4
+    outdir = os.path.join(outdir, "out_mcmc/multivar")
+    os.makedirs(outdir, exist_ok=True)
+
+    varma_data = VARMAData(n_samples=2**12, fs=64.0, seed=0)
+    ts_run = MultivariateTimeseries(y=varma_data.data, t=varma_data.time)
+
+    fmin, fmax = 1, 30.0
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
         Nc=None,
         Nh=1,
     )
-    Nb = 2 if test_mode != "fast" else 1
-    n_samples = n_warmup = 120 if test_mode != "fast" else 3
-    vi_steps = 30 if test_mode != "fast" else 5
+
+    n_samples = n_warmup = 120
+    vi_steps = 30
+    Nb = 4  # Number of blocks for Welch periodogram
 
     expected_freq = _expected_coarse_freq_multivar(
-        ts_spec,
+        ts_run,
         Nb=Nb,
         fmin=fmin,
         fmax=fmax,
@@ -181,7 +163,7 @@ def test_run_mcmc_coarse_grain_multivar(test_mode: str):
         fmin=fmin,
         fmax=fmax,
     )
-    diagnostics_cfg = DiagnosticsConfig(verbose=(test_mode != "fast"))
+    diagnostics_cfg = DiagnosticsConfig(verbose=True, outdir=outdir)
     vi_cfg = VIConfig(
         init_from_vi=True,
         only_vi=False,
@@ -231,4 +213,4 @@ def test_run_mcmc_coarse_grain_multivar(test_mode: str):
         psd_median, np.swapaxes(psd_median, 1, 2), rtol=1e-6, atol=1e-8
     ), "PSD should be Hermitian."
 
-    print(f"++++ multivariate MCMC test {test_mode} COMPLETE ++++")
+    print(f"++++ multivariate MCMC test COMPLETE ++++")

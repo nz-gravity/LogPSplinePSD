@@ -48,10 +48,12 @@ from ..pspline_block import (
     evaluate_log_density_batch,
     sample_pspline_block,
 )
-from ..vi_init.adapters import (
-    _extract_multivar_design_psd,
+from ..vi_init.blocked import (
     prepare_block_vi,
     prepare_coarse_block_vi,
+)
+from ..vi_init.diagnostics import (
+    _extract_multivar_design_psd,
 )
 from .multivar_base import MultivarBaseSampler
 

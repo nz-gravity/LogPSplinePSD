@@ -23,14 +23,16 @@ from ..pspline_block import (
     sample_pspline_block,
 )
 from ..vi_init import VIInitialisationMixin
-from ..vi_init.adapters import (
-    _median_vi_values,
-    compute_coarse_vi_artifacts_univar,
+from ..vi_init.defaults import default_init_values_univar
+from ..vi_init.diagnostics import _median_vi_values
+from ..vi_init.mixin import VIInitialisationArtifacts
+from ..vi_init.runner import (
     compute_vi_artifacts_univar,
     select_vi_or_default_init,
 )
-from ..vi_init.defaults import default_init_values_univar
-from ..vi_init.mixin import VIInitialisationArtifacts
+from ..vi_init.univar import (
+    compute_coarse_vi_artifacts_univar,
+)
 from .univar_base import UnivarBaseSampler, log_likelihood
 
 

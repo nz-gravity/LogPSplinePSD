@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import Callable, Dict
 
+from ..arviz_utils.from_arviz import get_psd_dataset
 from ..logger import logger
 from . import mcmc, psd_bands, psd_compare, vi
 
@@ -29,7 +30,15 @@ def run_all_diagnostics(
     }
 
     def _has_psd() -> bool:
-        return psd_compare._get_psd_dataset(idata, idata_vi) is not None
+        for source in (idata, idata_vi):
+            if source is None:
+                continue
+            try:
+                get_psd_dataset(source, source="best")
+                return True
+            except (KeyError, TypeError, ValueError, StopIteration):
+                continue
+        return False
 
     rules: list[
         tuple[str, Callable[..., Dict[str, float]], Callable[[], bool]]

@@ -8,6 +8,7 @@ from .from_arviz import (
     get_periodogram,
     get_posterior_psd,
     get_psd_dataset,
+    get_sample_dataset,
     get_spline_model,
     get_weights,
 )

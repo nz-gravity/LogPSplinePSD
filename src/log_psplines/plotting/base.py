@@ -126,6 +126,45 @@ def interior_frequency_slice(n_freq: int) -> slice:
     return slice(1, -1) if n_freq > 3 else slice(None)
 
 
+def _quantiles_from_standard_psd_dataset(
+    psd_ds,
+) -> Dict[str, np.ndarray | None]:
+    """Compute fixed 5/50/95 quantiles from normalized PSD draw datasets."""
+    percentiles = np.asarray([5.0, 50.0, 95.0], dtype=float)
+    spectral_density = np.asarray(psd_ds["spectral_density"].values).reshape(
+        -1,
+        psd_ds["spectral_density"].shape[2],
+        psd_ds["spectral_density"].shape[3],
+        psd_ds["spectral_density"].shape[4],
+    )
+    spectral_density = np.moveaxis(spectral_density, -1, 1)
+    real = np.percentile(spectral_density.real, percentiles, axis=0)
+    imag = np.percentile(spectral_density.imag, percentiles, axis=0)
+
+    coherence = None
+    if "coherence" in psd_ds:
+        coherence_samples = np.asarray(psd_ds["coherence"].values).reshape(
+            -1,
+            psd_ds["coherence"].shape[2],
+            psd_ds["coherence"].shape[3],
+            psd_ds["coherence"].shape[4],
+        )
+        coherence_samples = np.moveaxis(coherence_samples, -1, 1)
+        coherence = np.percentile(coherence_samples, percentiles, axis=0)
+
+    return {
+        "percentile": percentiles,
+        "freq": np.asarray(psd_ds.coords["frequency"].values, dtype=float),
+        "real": np.asarray(real, dtype=np.float64),
+        "imag": np.asarray(imag, dtype=np.float64),
+        "coherence": (
+            np.asarray(coherence, dtype=np.float64)
+            if coherence is not None
+            else None
+        ),
+    }
+
+
 def extract_plotting_data(
     idata, weights_key: int | None = None
 ) -> Dict[str, Any]:
@@ -140,95 +179,101 @@ def extract_plotting_data(
         Dictionary containing extracted data
     """
     from ..arviz_utils import (
-        get_multivar_posterior_psd_quantiles,
         get_multivar_prior_psd_quantiles,
-        get_multivar_vi_psd_quantiles,
         get_periodogram,
-        get_posterior_psd,
+        get_psd_dataset,
         get_spline_model,
         get_weights,
     )
 
     data: Dict[str, Any] = {}
 
-    # Extract core data - handle univariate, multivariate, and VI cases
+    # Extract core data
     try:
         data["periodogram"] = get_periodogram(idata)
     except KeyError:
-        # For multivariate or VI data, periodogram might not be available
-        # or might be stored differently
         data["periodogram"] = None
 
-    # Extract spline model - handle VI case where 'knots' might not exist
     try:
         data["spline_model"] = get_spline_model(idata)
     except KeyError:
-        # For VI data, spline model might be stored differently
         data["spline_model"] = None
 
-    # Extract weights - handle different data structures
     try:
         if isinstance(weights_key, int):
             data["weights"] = get_weights(idata, weights_key)
         else:
             data["weights"] = get_weights(idata)
     except (KeyError, AttributeError):
-        # For VI data, weights might be stored differently
         data["weights"] = None
 
     attrs = idata.attrs or {}
-    is_multivar = str(attrs.get("data_type", "")).lower().startswith("multi")
-    if is_multivar:
-        quantiles = get_multivar_posterior_psd_quantiles(idata)
+    try:
+        psd_ds = get_psd_dataset(idata, source="best")
+    except (KeyError, TypeError, ValueError, StopIteration):
+        psd_ds = None
+
+    if psd_ds is not None:
+        quantiles = _quantiles_from_standard_psd_dataset(psd_ds)
         data["frequencies"] = np.asarray(quantiles["freq"], dtype=float)
-        data["posterior_psd_matrix_quantiles"] = {
-            "percentile": np.asarray(quantiles["percentile"], dtype=float),
-            "real": np.asarray(quantiles["real"], dtype=np.float64),
-            "imag": np.asarray(quantiles["imag"], dtype=np.float64),
-            "coherence": np.asarray(quantiles["coherence"], dtype=np.float64),
-        }
-        if "vi_posterior" in idata.children:
-            vi_quantiles = get_multivar_vi_psd_quantiles(idata)
+        n_channels = int(psd_ds["spectral_density"].shape[2])
+        if n_channels > 1:
+            data["posterior_psd_matrix_quantiles"] = {
+                "percentile": np.asarray(quantiles["percentile"], dtype=float),
+                "real": np.asarray(quantiles["real"], dtype=np.float64),
+                "imag": np.asarray(quantiles["imag"], dtype=np.float64),
+                "coherence": (
+                    np.asarray(quantiles["coherence"], dtype=np.float64)
+                    if quantiles["coherence"] is not None
+                    else None
+                ),
+            }
+        else:
+            real_q = np.asarray(quantiles["real"], dtype=np.float64)
+            data["posterior_psd_quantiles"] = {
+                "percentile": np.asarray(quantiles["percentile"], dtype=float),
+                "values": np.asarray(real_q[:, :, 0, 0], dtype=np.float64),
+            }
+
+    try:
+        vi_psd_ds = get_psd_dataset(idata, source="vi")
+    except (KeyError, TypeError, ValueError, StopIteration):
+        vi_psd_ds = None
+    if vi_psd_ds is not None:
+        vi_quantiles = _quantiles_from_standard_psd_dataset(vi_psd_ds)
+        n_channels = int(vi_psd_ds["spectral_density"].shape[2])
+        if n_channels > 1:
             data["vi_psd_matrix_quantiles"] = {
                 "percentile": np.asarray(
                     vi_quantiles["percentile"], dtype=float
                 ),
                 "real": np.asarray(vi_quantiles["real"], dtype=np.float64),
                 "imag": np.asarray(vi_quantiles["imag"], dtype=np.float64),
-                "coherence": np.asarray(
-                    vi_quantiles["coherence"], dtype=np.float64
+                "coherence": (
+                    np.asarray(vi_quantiles["coherence"], dtype=np.float64)
+                    if vi_quantiles["coherence"] is not None
+                    else None
                 ),
             }
-        if (
-            attrs.get("tau") is not None
-            and attrs.get("design_psd") is not None
-        ):
-            prior_quantiles = get_multivar_prior_psd_quantiles(idata)
-            data["prior_psd_matrix_quantiles"] = {
-                "percentile": np.asarray(
-                    prior_quantiles["percentile"], dtype=float
-                ),
-                "real": np.asarray(prior_quantiles["real"], dtype=np.float64),
-                "imag": np.asarray(prior_quantiles["imag"], dtype=np.float64),
-                "coherence": None,
-            }
-    else:
-        freqs, median, lower, upper = get_posterior_psd(idata)
-        data["frequencies"] = np.asarray(freqs, dtype=float)
-        data["posterior_psd_quantiles"] = {
-            "percentile": np.asarray([5.0, 50.0, 95.0], dtype=float),
-            "values": np.asarray([lower, median, upper], dtype=np.float64),
-        }
-        if "vi_posterior" in idata.children:
-            vi_quantiles = get_multivar_vi_psd_quantiles(idata)
+        else:
+            vi_real_q = np.asarray(vi_quantiles["real"], dtype=np.float64)
             data["vi_psd_quantiles"] = {
                 "percentile": np.asarray(
                     vi_quantiles["percentile"], dtype=float
                 ),
-                "values": np.asarray(
-                    vi_quantiles["real"][:, :, 0, 0], dtype=np.float64
-                ),
+                "values": np.asarray(vi_real_q[:, :, 0, 0], dtype=np.float64),
             }
+
+    if attrs.get("tau") is not None and attrs.get("design_psd") is not None:
+        prior_quantiles = get_multivar_prior_psd_quantiles(idata)
+        data["prior_psd_matrix_quantiles"] = {
+            "percentile": np.asarray(
+                prior_quantiles["percentile"], dtype=float
+            ),
+            "real": np.asarray(prior_quantiles["real"], dtype=np.float64),
+            "imag": np.asarray(prior_quantiles["imag"], dtype=np.float64),
+            "coherence": None,
+        }
 
     # Extract true PSD if available
     if "true_psd" in attrs:

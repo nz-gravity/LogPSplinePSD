@@ -12,7 +12,16 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Literal, Mapping, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Literal,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import arviz_stats as azs
 import jax
@@ -222,6 +231,7 @@ class BaseSampler(ABC):
         n_warmup: int = 1000,
         *,
         only_vi: bool = False,
+        vi_warm_start_plan: Any | None = None,
         **kwargs,
     ) -> xr.DataTree:
         """Run MCMC sampling and return inference results."""
@@ -313,6 +323,70 @@ class BaseSampler(ABC):
             lnz_err=np.nan,
         )
         self._attach_vi_group(idata, diagnostics)
+        return idata
+
+    def _assemble_vi_only_inference_data(
+        self,
+        *,
+        diagnostics: Optional[Dict[str, Any]],
+        posterior_draws: Optional[Mapping[str, Any]],
+        means: Optional[Mapping[str, Any]],
+        site_filter: Callable[[str], bool],
+        normalize_samples: Callable[
+            [Dict[str, jnp.ndarray]], Dict[str, jnp.ndarray]
+        ],
+        sample_stats_builder: Optional[
+            Callable[[Dict[str, jnp.ndarray]], Dict[str, Any]]
+        ] = None,
+        required_sites: Optional[tuple[str, ...]] = None,
+        missing_sites_error: Optional[str] = None,
+        no_samples_error: str = "No variational posterior samples available.",
+        no_diagnostics_error: Optional[str] = None,
+    ) -> xr.DataTree:
+        """Build VI-only ``DataTree`` using sampler-specific callbacks."""
+        if diagnostics is None and no_diagnostics_error is not None:
+            raise ValueError(no_diagnostics_error)
+
+        if posterior_draws:
+            sample_dict = {
+                name: jnp.asarray(array)
+                for name, array in posterior_draws.items()
+                if site_filter(name)
+            }
+        elif means:
+            sample_dict = {
+                name: jnp.asarray(value)[None, ...]
+                for name, value in means.items()
+                if site_filter(name)
+            }
+        else:
+            raise ValueError(no_samples_error)
+
+        if not sample_dict:
+            raise ValueError(no_samples_error)
+
+        if required_sites is not None:
+            missing = set(required_sites) - set(sample_dict)
+            if missing:
+                raise ValueError(
+                    missing_sites_error
+                    or "Variational-only mode is missing required parameter sites."
+                )
+
+        sample_stats: Dict[str, Any] = {}
+        if sample_stats_builder is not None:
+            try:
+                sample_stats = sample_stats_builder(sample_dict) or {}
+            except Exception:
+                sample_stats = {}
+
+        samples = normalize_samples(dict(sample_dict))
+
+        self.runtime = 0.0
+        idata = self._create_vi_inference_data(
+            samples, sample_stats, diagnostics
+        )
+        self._cache_full_diagnostics(idata)
         return idata
 
     def _attach_vi_group(

@@ -7,8 +7,8 @@ from typing import Dict
 import numpy as np
 from scipy.integrate import simpson
 
+from ..arviz_utils.from_arviz import get_psd_dataset
 from ._utils import extract_percentile
-from .psd_compare import _get_psd_dataset
 
 
 def _variance_from_psd(psd_values: np.ndarray, freqs: np.ndarray) -> float:
@@ -25,7 +25,15 @@ def _run(
     idata_vi=None,
 ) -> Dict[str, float]:
     """Summaries of PSD credible bands and coherence."""
-    psd_ds = _get_psd_dataset(idata, idata_vi)
+    psd_ds = None
+    for source in (idata, idata_vi):
+        if source is None:
+            continue
+        try:
+            psd_ds = get_psd_dataset(source, source="best")
+            break
+        except (KeyError, TypeError, ValueError, StopIteration):
+            continue
     if psd_ds is None:
         return {}
 

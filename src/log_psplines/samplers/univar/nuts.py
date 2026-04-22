@@ -26,6 +26,7 @@ from ..vi_init import VIInitialisationMixin
 from ..vi_init.defaults import default_init_values_univar
 from ..vi_init.diagnostics import _median_vi_values
 from ..vi_init.mixin import VIInitialisationArtifacts
+from ..vi_init.plan import VIWarmStartPlan
 from ..vi_init.runner import (
     compute_vi_artifacts_univar,
     select_vi_or_default_init,
@@ -116,11 +117,11 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         n_warmup: int = 500,
         *,
         only_vi: bool = False,
+        vi_warm_start_plan: VIWarmStartPlan | None = None,
         **kwargs,
     ) -> xr.DataTree:
         """Run NUTS sampling."""
         vi_only_mode = bool(only_vi or getattr(self.config, "only_vi", False))
-        coarse_sampler = getattr(self, "_coarse_vi_sampler", None)
         default_values = default_init_values_univar(
             self.spline_model,
             alpha_phi=self.config.alpha_phi,
@@ -128,10 +129,10 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             alpha_delta=self.config.alpha_delta,
             beta_delta=self.config.beta_delta,
         )
-        if coarse_sampler is not None:
+        if vi_warm_start_plan is not None:
             vi_artifacts = compute_coarse_vi_artifacts_univar(
                 self,
-                coarse_sampler=coarse_sampler,
+                warm_start_plan=vi_warm_start_plan,
                 model=bayesian_model,
             )
         else:
@@ -168,7 +169,9 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
         self.rng_key = vi_artifacts.rng_key
         self._vi_diagnostics = vi_artifacts.diagnostics
         vi_diag = self._vi_diagnostics or {}
-        warm_start_method = "coarse_vi" if coarse_sampler is not None else "vi"
+        warm_start_method = (
+            "coarse_vi" if vi_warm_start_plan is not None else "vi"
+        )
         self._extra_idata_attrs = {
             "inference_method": "vi" if vi_only_mode else "nuts",
             "posterior_source": "vi" if vi_only_mode else "nuts",
@@ -299,48 +302,44 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
             "vi_samples"
         )
 
-        if posterior_draws:
-            sample_dict = {
-                name: jnp.asarray(array)
-                for name, array in posterior_draws.items()
-                if name in {"weights", "phi", "delta"}
-            }
-        else:
-            means = vi_artifacts.means or {}
-            sample_dict = {
-                name: jnp.asarray(value)[None, ...]
-                for name, value in means.items()
-                if name in {"weights", "phi", "delta"}
-            }
+        def _normalize_samples(
+            samples: Dict[str, jnp.ndarray],
+        ) -> Dict[str, jnp.ndarray]:
+            normalized = dict(samples)
+            if "phi" in normalized:
+                normalized["phi"] = jnp.exp(normalized["phi"])
+            return normalized
 
-        missing = {"weights", "phi", "delta"} - set(sample_dict)
-        if missing:
-            raise ValueError(
-                "Variational-only mode requires VI means for weights, phi, and delta."
-            )
-
-        params_batch = self._prepare_logpost_params(sample_dict)
-        sample_stats: Dict[str, jnp.ndarray] = {}
-        try:
-            sample_stats["lp"] = jnp.asarray(
-                evaluate_log_density_batch(self._logpost_fn, params_batch)
-            )
-            lp_arr = jnp.asarray(sample_stats.get("lp"))
+        def _build_sample_stats(
+            samples: Dict[str, jnp.ndarray],
+        ) -> Dict[str, jnp.ndarray]:
+            params_batch = self._prepare_logpost_params(samples)
+            sample_stats: Dict[str, jnp.ndarray] = {
+                "lp": jnp.asarray(
+                    evaluate_log_density_batch(self._logpost_fn, params_batch)
+                )
+            }
+            lp_arr = jnp.asarray(sample_stats["lp"])
             n_chains = int(self.config.num_chains)
             if lp_arr.ndim == 1 and lp_arr.size % n_chains == 0:
                 sample_stats["lp"] = lp_arr.reshape((n_chains, -1))
-        except Exception:
-            sample_stats = {}
+            return sample_stats
 
-        samples = dict(sample_dict)
-        if "phi" in samples:
-            samples["phi"] = jnp.exp(samples["phi"])
-        self.runtime = 0.0
-        idata = self._create_vi_inference_data(
-            samples, sample_stats, diagnostics
+        return self._assemble_vi_only_inference_data(
+            diagnostics=diagnostics,
+            posterior_draws=posterior_draws,
+            means=vi_artifacts.means or {},
+            site_filter=lambda name: name in {"weights", "phi", "delta"},
+            normalize_samples=_normalize_samples,
+            sample_stats_builder=_build_sample_stats,
+            required_sites=("weights", "phi", "delta"),
+            missing_sites_error=(
+                "Variational-only mode requires VI means for weights, phi, and delta."
+            ),
+            no_samples_error=(
+                "Variational-only mode requires VI means for weights, phi, and delta."
+            ),
         )
-        self._cache_full_diagnostics(idata)
-        return idata
 
     @property
     def _logp_kwargs(self):

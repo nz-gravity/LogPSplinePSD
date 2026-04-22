@@ -8,7 +8,6 @@ import numpy as np
 
 from ..arviz_utils.from_arviz import get_psd_dataset
 from ._utils import as_scalar, khat_status
-from .psd_compare import _get_psd_dataset
 from .psd_compare import _run as _run_psd_compare
 
 
@@ -31,24 +30,6 @@ def _extract_losses(idata_vi) -> Optional[np.ndarray]:
         return None
     arr = np.asarray(losses, dtype=float).reshape(-1)
     return arr if arr.size else None
-
-
-def _get_vi_psd_dataset(idata_vi):
-    if idata_vi is None:
-        return None
-    try:
-        return get_psd_dataset(idata_vi, source="vi")
-    except (KeyError, TypeError):
-        return None
-
-
-def _get_ref_psd_dataset(idata):
-    if idata is None:
-        return None
-    try:
-        return get_psd_dataset(idata, source="primary")
-    except (KeyError, TypeError):
-        return _get_psd_dataset(idata, idata)
 
 
 def _psd_variance_from_ds(psd_ds) -> Optional[float]:
@@ -96,8 +77,18 @@ def _psd_variance_from_ds(psd_ds) -> Optional[float]:
 
 
 def _variance_ratio_vs_mcmc(idata_vi, idata) -> Optional[float]:
-    vi_ds = _get_vi_psd_dataset(idata_vi)
-    ref_ds = _get_ref_psd_dataset(idata)
+    vi_ds = None
+    ref_ds = None
+    if idata_vi is not None:
+        try:
+            vi_ds = get_psd_dataset(idata_vi, source="vi")
+        except (KeyError, TypeError, ValueError, StopIteration):
+            vi_ds = None
+    if idata is not None:
+        try:
+            ref_ds = get_psd_dataset(idata, source="best")
+        except (KeyError, TypeError, ValueError, StopIteration):
+            ref_ds = None
     if vi_ds is None or ref_ds is None:
         return None
     vi_var = _psd_variance_from_ds(vi_ds)

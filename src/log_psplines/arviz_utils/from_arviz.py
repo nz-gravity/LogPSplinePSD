@@ -42,13 +42,58 @@ def _nearest_percentile_slice(
     return np.asarray(values[idx])
 
 
-def _sample_dataset_for_source(
-    idata: xr.DataTree, source: Literal["primary", "vi"]
+SampleSource = Literal["best", "posterior", "vi", "prior", "primary"]
+ResolvedSampleSource = Literal["posterior", "vi", "prior"]
+
+
+def _canonical_sample_source(source: SampleSource) -> SampleSource:
+    """Normalize legacy source aliases to the public source vocabulary."""
+    return "posterior" if source == "primary" else source
+
+
+def get_sample_dataset(
+    idata: xr.DataTree,
+    source: SampleSource = "best",
 ) -> xr.Dataset:
-    """Return the posterior-like draw dataset for the requested source."""
-    if source == "primary":
+    """Return a posterior-like sample dataset for the requested source.
+
+    Supported ``source`` values:
+    - ``"best"``: first available among posterior, VI, then prior-like groups.
+    - ``"posterior"`` / ``"primary"``: canonical MCMC posterior.
+    - ``"vi"``: VI posterior samples.
+    - ``"prior"``: prior samples if available.
+    """
+    source = _canonical_sample_source(source)
+
+    if source == "posterior":
         return _require_dataset(idata, "posterior")
-    return _require_dataset(idata, "vi_posterior")
+    if source == "vi":
+        return _require_dataset(idata, "vi_posterior")
+    if source == "prior":
+        for group in ("prior", "prior_predictive"):
+            try:
+                return _require_dataset(idata, group)
+            except (KeyError, TypeError):
+                continue
+        raise KeyError(
+            "DataTree missing required prior group ('prior' or 'prior_predictive')."
+        )
+
+    for candidate in ("posterior", "vi", "prior"):
+        try:
+            return get_sample_dataset(idata, source=candidate)
+        except (KeyError, TypeError):
+            continue
+    raise KeyError(
+        "DataTree missing any supported sample group for source='best'."
+    )
+
+
+def _sample_dataset_for_source(
+    idata: xr.DataTree, source: ResolvedSampleSource
+) -> xr.Dataset:
+    """Internal helper returning a dataset from a resolved sample source."""
+    return get_sample_dataset(idata, source=source)
 
 
 def _normalize_chain_draw_array(array: np.ndarray) -> np.ndarray:
@@ -141,7 +186,7 @@ def _build_psd_dataset(
 
 
 def _compute_univar_psd_dataset(
-    idata: xr.DataTree, source: Literal["primary", "vi"]
+    idata: xr.DataTree, source: ResolvedSampleSource
 ) -> xr.Dataset:
     """Reconstruct univariate PSD draws as a 1x1 spectral matrix dataset."""
     posterior = _sample_dataset_for_source(idata, source)
@@ -175,7 +220,7 @@ def _compute_univar_psd_dataset(
 
 
 def _compute_multivar_psd_dataset(
-    idata: xr.DataTree, source: Literal["primary", "vi"]
+    idata: xr.DataTree, source: ResolvedSampleSource
 ) -> xr.Dataset:
     """Reconstruct multivariate PSD/CSD draws from posterior-like weights."""
     posterior = _sample_dataset_for_source(idata, source)
@@ -216,21 +261,54 @@ def _compute_multivar_psd_dataset(
     )
 
 
-def get_psd_dataset(
-    idata: xr.DataTree,
-    source: Literal["primary", "vi"] = "primary",
-) -> xr.Dataset:
-    """Return standardized PSD/CSD draws for the requested posterior source.
+def _resolved_source_for_psd(source: SampleSource) -> ResolvedSampleSource:
+    """Resolve and validate a PSD source for draw-level reconstruction."""
+    source = _canonical_sample_source(source)
+    if source not in {"posterior", "vi", "prior"}:
+        raise ValueError(f"Unsupported PSD source '{source}'.")
+    return source
 
-    Returned datasets contain:
-    - ``spectral_density``: complex, dims ``(chain, draw, channel, channel_aux, frequency)``
-    - ``coherence``: real, dims ``(chain, draw, channel, channel_aux, frequency)``
-    """
+
+def _get_psd_dataset_from_source(
+    idata: xr.DataTree,
+    source: ResolvedSampleSource,
+) -> xr.Dataset:
+    """Build standardized PSD/CSD draws from a resolved sample source."""
     attrs = getattr(idata, "attrs", {}) or {}
     is_multivar = str(attrs.get("data_type", "")).lower().startswith("multi")
     if is_multivar:
         return _compute_multivar_psd_dataset(idata, source)
     return _compute_univar_psd_dataset(idata, source)
+
+
+def get_psd_dataset(
+    idata: xr.DataTree,
+    source: SampleSource = "best",
+) -> xr.Dataset:
+    """Return standardized PSD/CSD draws for the requested source.
+
+    Supported ``source`` values:
+    - ``"best"``: first available among posterior, VI, then prior.
+    - ``"posterior"`` / ``"primary"``: MCMC posterior draws.
+    - ``"vi"``: VI posterior draws.
+    - ``"prior"``: prior-like draws if present.
+
+    Returned datasets contain:
+    - ``spectral_density``: complex, dims ``(chain, draw, channel, channel_aux, frequency)``
+    - ``coherence``: real, dims ``(chain, draw, channel, channel_aux, frequency)``
+    """
+    source = _canonical_sample_source(source)
+    if source == "best":
+        for candidate in ("posterior", "vi", "prior"):
+            try:
+                return _get_psd_dataset_from_source(idata, candidate)
+            except (KeyError, TypeError, ValueError, StopIteration):
+                continue
+        raise KeyError(
+            "Unable to resolve PSD draws from source='best' for this DataTree."
+        )
+    resolved = _resolved_source_for_psd(source)
+    return _get_psd_dataset_from_source(idata, resolved)
 
 
 def _quantiles_from_psd_draws(
@@ -287,7 +365,7 @@ def _quantiles_from_psd_draws(
 def get_posterior_psd(idata: xr.DataTree):
     """Return ``(freqs, median_psd, lower, upper)`` for the primary posterior."""
     quantiles = _quantiles_from_psd_draws(
-        get_psd_dataset(idata, "primary"),
+        get_psd_dataset(idata, "posterior"),
         n_keep=None,
         percentiles=(5.0, 50.0, 95.0),
         freq_idx=None,
@@ -502,7 +580,7 @@ def _get_multivar_reconstruction_inputs_from_dataset(
 
 def _resolve_multivar_draw_cap(
     idata: xr.DataTree,
-    sample_source: Literal["primary", "vi"],
+    sample_source: Literal["posterior", "vi"],
     n_keep: int | None,
 ) -> int | None:
     """Resolve the default posterior/VI reconstruction cap from ``idata.attrs``."""
@@ -511,7 +589,7 @@ def _resolve_multivar_draw_cap(
     attrs = idata.attrs or {}
     attr_name = (
         "posterior_psd_max_draws"
-        if sample_source == "primary"
+        if sample_source == "posterior"
         else "vi_psd_max_draws"
     )
     value = attrs.get(attr_name, 50)
@@ -523,7 +601,7 @@ def _resolve_multivar_draw_cap(
 def _get_multivar_psd_quantiles(
     idata: xr.DataTree,
     *,
-    source: Literal["primary", "vi"],
+    source: Literal["posterior", "vi"],
     n_keep: int | None,
     percentiles: tuple[float, ...],
     freq_idx: np.ndarray | list[int] | None,
@@ -555,7 +633,7 @@ def get_multivar_posterior_psd_quantiles(
     del compute_coherence, chunk_size
     return _get_multivar_psd_quantiles(
         idata,
-        source="primary",
+        source="posterior",
         n_keep=n_keep,
         percentiles=percentiles,
         freq_idx=freq_idx,

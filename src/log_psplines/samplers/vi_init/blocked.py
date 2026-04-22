@@ -27,6 +27,7 @@ from .diagnostics import (
     _vi_means_are_usable,
     interp_design_psd_to_fine,
 )
+from .plan import VIWarmStartPlan, build_coarse_sampler_from_plan
 from .runner import (
     build_block_init_values,
     build_block_log_posterior_fn,
@@ -241,11 +242,12 @@ def prepare_block_vi(
 def prepare_coarse_block_vi(
     sampler,
     *,
-    coarse_sampler,
+    warm_start_plan: VIWarmStartPlan,
     block_model: Callable[..., Any],
 ) -> BlockVIArtifacts:
     """Run blocked VI on a coarse grid then transfer to fine model."""
-    metadata = coarse_vi_metadata(sampler)
+    metadata = coarse_vi_metadata(warm_start_plan)
+    coarse_sampler = build_coarse_sampler_from_plan(sampler, warm_start_plan)
     coarse_setup = prepare_block_vi(
         coarse_sampler,
         rng_key=sampler.rng_key,

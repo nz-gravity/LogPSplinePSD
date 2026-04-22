@@ -313,53 +313,34 @@ def _vi_weights_to_log_delta_theta(
     if sampler.n_theta > 0:
         theta_re = jnp.zeros((n_samples, sampler.N, sampler.n_theta))
         theta_im = jnp.zeros_like(theta_re)
+        for j in range(1, sampler.p):
+            for l in range(j):
+                theta_idx = sampler.spline_model.theta_index(j, l)
+                key_re = f"weights_theta_re_{j}_{l}"
+                key_im = f"weights_theta_im_{j}_{l}"
+                if key_re not in values or key_im not in values:
+                    continue
 
-        if "weights_theta_re" in values and "weights_theta_im" in values:
-            first_pair = sampler.spline_model.theta_pair_from_index(0)
-            basis_theta = jnp.asarray(
-                sampler.spline_model.get_theta_model(
-                    "re", first_pair[0], first_pair[1]
-                ).basis
-            )
-            w_re = jnp.asarray(values["weights_theta_re"])
-            w_im = jnp.asarray(values["weights_theta_im"])
-            if is_batch:
-                tr_base = w_re @ basis_theta.T
-                ti_base = w_im @ basis_theta.T
-            else:
-                tr_base = (jnp.einsum("nk,k->n", basis_theta, w_re))[None, :]
-                ti_base = (jnp.einsum("nk,k->n", basis_theta, w_im))[None, :]
-            theta_re = jnp.repeat(tr_base[:, :, None], sampler.n_theta, axis=2)
-            theta_im = jnp.repeat(ti_base[:, :, None], sampler.n_theta, axis=2)
-        else:
-            for j in range(1, sampler.p):
-                for l in range(j):
-                    theta_idx = sampler.spline_model.theta_index(j, l)
-                    key_re = f"weights_theta_re_{j}_{l}"
-                    key_im = f"weights_theta_im_{j}_{l}"
-                    if key_re not in values or key_im not in values:
-                        continue
-
-                    basis_re = jnp.asarray(
-                        sampler.spline_model.get_theta_model("re", j, l).basis
-                    )
-                    basis_im = jnp.asarray(
-                        sampler.spline_model.get_theta_model("im", j, l).basis
-                    )
-                    w_re = jnp.asarray(values[key_re])
-                    w_im = jnp.asarray(values[key_im])
-                    if is_batch:
-                        theta_re_eval = w_re @ basis_re.T
-                        theta_im_eval = w_im @ basis_im.T
-                    else:
-                        theta_re_eval = jnp.einsum("nk,k->n", basis_re, w_re)[
-                            None, :
-                        ]
-                        theta_im_eval = jnp.einsum("nk,k->n", basis_im, w_im)[
-                            None, :
-                        ]
-                    theta_re = theta_re.at[:, :, theta_idx].set(theta_re_eval)
-                    theta_im = theta_im.at[:, :, theta_idx].set(theta_im_eval)
+                basis_re = jnp.asarray(
+                    sampler.spline_model.get_theta_model("re", j, l).basis
+                )
+                basis_im = jnp.asarray(
+                    sampler.spline_model.get_theta_model("im", j, l).basis
+                )
+                w_re = jnp.asarray(values[key_re])
+                w_im = jnp.asarray(values[key_im])
+                if is_batch:
+                    theta_re_eval = w_re @ basis_re.T
+                    theta_im_eval = w_im @ basis_im.T
+                else:
+                    theta_re_eval = jnp.einsum("nk,k->n", basis_re, w_re)[
+                        None, :
+                    ]
+                    theta_im_eval = jnp.einsum("nk,k->n", basis_im, w_im)[
+                        None, :
+                    ]
+                theta_re = theta_re.at[:, :, theta_idx].set(theta_re_eval)
+                theta_im = theta_im.at[:, :, theta_idx].set(theta_im_eval)
     else:
         theta_re = jnp.zeros((n_samples, sampler.N, 0))
         theta_im = jnp.zeros((n_samples, sampler.N, 0))

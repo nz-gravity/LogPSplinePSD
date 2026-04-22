@@ -284,16 +284,6 @@ class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
 
         return self.to_arviz(samples, stats, mcmc=mcmc)
 
-    def _default_init_strategy(self):
-        default_values = default_init_values_univar(
-            self.spline_model,
-            alpha_phi=self.config.alpha_phi,
-            beta_phi=self.config.beta_phi,
-            alpha_delta=self.config.alpha_delta,
-            beta_delta=self.config.beta_delta,
-        )
-        return init_to_value(values=default_values)
-
     def _vi_only_inference_data(
         self, vi_artifacts: "VIInitialisationArtifacts"
     ) -> xr.DataTree:

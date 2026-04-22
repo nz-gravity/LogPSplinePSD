@@ -35,45 +35,21 @@ def _extract_losses(idata_vi) -> Optional[np.ndarray]:
 def _psd_variance_from_ds(psd_ds) -> Optional[float]:
     if psd_ds is None:
         return None
-    if "spectral_density" in psd_ds:
-        freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
-        spectral_density = np.asarray(psd_ds["spectral_density"].values)
-        diag = np.real(
-            spectral_density[
-                :,
-                :,
-                np.arange(spectral_density.shape[2]),
-                np.arange(spectral_density.shape[2]),
-                :,
-            ]
-        )
-        diag = diag.reshape(-1, spectral_density.shape[2], freqs.size)
-        q50 = np.percentile(diag, 50.0, axis=0)
-        variances = np.trapezoid(q50, freqs, axis=-1)
-        return float(np.mean(variances))
-    if "psd" in psd_ds:
-        psd = psd_ds["psd"]
-        freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
-        perc = np.asarray(psd.coords.get("percentile", []), dtype=float)
-        values = np.asarray(psd.values)
-        if perc.size == 0:
-            perc = np.arange(values.shape[0], dtype=float)
-        q50 = values[int(np.argmin(np.abs(perc - 50.0)))]
-        return float(np.trapezoid(q50, freqs))
-    if "psd_matrix_real" in psd_ds:
-        psd = psd_ds["psd_matrix_real"]
-        freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
-        perc = np.asarray(psd.coords.get("percentile", []), dtype=float)
-        values = np.asarray(psd.values)
-        if perc.size == 0:
-            perc = np.arange(values.shape[0], dtype=float)
-        q50 = values[int(np.argmin(np.abs(perc - 50.0)))]
-        diag = np.real(
-            q50[:, np.arange(q50.shape[1]), np.arange(q50.shape[2])]
-        )
-        var = np.trapezoid(diag, freqs, axis=0)
-        return float(np.mean(var))
-    return None
+    freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
+    spectral_density = np.asarray(psd_ds["spectral_density"].values)
+    diag = np.real(
+        spectral_density[
+            :,
+            :,
+            np.arange(spectral_density.shape[2]),
+            np.arange(spectral_density.shape[2]),
+            :,
+        ]
+    )
+    diag = diag.reshape(-1, spectral_density.shape[2], freqs.size)
+    q50 = np.percentile(diag, 50.0, axis=0)
+    variances = np.trapezoid(q50, freqs, axis=-1)
+    return float(np.mean(variances))
 
 
 def _variance_ratio_vs_mcmc(idata_vi, idata) -> Optional[float]:

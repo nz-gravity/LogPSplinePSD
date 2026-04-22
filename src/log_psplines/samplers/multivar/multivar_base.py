@@ -38,22 +38,6 @@ from ..base_sampler import BaseSampler, SamplerConfig
 from ..pspline_block import build_log_density_fn, evaluate_log_density_batch
 
 
-@jax.jit
-def batch_spline_eval(
-    basis: jnp.ndarray, weights_batch: jnp.ndarray
-) -> jnp.ndarray:
-    """JIT-compiled batch spline evaluation over multiple weight vectors.
-
-    Args:
-        basis: Basis matrix (N, n_basis)
-        weights_batch: Batch of weight vectors (n_samples, n_basis)
-
-    Returns:
-        Batch of spline evaluations (n_samples, N)
-    """
-    return jnp.sum(basis[None, :, :] * weights_batch[:, None, :], axis=-1)
-
-
 class MultivarBaseSampler(BaseSampler):
     """
     Base class for multivariate PSD samplers.

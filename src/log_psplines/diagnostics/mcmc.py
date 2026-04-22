@@ -9,6 +9,8 @@ import numpy as np
 import xarray as xr
 from arviz_stats.base import array_stats
 
+from ..arviz_utils._datatree import require_dataset as _require_dataset
+from ..arviz_utils._datatree import select_draw_slice as _select_draw_slice
 from ..logger import logger
 from ._utils import khat_status
 
@@ -17,29 +19,8 @@ DEFAULT_MCMC_DIAG_WEIGHT_POINTS = 6
 DEFAULT_MCMC_DIAG_MAX_DRAWS = 500
 
 
-def _require_dataset(idata: xr.DataTree, group: str) -> xr.Dataset:
-    dataset = idata[group].dataset
-    if dataset is None:
-        raise TypeError(f"DataTree group '{group}' must contain a dataset.")
-    return dataset
-
-
 def _has_group(idata: xr.DataTree, group: str) -> bool:
     return group in idata.children
-
-
-def _select_draw_slice(idata: xr.DataTree, draw_slice: slice) -> xr.DataTree:
-    out = xr.DataTree()
-    out.attrs.update(dict(idata.attrs))
-    for name, group in idata.children.items():
-        dataset = group.dataset
-        if dataset is None:
-            out[name] = group
-            continue
-        if "draw" in dataset.dims:
-            dataset = dataset.sel(draw=draw_slice)
-        out[name] = xr.DataTree(dataset=dataset)
-    return out
 
 
 def _metric_from_attr_or_compute(
@@ -497,8 +478,6 @@ def _run(
 
     attrs = idata.attrs or {}
     compute_psis_flag = bool(attrs.get("compute_psis", True))
-    summary_mode = "full"  # Always use full diagnostics mode
-    light_mode = False
     posterior_full = _require_dataset(idata, "posterior")
     _log_posterior_summary("base posterior", posterior_full)
 
@@ -556,24 +535,13 @@ def _run(
     if not thinned:
         logger.info(f"MCMC diagnostics: posterior elements={total_elements:,}")
 
-    rhat_drop = 0
-    if rhat_drop > 0:
-        idata_heavy = _select_draw_slice(idata_heavy, slice(rhat_drop, None))
-    # TODO: remove light_mode  option.
-    if light_mode:
-        logger.info("MCMC diagnostics: light mode, skipping ESS/PSIS compute.")
-
     skip_heavy = (
         not thinned and max_elements > 0 and total_elements > max_elements
     ) or not heavy_available
     metrics: Dict[str, float] = {}
-    metrics.update(
-        _compute_rhat(idata_heavy, skip_compute=skip_heavy or light_mode)
-    )
-    metrics.update(
-        _compute_ess(idata_heavy, skip_compute=skip_heavy or light_mode)
-    )
-    if compute_psis_flag and not (skip_heavy or light_mode):
+    metrics.update(_compute_rhat(idata_heavy, skip_compute=skip_heavy))
+    metrics.update(_compute_ess(idata_heavy, skip_compute=skip_heavy))
+    if compute_psis_flag and not skip_heavy:
         metrics.update(_compute_psis(idata_heavy))
 
     # Per-block ESS/Rhat (block index inferred from parameter names).
@@ -588,13 +556,13 @@ def _run(
         block_metrics.update(
             _compute_rhat(
                 block_idata,
-                skip_compute=skip_heavy or light_mode,
+                skip_compute=skip_heavy,
             )
         )
         block_metrics.update(
             _compute_ess(
                 block_idata,
-                skip_compute=skip_heavy or light_mode,
+                skip_compute=skip_heavy,
             )
         )
         for key, val in block_metrics.items():

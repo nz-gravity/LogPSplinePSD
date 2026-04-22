@@ -89,18 +89,4 @@ def default_init_values_multivar(
                 im_model.weights
             )
 
-        # Backward-compatible shared aliases (first theta component), used by
-        # legacy fully-coupled multivariate paths.
-        first_j, first_l = spline_model.theta_pair_from_index(0)
-        init_values["delta_theta_re"] = delta_0
-        init_values["phi_theta_re"] = log_phi_0
-        init_values["weights_theta_re"] = jnp.asarray(
-            spline_model.get_theta_model("re", first_j, first_l).weights
-        )
-        init_values["delta_theta_im"] = delta_0
-        init_values["phi_theta_im"] = log_phi_0
-        init_values["weights_theta_im"] = jnp.asarray(
-            spline_model.get_theta_model("im", first_j, first_l).weights
-        )
-
     return init_values

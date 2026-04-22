@@ -848,15 +848,15 @@ class MultivariateLogPSplines:
             chunk_len = end - start
             psd_chunk = np.empty(
                 (n_samps, chunk_len, p, p),
-                dtype=np.complex64,
+                dtype=np.complex128,
             )
 
             for s in range(n_samps):
                 for local_f in range(chunk_len):
                     diag_vals = np.exp(log_chunk[s, local_f]).astype(
-                        np.float32
+                        np.float64
                     )
-                    T = np.eye(p, dtype=np.complex64)
+                    T = np.eye(p, dtype=np.complex128)
 
                     if n_theta > 0:
                         assert theta_re_chunk is not None
@@ -875,7 +875,7 @@ class MultivariateLogPSplines:
                     D = np.diag(diag_vals)
                     psd_chunk[s, local_f] = (
                         Tinverse @ D @ Tinverse.conj().T
-                    ).astype(np.complex64)
+                    ).astype(np.complex128)
 
             yield start, end, psd_chunk
 
@@ -892,7 +892,7 @@ class MultivariateLogPSplines:
 
         The computation streams over frequency chunks (default 2048 bins) so the
         peak memory stays modest even for very long spectra. Results are returned
-        as a ``complex64`` NumPy array of shape
+        as a ``complex128`` NumPy array of shape
         ``(n_samps, N, p, p)``.
         """
         log_delta_sq_arr = np.asarray(log_delta_sq_samples)
@@ -917,7 +917,7 @@ class MultivariateLogPSplines:
         theta_re_arr = theta_re_arr[:n_samps]
         theta_im_arr = theta_im_arr[:n_samps]
 
-        psd = np.empty((n_samps, N, p, p), dtype=np.complex64)
+        psd = np.empty((n_samps, N, p, p), dtype=np.complex128)
 
         for start, end, psd_chunk in self._psd_chunk_iterator(
             log_delta_sq_arr,
@@ -1042,54 +1042,3 @@ class MultivariateLogPSplines:
             f"knots={knot_label}, degree={self.degree}, "
             f"penaltyOrder={self.diffMatrixOrder}, N={self.N})"
         )
-
-    def get_psd_matrix_percentiles(
-        self, psd_matrix_samples: jnp.ndarray, percentiles=[2.5, 50, 97.5]
-    ) -> np.ndarray:
-        arr = np.asarray(psd_matrix_samples)
-        if arr.ndim == 4 and arr.shape[0] == len(percentiles):
-            return arr.astype(np.float64, copy=False)
-
-        if arr.ndim == 3:
-            arr = arr[None, ...]
-        elif arr.ndim != 4:
-            raise ValueError(
-                f"Expected 4D array (samples, freqs, n, n), got {arr.shape}"
-            )
-
-        psd_matrix_real = _complex_to_real_batch(arr)
-        posterior_percentiles = np.percentile(
-            psd_matrix_real, percentiles, axis=0
-        )
-        return posterior_percentiles.astype(np.float64, copy=False)
-
-    def get_psd_matrix_coverage(
-        self, psd_matrix_samples: jnp.ndarray, empirical_psd: jnp.ndarray
-    ) -> float:
-        empirical_psd_real = _complex_to_real_batch(empirical_psd)
-
-        psd_percentiles = self.get_psd_matrix_percentiles(psd_matrix_samples)
-        coverage = np.mean(
-            (empirical_psd_real >= psd_percentiles[0])
-            & (empirical_psd_real <= psd_percentiles[-1])
-        )
-        return float(coverage)
-
-
-def _complex_to_real_batch(mats):
-    """
-    Safe, vectorized transform:
-      - Upper triangle (incl diag) -> real part
-      - Strict lower triangle      -> imag part
-    mats: (..., n, n) complex
-    returns float32 with same leading dims
-    """
-    mats = np.asarray(mats)
-    n = mats.shape[-1]
-    # boolean masks that broadcast over leading dims
-    upper = np.triu(np.ones((n, n), dtype=bool))
-    lower = np.tril(np.ones((n, n), dtype=bool), k=-1)
-
-    out = np.where(upper, mats.real, 0.0)
-    out = np.where(lower, mats.imag, out)
-    return out.astype(np.float64, copy=False)

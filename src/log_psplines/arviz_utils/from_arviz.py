@@ -19,6 +19,8 @@ from .to_arviz import (
     _select_evenly_spaced_indices,
 )
 
+SPECTRAL_DENSITY_VAR = "spectral_density"
+
 
 def _nearest_percentile_slice(
     values: np.ndarray, percentiles: np.ndarray, target: float
@@ -101,21 +103,30 @@ def _rescale_multivar_psd(
 
 
 def _compute_coherence_from_spectral_density(
-    spectral_density: np.ndarray,
+    posterior_psd: np.ndarray,
 ) -> np.ndarray:
     """Compute coherence from spectral matrices with shape ``(..., p, p, F)``."""
-    diag = np.real(
-        np.diagonal(spectral_density, axis1=2, axis2=3)
-    )  # (..., F, p)
+    diag = np.real(np.diagonal(posterior_psd, axis1=2, axis2=3))  # (..., F, p)
     diag = np.moveaxis(diag, -1, -2)  # (..., p, F)
     denom = diag[..., :, None, :] * diag[..., None, :, :]
     denom = np.where(denom > 0.0, denom, np.nan)
-    coherence = (np.abs(spectral_density) ** 2) / denom
+    coherence = (np.abs(posterior_psd) ** 2) / denom
     coherence = np.nan_to_num(coherence, nan=0.0, posinf=0.0, neginf=0.0)
-    p = spectral_density.shape[2]
+    p = posterior_psd.shape[2]
     for channel in range(p):
         coherence[:, :, channel, channel, :] = 1.0
     return coherence.astype(np.float64, copy=False)
+
+
+def _get_spectral_density_array(dataset: xr.Dataset) -> np.ndarray:
+    """Return the canonical complex spectral-density array from a dataset."""
+    if SPECTRAL_DENSITY_VAR not in dataset:
+        raise KeyError(
+            "Dataset does not contain canonical 'spectral_density' data."
+        )
+    return np.asarray(
+        dataset[SPECTRAL_DENSITY_VAR].values, dtype=np.complex128
+    )
 
 
 def _build_psd_dataset(
@@ -137,7 +148,7 @@ def _build_psd_dataset(
     }
     return xr.Dataset(
         {
-            "spectral_density": xr.DataArray(
+            SPECTRAL_DENSITY_VAR: xr.DataArray(
                 np.asarray(spectral_density, dtype=np.complex128),
                 dims=(
                     "chain",
@@ -291,7 +302,7 @@ def _quantiles_from_psd_draws(
     freq_idx: np.ndarray | list[int] | None,
 ) -> dict[str, np.ndarray | None]:
     """Compute PSD/CSD quantiles from standardized draw-level datasets."""
-    spectral_density = np.asarray(dataset["spectral_density"].values)
+    spectral_density = _get_spectral_density_array(dataset)
     coherence = (
         np.asarray(dataset["coherence"].values)
         if "coherence" in dataset
@@ -322,14 +333,14 @@ def _quantiles_from_psd_draws(
         imag = imag[..., idx]
         coherence_q = coherence_q[..., idx]
 
-    real = np.moveaxis(real, -1, 1)
-    imag = np.moveaxis(imag, -1, 1)
+    spectral_density_q = np.moveaxis(real + 1j * imag, -1, 1)
     coherence_q = np.moveaxis(coherence_q, -1, 1)
     return {
         "percentile": np.asarray(percentiles, dtype=float),
         "freq": freq,
-        "real": np.asarray(real, dtype=np.float64),
-        "imag": np.asarray(imag, dtype=np.float64),
+        "spectral_density": np.asarray(
+            spectral_density_q, dtype=np.complex128
+        ),
         "coherence": np.asarray(coherence_q, dtype=np.float64),
     }
 
@@ -342,7 +353,8 @@ def get_posterior_psd(idata: xr.DataTree):
         percentiles=(5.0, 50.0, 95.0),
         freq_idx=None,
     )
-    real = np.asarray(quantiles["real"], dtype=np.float64)[:, :, 0, 0]
+    psd_q = np.asarray(quantiles["spectral_density"], dtype=np.complex128)
+    real = np.asarray(psd_q.real, dtype=np.float64)[:, :, 0, 0]
     freqs = np.asarray(quantiles["freq"], dtype=float)
     percentiles = np.asarray(quantiles["percentile"], dtype=float)
 
@@ -365,12 +377,12 @@ def get_multivar_ci_summary(
     - ``true_psd_real/true_psd_imag``: ``(F, C, C)``
     """
     truth = _require_dataset(idata, truth_group)
-    true_real = np.asarray(truth["psd_matrix_real"].values)
-    true_imag = np.asarray(truth["psd_matrix_imag"].values)
+    true_psd = _get_spectral_density_array(truth)
 
     quantiles = get_multivar_posterior_psd_quantiles(idata)
-    psd_real = np.asarray(quantiles["real"])
-    psd_imag = np.asarray(quantiles["imag"])
+    psd_quantiles = np.asarray(
+        quantiles["spectral_density"], dtype=np.complex128
+    )
     coherence = (
         np.asarray(quantiles["coherence"])
         if quantiles["coherence"] is not None
@@ -381,14 +393,26 @@ def get_multivar_ci_summary(
 
     result = {
         "freq": freq,
-        "psd_real_q05": _nearest_percentile_slice(psd_real, percentiles, 5.0),
-        "psd_real_q50": _nearest_percentile_slice(psd_real, percentiles, 50.0),
-        "psd_real_q95": _nearest_percentile_slice(psd_real, percentiles, 95.0),
-        "psd_imag_q05": _nearest_percentile_slice(psd_imag, percentiles, 5.0),
-        "psd_imag_q50": _nearest_percentile_slice(psd_imag, percentiles, 50.0),
-        "psd_imag_q95": _nearest_percentile_slice(psd_imag, percentiles, 95.0),
-        "true_psd_real": np.asarray(true_real, dtype=np.float64),
-        "true_psd_imag": np.asarray(true_imag, dtype=np.float64),
+        "psd_real_q05": _nearest_percentile_slice(
+            np.asarray(psd_quantiles.real, dtype=np.float64), percentiles, 5.0
+        ),
+        "psd_real_q50": _nearest_percentile_slice(
+            np.asarray(psd_quantiles.real, dtype=np.float64), percentiles, 50.0
+        ),
+        "psd_real_q95": _nearest_percentile_slice(
+            np.asarray(psd_quantiles.real, dtype=np.float64), percentiles, 95.0
+        ),
+        "psd_imag_q05": _nearest_percentile_slice(
+            np.asarray(psd_quantiles.imag, dtype=np.float64), percentiles, 5.0
+        ),
+        "psd_imag_q50": _nearest_percentile_slice(
+            np.asarray(psd_quantiles.imag, dtype=np.float64), percentiles, 50.0
+        ),
+        "psd_imag_q95": _nearest_percentile_slice(
+            np.asarray(psd_quantiles.imag, dtype=np.float64), percentiles, 95.0
+        ),
+        "true_psd_real": np.asarray(true_psd.real, dtype=np.float64),
+        "true_psd_imag": np.asarray(true_psd.imag, dtype=np.float64),
     }
     if coherence is not None:
         result["coh_q05"] = _nearest_percentile_slice(
@@ -599,7 +623,7 @@ def get_multivar_posterior_psd_quantiles(
     Returned arrays follow the plotting/diagnostics layout:
     - ``percentile``: ``(Q,)``
     - ``freq``: ``(F,)``
-    - ``real`` / ``imag``: ``(Q, F, p, p)``
+    - ``spectral_density``: ``(Q, F, p, p)`` complex
     - ``coherence``: ``(Q, F, p, p)`` or ``None``
     """
     del compute_coherence, chunk_size
@@ -669,11 +693,15 @@ def get_multivar_prior_psd_quantiles(
         factor_4d = factor_matrix[None, None, :, :]
         real_q = np.asarray(real_q) * factor_4d
         imag_q = np.asarray(imag_q) * factor_4d
+    spectral_density_q = np.asarray(
+        real_q, dtype=np.float64
+    ) + 1j * np.asarray(imag_q, dtype=np.float64)
     return {
         "percentile": np.asarray([5.0, 50.0, 95.0], dtype=float),
         "freq": np.asarray(freq, dtype=float),
-        "real": np.asarray(real_q, dtype=np.float64),
-        "imag": np.asarray(imag_q, dtype=np.float64),
+        "spectral_density": np.asarray(
+            spectral_density_q, dtype=np.complex128
+        ),
         "coherence": None,
     }
 

@@ -131,15 +131,15 @@ def _quantiles_from_standard_psd_dataset(
 ) -> Dict[str, np.ndarray | None]:
     """Compute fixed 5/50/95 quantiles from normalized PSD draw datasets."""
     percentiles = np.asarray([5.0, 50.0, 95.0], dtype=float)
-    spectral_density = np.asarray(psd_ds["spectral_density"].values).reshape(
+    posterior_psd = np.asarray(psd_ds["spectral_density"].values).reshape(
         -1,
         psd_ds["spectral_density"].shape[2],
         psd_ds["spectral_density"].shape[3],
         psd_ds["spectral_density"].shape[4],
     )
-    spectral_density = np.moveaxis(spectral_density, -1, 1)
-    real = np.percentile(spectral_density.real, percentiles, axis=0)
-    imag = np.percentile(spectral_density.imag, percentiles, axis=0)
+    posterior_psd = np.moveaxis(posterior_psd, -1, 1)
+    real = np.percentile(posterior_psd.real, percentiles, axis=0)
+    imag = np.percentile(posterior_psd.imag, percentiles, axis=0)
 
     coherence = None
     if "coherence" in psd_ds:
@@ -155,8 +155,7 @@ def _quantiles_from_standard_psd_dataset(
     return {
         "percentile": percentiles,
         "freq": np.asarray(psd_ds.coords["frequency"].values, dtype=float),
-        "real": np.asarray(real, dtype=np.float64),
-        "imag": np.asarray(imag, dtype=np.float64),
+        "spectral_density": np.asarray(real + 1j * imag, dtype=np.complex128),
         "coherence": (
             np.asarray(coherence, dtype=np.float64)
             if coherence is not None
@@ -220,8 +219,9 @@ def extract_plotting_data(
         if n_channels > 1:
             data["posterior_psd_matrix_quantiles"] = {
                 "percentile": np.asarray(quantiles["percentile"], dtype=float),
-                "real": np.asarray(quantiles["real"], dtype=np.float64),
-                "imag": np.asarray(quantiles["imag"], dtype=np.float64),
+                "spectral_density": np.asarray(
+                    quantiles["spectral_density"], dtype=np.complex128
+                ),
                 "coherence": (
                     np.asarray(quantiles["coherence"], dtype=np.float64)
                     if quantiles["coherence"] is not None
@@ -229,10 +229,12 @@ def extract_plotting_data(
                 ),
             }
         else:
-            real_q = np.asarray(quantiles["real"], dtype=np.float64)
+            psd_q = np.asarray(
+                quantiles["spectral_density"], dtype=np.complex128
+            )
             data["posterior_psd_quantiles"] = {
                 "percentile": np.asarray(quantiles["percentile"], dtype=float),
-                "values": np.asarray(real_q[:, :, 0, 0], dtype=np.float64),
+                "values": np.asarray(psd_q.real[:, :, 0, 0], dtype=np.float64),
             }
 
     try:
@@ -247,8 +249,9 @@ def extract_plotting_data(
                 "percentile": np.asarray(
                     vi_quantiles["percentile"], dtype=float
                 ),
-                "real": np.asarray(vi_quantiles["real"], dtype=np.float64),
-                "imag": np.asarray(vi_quantiles["imag"], dtype=np.float64),
+                "spectral_density": np.asarray(
+                    vi_quantiles["spectral_density"], dtype=np.complex128
+                ),
                 "coherence": (
                     np.asarray(vi_quantiles["coherence"], dtype=np.float64)
                     if vi_quantiles["coherence"] is not None
@@ -256,12 +259,16 @@ def extract_plotting_data(
                 ),
             }
         else:
-            vi_real_q = np.asarray(vi_quantiles["real"], dtype=np.float64)
+            vi_psd_q = np.asarray(
+                vi_quantiles["spectral_density"], dtype=np.complex128
+            )
             data["vi_psd_quantiles"] = {
                 "percentile": np.asarray(
                     vi_quantiles["percentile"], dtype=float
                 ),
-                "values": np.asarray(vi_real_q[:, :, 0, 0], dtype=np.float64),
+                "values": np.asarray(
+                    vi_psd_q.real[:, :, 0, 0], dtype=np.float64
+                ),
             }
 
     if attrs.get("tau") is not None and attrs.get("design_psd") is not None:
@@ -270,8 +277,9 @@ def extract_plotting_data(
             "percentile": np.asarray(
                 prior_quantiles["percentile"], dtype=float
             ),
-            "real": np.asarray(prior_quantiles["real"], dtype=np.float64),
-            "imag": np.asarray(prior_quantiles["imag"], dtype=np.float64),
+            "spectral_density": np.asarray(
+                prior_quantiles["spectral_density"], dtype=np.complex128
+            ),
             "coherence": None,
         }
 

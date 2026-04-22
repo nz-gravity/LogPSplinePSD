@@ -217,7 +217,7 @@ def _compute_posterior_predictive_multivar(
                 samples_for_psd, spline_model, fft_data, "im"
             )
 
-    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float64)
     psd_real_q, psd_imag_q, coh_q = spline_model.compute_psd_quantiles(
         log_delta_sq,
         theta_re,
@@ -361,7 +361,7 @@ def _compute_prior_predictive_multivar(
                         arr[draw_idx, :, theta_idx] = theta_basis @ w_t
                     theta_idx += 1
 
-    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float32)
+    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float64)
     psd_real_q, psd_imag_q, _ = spline_model.compute_psd_quantiles(
         log_delta_sq_all,
         theta_re_all,

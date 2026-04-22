@@ -20,15 +20,15 @@ from ._utils import (
     interior_frequency_slice,
 )
 
-PSD_PERCENTILES = np.asarray([5.0, 50.0, 95.0], dtype=float)
+PSD_PERCENTILES = np.asarray([5.0, 50.0, 95.0], dtype=np.float64)
 
 
-def _spectral_density_samples(
+def _posterior_psd_samples(
     psd_ds,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-    """Return ``(freqs, spectral_density_samples, coherence_samples)``."""
+    """Return ``(freqs, posterior_psd_samples, coherence_samples)``."""
     freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
-    spectral_density = np.asarray(psd_ds["spectral_density"].values).reshape(
+    posterior_psd = np.asarray(psd_ds["spectral_density"].values).reshape(
         -1,
         psd_ds["spectral_density"].shape[2],
         psd_ds["spectral_density"].shape[3],
@@ -42,7 +42,7 @@ def _spectral_density_samples(
             psd_ds["coherence"].shape[3],
             psd_ds["coherence"].shape[4],
         )
-    return freqs, spectral_density, coherence_samples
+    return freqs, posterior_psd, coherence_samples
 
 
 def _coherence(psd_matrix: np.ndarray) -> np.ndarray:
@@ -67,9 +67,9 @@ def _parse_reference(reference: Optional[object]) -> Optional[np.ndarray]:
 
 
 def _handle_univariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
-    freqs, spectral_density, _ = _spectral_density_samples(psd_ds)
+    freqs, posterior_psd, _ = _posterior_psd_samples(psd_ds)
     values = np.percentile(
-        np.real(spectral_density[:, 0, 0, :]),
+        np.real(posterior_psd[:, 0, 0, :]),
         PSD_PERCENTILES,
         axis=0,
     )
@@ -95,9 +95,9 @@ def _handle_univariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
 
 
 def _handle_univariate_no_truth(psd_ds) -> Dict[str, float]:
-    freqs, spectral_density, _ = _spectral_density_samples(psd_ds)
+    freqs, posterior_psd, _ = _posterior_psd_samples(psd_ds)
     values = np.percentile(
-        np.real(spectral_density[:, 0, 0, :]),
+        np.real(posterior_psd[:, 0, 0, :]),
         PSD_PERCENTILES,
         axis=0,
     )
@@ -113,12 +113,10 @@ def _handle_univariate_no_truth(psd_ds) -> Dict[str, float]:
 
 
 def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
-    freqs, spectral_density, coherence_samples = _spectral_density_samples(
-        psd_ds
-    )
-    spectral_density = np.moveaxis(spectral_density, -1, 1)
-    psd_real = np.percentile(spectral_density.real, PSD_PERCENTILES, axis=0)
-    psd_imag = np.percentile(spectral_density.imag, PSD_PERCENTILES, axis=0)
+    freqs, posterior_psd, coherence_samples = _posterior_psd_samples(psd_ds)
+    posterior_psd = np.moveaxis(posterior_psd, -1, 1)
+    psd_real = np.percentile(posterior_psd.real, PSD_PERCENTILES, axis=0)
+    psd_imag = np.percentile(posterior_psd.imag, PSD_PERCENTILES, axis=0)
     coherence_quantiles = None
     if coherence_samples is not None:
         coherence_samples = np.moveaxis(coherence_samples, -1, 1)
@@ -293,9 +291,9 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
 
 
 def _handle_multivariate_no_truth(psd_ds) -> Dict[str, float]:
-    freqs, spectral_density, _ = _spectral_density_samples(psd_ds)
-    spectral_density = np.moveaxis(spectral_density, -1, 1)
-    psd_real = np.percentile(spectral_density.real, PSD_PERCENTILES, axis=0)
+    freqs, posterior_psd, _ = _posterior_psd_samples(psd_ds)
+    posterior_psd = np.moveaxis(posterior_psd, -1, 1)
+    psd_real = np.percentile(posterior_psd.real, PSD_PERCENTILES, axis=0)
     freq_idx = interior_frequency_slice(freqs.size)
     psd_real = psd_real[:, freq_idx, ...]
 
@@ -428,84 +426,43 @@ def compute_multivar_riae_diagnostics(
     if riae_bands:
         diagnostics["riae_bands"] = riae_bands
 
-    real_quantiles = psd_quantiles.get("real") if psd_quantiles else None
-    imag_quantiles = psd_quantiles.get("imag") if psd_quantiles else None
-    if real_quantiles:
-        q05_real = real_quantiles.get("q05")
-        q50_real = real_quantiles.get("q50")
-        q95_real = real_quantiles.get("q95")
-        q05_imag = imag_quantiles.get("q05") if imag_quantiles else None
-        q50_imag = imag_quantiles.get("q50") if imag_quantiles else None
-        q95_imag = imag_quantiles.get("q95") if imag_quantiles else None
+    posterior_psd_quantiles = (
+        np.asarray(psd_quantiles.get("posterior_psd"), dtype=np.complex128)
+        if psd_quantiles and psd_quantiles.get("posterior_psd") is not None
+        else None
+    )
+    if (
+        posterior_psd_quantiles is not None
+        and posterior_psd_quantiles.shape[0] >= 3
+    ):
+        q05 = np.asarray(posterior_psd_quantiles[0])[freq_idx, ...]
+        q50 = np.asarray(posterior_psd_quantiles[1])[freq_idx, ...]
+        q95 = np.asarray(posterior_psd_quantiles[2])[freq_idx, ...]
 
-        if (
-            q05_real is not None
-            and q95_real is not None
-            and q50_real is not None
-        ):
-            q05_real_arr = np.asarray(q05_real)[freq_idx, ...]
-            q50_real_arr = np.asarray(q50_real)[freq_idx, ...]
-            q95_real_arr = np.asarray(q95_real)[freq_idx, ...]
-            riae_low = compute_matrix_riae(q05_real_arr, true_psd_real, freqs)
-            riae_med = compute_matrix_riae(q50_real_arr, true_psd_real, freqs)
-            riae_high = compute_matrix_riae(q95_real_arr, true_psd_real, freqs)
-            diagnostics["riae_matrix_errorbars"] = [
-                float(riae_low),
-                float(riae_low),
-                float(riae_med),
-                float(riae_high),
-                float(riae_high),
-            ]
+        riae_low = compute_matrix_riae(np.real(q05), true_psd_real, freqs)
+        riae_med = compute_matrix_riae(np.real(q50), true_psd_real, freqs)
+        riae_high = compute_matrix_riae(np.real(q95), true_psd_real, freqs)
+        diagnostics["riae_matrix_errorbars"] = [
+            float(riae_low),
+            float(riae_low),
+            float(riae_med),
+            float(riae_high),
+            float(riae_high),
+        ]
 
-        if q05_real is not None and q95_real is not None:
-            q05_im = (
-                np.asarray(q05_imag)
-                if q05_imag is not None
-                else np.zeros_like(q05_real)
-            )
-            q50_im = (
-                np.asarray(q50_imag)
-                if q50_imag is not None
-                else np.zeros_like(
-                    q50_real if q50_real is not None else q05_real
-                )
-            )
-            q95_im = (
-                np.asarray(q95_imag)
-                if q95_imag is not None
-                else np.zeros_like(q95_real)
-            )
-
-            q50_real_array = (
-                np.asarray(q50_real)[freq_idx, ...]
-                if q50_real is not None
-                else vi_psd
-            )
-            diag_mask_2d = np.eye(q50_real_array.shape[1], dtype=bool)
-            diag_width = (
-                np.asarray(q95_real)[freq_idx, ...]
-                - np.asarray(q05_real)[freq_idx, ...]
-            )[:, diag_mask_2d]
-            diagnostics["ci_width_diag_mean"] = float(np.mean(diag_width))
-            diagnostics["ci_width"] = diagnostics["ci_width_diag_mean"]
-            q05_im = q05_im[freq_idx, ...]
-            q50_im = q50_im[freq_idx, ...]
-            q95_im = q95_im[freq_idx, ...]
-            percentiles_stack = np.stack(
-                [
-                    np.asarray(q05_real)[freq_idx, ...] + 1j * q05_im,
-                    q50_real_array + 1j * q50_im,
-                    np.asarray(q95_real)[freq_idx, ...] + 1j * q95_im,
-                ],
-                axis=0,
-            )
-            coverage_value = compute_ci_coverage_multivar(
-                percentiles_stack, true_psd_real
-            )
-            if np.isfinite(coverage_value):
-                diagnostics["coverage"] = float(coverage_value)
-                diagnostics["ci_coverage"] = float(coverage_value)
-                diagnostics["coverage_interval"] = coverage_interval
-                diagnostics["coverage_level"] = coverage_level
+        q50_real_array = np.real(q50)
+        diag_mask_2d = np.eye(q50_real_array.shape[1], dtype=bool)
+        diag_width = (np.real(q95) - np.real(q05))[:, diag_mask_2d]
+        diagnostics["ci_width_diag_mean"] = float(np.mean(diag_width))
+        diagnostics["ci_width"] = diagnostics["ci_width_diag_mean"]
+        coverage_value = compute_ci_coverage_multivar(
+            np.stack([q05, q50, q95], axis=0),
+            true_psd_real,
+        )
+        if np.isfinite(coverage_value):
+            diagnostics["coverage"] = float(coverage_value)
+            diagnostics["ci_coverage"] = float(coverage_value)
+            diagnostics["coverage_interval"] = coverage_interval
+            diagnostics["coverage_level"] = coverage_level
 
     return diagnostics

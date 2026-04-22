@@ -300,14 +300,16 @@ def _pack_ci_from_quantiles(
     if psd_quantiles is None:
         raise ValueError("psd_quantiles must be provided.")
 
-    real_q = psd_quantiles.get("real")
-    imag_q = psd_quantiles.get("imag")
-    if real_q is None:
-        raise ValueError("psd_quantiles must include 'real' entries.")
+    posterior_psd_q = psd_quantiles.get("posterior_psd")
+    if posterior_psd_q is None:
+        raise ValueError("psd_quantiles must include 'posterior_psd'.")
+    posterior_psd_q = np.asarray(posterior_psd_q, dtype=np.complex128)
+    real_q = np.asarray(posterior_psd_q.real, dtype=np.float64)
+    imag_q = np.asarray(posterior_psd_q.imag, dtype=np.float64)
 
-    q05 = real_q.get("q05")
-    q50 = real_q.get("q50")
-    q95 = real_q.get("q95")
+    q05 = real_q[0]
+    q50 = real_q[1]
+    q95 = real_q[2]
 
     N, p, _ = q05.shape
 
@@ -326,41 +328,37 @@ def _pack_ci_from_quantiles(
                 coh_q95 = coherence_quantiles["q95"][:, i, j]
                 ci_dict["coh"][(i, j)] = (coh_q05, coh_q50, coh_q95)
 
-            elif show_csd_magnitude and imag_q is not None and i > j:
+            elif show_csd_magnitude and i > j:
                 mag_q05 = np.sqrt(
                     np.maximum(
-                        q05[:, i, j] ** 2 + imag_q["q05"][:, i, j] ** 2,
+                        q05[:, i, j] ** 2 + imag_q[0, :, i, j] ** 2,
                         0.0,
                     )
                 )
                 mag_q50 = np.sqrt(
                     np.maximum(
-                        q50[:, i, j] ** 2 + imag_q["q50"][:, i, j] ** 2,
+                        q50[:, i, j] ** 2 + imag_q[1, :, i, j] ** 2,
                         0.0,
                     )
                 )
                 mag_q95 = np.sqrt(
                     np.maximum(
-                        q95[:, i, j] ** 2 + imag_q["q95"][:, i, j] ** 2,
+                        q95[:, i, j] ** 2 + imag_q[2, :, i, j] ** 2,
                         0.0,
                     )
                 )
                 ci_dict["mag"][(i, j)] = (mag_q05, mag_q50, mag_q95)
 
-            elif (
-                not show_coherence
-                and not show_csd_magnitude
-                and imag_q is not None
-            ):
+            elif not show_coherence and not show_csd_magnitude:
                 ci_dict["re"][(i, j)] = (
                     q05[:, i, j],
                     q50[:, i, j],
                     q95[:, i, j],
                 )
                 ci_dict["im"][(i, j)] = (
-                    imag_q["q05"][:, i, j],
-                    imag_q["q50"][:, i, j],
-                    imag_q["q95"][:, i, j],
+                    imag_q[0, :, i, j],
+                    imag_q[1, :, i, j],
+                    imag_q[2, :, i, j],
                 )
 
     return ci_dict

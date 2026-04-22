@@ -6,6 +6,7 @@ Base class for univariate PSD samplers.
 
 import tempfile
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import jax
@@ -17,11 +18,9 @@ from xarray import DataArray, Dataset
 
 from ...arviz_utils.to_arviz import _pack_spline_model
 from ...datatypes import Periodogram
+from ...diagnostics import build_vi_summary_table, plot_vi_elbo
 from ...logger import logger
-from ...plotting import (
-    plot_pdgrm,
-    save_vi_diagnostics_univariate,
-)
+from ...plotting import plot_pdgrm
 from ...psplines import LogPSplines, build_spline
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -177,27 +176,40 @@ class UnivarBaseSampler(BaseSampler):
     def _save_vi_diagnostics(self, *, log_summary: bool = True) -> None:
         """Persist VI diagnostics if available."""
         vi_diag = getattr(self, "_vi_diagnostics", None)
-        if vi_diag:
-            save_vi_diagnostics_univariate(
-                outdir=self.config.outdir,
-                periodogram=self.periodogram,
-                spline_model=self.spline_model,
-                diagnostics=vi_diag,
-            )
-            try:
-                from ...diagnostics.plotting import (
-                    generate_vi_diagnostics_summary,
-                )
+        if not vi_diag or self.config.outdir is None:
+            return
 
-                generate_vi_diagnostics_summary(
-                    vi_diag,
-                    outdir=self.config.outdir,
-                    log=log_summary,
-                )
-            except Exception:
-                logger.debug(
-                    "Could not log VI diagnostics summary.", exc_info=True
-                )
+        diagnostics_dir = Path(self.config.outdir) / "diagnostics"
+        diagnostics_dir.mkdir(parents=True, exist_ok=True)
+
+        summary = build_vi_summary_table(vi_diag)
+        summary.to_csv(diagnostics_dir / "vi_summary.csv", index=False)
+
+        try:
+            fig = plot_vi_elbo(vi_diag, factor="0")
+            fig.savefig(
+                diagnostics_dir / "vi_elbo_factor_0.png",
+                dpi=150,
+                bbox_inches="tight",
+            )
+            import matplotlib.pyplot as plt
+
+            plt.close(fig)
+        except Exception:
+            logger.warning("Could not save VI ELBO plot.", exc_info=True)
+
+        logger.info(
+            "Skipping univariate VI Pareto-k plot: VI diagnostics do not yet "
+            "provide ArviZ-ready LOO inputs."
+        )
+
+        if log_summary and not summary.empty:
+            row = summary.iloc[0]
+            logger.info(
+                f"VI summary: final_elbo={row['final_elbo']:.3f}, "
+                f"pareto_k_max={row['pareto_k_max']:.3f}, "
+                f"loo_warning={bool(row['loo_warning'])}"
+            )
 
     def _get_lnz(
         self, samples: Dict[str, Any], sample_stats: Dict[str, Any]

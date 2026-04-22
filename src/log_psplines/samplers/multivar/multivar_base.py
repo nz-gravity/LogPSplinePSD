@@ -8,6 +8,7 @@ import os
 import tempfile
 import time
 import traceback
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import jax
@@ -26,12 +27,16 @@ from ...datatypes.multivar_utils import (
     _get_coherence,
     _interp_complex_matrix,
 )
+from ...diagnostics import (
+    build_vi_summary_table,
+    plot_vi_elbo_factors,
+    plot_vi_pareto_k_factors,
+)
+from ...diagnostics._factors import vi_factor_idatas
 from ...logger import logger
 from ...plotting import (
     PSDMatrixPlotSpec,
     plot_psd_matrix,
-    plot_true_psd_diagnostics,
-    save_vi_diagnostics_multivariate,
 )
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
@@ -260,54 +265,10 @@ class MultivarBaseSampler(BaseSampler):
                 f"save_plots(multivar): PSD matrix plot done in {time.perf_counter() - t0:.2f}s"
             )
 
-            if true_psd is not None and self.config.outdir is not None:
-                t0 = time.perf_counter()
-                logger.debug(
-                    "save_plots(multivar): plotting true-PSD diagnostics"
-                )
-                _outdir: str = self.config.outdir
-                _diag_dir = os.path.join(_outdir, "diagnostics")
-                plot_true_psd_diagnostics(
-                    idata,
-                    true_psd,
-                    freq=np.array(self.freq),
-                    outdir=_diag_dir,
-                )
-                logger.debug(
-                    f"save_plots(multivar): true-PSD diagnostics done in {time.perf_counter() - t0:.2f}s"
-                )
-
-                # Composite accuracy.png from the three per-frequency diagnostic plots
-                from ...plotting.base import (
-                    composite_images_vertical as _composite,
-                )
-
-                _accuracy_sources = [
-                    os.path.join(
-                        _outdir,
-                        "diagnostics",
-                        "psd_truth_error_vs_freq.png",
-                    ),
-                    os.path.join(_outdir, "diagnostics", "riae_vs_freq.png"),
-                    os.path.join(
-                        _outdir,
-                        "diagnostics",
-                        "coverage_vs_freq.png",
-                    ),
-                ]
-                _composite(
-                    _accuracy_sources,
-                    outfile=os.path.join(
-                        _outdir, "diagnostics", "accuracy.png"
-                    ),
-                    dpi=150,
-                    title="Accuracy Diagnostics",
-                )
-
             t0 = time.perf_counter()
             logger.debug("save_plots(multivar): saving VI diagnostics")
             self._save_vi_diagnostics(
-                empirical_psd=empirical_psd, log_summary=False
+                idata=idata, empirical_psd=empirical_psd, log_summary=False
             )
             logger.debug(
                 f"save_plots(multivar): VI diagnostics done in {time.perf_counter() - t0:.2f}s"
@@ -380,6 +341,7 @@ class MultivarBaseSampler(BaseSampler):
     def _save_vi_diagnostics(
         self,
         *,
+        idata: Optional[xr.DataTree] = None,
         empirical_psd: Optional[EmpiricalPSD] = None,
         log_summary: bool = True,
     ) -> None:
@@ -388,17 +350,99 @@ class MultivarBaseSampler(BaseSampler):
         if not vi_diag:
             return
 
-        save_vi_diagnostics_multivariate(
-            outdir=self.config.outdir,
-            freq=self.freq_np,
-            empirical_psd=empirical_psd,
-            diagnostics=vi_diag,
-        )
-        from ...diagnostics.plotting import generate_vi_diagnostics_summary
+        del empirical_psd
+        if self.config.outdir is None:
+            return
 
-        generate_vi_diagnostics_summary(
-            vi_diag, outdir=self.config.outdir, log=log_summary
-        )
+        diagnostics_dir = Path(self.config.outdir) / "diagnostics"
+        diagnostics_dir.mkdir(parents=True, exist_ok=True)
+
+        summary = build_vi_summary_table(vi_diag)
+        factor_idata_map = vi_factor_idatas(idata) if idata is not None else {}
+        if factor_idata_map:
+            try:
+                loo_summary = build_vi_summary_table(factor_idata_map)
+                summary = summary.drop(
+                    columns=["pareto_k_max", "pareto_k_median", "loo_warning"],
+                    errors="ignore",
+                ).merge(
+                    loo_summary[
+                        [
+                            "factor",
+                            "pareto_k_max",
+                            "pareto_k_median",
+                            "loo_warning",
+                        ]
+                    ],
+                    on="factor",
+                    how="left",
+                )
+            except Exception:
+                logger.warning(
+                    "Could not compute ArviZ VI Pareto-k summary.",
+                    exc_info=True,
+                )
+        summary.to_csv(diagnostics_dir / "vi_summary.csv", index=False)
+
+        factor_payloads: dict[str, dict[str, np.ndarray]] = {}
+        for factor in summary["factor"]:
+            factor_key = str(factor)
+            payload: dict[str, np.ndarray] = {}
+            if "losses_per_block" in vi_diag:
+                payload["losses"] = np.asarray(vi_diag["losses_per_block"])[
+                    int(factor)
+                ]
+            factor_payloads[factor_key] = payload
+
+        if any("losses" in payload for payload in factor_payloads.values()):
+            try:
+                fig = plot_vi_elbo_factors(
+                    {
+                        factor: payload
+                        for factor, payload in factor_payloads.items()
+                        if "losses" in payload
+                    }
+                )
+                fig.savefig(
+                    diagnostics_dir / "vi_elbo_factors.png",
+                    dpi=150,
+                    bbox_inches="tight",
+                )
+                import matplotlib.pyplot as plt
+
+                plt.close(fig)
+            except Exception:
+                logger.warning(
+                    "Could not save combined VI ELBO plot.",
+                    exc_info=True,
+                )
+
+        if factor_idata_map:
+            try:
+                fig = plot_vi_pareto_k_factors(factor_idata_map)
+                fig.savefig(
+                    diagnostics_dir / "vi_pareto_k_factors.png",
+                    dpi=150,
+                    bbox_inches="tight",
+                )
+                import matplotlib.pyplot as plt
+
+                plt.close(fig)
+            except Exception:
+                logger.warning(
+                    "Could not save combined VI Pareto-k plot.",
+                    exc_info=True,
+                )
+
+        if log_summary and not summary.empty:
+            worst_row = summary.loc[
+                summary["pareto_k_max"].fillna(-np.inf).idxmax()
+            ]
+            logger.info(
+                f"VI summary: worst_factor={worst_row['factor']}, "
+                f"pareto_k_max={worst_row['pareto_k_max']:.3f}, "
+                f"loo_warning={bool(worst_row['loo_warning'])}"
+            )
 
     def _attach_vi_group(
         self, idata: xr.DataTree, diagnostics: Optional[Dict[str, Any]]
@@ -432,6 +476,9 @@ class MultivarBaseSampler(BaseSampler):
             coords[basis_dim] = np.arange(array.shape[-1])
             sample_vars[key] = (["chain", "draw", basis_dim], array[None, ...])
         self._attach_vi_posterior_dataset(idata, sample_vars, coords)
+        vi_log_likelihood = self._build_vi_log_likelihood_dataset(vi_samples)
+        if vi_log_likelihood is not None:
+            idata["vi_log_likelihood"] = xr.DataTree(dataset=vi_log_likelihood)
         self._attach_vi_sample_stats(
             idata,
             diagnostics,
@@ -454,6 +501,127 @@ class MultivarBaseSampler(BaseSampler):
                 "guide",
             ),
         )
+
+    def _build_vi_log_likelihood_dataset(
+        self, vi_samples: Dict[str, Any]
+    ) -> Optional[Dataset]:
+        """Build pointwise VI log-likelihood arrays for blocked multivariate VI."""
+
+        if not vi_samples:
+            return None
+
+        chain_coords = np.arange(1)
+        freq_coords = np.asarray(self.freq_np, dtype=np.float64)
+        data_vars: Dict[str, tuple[list[str], np.ndarray]] = {}
+        eta_vi = min(1.0, 1.0 / float(self.Nb * self.Nh))
+
+        for channel_index in range(self.p):
+            weights_delta_name = f"weights_delta_{channel_index}"
+            weights_delta = vi_samples.get(weights_delta_name)
+            if weights_delta is None:
+                continue
+
+            weights_delta = np.asarray(weights_delta, dtype=np.float64)
+            if weights_delta.ndim != 2 or weights_delta.shape[0] == 0:
+                continue
+
+            n_draws = int(weights_delta.shape[0])
+            delta_basis = np.asarray(
+                self.all_bases[channel_index], dtype=np.float64
+            )
+            log_delta_sq = weights_delta @ delta_basis.T
+            delta_eff_sq = np.exp(log_delta_sq)
+
+            theta_count = channel_index
+            if theta_count > 0:
+                theta_re = np.zeros(
+                    (n_draws, self.N, theta_count), dtype=np.float64
+                )
+                theta_im = np.zeros_like(theta_re)
+                for theta_idx in range(theta_count):
+                    basis_re = np.asarray(
+                        self.spline_model.get_theta_model(
+                            "re", channel_index, theta_idx
+                        ).basis,
+                        dtype=np.float64,
+                    )
+                    basis_im = np.asarray(
+                        self.spline_model.get_theta_model(
+                            "im", channel_index, theta_idx
+                        ).basis,
+                        dtype=np.float64,
+                    )
+                    w_re = np.asarray(
+                        vi_samples[
+                            f"weights_theta_re_{channel_index}_{theta_idx}"
+                        ],
+                        dtype=np.float64,
+                    )
+                    w_im = np.asarray(
+                        vi_samples[
+                            f"weights_theta_im_{channel_index}_{theta_idx}"
+                        ],
+                        dtype=np.float64,
+                    )
+                    theta_re[:, :, theta_idx] = w_re @ basis_re.T
+                    theta_im[:, :, theta_idx] = w_im @ basis_im.T
+            else:
+                theta_re = np.zeros((n_draws, self.N, 0), dtype=np.float64)
+                theta_im = np.zeros_like(theta_re)
+
+            u_re_channel = np.asarray(
+                self.u_re[:, channel_index, :], dtype=np.float64
+            )
+            u_im_channel = np.asarray(
+                self.u_im[:, channel_index, :], dtype=np.float64
+            )
+            u_re_prev = np.asarray(
+                self.u_re[:, :channel_index, :], dtype=np.float64
+            )
+            u_im_prev = np.asarray(
+                self.u_im[:, :channel_index, :], dtype=np.float64
+            )
+
+            if theta_count > 0:
+                contrib_re = np.einsum(
+                    "dfl,flr->dfr", theta_re, u_re_prev
+                ) - np.einsum("dfl,flr->dfr", theta_im, u_im_prev)
+                contrib_im = np.einsum(
+                    "dfl,flr->dfr", theta_re, u_im_prev
+                ) + np.einsum("dfl,flr->dfr", theta_im, u_re_prev)
+                u_re_resid = u_re_channel[None, :, :] - contrib_re
+                u_im_resid = u_im_channel[None, :, :] - contrib_im
+            else:
+                u_re_resid = np.broadcast_to(
+                    u_re_channel[None, :, :], (n_draws, *u_re_channel.shape)
+                )
+                u_im_resid = np.broadcast_to(
+                    u_im_channel[None, :, :], (n_draws, *u_im_channel.shape)
+                )
+
+            residual_power_sum = np.sum(u_re_resid**2 + u_im_resid**2, axis=2)
+            pointwise = -float(self.Nb) * float(
+                self.Nh
+            ) * log_delta_sq - residual_power_sum / (
+                float(self.duration) * delta_eff_sq
+            )
+            pointwise = pointwise / float(self.enbw)
+            pointwise = pointwise * float(eta_vi)
+
+            data_vars[f"log_likelihood_block_{channel_index}"] = (
+                ["chain", "draw", "freq"],
+                pointwise[None, ...].astype(np.float32),
+            )
+
+        if not data_vars:
+            return None
+
+        coords = {
+            "chain": chain_coords,
+            "draw": np.arange(next(iter(data_vars.values()))[1].shape[1]),
+            "freq": freq_coords,
+        }
+        return Dataset(data_vars, coords=coords)
 
     def _get_lnz(
         self, samples: Dict[str, Any], sample_stats: Dict[str, Any]

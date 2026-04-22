@@ -34,9 +34,9 @@ def test_mcmc_univar(outdir: str):
 
     psd_scale = 1  # e-42
 
-    n = 256
-    n_samples = n_warmup = 120
-    n_knots = 8
+    n = 2048
+    n_samples = n_warmup = 500
+    n_knots = 20
     compute_lnz = True
 
     ar_data = ARData(
@@ -62,6 +62,7 @@ def test_mcmc_univar(outdir: str):
         model=model_cfg,
         diagnostics=diagnostics_cfg,
         vi=vi_cfg,
+        num_chains=2,
     )
     idata = run_mcmc(
         ar_data.ts,
@@ -137,15 +138,15 @@ def test_mcmc_multivar(outdir):
     varma_data = VARMAData(n_samples=2**12, fs=64.0, seed=0)
     ts_run = MultivariateTimeseries(y=varma_data.data, t=varma_data.time)
 
-    fmin, fmax = 1, 30.0
+    fmin, fmax = 0, 32
     coarse_cfg = CoarseGrainConfig(
         enabled=True,
         Nc=None,
-        Nh=1,
+        Nh=2,
     )
 
-    n_samples = n_warmup = 120
-    vi_steps = 30
+    n_samples = n_warmup = 1000
+    vi_steps = 1000
     Nb = 4  # Number of blocks for Welch periodogram
 
     expected_freq = _expected_coarse_freq_multivar(
@@ -157,7 +158,7 @@ def test_mcmc_multivar(outdir):
     )
 
     model_cfg = ModelConfig(
-        n_knots=5,
+        n_knots=10,
         degree=3,
         diffMatrixOrder=2,
         fmin=fmin,
@@ -170,8 +171,8 @@ def test_mcmc_multivar(outdir):
         vi_steps=vi_steps,
         vi_lr=5e-3,
         vi_progress_bar=False,
-        vi_posterior_draws=6,
-        vi_psd_max_draws=2,
+        vi_posterior_draws=100,
+        vi_psd_max_draws=100,
     )
     run_cfg = RunMCMCConfig(
         n_samples=n_samples,
@@ -217,5 +218,14 @@ def test_mcmc_multivar(outdir):
         rtol=1e-6,
         atol=1e-8,
     ), "PSD should be Hermitian."
+
+    vi_log_likelihood = idata["vi_log_likelihood"].dataset
+    assert vi_log_likelihood is not None
+    assert "log_likelihood_block_0" in vi_log_likelihood
+    assert "log_likelihood_block_1" in vi_log_likelihood
+    assert vi_log_likelihood["log_likelihood_block_0"].ndim == 3
+
+    diagnostics_dir = os.path.join(outdir, "diagnostics")
+    assert os.path.exists(os.path.join(diagnostics_dir, "vi_summary.csv"))
 
     print(f"++++ multivariate MCMC test COMPLETE ++++")

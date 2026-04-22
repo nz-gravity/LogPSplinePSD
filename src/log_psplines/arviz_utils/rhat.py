@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import arviz as az
 import numpy as np
+import xarray as xr
+from arviz_stats import rhat as compute_rhat
 
 DEFAULT_RHAT_WEIGHT_POINTS = 6
 
@@ -20,11 +21,9 @@ def _select_weight_indices(size: int, max_points: int) -> np.ndarray:
 
 
 def _posterior_subset_for_rhat(idata, *, drop_draws: int = 0):
-    posterior = getattr(idata, "posterior", None)
-    if posterior is None and hasattr(idata, "data_vars"):
-        posterior = idata
+    posterior = idata["posterior"].dataset
     if posterior is None:
-        return idata
+        raise TypeError("DataTree group 'posterior' must contain a dataset.")
 
     subset = {}
     for name, var in posterior.data_vars.items():
@@ -48,16 +47,14 @@ def _posterior_subset_for_rhat(idata, *, drop_draws: int = 0):
     # Do not pass parent coords here: weight variables may have been indexed
     # down to a representative subset, and reusing the original coordinates
     # causes xarray to align/reindex and fill dropped indices with NaNs.
-    import xarray as xr
-
-    ds = xr.Dataset(subset, attrs=getattr(posterior, "attrs", {}))
+    ds = xr.Dataset(subset, attrs=posterior.attrs)
     if drop_draws > 0 and "draw" in ds.dims:
         ds = ds.isel(draw=slice(int(drop_draws), None))
     return ds
 
 
 def extract_rhat_values(
-    idata: az.InferenceData,
+    idata: xr.DataTree | dict,
     *,
     drop_draws: int = 0,
 ) -> np.ndarray:
@@ -71,7 +68,7 @@ def extract_rhat_values(
     subset = _posterior_subset_for_rhat(idata, drop_draws=drop_draws)
     if subset is None:
         return np.array([])
-    rhat_ds = az.rhat(subset)
+    rhat_ds = compute_rhat(subset)
     values = []
     for var in rhat_ds.data_vars.values():
         arr = np.asarray(var)

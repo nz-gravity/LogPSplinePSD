@@ -10,7 +10,6 @@ import json
 import os
 from pathlib import Path
 
-import arviz as az
 import numpy as np
 
 from log_psplines.datatypes.multivar_utils import interp_matrix

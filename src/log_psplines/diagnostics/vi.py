@@ -6,9 +6,7 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from ..arviz_utils.from_arviz import (
-    get_multivar_psd_dataset,
-)
+from ..arviz_utils.from_arviz import get_psd_dataset
 from ._utils import as_scalar, khat_status
 from .psd_compare import _get_psd_dataset
 from .psd_compare import _run as _run_psd_compare
@@ -38,32 +36,40 @@ def _extract_losses(idata_vi) -> Optional[np.ndarray]:
 def _get_vi_psd_dataset(idata_vi):
     if idata_vi is None:
         return None
-    attrs = getattr(idata_vi, "attrs", {}) or {}
-    if str(attrs.get("data_type", "")).lower().startswith("multi"):
-        if bool(attrs.get("only_vi")) or hasattr(idata_vi, "vi_posterior"):
-            return get_multivar_psd_dataset(idata_vi, source="vi")
+    try:
+        return get_psd_dataset(idata_vi, source="vi")
+    except (KeyError, TypeError):
         return None
-    dataset = getattr(idata_vi, "vi_posterior_psd", None)
-    if dataset is not None:
-        return dataset
-    return getattr(idata_vi, "posterior_psd", None)
 
 
 def _get_ref_psd_dataset(idata):
     if idata is None:
         return None
-    attrs = getattr(idata, "attrs", {}) or {}
-    if str(attrs.get("data_type", "")).lower().startswith("multi"):
-        return get_multivar_psd_dataset(idata, source="posterior")
-    dataset = getattr(idata, "posterior_psd", None)
-    if dataset is not None:
-        return dataset
-    return _get_psd_dataset(idata, idata)
+    try:
+        return get_psd_dataset(idata, source="primary")
+    except (KeyError, TypeError):
+        return _get_psd_dataset(idata, idata)
 
 
 def _psd_variance_from_ds(psd_ds) -> Optional[float]:
     if psd_ds is None:
         return None
+    if "spectral_density" in psd_ds:
+        freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
+        spectral_density = np.asarray(psd_ds["spectral_density"].values)
+        diag = np.real(
+            spectral_density[
+                :,
+                :,
+                np.arange(spectral_density.shape[2]),
+                np.arange(spectral_density.shape[2]),
+                :,
+            ]
+        )
+        diag = diag.reshape(-1, spectral_density.shape[2], freqs.size)
+        q50 = np.percentile(diag, 50.0, axis=0)
+        variances = np.trapezoid(q50, freqs, axis=-1)
+        return float(np.mean(variances))
     if "psd" in psd_ds:
         psd = psd_ds["psd"]
         freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))

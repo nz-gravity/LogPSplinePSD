@@ -1,9 +1,15 @@
 from .diagnostics import run_all_diagnostics
-from .diagnostics.posterior_diagnostics import (
-    compute_psd_functionals,
-    plot_subset_traces_and_ranks,
-    summarize_existing_mcmc_metrics,
-)
+
+try:
+    from .diagnostics.posterior_diagnostics import (
+        compute_psd_functionals,
+        plot_subset_traces_and_ranks,
+        summarize_existing_mcmc_metrics,
+    )
+except ImportError:  # pragma: no cover - optional plotting/stats stack
+    compute_psd_functionals = None
+    plot_subset_traces_and_ranks = None
+    summarize_existing_mcmc_metrics = None
 
 try:
     from ._version import __commit_id__, __version__

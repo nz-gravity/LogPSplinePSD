@@ -3,15 +3,18 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Literal, Optional
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
+from arviz_plots import plot_pair, plot_rank, plot_trace
+from arviz_stats import ess, rhat
 
 from ..arviz_utils.from_arviz import (
     get_multivar_posterior_psd_quantiles,
+    get_posterior_psd,
 )
 from ..logger import logger
 from ..plotting.base import (
@@ -25,6 +28,17 @@ from .run_all import run_all_diagnostics
 
 # Setup consistent styling for diagnostics plots
 setup_plot_style()
+
+# Backwards-compatibility shim for tests and older internal call sites that
+# still patch/access ``diag_mod.az`` during the ArviZ split transition.
+az = SimpleNamespace(
+    plot_trace=plot_trace,
+    plot_rank=plot_rank,
+    plot_pair=plot_pair,
+    ess=ess,
+    rhat=rhat,
+    loo=None,
+)
 
 
 @dataclass
@@ -157,7 +171,7 @@ def _flat_dim_from_shape(shape: tuple[int, ...]) -> int:
 
 
 def _select_rank_plot_vars(
-    idata: az.InferenceData, config: DiagnosticsConfig
+    idata: xr.DataTree, config: DiagnosticsConfig
 ) -> list[str]:
     posterior = getattr(idata, "posterior", None)
     if posterior is None:
@@ -179,7 +193,7 @@ def _select_rank_plot_vars(
 
 
 def _select_pair_plot_vars(
-    idata: az.InferenceData, config: DiagnosticsConfig
+    idata: xr.DataTree, config: DiagnosticsConfig
 ) -> list[str]:
     posterior = getattr(idata, "posterior", None)
     if posterior is None:
@@ -342,7 +356,7 @@ def _build_arviz_plot_data(idata, config: DiagnosticsConfig):
     return idata_plot, weight_vars
 
 
-def _ensure_diverging_sample_stats(idata: az.InferenceData) -> None:
+def _ensure_diverging_sample_stats(idata: xr.DataTree) -> None:
     if not hasattr(idata, "sample_stats"):
         return
     sample_stats = idata.sample_stats
@@ -380,7 +394,7 @@ def _sanitize_filename(name: str) -> str:
 
 
 def _create_ess_rhat_profiles(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     diag_dir: str,
     config: DiagnosticsConfig,
     weight_vars: list[str],
@@ -401,10 +415,10 @@ def _create_ess_rhat_profiles(
         if not dims:
             continue
         try:
-            ess = az.ess(var, method="bulk")
-            rhat = az.rhat(var)
-            ess_vals = _to_flat_finite_array(ess)
-            rhat_vals = _to_flat_finite_array(rhat)
+            ess_vals = ess(var, method="bulk")
+            rhat_vals = rhat(var)
+            ess_vals = _to_flat_finite_array(ess_vals)
+            rhat_vals = _to_flat_finite_array(rhat_vals)
         except Exception:
             continue
 
@@ -493,19 +507,21 @@ def _create_ess_rhat_profiles(
         _plot_single()
 
 
-def _is_multivar(idata: az.InferenceData) -> bool:
+def _is_multivar(idata: xr.DataTree) -> bool:
     attrs = getattr(idata, "attrs", {}) or {}
     return str(attrs.get("data_type", "")).lower().startswith("multi")
 
 
-def _get_freqs(idata: az.InferenceData, model=None) -> np.ndarray:
+def _get_freqs(idata: xr.DataTree, model=None) -> np.ndarray:
     attrs = getattr(idata, "attrs", {}) or {}
     if str(attrs.get("data_type", "")).lower().startswith("multi"):
         quantiles = get_multivar_posterior_psd_quantiles(idata)
         return np.asarray(quantiles["freq"], dtype=float)
-    psd = getattr(idata, "posterior_psd", None)
-    if psd is not None and "psd" in psd and "freq" in psd["psd"].coords:
-        return np.asarray(psd["psd"].coords["freq"])
+    try:
+        freqs, _, _, _ = get_posterior_psd(idata)
+        return np.asarray(freqs, dtype=float)
+    except Exception:
+        pass
     if model is not None and hasattr(model, "basis"):
         try:
             return np.arange(np.asarray(model.basis).shape[0])
@@ -514,7 +530,7 @@ def _get_freqs(idata: az.InferenceData, model=None) -> np.ndarray:
     return np.array([])
 
 
-def _posterior_draw_count(idata: az.InferenceData) -> int:
+def _posterior_draw_count(idata: xr.DataTree) -> int:
     posterior = getattr(idata, "posterior", None)
     if posterior is None:
         return 0
@@ -524,7 +540,7 @@ def _posterior_draw_count(idata: az.InferenceData) -> int:
 
 
 def _resolve_true_psd(
-    idata: az.InferenceData, true_psd: Optional[np.ndarray]
+    idata: xr.DataTree, true_psd: Optional[np.ndarray]
 ) -> Optional[np.ndarray]:
     if true_psd is not None:
         try:
@@ -565,28 +581,15 @@ def _relative_error_epsilon(values: np.ndarray) -> float:
 
 
 def _build_multivar_truth_frequency_maps(
-    idata: az.InferenceData, true_psd: Optional[np.ndarray]
+    idata: xr.DataTree, true_psd: Optional[np.ndarray]
 ) -> Optional[tuple[np.ndarray, list[str], np.ndarray, np.ndarray]]:
-    psd = getattr(idata, "posterior_psd", None)
-    if not _is_multivar(idata) and not (
-        psd is not None and "psd_matrix_real" in psd
-    ):
+    if not _is_multivar(idata):
         return None
-    if psd is not None and "psd_matrix_real" in psd:
-        psd_real = np.asarray(psd["psd_matrix_real"].values, dtype=np.float64)
-        psd_imag = np.asarray(psd["psd_matrix_imag"].values, dtype=np.float64)
-        freqs = np.asarray(
-            psd["psd_matrix_real"].coords["freq"].values, dtype=float
-        )
-        percentiles = np.asarray(
-            psd["psd_matrix_real"].coords["percentile"].values, dtype=float
-        )
-    else:
-        quantiles = get_multivar_posterior_psd_quantiles(idata)
-        psd_real = np.asarray(quantiles["real"], dtype=np.float64)
-        psd_imag = np.asarray(quantiles["imag"], dtype=np.float64)
-        freqs = np.asarray(quantiles["freq"], dtype=float)
-        percentiles = np.asarray(quantiles["percentile"], dtype=float)
+    quantiles = get_multivar_posterior_psd_quantiles(idata)
+    psd_real = np.asarray(quantiles["real"], dtype=np.float64)
+    psd_imag = np.asarray(quantiles["imag"], dtype=np.float64)
+    freqs = np.asarray(quantiles["freq"], dtype=float)
+    percentiles = np.asarray(quantiles["percentile"], dtype=float)
 
     truth = _resolve_true_psd(idata, true_psd)
     if truth is None:
@@ -647,7 +650,7 @@ def _build_multivar_truth_frequency_maps(
 
 
 def _create_truth_psd_frequency_diagnostics(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     diag_dir: str,
     config: DiagnosticsConfig,
     true_psd: Optional[np.ndarray] = None,
@@ -655,7 +658,7 @@ def _create_truth_psd_frequency_diagnostics(
     maps = _build_multivar_truth_frequency_maps(idata, true_psd)
     if maps is None:
         logger.info(
-            "Diagnostics plot: psd_truth_error_vs_freq skipped (requires multivariate posterior_psd and true_psd)."
+            "Diagnostics plot: psd_truth_error_vs_freq skipped (requires multivariate posterior draws and true_psd)."
         )
         return False
 
@@ -734,7 +737,7 @@ def _create_truth_psd_frequency_diagnostics(
 
 
 def plot_diagnostics(
-    idata: az.InferenceData,
+    idata: xr.DataTree,
     outdir: str,
     p: Optional[int] = None,
     N: Optional[int] = None,
@@ -844,7 +847,7 @@ def _create_diagnostic_plots(
         # ArviZ >= 1.0 removed combined/compact/figsize/divergences kwargs.
         # figure_kwargs passes figsize to the backend; visuals enables divergence markers.
         _trace_visuals = {"divergence": True} if has_divergences else None
-        pc = az.plot_trace(
+        pc = plot_trace(
             trace_idata,
             figure_kwargs={"figsize": figsize},
             **({"visuals": _trace_visuals} if _trace_visuals else {}),
@@ -862,8 +865,8 @@ def _create_diagnostic_plots(
             posterior = trace_idata.posterior
             for var_name in trace_idata.posterior.data_vars:
                 var_data = posterior[var_name]
-                rhat = az.rhat(var_data)
-                rhat_array = _to_flat_finite_array(rhat)
+                rhat_result = rhat(var_data)
+                rhat_array = _to_flat_finite_array(rhat_result)
 
                 # Handle both scalar and array R-hats
                 if rhat_array.size == 0:
@@ -1001,7 +1004,7 @@ def _create_rank_diagnostics(idata, diag_dir, config):
 
     @safe_plot(f"{diag_dir}/rank_plots.png", config.dpi)
     def _plot_rank():
-        az.plot_rank(idata, var_names=rank_vars)
+        plot_rank(idata, var_names=rank_vars)
 
     ok = _plot_rank()
     logger.debug(
@@ -1034,7 +1037,7 @@ def _create_pair_diagnostics(idata, diag_dir, config):
         pair_kwargs = dict(var_names=pair_vars, marginal=True)
         if has_divergences:
             pair_kwargs["aes_by_visuals"] = {"divergence": ["color"]}
-        az.plot_pair(idata, **pair_kwargs)
+        plot_pair(idata, **pair_kwargs)
 
     ok = _plot_pair()
     logger.info(
@@ -2743,11 +2746,14 @@ def generate_diagnostics_summary(
         rhat_mean = mcmc_diag.get("rhat_mean", rhat_mean)
 
         # Fallback to ArviZ scans when explicitly requested.
-        if ess_min is None or ess_tail_min is None or rhat_max is None:
+        if ess_min is None and ess_tail_min is None and rhat_max is None:
             try:
-                ess = az.ess(idata, method="bulk")
+                ess_ds = ess(idata, method="bulk")
                 ess_vals = np.concatenate(
-                    [np.asarray(ess[v]).reshape(-1) for v in ess.data_vars]
+                    [
+                        np.asarray(ess_ds[v]).reshape(-1)
+                        for v in ess_ds.data_vars
+                    ]
                 )
                 ess_vals = ess_vals[np.isfinite(ess_vals)]
                 if ess_vals.size:
@@ -2757,11 +2763,11 @@ def generate_diagnostics_summary(
                 pass
 
             try:
-                ess_tail = az.ess(idata, method="tail")
+                ess_tail_ds = ess(idata, method="tail")
                 ess_tail_vals = np.concatenate(
                     [
-                        np.asarray(ess_tail[v]).reshape(-1)
-                        for v in ess_tail.data_vars
+                        np.asarray(ess_tail_ds[v]).reshape(-1)
+                        for v in ess_tail_ds.data_vars
                     ]
                 )
                 ess_tail_vals = ess_tail_vals[np.isfinite(ess_tail_vals)]
@@ -2772,9 +2778,12 @@ def generate_diagnostics_summary(
                 pass
 
             try:
-                rhat = az.rhat(idata)
+                rhat_ds = rhat(idata)
                 rhat_vals = np.concatenate(
-                    [np.asarray(rhat[v]).reshape(-1) for v in rhat.data_vars]
+                    [
+                        np.asarray(rhat_ds[v]).reshape(-1)
+                        for v in rhat_ds.data_vars
+                    ]
                 )
                 rhat_vals = rhat_vals[np.isfinite(rhat_vals)]
                 if rhat_vals.size:
@@ -3109,16 +3118,12 @@ def generate_diagnostics_summary(
     have_vi_psd = (
         bool(getattr(idata, "attrs", {}).get("only_vi"))
         or hasattr(idata, "vi_posterior")
-        or hasattr(idata, "vi_posterior_psd")
+        or hasattr(idata, "vi_sample_stats")
     )
     if have_vi_psd:
         vi_psd_attrs = {}
-        if hasattr(idata, "vi_posterior"):
-            vi_psd_attrs = _attrs_like(getattr(idata, "vi_posterior", None))
-        elif hasattr(idata, "vi_posterior_psd"):
-            vi_psd_attrs = _attrs_like(
-                getattr(idata, "vi_posterior_psd", None)
-            )
+        if hasattr(idata, "vi_sample_stats"):
+            vi_psd_attrs = _attrs_like(getattr(idata, "vi_sample_stats", None))
         vi_metrics["riae"] = _pick_scalar(
             attrs.get("vi_riae_vs_truth"),
             attrs.get("vi_riae"),

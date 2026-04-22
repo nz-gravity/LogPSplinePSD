@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Union
 
-import arviz as az
+import xarray as xr
 
 from .datatypes.multivar import MultivariateTimeseries
 from .datatypes.univar import Timeseries
@@ -47,7 +47,7 @@ def run_mcmc(
     data: Union[Timeseries, MultivariateTimeseries],
     config: RunMCMCConfig | None = None,
     **kwargs,
-) -> az.InferenceData:
+) -> xr.DataTree:
     """
     Unified MCMC entrypoint for univariate and multivariate PSD estimation.
     Expects time-domain inputs (Timeseries or MultivariateTimeseries).

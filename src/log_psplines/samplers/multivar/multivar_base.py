@@ -8,16 +8,16 @@ import os
 import tempfile
 import time
 import traceback
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-import arviz as az
 import jax
 import jax.numpy as jnp
 import morphZ
 import numpy as np
+import xarray as xr
 from xarray import Dataset
 
+from ...arviz_utils.to_arviz import _pack_spline_model_multivar
 from ...datatypes import MultivarFFT
 from ...datatypes.multivar import EmpiricalPSD
 from ...datatypes.multivar_utils import (
@@ -26,7 +26,6 @@ from ...datatypes.multivar_utils import (
     _get_coherence,
     _interp_complex_matrix,
 )
-from ...diagnostics.plotting import generate_vi_diagnostics_summary
 from ...logger import logger
 from ...plotting import (
     PSDMatrixPlotSpec,
@@ -95,6 +94,8 @@ class MultivarBaseSampler(BaseSampler):
 
         # FFT data arrays for JAX operations
         self.freq = jnp.array(self.fft_data.freq, dtype=jnp.float32)
+        self.freq_np = np.asarray(self.freq, dtype=np.float32)
+        self.channel_coords = np.arange(self.p)
         self.u_re = jnp.array(self.fft_data.u_re, dtype=jnp.float32)
         self.u_im = jnp.array(self.fft_data.u_im, dtype=jnp.float32)
         self.Nb = int(self.fft_data.Nb)
@@ -139,7 +140,95 @@ class MultivarBaseSampler(BaseSampler):
     def data_type(self) -> str:
         return "multivariate"
 
-    def _save_plots(self, idata: az.InferenceData) -> None:
+    def _basis_dim_coords(self) -> Dict[str, np.ndarray]:
+        coords: Dict[str, np.ndarray] = {}
+        for idx, basis in enumerate(self.all_bases):
+            coords[f"delta_{idx}_basis_dim"] = np.arange(int(basis.shape[1]))
+        for j, l in self.spline_model.theta_pairs:
+            for part in ("re", "im"):
+                component = f"theta_{part}_{j}_{l}"
+                basis = self.spline_model.get_theta_model(part, j, l).basis
+                coords[f"{component}_basis_dim"] = np.arange(
+                    int(np.asarray(basis).shape[1])
+                )
+        return coords
+
+    def _make_empirical_psd(
+        self, freq: np.ndarray, psd: np.ndarray
+    ) -> EmpiricalPSD:
+        coherence = _get_coherence(psd)
+        return EmpiricalPSD(
+            freq=freq,
+            psd=psd,
+            coherence=coherence,
+            channels=np.arange(psd.shape[1]),
+        )
+
+    def _arviz_coords(self) -> Dict[str, Any]:
+        return {"freq": self.freq_np, **self._basis_dim_coords()}
+
+    def _arviz_dims(
+        self, samples: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, list[str]]:
+        dims: Dict[str, list[str]] = {}
+        if not samples:
+            return dims
+        for key in samples:
+            name = str(key)
+            if name.startswith("weights_"):
+                component = name[8:]
+                dims[name] = [f"{component}_basis_dim"]
+        return dims
+
+    def _observed_csd(self) -> np.ndarray:
+        raw_psd = getattr(self.fft_data, "raw_psd", None)
+        if raw_psd is not None:
+            psd = np.asarray(raw_psd, dtype=np.complex128)
+        else:
+            psd = Y_to_S(
+                U_to_Y(self.fft_data.U),
+                Nb=self.fft_data.Nb,
+                duration=float(getattr(self.fft_data, "duration", 1.0) or 1.0),
+                scaling_factor=float(self.fft_data.scaling_factor or 1.0),
+                Nh=self.Nh,
+            )
+        return self._rescale_psd(psd)
+
+    def _attach_custom_groups(
+        self,
+        idata: xr.DataTree,
+        *,
+        samples: Dict[str, Any],
+        sample_stats: Dict[str, Any],
+    ) -> None:
+        idata.attrs.update(
+            {
+                "p": self.fft_data.p,
+                "N": self.fft_data.N,
+                "n_theta": self.spline_model.n_theta,
+                "frequencies": self.freq_np,
+            }
+        )
+        idata["observed_data"] = xr.DataTree(
+            dataset=Dataset(
+                {
+                    "periodogram": (
+                        ("freq", "channels", "channels2"),
+                        self._observed_csd(),
+                    )
+                },
+                coords={
+                    "freq": self.freq_np,
+                    "channels": self.channel_coords,
+                    "channels2": self.channel_coords,
+                },
+            )
+        )
+        idata["spline_model"] = xr.DataTree(
+            dataset=_pack_spline_model_multivar(self.spline_model)
+        )
+
+    def _save_plots(self, idata: xr.DataTree) -> None:
         """Save multivariate-specific plots."""
         try:
             t0 = time.perf_counter()
@@ -253,28 +342,13 @@ class MultivarBaseSampler(BaseSampler):
             freq = np.asarray(self.fft_data.raw_freq, dtype=np.float64)
             psd = np.asarray(self.fft_data.raw_psd, dtype=np.complex128)
             if psd.shape[0] != self.N:
-                psd = _interp_complex_matrix(freq, np.array(self.freq), psd)
-                freq = np.array(self.freq, dtype=np.float64)
+                psd = _interp_complex_matrix(freq, self.freq_np, psd)
+                freq = self.freq_np.astype(np.float64)
             psd = self._rescale_psd(psd)
-            coherence = _get_coherence(psd)
-            channels = np.arange(psd.shape[1])
-            return EmpiricalPSD(
-                freq=freq, psd=psd, coherence=coherence, channels=channels
-            )
+            return self._make_empirical_psd(freq, psd)
 
-        S = Y_to_S(
-            U_to_Y(self.fft_data.U),
-            Nb=self.fft_data.Nb,
-            duration=float(getattr(self.fft_data, "duration", 1.0) or 1.0),
-            scaling_factor=float(self.fft_data.scaling_factor or 1.0),
-            Nh=self.Nh,
-        )
-        S = self._rescale_psd(S)
-        coherence = _get_coherence(S)
-        freq = np.array(self.freq, dtype=np.float64)
-        channels = np.arange(S.shape[1])
-        return EmpiricalPSD(
-            freq=freq, psd=S, coherence=coherence, channels=channels
+        return self._make_empirical_psd(
+            self.freq_np.astype(np.float64), self._observed_csd()
         )
 
     def _rescale_psd(self, psd: np.ndarray) -> np.ndarray:
@@ -288,7 +362,7 @@ class MultivarBaseSampler(BaseSampler):
         return psd * scale_matrix
 
     def _extract_vi_psd_median(
-        self, idata: az.InferenceData
+        self, idata: xr.DataTree
     ) -> Optional[EmpiricalPSD]:
         """Extract VI PSD median as EmpiricalPSD for overlay plotting."""
         vi_diag = getattr(self, "_vi_diagnostics", None)
@@ -306,7 +380,7 @@ class MultivarBaseSampler(BaseSampler):
             channels = np.arange(vi_psd_median.shape[1])
 
             return EmpiricalPSD(
-                freq=np.asarray(self.freq, dtype=np.float64),
+                freq=self.freq_np.astype(np.float64),
                 psd=vi_psd_median,
                 coherence=coherence,
                 channels=channels,
@@ -329,40 +403,25 @@ class MultivarBaseSampler(BaseSampler):
 
         save_vi_diagnostics_multivariate(
             outdir=self.config.outdir,
-            freq=np.array(self.freq),
+            freq=self.freq_np,
             empirical_psd=empirical_psd,
             diagnostics=vi_diag,
         )
+        from ...diagnostics.plotting import generate_vi_diagnostics_summary
+
         generate_vi_diagnostics_summary(
             vi_diag, outdir=self.config.outdir, log=log_summary
         )
 
-    def _create_vi_inference_data(
-        self,
-        samples: Dict[str, jnp.ndarray],
-        sample_stats: Dict[str, jnp.ndarray],
-        diagnostics: Optional[Dict[str, Any]],
-    ) -> az.InferenceData:
-        """Convert VI samples to ArviZ and attach matrix diagnostics."""
-
-        idata = self._create_inference_data(
-            samples,
-            sample_stats,
-            lnz=np.nan,
-            lnz_err=np.nan,
-        )
-        self._attach_vi_group(idata, diagnostics)
-        return idata
-
     def _attach_vi_group(
-        self, idata: az.InferenceData, diagnostics: Optional[Dict[str, Any]]
+        self, idata: xr.DataTree, diagnostics: Optional[Dict[str, Any]]
     ) -> None:
-        """Add VI posterior samples to an auxiliary InferenceData group."""
+        """Add VI posterior samples and diagnostics to auxiliary groups."""
 
         if not diagnostics:
             return
 
-        if bool(getattr(idata, "attrs", {}).get("only_vi")):
+        if bool(idata.attrs.get("only_vi")):
             return
 
         vi_samples = diagnostics.get("vi_samples")
@@ -371,52 +430,43 @@ class MultivarBaseSampler(BaseSampler):
 
         sample_vars = {}
         coords: Dict[str, Any] = {}
-        dims: Dict[str, list[str]] = {}
         for key, value in vi_samples.items():
             if not str(key).startswith("weights_"):
                 continue
             array = np.asarray(value)
+            if array.ndim == 1:
+                array = array[None, :]
             if array.ndim != 2:
                 continue
             component = str(key)[8:]
             basis_dim = f"{component}_basis_dim"
+            coords["chain"] = np.arange(1)
+            coords["draw"] = np.arange(array.shape[0])
             coords[basis_dim] = np.arange(array.shape[-1])
-            dims[key] = ["draw", basis_dim]
-            sample_vars[key] = (dims[key], array)
-        if not sample_vars:
-            return
-
-        dataset = Dataset(sample_vars, coords=coords)
-        attr_keys = [
-            "riae_matrix",
-            "l2_matrix",
-            "riae_per_channel",
-            "riae_offdiag",
-            "coherence_riae",
-            "coverage",
-            "ci_coverage",
-            "ci_width",
-            "ci_width_diag_mean",
-            "coverage_interval",
-            "coverage_level",
-            "riae_matrix_errorbars",
-            "psis_khat_max",
-            "psis_khat_status",
-            "psis_khat_threshold",
-            "guide",
-        ]
-        for key in attr_keys:
-            value = diagnostics.get(key)
-            if value is not None:
-                dataset.attrs[key] = value
-
-        import xarray as _xr
-
-        idata["vi_posterior"] = _xr.DataTree(dataset=dataset)
-        for key in attr_keys:
-            value = diagnostics.get(key)
-            if value is not None:
-                idata.attrs[f"vi_{key}"] = value
+            sample_vars[key] = (["chain", "draw", basis_dim], array[None, ...])
+        self._attach_vi_posterior_dataset(idata, sample_vars, coords)
+        self._attach_vi_sample_stats(
+            idata,
+            diagnostics,
+            attr_keys=(
+                "riae_matrix",
+                "l2_matrix",
+                "riae_per_channel",
+                "riae_offdiag",
+                "coherence_riae",
+                "coverage",
+                "ci_coverage",
+                "ci_width",
+                "ci_width_diag_mean",
+                "coverage_interval",
+                "coverage_level",
+                "riae_matrix_errorbars",
+                "psis_khat_max",
+                "psis_khat_status",
+                "psis_khat_threshold",
+                "guide",
+            ),
+        )
 
     def _get_lnz(
         self, samples: Dict[str, Any], sample_stats: Dict[str, Any]
@@ -610,9 +660,15 @@ class MultivarBaseSampler(BaseSampler):
         sample_stats: Dict[str, Any],
         lnz: float,
         lnz_err: float,
-    ) -> az.InferenceData:
+        *,
+        mcmc: Any | None = None,
+    ) -> xr.DataTree:
         idata = super()._create_inference_data(
-            samples, sample_stats, lnz, lnz_err
+            samples,
+            sample_stats,
+            lnz,
+            lnz_err,
+            mcmc=mcmc,
         )
         if self._lnz_by_block:
             idata.attrs["lnz_by_block"] = np.asarray(

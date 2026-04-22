@@ -7,9 +7,7 @@ from typing import Dict, Optional
 import numpy as np
 from scipy.integrate import simpson
 
-from ..arviz_utils.from_arviz import (
-    get_multivar_psd_dataset,
-)
+from ..arviz_utils.from_arviz import get_psd_dataset
 from ._utils import (
     compute_ci_coverage_multivar,
     compute_ci_coverage_multivar_detailed,
@@ -28,24 +26,12 @@ def _get_psd_dataset(idata, idata_vi):
     for source, prefer_vi in ((idata, False), (idata_vi, True)):
         if source is None:
             continue
-        attrs = getattr(source, "attrs", {}) or {}
-        is_multivar = (
-            str(attrs.get("data_type", "")).lower().startswith("multi")
-        )
-        if is_multivar:
-            if prefer_vi and (
-                bool(attrs.get("only_vi")) or hasattr(source, "vi_posterior")
-            ):
-                return get_multivar_psd_dataset(source, source="vi")
-            return get_multivar_psd_dataset(source, source="posterior")
-        for name in ("vi_posterior_psd", "posterior_psd"):
-            dataset = (
-                source.get(name)
-                if isinstance(source, dict)
-                else getattr(source, name, None)
+        try:
+            return get_psd_dataset(
+                source, source="vi" if prefer_vi else "primary"
             )
-            if dataset is not None:
-                return dataset
+        except (KeyError, TypeError):
+            continue
     return None
 
 
@@ -71,16 +57,25 @@ def _parse_reference(reference: Optional[object]) -> Optional[np.ndarray]:
 
 
 def _handle_univariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
-    psd = psd_ds["psd"]
-    freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
-    values = np.asarray(psd.values)
+    if "spectral_density" in psd_ds:
+        freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
+        values = np.real(
+            np.asarray(psd_ds["spectral_density"].values)[:, :, 0, 0, :]
+        ).reshape(-1, freqs.size)
+        percentiles = np.asarray([5.0, 50.0, 95.0], dtype=float)
+        values = np.percentile(values, percentiles, axis=0)
+    else:
+        psd = psd_ds["psd"]
+        freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
+        values = np.asarray(psd.values)
+        percentiles = np.asarray(psd.coords.get("percentile", []), dtype=float)
+        if percentiles.size == 0:
+            percentiles = np.arange(values.shape[0], dtype=float)
+
     freq_idx = interior_frequency_slice(freqs.size)
     freqs = freqs[freq_idx]
     values = values[..., freq_idx]
     reference = np.asarray(reference)[freq_idx]
-    percentiles = np.asarray(psd.coords.get("percentile", []), dtype=float)
-    if percentiles.size == 0:
-        percentiles = np.arange(values.shape[0], dtype=float)
 
     metrics: Dict[str, float] = {}
 
@@ -99,14 +94,23 @@ def _handle_univariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
 
 
 def _handle_univariate_no_truth(psd_ds) -> Dict[str, float]:
-    psd = psd_ds["psd"]
-    freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
-    values = np.asarray(psd.values)
+    if "spectral_density" in psd_ds:
+        freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
+        values = np.real(
+            np.asarray(psd_ds["spectral_density"].values)[:, :, 0, 0, :]
+        ).reshape(-1, freqs.size)
+        percentiles = np.asarray([5.0, 50.0, 95.0], dtype=float)
+        values = np.percentile(values, percentiles, axis=0)
+    else:
+        psd = psd_ds["psd"]
+        freqs = np.asarray(psd.coords.get("freq", np.arange(psd.shape[-1])))
+        values = np.asarray(psd.values)
+        percentiles = np.asarray(psd.coords.get("percentile", []), dtype=float)
+        if percentiles.size == 0:
+            percentiles = np.arange(values.shape[0], dtype=float)
+
     freq_idx = interior_frequency_slice(freqs.size)
     values = values[..., freq_idx]
-    percentiles = np.asarray(psd.coords.get("percentile", []), dtype=float)
-    if percentiles.size == 0:
-        percentiles = np.arange(values.shape[0], dtype=float)
 
     metrics: Dict[str, float] = {}
     if percentiles.size >= 3:
@@ -117,19 +121,51 @@ def _handle_univariate_no_truth(psd_ds) -> Dict[str, float]:
 
 
 def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
-    psd_real = np.asarray(psd_ds["psd_matrix_real"].values)
-    percentiles = np.asarray(
-        psd_ds["psd_matrix_real"].coords.get("percentile", []), dtype=float
-    )
-    freqs = np.asarray(psd_ds["psd_matrix_real"].coords.get("freq"))
+    if "spectral_density" in psd_ds:
+        freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
+        spectral_density = np.asarray(psd_ds["spectral_density"].values)
+        spectral_density = spectral_density.reshape(
+            -1,
+            spectral_density.shape[2],
+            spectral_density.shape[3],
+            spectral_density.shape[4],
+        )
+        spectral_density = np.moveaxis(spectral_density, -1, 1)
+        percentiles = np.asarray([5.0, 50.0, 95.0], dtype=float)
+        psd_real = np.percentile(spectral_density.real, percentiles, axis=0)
+        psd_imag = np.percentile(spectral_density.imag, percentiles, axis=0)
+        coherence_samples = np.asarray(psd_ds["coherence"].values).reshape(
+            -1,
+            spectral_density.shape[2],
+            spectral_density.shape[3],
+            spectral_density.shape[1],
+        )
+        coherence_samples = np.moveaxis(coherence_samples, -1, 1)
+        coherence_quantiles = np.percentile(
+            coherence_samples, percentiles, axis=0
+        )
+    else:
+        psd_real = np.asarray(psd_ds["psd_matrix_real"].values)
+        percentiles = np.asarray(
+            psd_ds["psd_matrix_real"].coords.get("percentile", []), dtype=float
+        )
+        freqs = np.asarray(psd_ds["psd_matrix_real"].coords.get("freq"))
+        psd_imag = None
+        if "psd_matrix_imag" in psd_ds:
+            psd_imag = np.asarray(psd_ds["psd_matrix_imag"].values)
+        coherence_quantiles = (
+            np.asarray(psd_ds["coherence"].values)
+            if "coherence" in psd_ds
+            else None
+        )
+
     freq_idx = interior_frequency_slice(freqs.size)
     freqs = freqs[freq_idx]
     psd_real = psd_real[:, freq_idx, ...]
-    psd_imag = None
-    if "psd_matrix_imag" in psd_ds:
-        psd_imag = np.asarray(psd_ds["psd_matrix_imag"].values)[
-            :, freq_idx, ...
-        ]
+    if psd_imag is not None:
+        psd_imag = psd_imag[:, freq_idx, ...]
+    if coherence_quantiles is not None:
+        coherence_quantiles = coherence_quantiles[:, freq_idx, ...]
 
     true_psd_real = np.asarray(reference)[freq_idx, ...]
 
@@ -219,7 +255,11 @@ def _handle_multivariate(psd_ds, reference: np.ndarray) -> Dict[str, float]:
     # If Im true is ~0 (e.g. LISA), riae_offdiag_im is undefined — leave absent.
 
     # --- Coherence RIAE ---
-    coherence_est = _coherence(q50_real)
+    coherence_est = (
+        extract_percentile(coherence_quantiles, percentiles, 50.0)
+        if coherence_quantiles is not None
+        else _coherence(q50_real)
+    )
     coherence_true = _coherence(true_psd_complex)
     coh_diff = np.linalg.norm(
         (coherence_est - coherence_true)[:, offdiag_mask], axis=1

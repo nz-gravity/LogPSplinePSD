@@ -33,12 +33,12 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, Tuple, cast
 
-import arviz as az
 import jax
 import jax.numpy as jnp
 import morphZ
 import numpy as np
 import numpyro
+import xarray as xr
 from numpyro.infer import MCMC, NUTS
 
 from ...logger import logger
@@ -562,7 +562,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
         *,
         only_vi: bool = False,
         **kwargs,
-    ) -> az.InferenceData:
+    ) -> xr.DataTree:
         """Run the blocked inference and assemble results.
 
         Steps
@@ -603,18 +603,29 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
             )
         self._vi_diagnostics = vi_setup.diagnostics
         vi_diag = self._vi_diagnostics or {}
+        warm_start_method = "coarse_vi" if coarse_sampler is not None else "vi"
         self._extra_idata_attrs = {
-            key: vi_diag[key]
-            for key in (
-                "coarse_vi_attempted",
-                "coarse_vi_success",
-                "coarse_vi_mode",
-                "coarse_vi_full_nfreq",
-                "coarse_vi_nfreq",
-                "coarse_vi_target_nfreq",
-            )
-            if key in vi_diag
+            "inference_method": "vi" if vi_only_mode else "nuts",
+            "posterior_source": "vi" if vi_only_mode else "nuts",
+            "warm_start_method": warm_start_method,
+            "vi_guide": vi_diag.get("guide")
+            or getattr(self.config, "vi_guide", None)
+            or "vi",
         }
+        self._extra_idata_attrs.update(
+            {
+                key: vi_diag[key]
+                for key in (
+                    "coarse_vi_attempted",
+                    "coarse_vi_success",
+                    "coarse_vi_mode",
+                    "coarse_vi_full_nfreq",
+                    "coarse_vi_nfreq",
+                    "coarse_vi_target_nfreq",
+                )
+                if key in vi_diag
+            }
+        )
         if self._vi_diagnostics:
             empirical_psd = (
                 self._compute_empirical_psd()
@@ -815,7 +826,7 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
 
     def _vi_only_inference_data(
         self, diagnostics: Optional[Dict[str, Any]]
-    ) -> az.InferenceData:
+    ) -> xr.DataTree:
         self._reset_lnz_details()
         if not diagnostics:
             raise ValueError(

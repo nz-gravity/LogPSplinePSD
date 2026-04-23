@@ -3,20 +3,17 @@ from .base import (
     PlotConfig,
     compute_confidence_intervals,
     extract_plotting_data,
-    safe_plot,
     setup_plot_style,
 )
 from .pdgrm import plot_pdgrm
 from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 from .utils import PlottingData, unpack_data
 from .vi import (
-    _extract_losses,
     plot_vi_elbo,
     plot_vi_elbo_figure,
     plot_vi_initial_psd_matrix,
     plot_vi_initial_psd_univariate,
-    save_vi_diagnostics_multivariate,
-    save_vi_diagnostics_univariate,
+    plot_vi_loss,
 )
 
 __all__ = [
@@ -26,18 +23,15 @@ __all__ = [
     "extract_plotting_data",
     "compute_confidence_intervals",
     "setup_plot_style",
-    "safe_plot",
     "unpack_data",
     "PlottingData",
     # Main plotting functions
     "plot_pdgrm",
     "plot_psd_matrix",
     "PSDMatrixPlotSpec",
+    "plot_vi_loss",
     "plot_vi_elbo",
     "plot_vi_elbo_figure",
     "plot_vi_initial_psd_matrix",
     "plot_vi_initial_psd_univariate",
-    "save_vi_diagnostics_multivariate",
-    "save_vi_diagnostics_univariate",
-    "_extract_losses",
 ]

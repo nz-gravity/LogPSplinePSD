@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional, cast
+from pathlib import Path
+from typing import Any, Dict, Mapping, Optional, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from ..datatypes.multivar import EmpiricalPSD
-from .base import COLORS, PlotConfig, safe_plot, setup_plot_style
+from .base import COLORS, PlotConfig, setup_plot_style
 from .pdgrm import plot_pdgrm
 from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 
@@ -17,115 +18,38 @@ from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 setup_plot_style()
 
 
-def _extract_losses(source: Dict[str, Any]) -> np.ndarray:
-    """Extract loss array from a dict-like source.
-
-    Parameters
-    ----------
-    source : dict
-        Dictionary containing VI diagnostics.
-
-    Returns
-    -------
-    np.ndarray
-        Loss array, empty if not found.
-    """
-    if source is None:
-        return np.array([], dtype=float)
-
-    losses = source.get("losses")
-    if losses is None:
-        return np.array([], dtype=float)
-    return np.asarray(losses, dtype=float).reshape(-1)
-
-
-def plot_vi_elbo_figure(
-    losses: np.ndarray | Dict[str, np.ndarray],
-) -> plt.Figure:
-    """Create a VI ELBO/loss history figure (lightweight, returns Figure).
-
-    This is a lightweight alternative to plot_vi_elbo() for interactive/diagnostic use.
-    Returns a matplotlib Figure object instead of saving to disk.
-
-    Parameters
-    ----------
-    losses : np.ndarray or Dict[str, np.ndarray]
-        Single loss array or dict mapping factor names to loss arrays.
-
-    Returns
-    -------
-    plt.Figure
-        Matplotlib figure with loss curves.
-    """
-    # Handle single array (univariate case)
-    if isinstance(losses, np.ndarray):
-        losses = {"0": losses}
-
-    if not losses:
-        raise ValueError("No loss data provided.")
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-
-    for factor, loss_array in losses.items():
-        loss_array = np.asarray(loss_array, dtype=float).reshape(-1)
-        if loss_array.size == 0:
-            raise ValueError(f"Empty loss array for factor {factor}.")
-        ax.plot(
-            np.arange(loss_array.size), loss_array, label=factor, linewidth=1.5
-        )
-
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("ELBO / loss")
-    ax.set_title("VI ELBO")
-    ax.grid(True, alpha=0.3)
-
-    if len(losses) > 1:
-        ax.legend()
-
-    fig.tight_layout()
-    return fig
-
-
-def plot_vi_elbo(
+def _build_vi_loss_figure(
     losses: np.ndarray,
     guide_name: str,
-    outfile: str,
     loss_components: Optional[Dict[str, np.ndarray]] = None,
-) -> None:
-    """Plot the ELBO trace recorded during SVI optimisation.
-
-    Args:
-        losses: Main ELBO loss values (fine-grid VI).
-        guide_name: Name of the VI guide.
-        outfile: Output file path.
-        loss_components: Optional per-block loss traces.
-    """
+) -> plt.Figure | None:
+    """Build a VI loss figure for reuse by save and aggregate helpers."""
+    losses = np.asarray(losses, dtype=np.float64)
     if losses.size == 0:
-        return
+        return None
 
-    # Use consistent styling - larger figure for multiple components
     fig_width = 8.0 if loss_components else 6.0
     config = PlotConfig(figsize=(fig_width, 5.0), fontsize=10)
-
     fig, ax = plt.subplots(figsize=config.figsize)
     steps = np.arange(losses.size)
 
-    # Normalize losses for log scale: shift to be positive while preserving relative changes
-    # Find minimum across main losses and all components
-    min_loss = losses.min()
+    min_loss = float(np.nanmin(losses))
     if loss_components:
         for comp_losses in loss_components.values():
-            min_loss = min(min_loss, comp_losses.min())
+            comp_arr = np.asarray(comp_losses, dtype=np.float64)
+            if comp_arr.size:
+                min_loss = min(min_loss, float(np.nanmin(comp_arr)))
 
-    # Shift so minimum is slightly above zero for log scale
-    shift_value = min_loss - 0.1 * np.abs(min_loss) if min_loss != 0 else -1.0
-
-    # Plot main ELBO trace
+    shift_value = min_loss - 0.1 * abs(min_loss) if min_loss != 0 else -1.0
     ax.plot(
-        steps, losses - shift_value, color="k", lw=2, alpha=0.9, label="ELBO"
+        steps,
+        losses - shift_value,
+        color="k",
+        lw=2,
+        alpha=0.9,
+        label="ELBO",
     )
 
-    # Plot loss components if provided (useful for multivariate VI)
     if loss_components:
         component_colors = [
             COLORS["real"],
@@ -135,17 +59,18 @@ def plot_vi_elbo(
             "pink",
         ]
         for i, (comp_name, comp_losses) in enumerate(loss_components.items()):
-            if comp_losses.size == losses.size:  # Ensure same length
-                shifted_comp_losses = comp_losses - shift_value
-                color = component_colors[i % len(component_colors)]
-                ax.plot(
-                    steps,
-                    shifted_comp_losses,
-                    color=color,
-                    lw=1.5,
-                    alpha=0.7,
-                    label=f"{comp_name}",
-                )
+            comp_arr = np.asarray(comp_losses, dtype=np.float64)
+            if comp_arr.size != losses.size:
+                continue
+            color = component_colors[i % len(component_colors)]
+            ax.plot(
+                steps,
+                comp_arr - shift_value,
+                color=color,
+                lw=1.5,
+                alpha=0.7,
+                label=str(comp_name),
+            )
 
     ax.set_xlabel("VI Evaluation", fontsize=config.labelsize)
     ax.set_ylabel("ELBO (relative)", fontsize=config.labelsize)
@@ -154,14 +79,18 @@ def plot_vi_elbo(
     ax.grid(True, alpha=0.3, linewidth=0.8)
     ax.legend(frameon=False, loc="best")
 
-    # Add component statistics if available
     if loss_components:
         stats_text = "Components:"
         for comp_name, comp_losses in loss_components.items():
-            if comp_losses.size > 0:
-                comp_final = comp_losses[-1]
-                comp_range = comp_losses.max() - comp_losses.min()
-                stats_text += f"\n{comp_name}: {comp_final:.2f} (range: {comp_range:.2f})"
+            comp_arr = np.asarray(comp_losses, dtype=np.float64)
+            if comp_arr.size == 0:
+                continue
+            comp_final = comp_arr[-1]
+            comp_range = comp_arr.max() - comp_arr.min()
+            stats_text += (
+                f"\n{comp_name}: {comp_final:.2f} "
+                f"(range: {comp_range:.2f})"
+            )
 
         ax.text(
             0.02,
@@ -175,8 +104,69 @@ def plot_vi_elbo(
         )
 
     fig.tight_layout()
+    return fig
+
+
+def plot_vi_loss(
+    losses: np.ndarray,
+    guide_name: str,
+    outfile: str,
+    loss_components: Optional[Dict[str, np.ndarray]] = None,
+) -> None:
+    """Plot the ELBO trace recorded during SVI optimisation.
+
+    Args:
+        losses: Main ELBO loss values (fine-grid VI).
+        guide_name: Name of the VI guide.
+        outfile: Output file path.
+        loss_components: Optional per-block loss traces.
+    """
+    fig = _build_vi_loss_figure(
+        losses=np.asarray(losses, dtype=np.float64),
+        guide_name=guide_name,
+        loss_components=loss_components,
+    )
+    if fig is None:
+        return
     fig.savefig(outfile, dpi=150)
     plt.close(fig)
+
+
+def plot_vi_elbo(losses_by_factor: Mapping[str, np.ndarray]) -> plt.Figure:
+    """Build a combined ELBO figure for multivariate VI factor diagnostics."""
+    normalized = {
+        str(name): np.asarray(losses, dtype=np.float64)
+        for name, losses in losses_by_factor.items()
+        if np.asarray(losses).size
+    }
+    if not normalized:
+        raise ValueError(
+            "losses_by_factor must contain at least one loss trace"
+        )
+
+    longest_name, longest_losses = max(
+        normalized.items(), key=lambda item: item[1].size
+    )
+    components = {
+        name: losses
+        for name, losses in normalized.items()
+        if name != longest_name and losses.size == longest_losses.size
+    }
+    fig = _build_vi_loss_figure(
+        losses=longest_losses,
+        guide_name=f"factors ({longest_name} reference)",
+        loss_components=components or None,
+    )
+    if fig is None:
+        raise ValueError("Could not build VI ELBO figure")
+    return fig
+
+
+def plot_vi_elbo_figure(
+    losses_by_factor: Mapping[str, np.ndarray],
+) -> plt.Figure:
+    """Backward-compatible alias for the combined VI ELBO figure helper."""
+    return plot_vi_elbo(losses_by_factor)
 
 
 def plot_vi_initial_psd_univariate(
@@ -431,191 +421,3 @@ def _pack_ci_from_quantiles(
                 )
 
     return ci_dict
-
-
-def save_vi_diagnostics_univariate(
-    *,
-    outdir: Optional[str],
-    periodogram,
-    spline_model,
-    diagnostics: Optional[Dict[str, Any]],
-) -> None:
-    """Persist VI diagnostics for univariate samplers as soon as they are available."""
-
-    if not diagnostics or outdir is None:
-        return
-
-    diagnostics_dir = os.path.join(outdir, "diagnostics")
-    os.makedirs(diagnostics_dir, exist_ok=True)
-
-    losses = diagnostics.get("losses")
-    if losses is not None:
-        losses_arr = np.asarray(losses)
-        if losses_arr.ndim > 1:
-            losses_arr = losses_arr.mean(axis=0)
-        if losses_arr.size:
-            guide_name = str(diagnostics.get("guide", "vi"))
-            coarse = diagnostics.get("coarse_losses")
-            plot_vi_elbo(
-                losses=losses_arr,
-                guide_name=guide_name,
-                outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
-            )
-            coarse_arr = np.asarray(coarse) if coarse is not None else None
-            if coarse_arr is not None and coarse_arr.size:
-                plot_vi_elbo(
-                    losses=coarse_arr,
-                    guide_name=f"{guide_name} (coarse)",
-                    outfile=os.path.join(
-                        diagnostics_dir, "vi_elbo_trace_coarse.png"
-                    ),
-                )
-
-    weights = diagnostics.get("weights")
-    if weights is not None:
-        psd_quantiles_val = diagnostics.get("psd_quantiles")
-        psd_quantiles = (
-            cast(Dict[str, np.ndarray], psd_quantiles_val)
-            if isinstance(psd_quantiles_val, dict)
-            else None
-        )
-        plot_vi_initial_psd_univariate(
-            outfile=os.path.join(diagnostics_dir, "vi_initial_psd.png"),
-            periodogram=periodogram,
-            spline_model=spline_model,
-            weights=weights,
-            true_psd=diagnostics.get("true_psd"),
-            psd_quantiles=psd_quantiles,
-            coarse_vi_freq=diagnostics.get("coarse_vi_freq"),
-            coarse_vi_psd=diagnostics.get("coarse_vi_psd"),
-            coarse_vi_label=diagnostics.get("coarse_vi_label"),
-        )
-
-
-def save_vi_diagnostics_multivariate(
-    *,
-    outdir: Optional[str],
-    freq: np.ndarray,
-    empirical_psd: Optional[EmpiricalPSD],
-    diagnostics: Optional[Dict[str, Any]],
-) -> None:
-    """Persist VI diagnostics for multivariate samplers right after VI initialisation."""
-
-    if not diagnostics or outdir is None:
-        return
-
-    diagnostics_dir = os.path.join(outdir, "diagnostics")
-    os.makedirs(diagnostics_dir, exist_ok=True)
-
-    losses = diagnostics.get("losses")
-    loss_components = diagnostics.get("losses_per_block")
-    coarse_raw = diagnostics.get("coarse_losses")
-    coarse_arr = np.asarray(coarse_raw) if coarse_raw is not None else None
-    coarse_components_raw = diagnostics.get("coarse_losses_per_block")
-    coarse_components_arr = (
-        np.asarray(coarse_components_raw)
-        if coarse_components_raw is not None
-        else None
-    )
-
-    component_dict: Optional[Dict[str, np.ndarray]] = None
-    component_source = None
-    if loss_components is not None:
-        component_source = np.asarray(loss_components)
-        if component_source.ndim == 2 and component_source.shape[1] > 0:
-            component_dict = {
-                f"block_{idx}": component_source[idx]
-                for idx in range(component_source.shape[0])
-            }
-        elif component_source.ndim == 3 and component_source.shape[2] > 0:
-            component_dict = {}
-            for block_idx in range(component_source.shape[0]):
-                mean_trace = component_source[block_idx].mean(axis=0)
-                component_dict[f"block_{block_idx}"] = mean_trace
-
-    if losses is not None:
-        losses_arr = np.asarray(losses)
-        if losses_arr.ndim == 1 and losses_arr.size:
-            guide_name = str(diagnostics.get("guide", "vi"))
-            outfile = os.path.join(diagnostics_dir, "vi_elbo_trace.png")
-            plot_vi_elbo(
-                losses=losses_arr,
-                guide_name=guide_name,
-                outfile=outfile,
-                loss_components=component_dict,
-            )
-        elif losses_arr.ndim > 1 and losses_arr.shape[1] > 0:
-            mean_loss = losses_arr.mean(axis=0)
-            components = {
-                f"run_{idx}": losses_arr[idx]
-                for idx in range(losses_arr.shape[0])
-            }
-            if component_dict:
-                components.update(component_dict)
-            guide_name = str(diagnostics.get("guide", "vi"))
-            plot_vi_elbo(
-                losses=mean_loss,
-                guide_name=guide_name,
-                outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
-                loss_components=components if components else None,
-            )
-    elif component_dict:
-        # No aggregate losses stored; fall back to plotting components only
-        mean_loss = np.mean(np.vstack(list(component_dict.values())), axis=0)
-        guide_name = str(diagnostics.get("guide", "vi"))
-        plot_vi_elbo(
-            losses=mean_loss,
-            guide_name=guide_name,
-            outfile=os.path.join(diagnostics_dir, "vi_elbo_trace.png"),
-            loss_components=component_dict,
-        )
-
-    coarse_component_dict: Optional[Dict[str, np.ndarray]] = None
-    if coarse_components_arr is not None:
-        if (
-            coarse_components_arr.ndim == 2
-            and coarse_components_arr.shape[1] > 0
-        ):
-            coarse_component_dict = {
-                f"block_{idx}": coarse_components_arr[idx]
-                for idx in range(coarse_components_arr.shape[0])
-            }
-        elif (
-            coarse_components_arr.ndim == 3
-            and coarse_components_arr.shape[2] > 0
-        ):
-            coarse_component_dict = {}
-            for block_idx in range(coarse_components_arr.shape[0]):
-                coarse_component_dict[f"block_{block_idx}"] = (
-                    coarse_components_arr[block_idx].mean(axis=0)
-                )
-
-    if coarse_arr is not None and coarse_arr.size:
-        guide_name = str(diagnostics.get("guide", "vi"))
-        plot_vi_elbo(
-            losses=coarse_arr,
-            guide_name=f"{guide_name} (coarse)",
-            outfile=os.path.join(diagnostics_dir, "vi_elbo_trace_coarse.png"),
-            loss_components=coarse_component_dict,
-        )
-
-    psd_quantiles_val = diagnostics.get("psd_quantiles")
-    coherence_quantiles_val = diagnostics.get("coherence_quantiles")
-    if isinstance(psd_quantiles_val, dict):
-        plot_vi_initial_psd_matrix(
-            outfile=os.path.join(diagnostics_dir, "vi_initial_psd_matrix.png"),
-            freq=freq,
-            empirical_psd=empirical_psd,
-            true_psd=diagnostics.get("true_psd"),
-            psd_quantiles=cast(Dict[str, np.ndarray], psd_quantiles_val),
-            coherence_quantiles=(
-                cast(Dict[str, np.ndarray], coherence_quantiles_val)
-                if isinstance(coherence_quantiles_val, dict)
-                else None
-            ),
-            show_coherence=True,
-            show_csd_magnitude=False,
-            coarse_vi_freq=diagnostics.get("coarse_vi_freq"),
-            coarse_vi_psd=diagnostics.get("coarse_vi_psd"),
-            coarse_vi_label=diagnostics.get("coarse_vi_label"),
-        )

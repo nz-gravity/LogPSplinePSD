@@ -20,7 +20,7 @@ from ...arviz_utils.to_arviz import _pack_spline_model
 from ...datatypes import Periodogram
 from ...diagnostics import build_vi_summary_table
 from ...logger import logger
-from ...plotting import _extract_losses, plot_pdgrm, plot_vi_elbo_figure
+from ...plotting import plot_pdgrm, plot_vi_loss
 from ...psplines import LogPSplines, build_spline
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -185,25 +185,13 @@ class UnivarBaseSampler(BaseSampler):
         summary = build_vi_summary_table(vi_diag)
         summary.to_csv(diagnostics_dir / "vi_summary.csv", index=False)
 
-        try:
-            losses = _extract_losses(vi_diag)
-            if losses.size > 0:
-                fig = plot_vi_elbo_figure(losses)
-                fig.savefig(
-                    diagnostics_dir / "vi_elbo_factor_0.png",
-                    dpi=150,
-                    bbox_inches="tight",
-                )
-                import matplotlib.pyplot as plt
-
-                plt.close(fig)
-        except Exception:
-            logger.warning("Could not save VI ELBO plot.", exc_info=True)
-
-        logger.info(
-            "Skipping univariate VI Pareto-k plot: VI diagnostics do not yet "
-            "provide ArviZ-ready LOO inputs."
-        )
+        losses = np.asarray(vi_diag.get("losses", []), dtype=np.float64)
+        if losses.size:
+            plot_vi_loss(
+                losses=losses,
+                guide_name=str(vi_diag.get("guide", "vi")),
+                outfile=str(diagnostics_dir / "vi_loss.png"),
+            )
 
         if log_summary and not summary.empty:
             row = summary.iloc[0]

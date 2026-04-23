@@ -6,8 +6,11 @@ from typing import Optional, Union
 
 import numpy as np
 
+from .._jaxtypes import Complex, Float
+from .._typecheck import runtime_typecheck
 from ..datatypes import Periodogram
 from ..datatypes.multivar import EmpiricalPSD, MultivarFFT
+from ..datatypes.multivar_utils import _interp_frequency_indexed_array
 from ..logger import logger
 from ..samplers.vi_init import VIWarmStartPlan
 from .checks import _run_preprocessing_checks, _save_preprocessing_plot
@@ -16,8 +19,15 @@ from .coarse_grain import (
     _closest_divisor,
     _smallest_divisor_geq,
 )
-from .config_utils import _build_config_from_kwargs, _normalize_run_config
-from .configs import RunMCMCConfig, SamplerName
+from .configs import (
+    DiagnosticsConfig,
+    ModelConfig,
+    NUTSConfigOverride,
+    RunMCMCConfig,
+    SamplerName,
+    TruePSDInput,
+    VIConfig,
+)
 from .data_prep import (
     _build_welch_overlay,
     _coarse_grain_processed_data,
@@ -33,37 +43,10 @@ from .sampler_factory import (
     _build_univar_sampler,
     _create_sampler,
     _validate_extra_kwargs,
-    _validate_sampler_selection,
-)
-from .true_psd import (
-    _align_true_psd_to_freq,
-    _interp_psd_array,
-    _prepare_true_psd_for_freq,
-    _unpack_true_psd,
 )
 
 __all__ = [
     "PreprocessedMCMCInput",
-    "_align_true_psd_to_freq",
-    "_build_common_sampler_kwargs",
-    "_build_config_from_kwargs",
-    "_build_model_from_data",
-    "_build_sampler_inputs",
-    "_build_univar_sampler",
-    "_build_multivar_blocked_sampler",
-    "_build_welch_overlay",
-    "_coarse_grain_processed_data",
-    "_create_sampler",
-    "_interp_psd_array",
-    "_normalize_coarse_grain_config",
-    "_normalize_run_config",
-    "_prepare_processed_data",
-    "_prepare_true_psd_for_freq",
-    "_preprocess_data",
-    "_run_preprocessing_checks",
-    "_unpack_true_psd",
-    "_validate_extra_kwargs",
-    "_validate_sampler_selection",
 ]
 
 
@@ -77,6 +60,230 @@ class PreprocessedMCMCInput:
     extra_empirical_styles: list[dict] | None
     run_config: RunMCMCConfig
     vi_warm_start_plan: Optional[VIWarmStartPlan] = None
+
+
+def _normalize_run_config(config: RunMCMCConfig | None) -> RunMCMCConfig:
+    if config is None:
+        return RunMCMCConfig()
+    if not isinstance(config, RunMCMCConfig):
+        raise TypeError("config must be a RunMCMCConfig instance or None.")
+    return config
+
+
+def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
+    """Route legacy kwargs into the nested run configuration objects."""
+    model_fields = {
+        "n_knots",
+        "degree",
+        "diffMatrixOrder",
+        "knot_kwargs",
+        "fmin",
+        "fmax",
+        "exclude_freq_bands",
+        "true_psd",
+        "parametric_model",
+        "analytical_psd",
+    }
+    nuts_fields = {
+        "target_accept_prob",
+        "target_accept_prob_by_channel",
+        "max_tree_depth",
+        "max_tree_depth_by_channel",
+        "dense_mass",
+        "alpha_phi_theta",
+        "beta_phi_theta",
+    }
+    vi_fields = {
+        "init_from_vi",
+        "vi_steps",
+        "vi_guide",
+        "vi_psd_max_draws",
+        "vi_lr",
+        "vi_posterior_draws",
+        "only_vi",
+        "vi_progress_bar",
+        "coarse_grain_config_vi",
+        "auto_coarse_vi",
+        "auto_coarse_vi_target_nfreq",
+        "auto_coarse_vi_min_full_nfreq",
+        "use_coarse_vi_for_init",
+        "vi_coarse_only",
+    }
+    diagnostics_fields = {
+        "verbose",
+        "outdir",
+        "compute_lnz",
+    }
+    run_mcmc_fields = {
+        "n_samples",
+        "n_warmup",
+        "num_chains",
+        "chain_method",
+        "rng_key",
+        "alpha_phi",
+        "beta_phi",
+        "alpha_delta",
+        "beta_delta",
+        "coarse_grain_config",
+        "Nb",
+        "wishart_window",
+        "wishart_detrend",
+        "wishart_floor_fraction",
+        "welch_nperseg",
+        "welch_noverlap",
+        "welch_window",
+    }
+    sampler_config_fields = {
+        "posterior_psd_max_draws",
+        "compute_coherence_quantiles",
+    }
+
+    if "sampler" in kwargs:
+        logger.warning(
+            "The 'sampler' parameter is now inferred automatically from input data type "
+            "(univariate -> 'nuts', multivariate -> 'multivar_blocked_nuts'). "
+            "Your provided value will be ignored."
+        )
+
+    model_dict = {k: v for k, v in kwargs.items() if k in model_fields}
+    nuts_dict = {k: v for k, v in kwargs.items() if k in nuts_fields}
+    vi_dict = {k: v for k, v in kwargs.items() if k in vi_fields}
+    diagnostics_dict = {
+        k: v for k, v in kwargs.items() if k in diagnostics_fields
+    }
+    run_mcmc_dict = {k: v for k, v in kwargs.items() if k in run_mcmc_fields}
+    sampler_dict = {
+        k: v for k, v in kwargs.items() if k in sampler_config_fields
+    }
+
+    routed = (
+        model_fields
+        | nuts_fields
+        | vi_fields
+        | diagnostics_fields
+        | run_mcmc_fields
+        | sampler_config_fields
+    )
+    extra_kwargs = {
+        k: v for k, v in kwargs.items() if k not in routed and k != "sampler"
+    }
+    extra_kwargs.update(sampler_dict)
+    run_mcmc_dict["extra_kwargs"] = extra_kwargs
+
+    return RunMCMCConfig(
+        model=ModelConfig(**model_dict),
+        nuts=NUTSConfigOverride(**nuts_dict),
+        vi=VIConfig(**vi_dict),
+        diagnostics=DiagnosticsConfig(**diagnostics_dict),
+        **run_mcmc_dict,
+    )
+
+
+def _unpack_true_psd(
+    true_psd: TruePSDInput,
+) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    """Return ``(freq, psd)`` from accepted ``true_psd`` formats."""
+    if true_psd is None:
+        return None, None
+
+    if isinstance(true_psd, dict):
+        freq = true_psd.get("freq")
+        psd = true_psd.get("psd")
+        if psd is None:
+            raise ValueError(
+                "true_psd dict must contain a 'psd' entry (optional 'freq')."
+            )
+        freq_arr = np.asarray(freq) if freq is not None else None
+        return freq_arr, np.asarray(psd)
+
+    if isinstance(true_psd, (tuple, list)) and len(true_psd) == 2:
+        freq = np.asarray(true_psd[0]) if true_psd[0] is not None else None
+        return freq, np.asarray(true_psd[1])
+
+    return None, np.asarray(true_psd)
+
+
+@runtime_typecheck
+def _interp_psd_array(
+    psd: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],
+    freq_src: Float[np.ndarray, "f_src"],
+    freq_tgt: Float[np.ndarray, "f_tgt"],
+) -> Complex[np.ndarray, "f_tgt ..."] | Float[np.ndarray, "f_tgt ..."]:
+    """Interpolate PSD arrays (real or complex) onto target frequencies."""
+    return _interp_frequency_indexed_array(
+        freq_src,
+        freq_tgt,
+        psd,
+        sort_and_dedup=True,
+    )
+
+
+def _prepare_true_psd_for_freq(
+    true_psd: TruePSDInput,
+    freq_target: Optional[Float[np.ndarray, "f_tgt"]],
+) -> Optional[np.ndarray]:
+    """Resample supplied true PSD onto the target frequency grid."""
+    if true_psd is None:
+        return None
+
+    freq_src, psd_array = _unpack_true_psd(true_psd)
+    if psd_array is None:
+        return None
+    if freq_target is None:
+        return np.asarray(psd_array)
+
+    psd_array = np.asarray(psd_array)
+    freq_target = np.asarray(freq_target)
+
+    if freq_src is None:
+        if psd_array.shape[0] == freq_target.size:
+            return psd_array
+        logger.warning(
+            "true_psd length {} does not match target frequencies {}; assuming uniform spacing for interpolation.",
+            psd_array.shape[0],
+            freq_target.size,
+        )
+        freq_src = np.linspace(
+            freq_target[0], freq_target[-1], psd_array.shape[0]
+        )
+    else:
+        freq_src = np.asarray(freq_src)
+        if freq_src.ndim != 1:
+            raise ValueError(
+                "true_psd frequency grid must be one-dimensional."
+            )
+        if freq_src.shape[0] != psd_array.shape[0]:
+            raise ValueError(
+                "true_psd frequency and value arrays must have matching lengths."
+            )
+
+    return _interp_psd_array(psd_array, freq_src, freq_target)
+
+
+def _align_true_psd_to_freq(
+    true_psd: TruePSDInput,
+    processed_data,
+) -> Optional[np.ndarray]:
+    """Align ``true_psd`` to the frequency grid of the processed data."""
+    if true_psd is None:
+        return None
+    if processed_data is None:
+        _, psd = _unpack_true_psd(true_psd)
+        return None if psd is None else np.asarray(psd)
+
+    if isinstance(processed_data, Periodogram):
+        freq_target = np.asarray(processed_data.freqs)
+    elif isinstance(processed_data, MultivarFFT):
+        freq_target = np.asarray(processed_data.freq)
+    else:
+        _, psd = _unpack_true_psd(true_psd)
+        return None if psd is None else np.asarray(psd)
+
+    aligned = _prepare_true_psd_for_freq(true_psd, freq_target)
+    if aligned is not None:
+        return aligned
+    _, psd = _unpack_true_psd(true_psd)
+    return None if psd is None else np.asarray(psd)
 
 
 def _get_frequency_count(data: Union[Periodogram, MultivarFFT]) -> int:
@@ -100,13 +307,6 @@ def _get_frequency_axis(
     return np.asarray(data.freq, dtype=float)
 
 
-def _apply_frequency_mask(
-    data: Union[Periodogram, MultivarFFT],
-    mask: np.ndarray,
-) -> Union[Periodogram, MultivarFFT]:
-    return data.apply_mask(mask)
-
-
 def _apply_frequency_exclusion(
     data: Union[Periodogram, MultivarFFT],
     excl_bands: tuple[tuple[float, float], ...],
@@ -128,7 +328,7 @@ def _apply_frequency_exclusion(
         f"Null-band excision: removing {n_excl} bins across {len(excl_bands)} band(s). "
         f"{int(np.count_nonzero(keep))} bins retained."
     )
-    return _apply_frequency_mask(data, keep)
+    return data.apply_mask(keep)
 
 
 def _derive_vi_coarse_grain_config(

@@ -12,33 +12,27 @@ from .preprocessing.configs import (
     ModelConfig,
     NUTSConfigOverride,
     RunMCMCConfig,
-    SamplerFactoryConfig,
     SamplerName,
     TruePSDInput,
     VIConfig,
 )
 from .preprocessing.preprocessing import (
-    PreprocessedMCMCInput,
     _build_model_from_data,
     _build_sampler_inputs,
-    _build_welch_overlay,
     _create_sampler,
-    _interp_psd_array,
     _preprocess_data,
 )
 
 __all__ = [
     "DiagnosticsConfig",
     "ModelConfig",
+    "MultivariateTimeseries",
     "NUTSConfigOverride",
     "RunMCMCConfig",
     "SamplerName",
+    "Timeseries",
     "TruePSDInput",
     "VIConfig",
-    "_build_model_from_data",
-    "_create_sampler",
-    "_interp_psd_array",
-    "_build_welch_overlay",
     "run_mcmc",
 ]
 

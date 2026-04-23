@@ -18,9 +18,9 @@ from xarray import DataArray, Dataset
 
 from ...arviz_utils.to_arviz import _pack_spline_model
 from ...datatypes import Periodogram
-from ...diagnostics import build_vi_summary_table, plot_vi_elbo
+from ...diagnostics import build_vi_summary_table
 from ...logger import logger
-from ...plotting import plot_pdgrm
+from ...plotting import _extract_losses, plot_pdgrm, plot_vi_elbo_figure
 from ...psplines import LogPSplines, build_spline
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -186,15 +186,17 @@ class UnivarBaseSampler(BaseSampler):
         summary.to_csv(diagnostics_dir / "vi_summary.csv", index=False)
 
         try:
-            fig = plot_vi_elbo(vi_diag, factor="0")
-            fig.savefig(
-                diagnostics_dir / "vi_elbo_factor_0.png",
-                dpi=150,
-                bbox_inches="tight",
-            )
-            import matplotlib.pyplot as plt
+            losses = _extract_losses(vi_diag)
+            if losses.size > 0:
+                fig = plot_vi_elbo_figure(losses)
+                fig.savefig(
+                    diagnostics_dir / "vi_elbo_factor_0.png",
+                    dpi=150,
+                    bbox_inches="tight",
+                )
+                import matplotlib.pyplot as plt
 
-            plt.close(fig)
+                plt.close(fig)
         except Exception:
             logger.warning("Could not save VI ELBO plot.", exc_info=True)
 

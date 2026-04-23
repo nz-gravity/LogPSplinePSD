@@ -116,36 +116,6 @@ def _build_common_sampler_kwargs(
     }
 
 
-def _validate_sampler_selection(
-    data: Union[Periodogram, MultivarFFT],
-    sampler_type: SamplerName,
-    verbose: bool,
-) -> SamplerName:
-    if isinstance(data, Periodogram):
-        if sampler_type != "nuts":
-            raise ValueError(
-                f"Unknown sampler_type '{sampler_type}' for univariate data. Choose 'nuts'."
-            )
-        return sampler_type
-
-    allowed_types = {"nuts", "multivar_blocked_nuts"}
-    if sampler_type not in allowed_types:
-        if verbose:
-            allowed = ", ".join(sorted(allowed_types))
-            logger.warning(
-                f"Multivariate analysis supports {allowed}. Using NUTS instead of {sampler_type}"
-            )
-        sampler_type = "nuts"
-
-    if sampler_type == "nuts":
-        if verbose:
-            logger.info(
-                "Mapping multivariate sampler 'nuts' to 'multivar_blocked_nuts'."
-            )
-        return "multivar_blocked_nuts"
-    return sampler_type
-
-
 def _build_univar_sampler(
     data: Periodogram,
     model,
@@ -234,29 +204,25 @@ def _create_sampler(
     config: SamplerFactoryConfig,
 ):
     """Factory function to create sampler instances from a config object."""
-    sampler_type = _validate_sampler_selection(
-        data,
-        config.sampler_type,
-        config.run_config.diagnostics.verbose,
-    )
     common_kwargs = _build_common_sampler_kwargs(config)
 
     if isinstance(data, Periodogram):
         return _build_univar_sampler(
             data,
             model,
-            sampler_type,
+            "nuts",
             config,
             common_kwargs,
         )
 
-    if sampler_type == "multivar_blocked_nuts":
+    if isinstance(data, MultivarFFT):
         return _build_multivar_blocked_sampler(
             data,
             model,
             config,
             common_kwargs,
         )
+
     raise ValueError(
-        f"Unknown sampler_type '{sampler_type}' for multivariate data. Choose 'multivar_blocked_nuts'."
+        f"Unsupported data type: {type(data)}. Expected Periodogram or MultivarFFT."
     )

@@ -17,6 +17,75 @@ from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 setup_plot_style()
 
 
+def _extract_losses(source: Dict[str, Any]) -> np.ndarray:
+    """Extract loss array from a dict-like source.
+
+    Parameters
+    ----------
+    source : dict
+        Dictionary containing VI diagnostics.
+
+    Returns
+    -------
+    np.ndarray
+        Loss array, empty if not found.
+    """
+    if source is None:
+        return np.array([], dtype=float)
+
+    losses = source.get("losses")
+    if losses is None:
+        return np.array([], dtype=float)
+    return np.asarray(losses, dtype=float).reshape(-1)
+
+
+def plot_vi_elbo_figure(
+    losses: np.ndarray | Dict[str, np.ndarray],
+) -> plt.Figure:
+    """Create a VI ELBO/loss history figure (lightweight, returns Figure).
+
+    This is a lightweight alternative to plot_vi_elbo() for interactive/diagnostic use.
+    Returns a matplotlib Figure object instead of saving to disk.
+
+    Parameters
+    ----------
+    losses : np.ndarray or Dict[str, np.ndarray]
+        Single loss array or dict mapping factor names to loss arrays.
+
+    Returns
+    -------
+    plt.Figure
+        Matplotlib figure with loss curves.
+    """
+    # Handle single array (univariate case)
+    if isinstance(losses, np.ndarray):
+        losses = {"0": losses}
+
+    if not losses:
+        raise ValueError("No loss data provided.")
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+
+    for factor, loss_array in losses.items():
+        loss_array = np.asarray(loss_array, dtype=float).reshape(-1)
+        if loss_array.size == 0:
+            raise ValueError(f"Empty loss array for factor {factor}.")
+        ax.plot(
+            np.arange(loss_array.size), loss_array, label=factor, linewidth=1.5
+        )
+
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("ELBO / loss")
+    ax.set_title("VI ELBO")
+    ax.grid(True, alpha=0.3)
+
+    if len(losses) > 1:
+        ax.legend()
+
+    fig.tight_layout()
+    return fig
+
+
 def plot_vi_elbo(
     losses: np.ndarray,
     guide_name: str,

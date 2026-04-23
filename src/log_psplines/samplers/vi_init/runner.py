@@ -9,23 +9,122 @@ import jax.numpy as jnp
 import numpy as np
 from numpyro.infer.util import init_to_value
 
+from ...diagnostics.vi_results import (
+    _build_multivar_vi_diagnostics,
+    _build_univar_vi_diagnostics,
+)
 from ...logger import logger
 from ..pspline_block import (
     build_log_density_fn,
     pspline_hyperparameter_initials,
 )
 from .core import fit_vi
-from .defaults import default_init_values_multivar, default_init_values_univar
-from .diagnostics import (
-    _build_multivar_vi_diagnostics,
-    _build_univar_vi_diagnostics,
-)
 from .guide import (
     suggest_guide_block,
     suggest_guide_multivar,
     suggest_guide_univar,
 )
 from .mixin import VIInitialisationArtifacts
+
+
+def _hyperparameter_defaults(
+    *,
+    alpha_phi: float,
+    beta_phi: float,
+    alpha_delta: float,
+    beta_delta: float,
+    divide_phi_by_delta: bool = True,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Return ``(delta_0, log_phi_0)`` from the prior hypers."""
+    delta_0, phi_0 = pspline_hyperparameter_initials(
+        alpha_phi=alpha_phi,
+        beta_phi=beta_phi,
+        alpha_delta=alpha_delta,
+        beta_delta=beta_delta,
+        divide_phi_by_delta=divide_phi_by_delta,
+    )
+    return jnp.asarray(delta_0), jnp.log(jnp.asarray(phi_0))
+
+
+def _assign_theta_component_init_values(
+    init_values: Dict[str, jnp.ndarray],
+    *,
+    prefix: str,
+    weights: tuple[jnp.ndarray, jnp.ndarray],
+    delta_init: jnp.ndarray,
+    log_phi_init: jnp.ndarray,
+) -> None:
+    """Populate delta/phi/weight init values for one theta component."""
+    init_values[f"delta_theta_re_{prefix}"] = delta_init
+    init_values[f"phi_theta_re_{prefix}"] = log_phi_init
+    init_values[f"weights_theta_re_{prefix}"] = weights[0]
+    init_values[f"delta_theta_im_{prefix}"] = delta_init
+    init_values[f"phi_theta_im_{prefix}"] = log_phi_init
+    init_values[f"weights_theta_im_{prefix}"] = weights[1]
+
+
+def default_init_values_univar(
+    spline_model,
+    *,
+    alpha_phi: float,
+    beta_phi: float,
+    alpha_delta: float,
+    beta_delta: float,
+) -> Dict[str, jnp.ndarray]:
+    """Return default init values for univariate samplers."""
+    delta_0, log_phi_0 = _hyperparameter_defaults(
+        alpha_phi=alpha_phi,
+        beta_phi=beta_phi,
+        alpha_delta=alpha_delta,
+        beta_delta=beta_delta,
+        divide_phi_by_delta=True,
+    )
+    return {
+        "delta": delta_0,
+        "phi": log_phi_0,
+        "weights": jnp.asarray(spline_model.weights),
+    }
+
+
+def default_init_values_multivar(
+    spline_model,
+    *,
+    alpha_phi: float,
+    beta_phi: float,
+    alpha_delta: float,
+    beta_delta: float,
+) -> Dict[str, jnp.ndarray]:
+    """Return default init values for multivariate samplers."""
+    delta_0, log_phi_0 = _hyperparameter_defaults(
+        alpha_phi=alpha_phi,
+        beta_phi=beta_phi,
+        alpha_delta=alpha_delta,
+        beta_delta=beta_delta,
+        divide_phi_by_delta=False,
+    )
+
+    init_values: Dict[str, jnp.ndarray] = {}
+    for idx, model in enumerate(spline_model.diagonal_models):
+        init_values[f"delta_{idx}"] = delta_0
+        init_values[f"phi_delta_{idx}"] = log_phi_0
+        init_values[f"weights_delta_{idx}"] = jnp.asarray(model.weights)
+
+    if spline_model.n_theta > 0:
+        for j, l in spline_model.theta_pairs:
+            re_model = spline_model.get_theta_model("re", j, l)
+            im_model = spline_model.get_theta_model("im", j, l)
+            _assign_theta_component_init_values(
+                init_values,
+                prefix=f"{j}_{l}",
+                weights=(
+                    jnp.asarray(re_model.weights),
+                    jnp.asarray(im_model.weights),
+                ),
+                delta_init=delta_0,
+                log_phi_init=log_phi_0,
+            )
+
+    return init_values
 
 
 def select_vi_or_default_init(
@@ -247,19 +346,15 @@ def build_block_init_values(
                 "im", channel_index, theta_idx
             )
             pfx = f"{channel_index}_{theta_idx}"
-            init_values[f"delta_theta_re_{pfx}"] = jnp.asarray(delta_init)
-            init_values[f"phi_theta_re_{pfx}"] = jnp.log(
-                jnp.asarray(phi_theta_init)
-            )
-            init_values[f"weights_theta_re_{pfx}"] = jnp.asarray(
-                re_model.weights
-            )
-            init_values[f"delta_theta_im_{pfx}"] = jnp.asarray(delta_init)
-            init_values[f"phi_theta_im_{pfx}"] = jnp.log(
-                jnp.asarray(phi_theta_init)
-            )
-            init_values[f"weights_theta_im_{pfx}"] = jnp.asarray(
-                im_model.weights
+            _assign_theta_component_init_values(
+                init_values,
+                prefix=pfx,
+                weights=(
+                    jnp.asarray(re_model.weights),
+                    jnp.asarray(im_model.weights),
+                ),
+                delta_init=jnp.asarray(delta_init),
+                log_phi_init=jnp.log(jnp.asarray(phi_theta_init)),
             )
     return init_values
 

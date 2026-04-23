@@ -108,28 +108,66 @@ def _build_vi_loss_figure(
 
 
 def plot_vi_loss(
-    losses: np.ndarray,
-    guide_name: str,
-    outfile: str,
+    losses: np.ndarray | Mapping[str, np.ndarray],
+    guide_name: str | None = None,
+    outfile: str | None = None,
     loss_components: Optional[Dict[str, np.ndarray]] = None,
-) -> None:
+) -> plt.Figure | None:
     """Plot the ELBO trace recorded during SVI optimisation.
 
     Args:
-        losses: Main ELBO loss values (fine-grid VI).
-        guide_name: Name of the VI guide.
-        outfile: Output file path.
+        losses: Main ELBO loss values (fine-grid VI), or factor -> losses.
+        guide_name: Name of the VI guide for single-run plots.
+        outfile: Optional output file path.
         loss_components: Optional per-block loss traces.
     """
+    if isinstance(losses, Mapping):
+        if not losses:
+            return None
+        fig, ax = plt.subplots(figsize=(8.0, 5.0))
+        for factor, factor_losses in losses.items():
+            loss_arr = np.asarray(factor_losses, dtype=np.float64)
+            if loss_arr.size == 0:
+                continue
+            steps = np.arange(loss_arr.size)
+            min_loss = float(np.nanmin(loss_arr))
+            shift_value = (
+                min_loss - 0.1 * abs(min_loss) if min_loss != 0 else -1.0
+            )
+            ax.plot(
+                steps,
+                loss_arr - shift_value,
+                lw=1.5,
+                alpha=0.9,
+                label=f"Factor {factor}",
+            )
+        ax.set_xlabel("VI Evaluation")
+        ax.set_ylabel("ELBO (relative)")
+        ax.set_yscale("log")
+        ax.set_title("VI Convergence by Factor")
+        ax.grid(True, alpha=0.3, linewidth=0.8)
+        ax.legend(frameon=False, loc="best")
+        fig.tight_layout()
+        if outfile is not None:
+            fig.savefig(outfile, dpi=150)
+            plt.close(fig)
+            return None
+        return fig
+
+    if guide_name is None:
+        raise ValueError("guide_name is required for single VI loss plots")
     fig = _build_vi_loss_figure(
         losses=np.asarray(losses, dtype=np.float64),
         guide_name=guide_name,
         loss_components=loss_components,
     )
     if fig is None:
-        return
-    fig.savefig(outfile, dpi=150)
-    plt.close(fig)
+        return None
+    if outfile is not None:
+        fig.savefig(outfile, dpi=150)
+        plt.close(fig)
+        return None
+    return fig
 
 
 def plot_vi_initial_psd_univariate(

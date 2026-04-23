@@ -403,7 +403,7 @@ class MultivarBaseSampler(BaseSampler):
                 }
                 fig = plot_vi_loss(losses_dict)
                 fig.savefig(
-                    diagnostics_dir / "vi_elbo_factors.png",
+                    diagnostics_dir / "vi_elbo.png",
                     dpi=150,
                     bbox_inches="tight",
                 )

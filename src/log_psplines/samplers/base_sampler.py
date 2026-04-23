@@ -22,6 +22,7 @@ from typing import (
     Union,
 )
 
+import arviz_plots as azp
 import arviz_stats as azs
 import jax
 import jax.numpy as jnp
@@ -67,6 +68,8 @@ def _sanitize_attr_value(value: Any) -> Any | None:
                 dtype=float,
             )
         if all(isinstance(v, str) for v in value):
+            if len(value) == 1:
+                return value[0]
             return list(value)
         return None
 
@@ -681,7 +684,6 @@ class BaseSampler(ABC):
             from ..diagnostics import (
                 build_nuts_summary_table,
                 plot_energy,
-                plot_traces,
             )
 
             nuts_summary = build_nuts_summary_table(
@@ -709,30 +711,30 @@ class BaseSampler(ABC):
                     sample_stats_ds = _require_dataset(target, "sample_stats")
                     sample_stats_ds.attrs.update(nuts_metric_attrs)
 
-            trace_plot = plot_traces(idata_out)
+            trace_plot = azp.plot_trace_dist(idata_out, compact=True)
             trace_plot.savefig(
                 diagnostics_dir / "traces.png",
                 dpi=150,
                 bbox_inches="tight",
             )
-            if hasattr(trace_plot, "viz"):
-                plt.close("all")
-            else:
-                plt.close(trace_plot)
+            plt.close("all")
 
+        except Exception as exc:  # pragma: no cover
+            logger.warning(
+                f"Could not save minimal NUTS diagnostics: {exc}",
+                exc_info=True,
+            )
+        try:
             energy_plot = plot_energy(idata_out)
             energy_plot.savefig(
                 diagnostics_dir / "energy.png",
                 dpi=150,
                 bbox_inches="tight",
             )
-            if hasattr(energy_plot, "viz"):
-                plt.close("all")
-            else:
-                plt.close(energy_plot)
+            plt.close("all")
         except Exception as exc:  # pragma: no cover
             logger.warning(
-                f"Could not save minimal NUTS diagnostics: {exc}",
+                f"Could not save energy diagnostics: {exc}",
                 exc_info=True,
             )
         logger.debug("save_results: minimal diagnostics done")

@@ -341,6 +341,7 @@ def _quantiles_from_psd_draws(
         "spectral_density": np.asarray(
             spectral_density_q, dtype=np.complex128
         ),
+        "psd": np.asarray(spectral_density_q, dtype=np.complex128),
         "coherence": np.asarray(coherence_q, dtype=np.float64),
     }
 
@@ -702,6 +703,7 @@ def get_multivar_prior_psd_quantiles(
         "spectral_density": np.asarray(
             spectral_density_q, dtype=np.complex128
         ),
+        "psd": np.asarray(spectral_density_q, dtype=np.complex128),
         "coherence": None,
     }
 

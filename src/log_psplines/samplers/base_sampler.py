@@ -686,21 +686,27 @@ class BaseSampler(ABC):
                     sample_stats_ds = _require_dataset(target, "sample_stats")
                     sample_stats_ds.attrs.update(nuts_metric_attrs)
 
-            fig = plot_traces(idata_out)  # TODO: is this called? i dont see it
-            fig.savefig(
-                diagnostics_dir / f"diagnostic_traces.png",
+            trace_plot = plot_traces(idata_out)
+            trace_plot.savefig(
+                diagnostics_dir / "traces.png",
                 dpi=150,
                 bbox_inches="tight",
             )
-            plt.close(fig)
+            if hasattr(trace_plot, "viz"):
+                plt.close("all")
+            else:
+                plt.close(trace_plot)
 
-            fig = plot_energy(idata_out)  # TODO: is this called? i dont see it
-            fig.savefig(
-                diagnostics_dir / "diagnostic_energy.png",
+            energy_plot = plot_energy(idata_out)
+            energy_plot.savefig(
+                diagnostics_dir / "energy.png",
                 dpi=150,
                 bbox_inches="tight",
             )
-            plt.close(fig)
+            if hasattr(energy_plot, "viz"):
+                plt.close("all")
+            else:
+                plt.close(energy_plot)
         except Exception as exc:  # pragma: no cover
             logger.warning(
                 f"Could not save minimal NUTS diagnostics: {exc}",

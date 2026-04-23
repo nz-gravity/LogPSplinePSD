@@ -59,7 +59,7 @@ def test_mcmc_univar(outdir: str):
     assert get_weights(idata) is not None
 
     nuts_stats = pd.read_csv(f"{outdir}/diagnostics/nuts_summary.csv")
-    assert isinstance(nuts_stats["r_hat"].values[0], float)
+    assert isinstance(nuts_stats["rhat_max"].values[0], float)
     assert isinstance(nuts_stats["riae"].values[0], float)
 
     # numerical checks

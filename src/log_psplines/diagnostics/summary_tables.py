@@ -58,15 +58,15 @@ def _truth_metrics_from_idata(
         return {}
 
     psd_ds = get_psd_dataset(idata, source="best")
-    freqs = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
-    freq_idx = interior_frequency_slice(freqs.size)
-    freqs = freqs[freq_idx]
+    freqs_raw = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
+    freq_idx = interior_frequency_slice(freqs_raw.size)
+    freqs = freqs_raw[freq_idx]
     spectral_density = np.asarray(psd_ds["spectral_density"].values)
 
     n_channels = int(spectral_density.shape[2])
     if n_channels == 1:
         samples = np.real(spectral_density[:, :, 0, 0, :]).reshape(
-            -1, freqs.size
+            -1, freqs_raw.size
         )
         samples = samples[:, freq_idx]
         truth_arr = np.asarray(truth, dtype=float).reshape(-1)[freq_idx]
@@ -210,6 +210,9 @@ def build_nuts_summary_table(
                 else np.nan
             ),
             "n_draws": _n_draws(idata),
+            "riae": np.nan,
+            "l2": np.nan,
+            "coverage": np.nan,
         }
         row.update(shared_truth_metrics)
         rows.append(row)

@@ -57,22 +57,16 @@ def compute_matrix_riae(
     true_psd_matrix: np.ndarray,
     freqs: Iterable[float],
 ) -> float:
-    """RIAE for multivariate PSD matrices using the Frobenius norm."""
+    """RIAE for multivariate PSD matrices using Frobenius-squared energy."""
     freqs_arr = np.asarray(freqs, dtype=float)
-    diff_frobenius = np.array(
-        [
-            np.linalg.norm(median_psd_matrix[k] - true_psd_matrix[k], "fro")
-            for k in range(len(freqs_arr))
-        ]
+    diff_sq = np.sum(
+        np.abs(np.asarray(median_psd_matrix) - np.asarray(true_psd_matrix))
+        ** 2,
+        axis=(-2, -1),
     )
-    true_frobenius = np.array(
-        [
-            np.linalg.norm(true_psd_matrix[k], "fro")
-            for k in range(len(freqs_arr))
-        ]
-    )
-    numerator = float(simpson(diff_frobenius, x=freqs_arr))
-    denominator = float(simpson(true_frobenius, x=freqs_arr))
+    true_sq = np.sum(np.abs(np.asarray(true_psd_matrix)) ** 2, axis=(-2, -1))
+    numerator = float(simpson(diff_sq, x=freqs_arr))
+    denominator = float(simpson(true_sq, x=freqs_arr))
     return float(numerator / denominator) if denominator != 0 else float("nan")
 
 
@@ -89,19 +83,12 @@ def compute_matrix_l2(
         / sqrt( integral ||S_true(f)||_F^2 df )
     """
     freqs_arr = np.asarray(freqs, dtype=float)
-    diff_sq = np.array(
-        [
-            np.linalg.norm(median_psd_matrix[k] - true_psd_matrix[k], "fro")
-            ** 2
-            for k in range(len(freqs_arr))
-        ]
+    diff_sq = np.sum(
+        np.abs(np.asarray(median_psd_matrix) - np.asarray(true_psd_matrix))
+        ** 2,
+        axis=(-2, -1),
     )
-    true_sq = np.array(
-        [
-            np.linalg.norm(true_psd_matrix[k], "fro") ** 2
-            for k in range(len(freqs_arr))
-        ]
-    )
+    true_sq = np.sum(np.abs(np.asarray(true_psd_matrix)) ** 2, axis=(-2, -1))
     numerator = float(np.sqrt(max(simpson(diff_sq, x=freqs_arr), 0.0)))
     denominator = float(np.sqrt(max(simpson(true_sq, x=freqs_arr), 0.0)))
     return float(numerator / denominator) if denominator != 0 else float("nan")

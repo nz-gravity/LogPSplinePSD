@@ -38,18 +38,6 @@ def _resolve_truth(
         return None if value is None else np.asarray(value)
     value = source.get("true_psd")
     return None if value is None else np.asarray(value)
-
-
-def _compute_univar_l2(
-    estimate: np.ndarray, truth: np.ndarray, freqs: np.ndarray
-) -> float:
-    numerator = float(
-        np.sqrt(max(np.trapezoid((estimate - truth) ** 2, freqs), 0.0))
-    )
-    denominator = float(np.sqrt(max(np.trapezoid(truth**2, freqs), 0.0)))
-    return numerator / denominator if denominator != 0.0 else float("nan")
-
-
 def _truth_metrics_from_idata(
     idata: xr.DataTree, true_psd: Any = None
 ) -> dict[str, float]:
@@ -73,7 +61,13 @@ def _truth_metrics_from_idata(
         q05, q50, q95 = np.percentile(samples, [5.0, 50.0, 95.0], axis=0)
         return {
             "riae": float(compute_riae(q50, truth_arr, freqs)),
-            "l2": float(_compute_univar_l2(q50, truth_arr, freqs)),
+            "l2": float(
+                compute_matrix_l2(
+                    q50[:, None, None],
+                    truth_arr[:, None, None],
+                    freqs,
+                )
+            ),
             "coverage": float(
                 compute_ci_coverage_univar(
                     np.stack([q05, q50, q95], axis=0), truth_arr

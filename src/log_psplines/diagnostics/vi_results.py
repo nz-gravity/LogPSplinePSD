@@ -9,6 +9,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..logger import logger
+from ._utils import (
+    compute_ci_coverage_univar,
+    compute_matrix_l2,
+    compute_riae,
+    interior_frequency_slice,
+)
 from .psd_compare import compute_multivar_riae_diagnostics
 
 
@@ -173,8 +179,6 @@ def _ensure_positive_definite_psd(
         if min_eig < eps:
             arr[idx] += (eps - min_eig + eps) * eye
     return arr
-
-
 def _build_univar_vi_diagnostics(sampler, vi_result) -> Dict[str, Any]:
     scaling = _get_scaling_factor(
         getattr(sampler, "periodogram", None), sampler.config
@@ -212,6 +216,36 @@ def _build_univar_vi_diagnostics(sampler, vi_result) -> Dict[str, Any]:
     vi_samples = _to_np_dict(vi_result.samples)
     if vi_samples:
         diagnostics["vi_samples"] = vi_samples
+    true_psd = diagnostics["true_psd"]
+    psd_quantiles = diagnostics.get("psd_quantiles")
+    if true_psd is not None and psd_quantiles is not None:
+        freqs_raw = np.asarray(sampler.freq_coords, dtype=np.float64)
+        freq_idx = interior_frequency_slice(freqs_raw.size)
+        freqs = freqs_raw[freq_idx]
+        truth_arr = np.asarray(true_psd, dtype=np.float64).reshape(-1)[freq_idx]
+        q05 = np.asarray(psd_quantiles["q05"], dtype=np.float64)[freq_idx]
+        q50 = np.asarray(psd_quantiles["q50"], dtype=np.float64)[freq_idx]
+        q95 = np.asarray(psd_quantiles["q95"], dtype=np.float64)[freq_idx]
+        diagnostics.update(
+            {
+                "riae": float(compute_riae(q50, truth_arr, freqs)),
+                "l2": float(
+                    compute_matrix_l2(
+                        q50[:, None, None],
+                        truth_arr[:, None, None],
+                        freqs,
+                    )
+                ),
+                "coverage": float(
+                    compute_ci_coverage_univar(
+                        np.stack([q05, q50, q95], axis=0),
+                        truth_arr,
+                    )
+                ),
+            }
+        )
+    if "pareto_k_max" not in diagnostics and "psis_khat_max" in diagnostics:
+        diagnostics["pareto_k_max"] = diagnostics["psis_khat_max"]
     return diagnostics
 
 

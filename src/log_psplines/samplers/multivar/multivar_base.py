@@ -35,7 +35,7 @@ from ...logger import logger
 from ...plotting import (
     PSDMatrixPlotSpec,
     plot_psd_matrix,
-    plot_vi_elbo,
+    plot_vi_loss,
 )
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
@@ -401,7 +401,7 @@ class MultivarBaseSampler(BaseSampler):
                     for factor, payload in factor_payloads.items()
                     if "losses" in payload
                 }
-                fig = plot_vi_elbo(losses_dict)
+                fig = plot_vi_loss(losses_dict)
                 fig.savefig(
                     diagnostics_dir / "vi_elbo_factors.png",
                     dpi=150,

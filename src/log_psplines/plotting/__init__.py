@@ -9,8 +9,6 @@ from .pdgrm import plot_pdgrm
 from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 from .utils import PlottingData, unpack_data
 from .vi import (
-    plot_vi_elbo,
-    plot_vi_elbo_figure,
     plot_vi_initial_psd_matrix,
     plot_vi_initial_psd_univariate,
     plot_vi_loss,
@@ -30,8 +28,6 @@ __all__ = [
     "plot_psd_matrix",
     "PSDMatrixPlotSpec",
     "plot_vi_loss",
-    "plot_vi_elbo",
-    "plot_vi_elbo_figure",
     "plot_vi_initial_psd_matrix",
     "plot_vi_initial_psd_univariate",
 ]

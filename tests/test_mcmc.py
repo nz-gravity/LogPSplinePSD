@@ -1,7 +1,7 @@
 import csv
 import os
 import shutil
-from typing import cast
+from typing import List, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -58,9 +58,7 @@ def test_mcmc_univar(outdir: str):
     assert "coverage" in idata["sample_stats"].attrs
     assert get_weights(idata) is not None
 
-    nuts_stats = pd.read_csv(f"{outdir}/diagnostics/nuts_summary.csv")
-    assert isinstance(nuts_stats["rhat_max"].values[0], float)
-    assert isinstance(nuts_stats["riae"].values[0], float)
+    _check_stats_are_finite(idata, outdir)
 
     # numerical checks
     _, median_psd, _, _ = get_posterior_psd(idata)
@@ -82,34 +80,39 @@ def test_mcmc_univar(outdir: str):
 
 
 def test_mcmc_multivar(outdir):
-    expected_freq = _run_multivar_mcmc(outdir)
+    idata_orig, expected_freq = _run_multivar_mcmc(outdir)
     ### NOW WE CHECK THE OUTPUTS ###
+
+    _check_for_files(
+        [
+            "inference_data.nc",
+            "posterior_predictive.png",
+            "diagnostics/vi_summary.csv",
+            "diagnostics/nuts_summary.csv",
+            "diagnostics/preprocessing_eigenvalue_ratios.png",
+        ],
+        outdir,
+    )
+
     # load idata
     idata_path = os.path.join(outdir, "inference_data.nc")
     idata = open_inference_data(idata_path)
+    xr.testing.assert_identical(idata_orig, idata)
 
     # Verify coarse-grained frequency structure
-    quantiles = get_multivar_posterior_psd_quantiles(idata, n_keep=2)
-    freq = np.asarray(quantiles["freq"], dtype=float)
-    assert freq.shape[0] == expected_freq.shape[0], (
-        f"Frequency dimension mismatch: got {freq.shape[0]}, "
-        f"expected {expected_freq.shape[0]}"
-    )
-    assert np.allclose(
-        freq, expected_freq
-    ), "Coarse-grained frequencies do not match."
+    qtl = get_multivar_posterior_psd_quantiles(idata, n_keep=2)
+    freq = np.asarray(qtl["freq"], dtype=float)
+    assert np.allclose(freq, expected_freq)
 
     # Verify PSD matrix structure for multivariate
-    spectral_density = np.asarray(
-        quantiles["spectral_density"], dtype=np.complex128
-    )
-    psd_shape = spectral_density.shape
-    assert psd_shape[1] == freq.shape[0], "PSD frequency dimension mismatch."
-    assert psd_shape[2:] == (2, 2), "PSD matrix should be 2x2 per frequency."
+    psd = np.asarray(qtl["psd"], dtype=np.complex128)
+    psd_shape = psd.shape
+    assert psd_shape[1] == freq.shape[0]
+    assert psd_shape[2:] == (2, 2)
 
     # Verify Hermitian and positive definite
-    idx50 = int(np.argmin(np.abs(np.asarray(quantiles["percentile"]) - 50.0)))
-    psd_median = spectral_density[idx50]
+    idx50 = int(np.argmin(np.abs(np.asarray(qtl["percentile"]) - 50.0)))
+    psd_median = psd[idx50]
     diag = np.real(np.diagonal(psd_median, axis1=1, axis2=2))
     assert np.all(diag > 0.0), "PSD diagonal elements should be positive."
     assert np.allclose(
@@ -125,46 +128,10 @@ def test_mcmc_multivar(outdir):
     assert "log_likelihood_block_1" in vi_log_likelihood
     assert vi_log_likelihood["log_likelihood_block_0"].ndim == 3
 
-    vi_stats = idata["vi_sample_stats"].dataset
-    for key in ("riae_matrix", "l2_matrix", "coverage"):
-        assert key in vi_stats.attrs, f"Missing VI metric attr: {key}"
-        assert np.isfinite(
-            float(vi_stats.attrs[key])
-        ), f"VI metric {key} should be finite."
-
-    with open(summary_path, newline="", encoding="utf-8") as handle:
-        row = next(csv.DictReader(handle))
-    for key in ("riae", "l2", "coverage"):
-        assert (
-            key in row
-        ), f"Column {key} missing from multivariate vi_summary.csv"
-        assert np.isfinite(
-            float(row[key])
-        ), f"Column {key} in multivariate vi_summary.csv should be finite."
-
-    with open(nuts_summary_path, newline="", encoding="utf-8") as handle:
-        row = next(csv.DictReader(handle))
-    for key in ("riae", "l2", "coverage"):
-        assert (
-            key in row
-        ), f"Column {key} missing from multivariate nuts_summary.csv"
-        assert np.isfinite(
-            float(row[key])
-        ), f"Column {key} in multivariate nuts_summary.csv should be finite."
-        assert (
-            key in idata.sample_stats.attrs
-        ), f"sample_stats missing NUTS metric attr: {key}"
-        assert np.isfinite(
-            float(idata.sample_stats.attrs[key])
-        ), f"sample_stats NUTS metric attr {key} should be finite."
+    _check_stats_are_finite(idata, outdir)
 
     ## Check that all expected output files are present
     files_to_check = [
-        "inference_data.nc",
-        "psd_matrix.png",
-        "diagnostics/vi_summary.csv",
-        "diagnostics/nuts_summary.csv",
-        "diagnostics/preprocessing_eignvalue_ratios.png",
         "diagnostics/traces.png",
         "diagnostics/energy.png",
         "diagnostics/vi_elbo.png",
@@ -172,6 +139,25 @@ def test_mcmc_multivar(outdir):
     _check_for_files(files_to_check, outdir)
 
     print(f"++++ multivariate MCMC test COMPLETE ++++")
+
+
+def _check_stats_are_finite(idata, outdir) -> None:
+    vi_stats = idata["vi_sample_stats"].dataset
+    nuts_stats = idata["sample_stats"].dataset
+    vi_stats_pd = pd.read_csv(f"{outdir}/diagnostics/vi_summary.csv")
+    nuts_stats_pd = pd.read_csv(f"{outdir}/diagnostics/nuts_summary.csv")
+
+    def check_finite(d: dict, key: List[str]) -> None:
+        for k in key:
+            assert k in d, f"Key '{k}' not found in {d}."
+
+    nuts_keys = ["riae", "l2", "coverage", "rhat_max"]
+    vi_keys = ["riae", "l2", "coverage", "pareto_k_max"]
+    
+    check_finite(nuts_stats.attrs, nuts_keys)
+    check_finite(nuts_stats_pd.iloc[0], nuts_keys)
+    check_finite(vi_stats.attrs, vi_keys)
+    check_finite(vi_stats_pd.iloc[0], vi_keys)
 
 
 def _check_for_files(expected_files, outdir):
@@ -301,8 +287,8 @@ def _run_multivar_mcmc(outdir):
         diagnostics=diagnostics_cfg,
         vi=vi_cfg,
     )
-    run_mcmc(
+    idata = run_mcmc(
         data=ts_run,
         config=run_cfg,
     )
-    return expected_freq
+    return idata, expected_freq

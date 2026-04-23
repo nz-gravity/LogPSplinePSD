@@ -134,7 +134,7 @@ def test_mcmc_multivar(outdir):
     files_to_check = [
         "diagnostics/traces.png",
         "diagnostics/energy.png",
-        "diagnostics/vi_elbo.png",
+        "diagnostics/vi_loss.png",
     ]
     _check_for_files(files_to_check, outdir)
 
@@ -153,7 +153,7 @@ def _check_stats_are_finite(idata, outdir) -> None:
 
     nuts_keys = ["riae", "l2", "coverage", "rhat_max"]
     vi_keys = ["riae", "l2", "coverage", "pareto_k_max"]
-    
+
     check_finite(nuts_stats.attrs, nuts_keys)
     check_finite(nuts_stats_pd.iloc[0], nuts_keys)
     check_finite(vi_stats.attrs, vi_keys)
@@ -249,7 +249,7 @@ def _run_multivar_mcmc(outdir):
     )
 
     n_samples = n_warmup = 200
-    vi_steps = 1000
+    vi_steps = 5000
     Nb = 4  # Number of blocks for Welch periodogram
 
     expected_freq = _expected_coarse_freq_multivar(

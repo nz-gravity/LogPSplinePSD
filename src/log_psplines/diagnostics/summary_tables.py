@@ -38,6 +38,8 @@ def _resolve_truth(
         return None if value is None else np.asarray(value)
     value = source.get("true_psd")
     return None if value is None else np.asarray(value)
+
+
 def _truth_metrics_from_idata(
     idata: xr.DataTree, true_psd: Any = None
 ) -> dict[str, float]:
@@ -244,7 +246,18 @@ def _extract_pareto_k_from_data(
 
     if "pareto_k" in source and source["pareto_k"] is not None:
         pareto_k = np.asarray(source["pareto_k"], dtype=float).reshape(-1)
-        warning = bool(np.any(np.isfinite(pareto_k) & (pareto_k > 0.7)))
+        good_k = source.get("good_k", source.get("pareto_k_good_k", 0.7))
+        if good_k is None or not np.isfinite(float(good_k)):
+            good_k = 0.7
+        warning = bool(
+            source.get(
+                "warning",
+                source.get(
+                    "loo_warning",
+                    np.any(np.isfinite(pareto_k) & (pareto_k > float(good_k))),
+                ),
+            )
+        )
         return pareto_k, warning
 
     return np.array([], dtype=float), False

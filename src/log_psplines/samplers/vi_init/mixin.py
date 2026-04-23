@@ -8,17 +8,11 @@ from typing import Any, Callable, Dict, Optional, Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
-from numpyro.infer.util import init_to_value, log_density
+from numpyro.infer.util import init_to_value
 
-from ...diagnostics.vi_psis import (
-    _compute_correlation_diagnostics,
-    _compute_psis_khat,
-    _compute_psis_moment_checks,
-    _emit_moment_warnings,
-    _interpret_khat,
-)
 from ...logger import logger
 from .core import VIResult, fit_vi
+from .loo import compute_vi_loo_approximate_posterior
 
 
 @dataclass
@@ -148,7 +142,15 @@ class VIInitialisationMixin:
                     f"VI ELBO trend over last {window} steps: Δ={end - start:.3f}, slope/step={slope:.4f}"
                 )
 
-        psis_diag = _compute_psis_khat(
+        log_likelihood_builder = getattr(
+            self, "_build_vi_log_likelihood_dataset", None
+        )
+        loo_diag = compute_vi_loo_approximate_posterior(
+            log_likelihood=(
+                None
+                if log_likelihood_builder is None
+                else log_likelihood_builder(vi_result.samples or {})
+            ),
             model=model,
             model_args=model_args,
             model_kwargs=model_kwargs,
@@ -157,30 +159,19 @@ class VIInitialisationMixin:
             vi_samples=vi_result.samples,
             latent_samples=vi_result.latent_samples,
         )
-        if psis_diag is not None:
-            diagnostics.update(psis_diag)
-            status, status_msg = _interpret_khat(psis_diag["psis_khat_max"])
-            diagnostics["psis_khat_status"] = status
-            diagnostics["psis_status_message"] = status_msg
-            diagnostics["psis_khat_threshold"] = 0.7
-            diagnostics["psis_flag_warn"] = status in ("warn", "fail")
-            diagnostics["psis_flag_critical"] = status == "fail"
-            should_log = getattr(self.config, "verbose", False) or status in (
-                "warn",
-                "fail",
-            )
-            if should_log:
+        if loo_diag is not None:
+            diagnostics.update(loo_diag)
+            khat_max = float(loo_diag["pareto_k_max"])
+            good_k = float(loo_diag["good_k"])
+            if getattr(self.config, "verbose", False):
                 logger.info(
-                    f"VI PSIS k-hat max = {psis_diag['psis_khat_max']:.3f} ({status_msg})"
+                    f"VI Pareto-k max = {khat_max:.3f} (threshold={good_k:.3f})"
                 )
-            if status == "fail":
+            if loo_diag["warning"]:
                 logger.warning(
-                    "VI PSIS diagnostic indicates poor posterior fit (k-hat > 0.7). "
-                    "Consider revisiting parametrization or VI configuration."
+                    "VI Pareto-k exceeds the ArviZ approximate-posterior threshold. "
+                    "Consider revisiting the guide or VI settings."
                 )
-            moment_summary = psis_diag.get("psis_moment_summary")
-            if moment_summary:
-                _emit_moment_warnings(moment_summary)
 
         return VIInitialisationArtifacts(
             init_strategy,

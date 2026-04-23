@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import jax.numpy as jnp
 import numpy as np
 
 from ...diagnostics.psd_compare import compute_multivar_riae_diagnostics
-from ...diagnostics.vi_psis import _compute_psis_khat, _interpret_khat
 from ...diagnostics.vi_results import (
     _extract_true_psd,
     _reconstruct_psd_quantiles_from_draws,
 )
 from ...logger import logger
 from .common import _to_np, _to_np_dict
+from .loo import compute_vi_loo_approximate_posterior
 
 
 def _prepare_block_accum(sampler) -> Dict[str, Any]:
@@ -51,79 +51,66 @@ def _prepare_block_accum(sampler) -> Dict[str, Any]:
         "vi_log_delta_means": [],
         "vi_theta_re_mean": None,
         "vi_theta_im_mean": None,
-        "psis_khat_values": [],
-        "psis_hyper_entries": [],
-        "psis_weight_blocks": [],
-        "psis_corr_summary": {},
-        "psis_thresholds": None,
+        "pareto_k_blocks": [],
+        "pareto_k_max_per_block": [],
+        "pareto_good_k_per_block": [],
+        "loo_warning_per_block": [],
     }
 
 
 def _aggregate_psis_diagnostics(
     diagnostics: Dict[str, Any],
     *,
-    psis_khat_values: List[float],
-    psis_hyper_entries: List[Dict[str, Any]],
-    psis_weight_blocks: List[Dict[str, Any]],
-    psis_corr_summary: Dict[str, Any],
-    psis_thresholds: Optional[Dict[str, float]],
+    pareto_k_blocks: List[np.ndarray],
+    pareto_k_max_per_block: List[float],
+    pareto_good_k_per_block: List[float],
+    loo_warning_per_block: List[bool],
     verbose: bool,
 ) -> None:
-    if psis_khat_values:
-        khat_array = np.asarray(psis_khat_values, dtype=float)
+    if pareto_k_max_per_block:
+        khat_array = np.asarray(pareto_k_max_per_block, dtype=float)
         khat_max = float(np.nanmax(khat_array))
-        status, status_msg = _interpret_khat(khat_max)
+        good_k = (
+            np.nan
+            if not pareto_good_k_per_block
+            else float(np.nanmax(np.asarray(pareto_good_k_per_block)))
+        )
+        warning = bool(np.any(np.asarray(loo_warning_per_block, dtype=bool)))
         diagnostics.update(
+            pareto_k_per_block=khat_array,
+            pareto_k=(
+                None
+                if not pareto_k_blocks
+                else np.concatenate(
+                    [
+                        np.asarray(block, dtype=np.float64).reshape(-1)
+                        for block in pareto_k_blocks
+                    ]
+                )
+            ),
+            pareto_k_good_k=good_k,
+            pareto_k_max=khat_max,
+            loo_warning=warning,
             psis_khat_per_block=khat_array,
             psis_khat_max=khat_max,
-            psis_khat_status=status,
-            psis_status_message=status_msg,
-            psis_khat_threshold=0.7,
-            psis_flag_warn=status in ("warn", "fail"),
-            psis_flag_critical=status == "fail",
+            psis_khat_status=(
+                "unknown"
+                if not np.isfinite(khat_max)
+                else "warn" if warning else "ok"
+            ),
+            psis_khat_threshold=good_k,
+            psis_flag_warn=warning,
+            psis_flag_critical=warning,
         )
-        if verbose or status in ("warn", "fail"):
+        if verbose:
             logger.info(
-                f"VI PSIS k-hat max (blocked) = {khat_max:.3f} ({status_msg})"
+                f"VI Pareto-k max (blocked) = {khat_max:.3f} (threshold={good_k:.3f})"
             )
-        if status == "fail":
+        if warning:
             logger.warning(
-                "VI PSIS diagnostic (blocked) indicates poor posterior fit. "
+                "VI Pareto-k exceeds the ArviZ approximate-posterior threshold. "
                 "Consider adjusting the guide or VI settings."
             )
-    if psis_hyper_entries or psis_weight_blocks or psis_corr_summary:
-        summary: Dict[str, Any] = {}
-        if psis_hyper_entries:
-            summary["hyperparameters"] = psis_hyper_entries
-        if psis_weight_blocks:
-            summary["weights_by_block"] = psis_weight_blocks
-            fns: Dict[str, Callable[[Any], Any]] = {
-                "var_ratio_min": np.nanmin,
-                "var_ratio_median": np.nanmedian,
-                "var_ratio_max": np.nanmax,
-                "frac_outside": np.nanmax,
-                "bias_median_abs": np.nanmedian,
-                "bias_max_abs": np.nanmax,
-                "bias_abs_median": np.nanmedian,
-                "bias_abs_max": np.nanmax,
-            }
-            summary["weights"] = {
-                **{
-                    k: float(
-                        fn([e.get(k, np.nan) for e in psis_weight_blocks])
-                    )
-                    for k, fn in fns.items()
-                },
-                "n_weights": int(
-                    np.sum([e.get("n_weights", 0) for e in psis_weight_blocks])
-                ),
-            }
-        if psis_thresholds:
-            summary["thresholds"] = psis_thresholds
-        if summary:
-            diagnostics["psis_moment_summary"] = summary
-        if psis_corr_summary:
-            diagnostics["psis_correlation_summary"] = psis_corr_summary
 
 
 def _accumulate_block_vi_diagnostics(
@@ -142,8 +129,17 @@ def _accumulate_block_vi_diagnostics(
     accum["vi_losses_blocks"].append(_to_np(vi_result.losses))
     accum["vi_guides"].append(vi_result.guide_name)
     accum["vi_samples"].update(_to_np_dict(vi_result.samples))
+    full_log_likelihood = sampler._build_vi_log_likelihood_dataset(
+        accum["vi_samples"]
+    )
+    block_log_likelihood = (
+        None
+        if full_log_likelihood is None
+        else full_log_likelihood[[f"log_likelihood_block_{channel_index}"]]
+    )
 
-    psis_diag = _compute_psis_khat(
+    loo_diag = compute_vi_loo_approximate_posterior(
+        log_likelihood=block_log_likelihood,
         model=block_model,
         model_args=model_args,
         model_kwargs=model_kwargs,
@@ -151,31 +147,17 @@ def _accumulate_block_vi_diagnostics(
         guide_params=vi_result.params,
         vi_samples=vi_result.samples,
         latent_samples=vi_result.latent_samples,
+        var_name=f"log_likelihood_block_{channel_index}",
     )
-    if psis_diag is not None:
-        accum["psis_khat_values"].append(psis_diag["psis_khat_max"])
-        moment_summary = psis_diag.get("psis_moment_summary") or {}
-        accum["psis_thresholds"] = accum[
-            "psis_thresholds"
-        ] or moment_summary.get("thresholds")
-        for entry in moment_summary.get("hyperparameters") or []:
-            accum["psis_hyper_entries"].append(
-                {
-                    **entry,
-                    "param": f"block_{channel_index}:{entry.get('param', 'param')}",
-                }
+    if loo_diag is not None:
+        pareto_k = loo_diag.get("pareto_k")
+        if pareto_k is not None:
+            accum["pareto_k_blocks"].append(
+                np.asarray(pareto_k, dtype=np.float64)
             )
-        if moment_summary.get("weights"):
-            accum["psis_weight_blocks"].append(
-                {"block": channel_index, **moment_summary["weights"]}
-            )
-        for label, stats in (
-            psis_diag.get("psis_correlation_summary") or {}
-        ).items():
-            if stats:
-                accum["psis_corr_summary"][
-                    f"{label}_block_{channel_index}"
-                ] = stats
+        accum["pareto_k_max_per_block"].append(float(loo_diag["pareto_k_max"]))
+        accum["pareto_good_k_per_block"].append(float(loo_diag["good_k"]))
+        accum["loo_warning_per_block"].append(bool(loo_diag["warning"]))
 
     weights_delta_name = f"weights_delta_{channel_index}"
     weights_delta = vi_result.means.get(weights_delta_name)
@@ -392,18 +374,14 @@ def _assemble_blocked_vi_diagnostics(
         diagnostics = diagnostics or {}
         diagnostics["vi_samples"] = accum["vi_samples"]
     if diagnostics is not None and (
-        accum["psis_khat_values"]
-        or accum["psis_hyper_entries"]
-        or accum["psis_weight_blocks"]
-        or accum["psis_corr_summary"]
+        accum["pareto_k_blocks"] or accum["pareto_k_max_per_block"]
     ):
         _aggregate_psis_diagnostics(
             diagnostics,
-            psis_khat_values=accum["psis_khat_values"],
-            psis_hyper_entries=accum["psis_hyper_entries"],
-            psis_weight_blocks=accum["psis_weight_blocks"],
-            psis_corr_summary=accum["psis_corr_summary"],
-            psis_thresholds=accum["psis_thresholds"],
+            pareto_k_blocks=accum["pareto_k_blocks"],
+            pareto_k_max_per_block=accum["pareto_k_max_per_block"],
+            pareto_good_k_per_block=accum["pareto_good_k_per_block"],
+            loo_warning_per_block=accum["loo_warning_per_block"],
             verbose=sampler.config.verbose,
         )
     return diagnostics

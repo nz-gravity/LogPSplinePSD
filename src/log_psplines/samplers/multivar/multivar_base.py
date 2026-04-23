@@ -8,7 +8,6 @@ import os
 import tempfile
 import time
 import traceback
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import jax
@@ -27,15 +26,10 @@ from ...datatypes.multivar_utils import (
     _get_coherence,
     _interp_complex_matrix,
 )
-from ...diagnostics import (
-    build_vi_summary_table,
-)
-from ...diagnostics._factors import vi_factor_idatas
 from ...logger import logger
 from ...plotting import (
     PSDMatrixPlotSpec,
     plot_psd_matrix,
-    plot_vi_loss,
 )
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
@@ -337,94 +331,6 @@ class MultivarBaseSampler(BaseSampler):
             if self.config.verbose:
                 logger.debug(f"Could not extract VI PSD median: {e}")
             return None
-
-    def _save_vi_diagnostics(
-        self,
-        *,
-        idata: Optional[xr.DataTree] = None,
-        empirical_psd: Optional[EmpiricalPSD] = None,
-        log_summary: bool = True,
-    ) -> None:
-        """Persist VI diagnostics if available."""
-        vi_diag = getattr(self, "_vi_diagnostics", None)
-        if not vi_diag:
-            return
-
-        del empirical_psd
-        if self.config.outdir is None:
-            return
-
-        diagnostics_dir = Path(self.config.outdir) / "diagnostics"
-        diagnostics_dir.mkdir(parents=True, exist_ok=True)
-
-        summary = build_vi_summary_table(vi_diag)
-        factor_idata_map = vi_factor_idatas(idata) if idata is not None else {}
-        if factor_idata_map:
-            try:
-                loo_summary = build_vi_summary_table(factor_idata_map)
-                summary = summary.drop(
-                    columns=["pareto_k_max", "pareto_k_median", "loo_warning"],
-                    errors="ignore",
-                ).merge(
-                    loo_summary[
-                        [
-                            "factor",
-                            "pareto_k_max",
-                            "pareto_k_median",
-                            "loo_warning",
-                        ]
-                    ],
-                    on="factor",
-                    how="left",
-                )
-            except Exception:
-                logger.warning(
-                    "Could not compute ArviZ VI Pareto-k summary.",
-                    exc_info=True,
-                )
-        summary.to_csv(str(diagnostics_dir / "vi_summary.csv"), index=False)
-
-        factor_payloads: dict[str, dict[str, np.ndarray]] = {}
-        for factor in summary["factor"]:
-            factor_key = str(factor)
-            payload: dict[str, np.ndarray] = {}
-            if "losses_per_block" in vi_diag:
-                payload["losses"] = np.asarray(vi_diag["losses_per_block"])[
-                    int(factor)
-                ]
-            factor_payloads[factor_key] = payload
-
-        if any("losses" in payload for payload in factor_payloads.values()):
-            try:
-                losses_dict = {
-                    factor: payload["losses"]
-                    for factor, payload in factor_payloads.items()
-                    if "losses" in payload
-                }
-                fig = plot_vi_loss(losses_dict)
-                fig.savefig(
-                    diagnostics_dir / "vi_elbo.png",
-                    dpi=150,
-                    bbox_inches="tight",
-                )
-                import matplotlib.pyplot as plt
-
-                plt.close(fig)
-            except Exception:
-                logger.warning(
-                    "Could not save combined VI ELBO plot.",
-                    exc_info=True,
-                )
-
-        if log_summary and not summary.empty:
-            worst_row = summary.loc[
-                summary["pareto_k_max"].fillna(-np.inf).idxmax()
-            ]
-            logger.info(
-                f"VI summary: worst_factor={worst_row['factor']}, "
-                f"pareto_k_max={worst_row['pareto_k_max']:.3f}, "
-                f"loo_warning={bool(worst_row['loo_warning'])}"
-            )
 
     def _attach_vi_group(
         self, idata: xr.DataTree, diagnostics: Optional[Dict[str, Any]]

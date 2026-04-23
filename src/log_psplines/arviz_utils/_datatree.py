@@ -2,6 +2,8 @@ from __future__ import annotations
 
 """Small helpers for working with canonical ``xarray.DataTree`` objects."""
 
+from pathlib import Path
+
 import xarray as xr
 
 
@@ -34,3 +36,17 @@ def select_draw_slice(idata: xr.DataTree, draw_slice: slice) -> xr.DataTree:
             dataset = dataset.sel(draw=draw_slice)
         out[name] = xr.DataTree(dataset=dataset)
     return out
+
+
+def save_inference_data(
+    idata: xr.DataTree, path: str | Path, *, engine: str = "h5netcdf"
+) -> None:
+    """Save inference data using the canonical grouped NetCDF layout."""
+    idata.to_netcdf(Path(path), engine=engine)
+
+
+def open_inference_data(
+    path: str | Path, *, engine: str = "h5netcdf"
+) -> xr.DataTree:
+    """Load inference data saved by ``save_inference_data``."""
+    return xr.open_datatree(Path(path), engine=engine)

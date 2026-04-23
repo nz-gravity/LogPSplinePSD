@@ -1,4 +1,6 @@
 import os
+import shutil
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -6,7 +8,7 @@ import pytest
 from log_psplines.datatypes import MultivariateTimeseries, Timeseries
 from log_psplines.logger import set_level
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = Path(__file__).parent
 if os.getenv("GITHUB_ACTIONS") == "true":
     os.environ.setdefault("LOG_PSPLINES_SLOW_TESTS", "0")
 else:
@@ -44,43 +46,29 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture
-def outdir():
+def outdir(request):
+    # 1. Get Git branch
     try:
         from git import Repo
 
         branch = Repo(".", search_parent_directories=True).active_branch.name
-        outdir = f"{HERE}/test_output/branch_[{branch}]"
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
     except Exception:
-        outdir = f"{HERE}/test_output/unknown_branch"
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-    return outdir
+        branch = "unknown_branch"
 
+    # 2. Get the filename (e.g., 'test_physics') and test name (e.g., 'test_simulation')
+    # request.path.stem gives 'test_logic' from 'test_logic.py'
+    file_stem = request.path.stem
+    test_name = request.node.name
 
-@pytest.fixture
-def synthetic_univar_timeseries() -> Timeseries:
-    rng = np.random.default_rng(123)
-    n = 32
-    t = np.linspace(0.0, 1.0, n, endpoint=False)
-    y = 0.2 * np.sin(2 * np.pi * 3.0 * t)
-    y += 0.05 * rng.normal(size=n)
-    return Timeseries(t=t, y=y)
-
-
-@pytest.fixture
-def synthetic_multivar_timeseries() -> MultivariateTimeseries:
-    rng = np.random.default_rng(456)
-    n = 32
-    t = np.linspace(0.0, 1.0, n, endpoint=False)
-    base = np.stack(
-        (
-            np.sin(2 * np.pi * 2.0 * t),
-            np.cos(2 * np.pi * 3.0 * t),
-        ),
-        axis=1,
+    # 3. Build path: .../test_logic/branch_[main]/test_simulation
+    target_dir = (
+        HERE / "test_output" / f"branch_[{branch}]" / file_stem / test_name
     )
-    y = base + 0.05 * rng.normal(size=base.shape)
-    y[:, 1] += 0.15 * y[:, 0]
-    return MultivariateTimeseries(t=t, y=y)
+
+    # 4. Cleanup and Create
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    return target_dir

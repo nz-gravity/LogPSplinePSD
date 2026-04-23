@@ -258,6 +258,7 @@ class MultivarBaseSampler(BaseSampler):
                 true_psd=true_psd,
                 overlay_vi=overlay_vi,
                 outdir=self.config.outdir,
+                filename="posterior_predictive.png",
             )
             plot_psd_matrix(spec)
             logger.debug(

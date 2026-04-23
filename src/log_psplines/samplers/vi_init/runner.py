@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import Any, Callable, Dict, Optional
 
 import jax.numpy as jnp
@@ -14,16 +13,8 @@ from ...diagnostics.vi_results import (
     _build_univar_vi_diagnostics,
 )
 from ...logger import logger
-from ..pspline_block import (
-    build_log_density_fn,
-    pspline_hyperparameter_initials,
-)
-from .core import fit_vi
-from .guide import (
-    suggest_guide_block,
-    suggest_guide_multivar,
-    suggest_guide_univar,
-)
+from ..pspline_block import pspline_hyperparameter_initials
+from .common import suggest_guide_multivar, suggest_guide_univar
 from .mixin import VIInitialisationArtifacts
 
 
@@ -170,17 +161,6 @@ def _univar_model_args(sampler) -> tuple:
     )
 
 
-def _univar_default_init(sampler) -> Dict[str, jnp.ndarray]:
-    """Build default init values for univariate VI/NUTS."""
-    return default_init_values_univar(
-        sampler.spline_model,
-        alpha_phi=sampler.config.alpha_phi,
-        beta_phi=sampler.config.beta_phi,
-        alpha_delta=sampler.config.alpha_delta,
-        beta_delta=sampler.config.beta_delta,
-    )
-
-
 def compute_vi_artifacts_univar(
     sampler,
     *,
@@ -202,7 +182,14 @@ def compute_vi_artifacts_univar(
         model=model,
         model_args=_univar_model_args(sampler),
         guide=guide_spec,
-        init_values=init_values or _univar_default_init(sampler),
+        init_values=init_values
+        or default_init_values_univar(
+            sampler.spline_model,
+            alpha_phi=sampler.config.alpha_phi,
+            beta_phi=sampler.config.beta_phi,
+            alpha_delta=sampler.config.alpha_delta,
+            beta_delta=sampler.config.beta_delta,
+        ),
         postprocess=_postprocess,
     )
 
@@ -260,159 +247,4 @@ def compute_vi_artifacts_multivar(
             beta_delta=sampler.config.beta_delta,
         ),
         postprocess=_postprocess,
-    )
-
-
-def build_block_model_args(
-    sampler,
-    channel_index: int,
-    alpha_phi_theta: float,
-    beta_phi_theta: float,
-) -> tuple[tuple, dict]:
-    """Build positional and keyword args for blocked-channel model."""
-    theta_re_basis, theta_re_penalty = (
-        sampler._theta_component_arrays_for_channel(channel_index, part="re")
-    )
-    theta_im_basis, theta_im_penalty = (
-        sampler._theta_component_arrays_for_channel(channel_index, part="im")
-    )
-    model_args = (
-        channel_index,
-        sampler.u_re[:, channel_index, :],
-        sampler.u_im[:, channel_index, :],
-        sampler.u_re[:, :channel_index, :],
-        sampler.u_im[:, :channel_index, :],
-        sampler.all_bases[channel_index],
-        sampler.all_penalties[channel_index],
-        theta_re_basis,
-        theta_re_penalty,
-        theta_im_basis,
-        theta_im_penalty,
-        sampler.config.alpha_phi,
-        sampler.config.beta_phi,
-        alpha_phi_theta,
-        beta_phi_theta,
-        sampler.config.alpha_delta,
-        sampler.config.beta_delta,
-        sampler.duration,
-        sampler.Nb,
-        sampler.Nh,
-    )
-    eta_vi = min(1.0, 1.0 / float(sampler.Nb * sampler.Nh))
-    model_kwargs = {
-        "enbw": float(sampler.enbw),
-        "eta": eta_vi,
-    }
-    return model_args, model_kwargs
-
-
-def build_block_init_values(
-    *,
-    sampler,
-    channel_index: int,
-    theta_count: int,
-    delta_weights_init: jnp.ndarray,
-    alpha_phi_theta: float,
-    beta_phi_theta: float,
-) -> Dict[str, jnp.ndarray]:
-    """Build initial values for one blocked channel model."""
-    alpha_phi_delta = sampler.config.alpha_phi
-    beta_phi_delta = sampler.config.beta_phi
-    delta_init, phi_delta_init = pspline_hyperparameter_initials(
-        alpha_phi_delta,
-        beta_phi_delta,
-        sampler.config.alpha_delta,
-        sampler.config.beta_delta,
-        divide_phi_by_delta=True,
-    )
-    _, phi_theta_init = pspline_hyperparameter_initials(
-        alpha_phi_theta,
-        beta_phi_theta,
-        sampler.config.alpha_delta,
-        sampler.config.beta_delta,
-        divide_phi_by_delta=True,
-    )
-    init_values = {
-        f"delta_{channel_index}": jnp.asarray(delta_init),
-        f"phi_delta_{channel_index}": jnp.log(jnp.asarray(phi_delta_init)),
-        f"weights_delta_{channel_index}": delta_weights_init,
-    }
-    if theta_count > 0:
-        for theta_idx in range(theta_count):
-            re_model = sampler.spline_model.get_theta_model(
-                "re", channel_index, theta_idx
-            )
-            im_model = sampler.spline_model.get_theta_model(
-                "im", channel_index, theta_idx
-            )
-            pfx = f"{channel_index}_{theta_idx}"
-            _assign_theta_component_init_values(
-                init_values,
-                prefix=pfx,
-                weights=(
-                    jnp.asarray(re_model.weights),
-                    jnp.asarray(im_model.weights),
-                ),
-                delta_init=jnp.asarray(delta_init),
-                log_phi_init=jnp.log(jnp.asarray(phi_theta_init)),
-            )
-    return init_values
-
-
-def run_single_block_vi(
-    *,
-    sampler,
-    block_model: Callable[..., Any],
-    vi_key,
-    model_args: tuple[Any, ...],
-    model_kwargs: Dict[str, Any],
-    guide_spec: str,
-    progress_bar: bool,
-    init_values: Dict[str, jnp.ndarray],
-):
-    """Execute one VI run with a guarded retry for unstable ELBOs."""
-    vi_result = fit_vi(
-        model=block_model,
-        rng_key=vi_key,
-        vi_steps=sampler.config.vi_steps,
-        optimizer_lr=sampler.config.vi_lr,
-        model_args=model_args,
-        model_kwargs=model_kwargs,
-        guide=guide_spec,
-        posterior_draws=sampler.config.vi_posterior_draws,
-        progress_bar=progress_bar,
-        init_values=init_values,
-    )
-    losses_arr = np.asarray(vi_result.losses)
-    if not (losses_arr.size and not np.isfinite(losses_arr[-1])):
-        return vi_result, losses_arr
-
-    logger.warning(
-        f"VI returned a non-finite ELBO (guide={vi_result.guide_name}); retrying with diag guide."
-    )
-    vi_result = fit_vi(
-        model=block_model,
-        rng_key=vi_key,
-        vi_steps=min(int(sampler.config.vi_steps), 2000),
-        optimizer_lr=min(float(sampler.config.vi_lr), 1e-3),
-        model_args=model_args,
-        model_kwargs=model_kwargs,
-        guide="diag",
-        posterior_draws=sampler.config.vi_posterior_draws,
-        progress_bar=progress_bar,
-        init_values=init_values,
-    )
-    losses_arr = np.asarray(vi_result.losses)
-    return vi_result, losses_arr
-
-
-def build_block_log_posterior_fn(
-    block_model: Callable[..., Any],
-    model_args: tuple[Any, ...],
-    model_kwargs: Dict[str, Any],
-):
-    """Build callable log posterior for blocked VI init model selection."""
-    return build_log_density_fn(
-        partial(block_model, *model_args),
-        model_kwargs,
     )

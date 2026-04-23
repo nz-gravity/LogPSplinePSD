@@ -12,7 +12,6 @@ from ...diagnostics.vi_results import _extract_psd_q50, _get_scaling_factor
 from ...logger import logger
 from .bridge import transfer_univar_weights
 from .common import (
-    _median_vi_values,
     _strip_coarse_vi_plot_arrays,
     _validate_positive_finite_psd,
 )
@@ -158,5 +157,4 @@ def compute_coarse_vi_artifacts_univar(
 __all__ = [
     "compute_coarse_vi_artifacts_univar",
     "compute_vi_artifacts_univar",
-    "_median_vi_values",
 ]

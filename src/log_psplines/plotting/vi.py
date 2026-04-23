@@ -132,43 +132,6 @@ def plot_vi_loss(
     plt.close(fig)
 
 
-def plot_vi_elbo(losses_by_factor: Mapping[str, np.ndarray]) -> plt.Figure:
-    """Build a combined ELBO figure for multivariate VI factor diagnostics."""
-    normalized = {
-        str(name): np.asarray(losses, dtype=np.float64)
-        for name, losses in losses_by_factor.items()
-        if np.asarray(losses).size
-    }
-    if not normalized:
-        raise ValueError(
-            "losses_by_factor must contain at least one loss trace"
-        )
-
-    longest_name, longest_losses = max(
-        normalized.items(), key=lambda item: item[1].size
-    )
-    components = {
-        name: losses
-        for name, losses in normalized.items()
-        if name != longest_name and losses.size == longest_losses.size
-    }
-    fig = _build_vi_loss_figure(
-        losses=longest_losses,
-        guide_name=f"factors ({longest_name} reference)",
-        loss_components=components or None,
-    )
-    if fig is None:
-        raise ValueError("Could not build VI ELBO figure")
-    return fig
-
-
-def plot_vi_elbo_figure(
-    losses_by_factor: Mapping[str, np.ndarray],
-) -> plt.Figure:
-    """Backward-compatible alias for the combined VI ELBO figure helper."""
-    return plot_vi_elbo(losses_by_factor)
-
-
 def plot_vi_initial_psd_univariate(
     *,
     outfile: str,

@@ -408,8 +408,31 @@ class BaseSampler(ABC):
             value = diagnostics.get(key)
             if value is not None:
                 dataset.attrs[key] = value
+        for src_key, out_key in (
+            ("riae", "riae"),
+            ("riae_matrix", "riae"),
+            ("l2", "l2"),
+            ("l2_matrix", "l2"),
+            ("coverage", "coverage"),
+            ("ci_coverage", "coverage"),
+            ("pareto_k_max", "pareto_k_max"),
+            ("psis_khat_max", "pareto_k_max"),
+        ):
+            if out_key in dataset.attrs:
+                continue
+            value = diagnostics.get(src_key)
+            if value is not None:
+                dataset.attrs[out_key] = value
         if dataset.data_vars or dataset.attrs:
             idata["vi_sample_stats"] = xr.DataTree(dataset=dataset)
+
+    def _save_vi_diagnostics(self, *args, **kwargs) -> None:
+        # TODO, standardise between both univar and multivar
+        # 0. compute PSIS loo
+        # 1. save vi summary stats csv
+        # 2. save loss plots
+        # 3. Save VI posterior prediction
+        pass
 
     def to_arviz(
         self,
@@ -670,7 +693,7 @@ class BaseSampler(ABC):
             )
 
             nuts_metric_attrs: Dict[str, float] = {}
-            for col in ("riae", "l2", "coverage"):
+            for col in ("riae", "l2", "coverage", "rhat_max"):
                 if col not in nuts_summary.columns:
                     continue
                 vals = np.asarray(nuts_summary[col], dtype=float)

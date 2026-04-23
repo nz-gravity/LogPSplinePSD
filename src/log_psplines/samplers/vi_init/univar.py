@@ -8,20 +8,39 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from ...diagnostics.vi_results import _extract_psd_q50, _get_scaling_factor
 from ...logger import logger
 from .bridge import transfer_univar_weights
-from .defaults import default_init_values_univar
-from .diagnostics import (
-    _extract_psd_q50,
-    _get_scaling_factor,
+from .common import (
     _median_vi_values,
     _strip_coarse_vi_plot_arrays,
     _validate_positive_finite_psd,
 )
 from .mixin import VIInitialisationArtifacts
-from .plan import VIWarmStartPlan, build_coarse_sampler_from_plan
-from .runner import compute_vi_artifacts_univar
-from .transfer import coarse_vi_metadata, mark_coarse_vi
+from .plan import (
+    VIWarmStartPlan,
+    add_coarse_plot_diagnostics,
+    build_coarse_sampler_from_plan,
+    coarse_vi_metadata,
+    mark_coarse_vi,
+)
+from .runner import compute_vi_artifacts_univar, default_init_values_univar
+
+
+def _fallback_to_fine_vi(
+    sampler, metadata: dict[str, Any], model: Callable[..., Any]
+):
+    fine_artifacts = compute_vi_artifacts_univar(sampler, model=model)
+    diagnostics = mark_coarse_vi(
+        fine_artifacts.diagnostics, metadata, attempted=True, success=False
+    )
+    return VIInitialisationArtifacts(
+        fine_artifacts.init_strategy,
+        fine_artifacts.rng_key,
+        _strip_coarse_vi_plot_arrays(diagnostics),
+        means=fine_artifacts.means,
+        posterior_draws=fine_artifacts.posterior_draws,
+    )
 
 
 def compute_coarse_vi_artifacts_univar(
@@ -47,20 +66,7 @@ def compute_coarse_vi_artifacts_univar(
             "Coarse-grid VI did not produce a valid PSD; "
             "falling back to standard fine-grid VI."
         )
-        fine_artifacts = compute_vi_artifacts_univar(sampler, model=model)
-        diagnostics = mark_coarse_vi(
-            fine_artifacts.diagnostics,
-            metadata,
-            attempted=True,
-            success=False,
-        )
-        return VIInitialisationArtifacts(
-            fine_artifacts.init_strategy,
-            fine_artifacts.rng_key,
-            _strip_coarse_vi_plot_arrays(diagnostics),
-            means=fine_artifacts.means,
-            posterior_draws=fine_artifacts.posterior_draws,
-        )
+        return _fallback_to_fine_vi(sampler, metadata, model)
 
     try:
         coarse_freq = np.asarray(coarse_sampler.periodogram.freqs, dtype=float)
@@ -95,19 +101,18 @@ def compute_coarse_vi_artifacts_univar(
         coarse_only = bool(getattr(sampler.config, "vi_coarse_only", False))
 
         if coarse_only:
-            diagnostics = mark_coarse_vi(
-                coarse_diag,
-                metadata,
-                attempted=True,
-                success=True,
+            diagnostics = add_coarse_plot_diagnostics(
+                mark_coarse_vi(
+                    coarse_diag,
+                    metadata,
+                    attempted=True,
+                    success=True,
+                ),
+                coarse_freq=coarse_freq,
+                coarse_psd=coarse_psd,
+                coarse_label=coarse_label,
+                coarse_losses=coarse_diag.get("losses"),
             )
-            diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
-            diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
-            diagnostics["coarse_vi_psd"] = np.asarray(coarse_psd)
-            diagnostics["coarse_vi_label"] = coarse_label
-            coarse_losses = coarse_diag.get("losses")
-            if coarse_losses is not None:
-                diagnostics["coarse_losses"] = np.asarray(coarse_losses)
             return VIInitialisationArtifacts(
                 init_strategy=None,
                 rng_key=coarse_artifacts.rng_key,
@@ -122,19 +127,18 @@ def compute_coarse_vi_artifacts_univar(
             init_values=transferred_init,
         )
 
-        diagnostics = mark_coarse_vi(
-            fine_artifacts.diagnostics,
-            metadata,
-            attempted=True,
-            success=True,
+        diagnostics = add_coarse_plot_diagnostics(
+            mark_coarse_vi(
+                fine_artifacts.diagnostics,
+                metadata,
+                attempted=True,
+                success=True,
+            ),
+            coarse_freq=coarse_freq,
+            coarse_psd=coarse_psd,
+            coarse_label=coarse_label,
+            coarse_losses=coarse_diag.get("losses"),
         )
-        diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
-        diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
-        diagnostics["coarse_vi_psd"] = np.asarray(coarse_psd)
-        diagnostics["coarse_vi_label"] = coarse_label
-        coarse_losses = coarse_diag.get("losses")
-        if coarse_losses is not None:
-            diagnostics["coarse_losses"] = np.asarray(coarse_losses)
 
         return VIInitialisationArtifacts(
             fine_artifacts.init_strategy,
@@ -148,20 +152,7 @@ def compute_coarse_vi_artifacts_univar(
             f"Coarse-to-fine transfer failed ({exc}); "
             "falling back to standard fine-grid VI."
         )
-        fine_artifacts = compute_vi_artifacts_univar(sampler, model=model)
-        diagnostics = mark_coarse_vi(
-            fine_artifacts.diagnostics,
-            metadata,
-            attempted=True,
-            success=False,
-        )
-        return VIInitialisationArtifacts(
-            fine_artifacts.init_strategy,
-            fine_artifacts.rng_key,
-            _strip_coarse_vi_plot_arrays(diagnostics),
-            means=fine_artifacts.means,
-            posterior_draws=fine_artifacts.posterior_draws,
-        )
+        return _fallback_to_fine_vi(sampler, metadata, model)
 
 
 __all__ = [

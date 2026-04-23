@@ -134,7 +134,13 @@ branch = true
 source = [
     "log_psplines"
 ]
-omit = ["src/log_psplines/_version.py", "src/log_psplines/logger.py", "src/log_psplines/benchmark/*"]
+omit = [
+    "src/log_psplines/_version.py",
+    "src/log_psplines/logger.py",
+    "src/log_psplines/benchmark/*",
+    "src/log_psplines/example_datasets/lvk_data.py",
+    "src/log_psplines/psplines/knots_locator/lvk_knot_allocator.py"
+]
 
 [tool.coverage.paths]
 source = [

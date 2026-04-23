@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any, Mapping, cast
+from typing import Any, Mapping, Optional, cast
 
 import numpy as np
 
@@ -26,6 +26,56 @@ class VIWarmStartPlan:
     model_knot_kwargs: dict[str, Any]
     model_parametric_model: Any
     model_analytical_psd: Any
+
+
+def coarse_vi_metadata(
+    warm_start_plan: VIWarmStartPlan | None = None,
+) -> dict[str, Any]:
+    """Return normalized metadata for coarse VI runs."""
+    metadata = dict(
+        (warm_start_plan.metadata if warm_start_plan else {}) or {}
+    )
+    metadata.setdefault("coarse_vi_attempted", 0)
+    metadata.setdefault("coarse_vi_success", 0)
+    return metadata
+
+
+def mark_coarse_vi(
+    diagnostics: dict[str, Any] | None,
+    metadata: dict[str, Any],
+    *,
+    attempted: bool,
+    success: bool,
+) -> dict[str, Any]:
+    """Attach coarse-VI attempt/success flags to diagnostics."""
+    out = dict(diagnostics or {})
+    out.update(metadata)
+    out.update(
+        coarse_vi_attempted=int(bool(attempted)),
+        coarse_vi_success=int(bool(success)),
+    )
+    return out
+
+
+def add_coarse_plot_diagnostics(
+    diagnostics: dict[str, Any] | None,
+    *,
+    coarse_freq: np.ndarray,
+    coarse_psd: np.ndarray,
+    coarse_label: str,
+    coarse_losses: Optional[np.ndarray] = None,
+) -> dict[str, Any]:
+    """Attach coarse-grid plotting arrays to a diagnostics dictionary."""
+    out = dict(diagnostics or {})
+    out.update(
+        coarse_vi_nfreq=int(coarse_freq.size),
+        coarse_vi_freq=np.asarray(coarse_freq),
+        coarse_vi_psd=np.asarray(coarse_psd),
+        coarse_vi_label=coarse_label,
+    )
+    if coarse_losses is not None:
+        out["coarse_losses"] = np.asarray(coarse_losses)
+    return out
 
 
 def build_coarse_sampler_from_plan(
@@ -84,4 +134,10 @@ def build_coarse_sampler_from_plan(
     return type(sampler)(processed_data, coarse_model, coarse_config)
 
 
-__all__ = ["VIWarmStartPlan", "build_coarse_sampler_from_plan"]
+__all__ = [
+    "VIWarmStartPlan",
+    "add_coarse_plot_diagnostics",
+    "build_coarse_sampler_from_plan",
+    "coarse_vi_metadata",
+    "mark_coarse_vi",
+]

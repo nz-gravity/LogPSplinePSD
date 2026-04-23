@@ -41,6 +41,7 @@ import numpyro
 import xarray as xr
 from numpyro.infer import MCMC, NUTS
 
+from ...diagnostics.vi_results import _extract_multivar_design_psd
 from ...logger import logger
 from ..base_sampler import SamplerConfig
 from ..pspline_block import (
@@ -51,9 +52,6 @@ from ..pspline_block import (
 from ..vi_init.blocked import (
     prepare_block_vi,
     prepare_coarse_block_vi,
-)
-from ..vi_init.diagnostics import (
-    _extract_multivar_design_psd,
 )
 from ..vi_init.plan import VIWarmStartPlan
 from .multivar_base import MultivarBaseSampler

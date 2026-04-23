@@ -29,14 +29,13 @@ from ...datatypes.multivar_utils import (
 )
 from ...diagnostics import (
     build_vi_summary_table,
-    plot_vi_elbo_factors,
-    plot_vi_pareto_k_factors,
 )
 from ...diagnostics._factors import vi_factor_idatas
 from ...logger import logger
 from ...plotting import (
     PSDMatrixPlotSpec,
     plot_psd_matrix,
+    plot_vi_elbo,
 )
 from ...psplines.multivar_psplines import MultivariateLogPSplines
 from ..base_sampler import BaseSampler, SamplerConfig
@@ -382,7 +381,7 @@ class MultivarBaseSampler(BaseSampler):
                     "Could not compute ArviZ VI Pareto-k summary.",
                     exc_info=True,
                 )
-        summary.to_csv(diagnostics_dir / "vi_summary.csv", index=False)
+        summary.to_csv(str(diagnostics_dir / "vi_summary.csv"), index=False)
 
         factor_payloads: dict[str, dict[str, np.ndarray]] = {}
         for factor in summary["factor"]:
@@ -396,13 +395,12 @@ class MultivarBaseSampler(BaseSampler):
 
         if any("losses" in payload for payload in factor_payloads.values()):
             try:
-                fig = plot_vi_elbo_factors(
-                    {
-                        factor: payload
-                        for factor, payload in factor_payloads.items()
-                        if "losses" in payload
-                    }
-                )
+                losses_dict = {
+                    factor: payload["losses"]
+                    for factor, payload in factor_payloads.items()
+                    if "losses" in payload
+                }
+                fig = plot_vi_elbo(losses_dict)
                 fig.savefig(
                     diagnostics_dir / "vi_elbo_factors.png",
                     dpi=150,
@@ -414,23 +412,6 @@ class MultivarBaseSampler(BaseSampler):
             except Exception:
                 logger.warning(
                     "Could not save combined VI ELBO plot.",
-                    exc_info=True,
-                )
-
-        if factor_idata_map:
-            try:
-                fig = plot_vi_pareto_k_factors(factor_idata_map)
-                fig.savefig(
-                    diagnostics_dir / "vi_pareto_k_factors.png",
-                    dpi=150,
-                    bbox_inches="tight",
-                )
-                import matplotlib.pyplot as plt
-
-                plt.close(fig)
-            except Exception:
-                logger.warning(
-                    "Could not save combined VI Pareto-k plot.",
                     exc_info=True,
                 )
 

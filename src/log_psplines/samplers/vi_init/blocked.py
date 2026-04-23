@@ -9,25 +9,34 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ...logger import logger
-from .bridge import transfer_block_init_values
-from .diagnostics import (
-    _accumulate_block_vi_diagnostics,
-    _assemble_blocked_vi_diagnostics,
-    _block_site_names,
+from ...datatypes.multivar_utils import _interp_complex_matrix
+from ...diagnostics.vi_results import (
     _ensure_positive_definite_psd,
     _extract_multivar_design_psd,
     _extract_psd_q50,
-    _median_vi_values,
-    _prepare_block_accum,
     _rescale_multivar_psd_for_diagnostics,
+)
+from ...logger import logger
+from .blocked_state import (
+    _accumulate_block_vi_diagnostics,
+    _assemble_blocked_vi_diagnostics,
+    _block_site_names,
+    _prepare_block_accum,
+)
+from .bridge import transfer_block_init_values
+from .common import (
+    _median_vi_values,
     _sanitize_vi_init_values,
     _strip_coarse_vi_plot_arrays,
     _to_np,
     _vi_means_are_usable,
-    interp_design_psd_to_fine,
 )
-from .plan import VIWarmStartPlan, build_coarse_sampler_from_plan
+from .plan import (
+    VIWarmStartPlan,
+    build_coarse_sampler_from_plan,
+    coarse_vi_metadata,
+    mark_coarse_vi,
+)
 from .runner import (
     build_block_init_values,
     build_block_log_posterior_fn,
@@ -35,7 +44,6 @@ from .runner import (
     run_single_block_vi,
     select_vi_or_default_init,
 )
-from .transfer import coarse_vi_metadata, mark_coarse_vi
 
 
 @dataclass
@@ -46,6 +54,47 @@ class BlockVIArtifacts:
     mcmc_keys: List[jax.Array]
     rng_key: jax.Array
     diagnostics: Optional[Dict[str, Any]]
+
+
+def _coarse_block_plot_payload(
+    *,
+    coarse_diag: Dict[str, Any],
+    coarse_sampler,
+    sampler,
+    coarse_design: np.ndarray,
+) -> Dict[str, Any]:
+    """Return coarse-grid plotting diagnostics for blocked VI flows."""
+    coarse_freq = np.asarray(coarse_sampler.freq)
+    coarse_plot_psd = _extract_psd_q50(coarse_diag)
+    if coarse_plot_psd is not None:
+        coarse_psd = np.real(coarse_plot_psd)
+        coarse_label = "Coarse-Grid VI Posterior Median"
+    else:
+        coarse_psd = np.real(
+            _rescale_multivar_psd_for_diagnostics(
+                coarse_sampler,
+                np.asarray(coarse_design, dtype=np.complex128),
+            )
+        )
+        coarse_label = "Coarse-Grid VI Mean"
+
+    payload: Dict[str, Any] = {
+        "psd_matrix_complex": coarse_design,
+        "psd_matrix": np.real(
+            _rescale_multivar_psd_for_diagnostics(sampler, coarse_design)
+        ),
+        "coarse_vi_nfreq": int(coarse_freq.size),
+        "coarse_vi_freq": coarse_freq,
+        "coarse_vi_psd": coarse_psd,
+        "coarse_vi_label": coarse_label,
+    }
+    coarse_losses = coarse_diag.get("losses")
+    if coarse_losses is not None:
+        payload["coarse_losses"] = np.asarray(coarse_losses)
+    coarse_per_block = coarse_diag.get("losses_per_block")
+    if coarse_per_block is not None:
+        payload["coarse_losses_per_block"] = np.asarray(coarse_per_block)
+    return payload
 
 
 def prepare_block_vi(
@@ -277,9 +326,9 @@ def prepare_coarse_block_vi(
         fine_freq = np.asarray(sampler.freq, dtype=np.float64)
         coarse_freq = np.asarray(coarse_sampler.freq, dtype=np.float64)
 
-        fine_design = interp_design_psd_to_fine(
-            coarse_freq,
-            fine_freq,
+        fine_design = _interp_complex_matrix(
+            coarse_freq.astype(np.float64),
+            fine_freq.astype(np.float64),
             np.asarray(coarse_design, dtype=np.complex128),
         )
         fine_design = _ensure_positive_definite_psd(fine_design)
@@ -334,33 +383,20 @@ def prepare_coarse_block_vi(
 
         if coarse_only:
             coarse_diag = coarse_setup.diagnostics or {}
-            merged_diagnostics = dict(coarse_diag)
-            merged_diagnostics.update(metadata)
-            merged_diagnostics["coarse_vi_attempted"] = 1
-            merged_diagnostics["coarse_vi_success"] = 1
-            merged_diagnostics["psd_matrix_complex"] = fine_design
-            merged_diagnostics["psd_matrix"] = np.real(
-                _rescale_multivar_psd_for_diagnostics(sampler, fine_design)
+            merged_diagnostics = mark_coarse_vi(
+                coarse_diag,
+                metadata,
+                attempted=True,
+                success=True,
             )
-            merged_diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
-            merged_diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
-            coarse_losses = coarse_diag.get("losses")
-            coarse_plot_psd = _extract_psd_q50(coarse_diag)
-            if coarse_plot_psd is not None:
-                merged_diagnostics["coarse_vi_psd"] = np.real(coarse_plot_psd)
-                merged_diagnostics["coarse_vi_label"] = (
-                    "Coarse-Grid VI Posterior Median"
+            merged_diagnostics.update(
+                _coarse_block_plot_payload(
+                    coarse_diag=coarse_diag,
+                    coarse_sampler=coarse_sampler,
+                    sampler=sampler,
+                    coarse_design=fine_design,
                 )
-            else:
-                merged_diagnostics["coarse_vi_psd"] = np.real(
-                    _rescale_multivar_psd_for_diagnostics(
-                        coarse_sampler,
-                        np.asarray(coarse_design, dtype=np.complex128),
-                    )
-                )
-                merged_diagnostics["coarse_vi_label"] = "Coarse-Grid VI Mean"
-            if coarse_losses is not None:
-                merged_diagnostics["coarse_losses"] = np.asarray(coarse_losses)
+            )
             return BlockVIArtifacts(
                 init_strategies=[None] * sampler.p,
                 mcmc_keys=coarse_setup.mcmc_keys,
@@ -375,39 +411,21 @@ def prepare_coarse_block_vi(
             init_overrides=init_overrides or None,
         )
 
-        merged_diagnostics = dict(fine_setup.diagnostics or {})
-        merged_diagnostics.update(metadata)
-        merged_diagnostics["coarse_vi_attempted"] = 1
-        merged_diagnostics["coarse_vi_success"] = 1
-        merged_diagnostics["psd_matrix_complex"] = fine_design
-        merged_diagnostics["psd_matrix"] = np.real(
-            _rescale_multivar_psd_for_diagnostics(sampler, fine_design)
-        )
-        merged_diagnostics["coarse_vi_nfreq"] = int(coarse_freq.size)
-        merged_diagnostics["coarse_vi_freq"] = np.asarray(coarse_freq)
         coarse_diag = coarse_setup.diagnostics or {}
-        coarse_plot_psd = _extract_psd_q50(coarse_diag)
-        if coarse_plot_psd is not None:
-            merged_diagnostics["coarse_vi_psd"] = np.real(coarse_plot_psd)
-            merged_diagnostics["coarse_vi_label"] = (
-                "Coarse-Grid VI Posterior Median"
+        merged_diagnostics = mark_coarse_vi(
+            fine_setup.diagnostics,
+            metadata,
+            attempted=True,
+            success=True,
+        )
+        merged_diagnostics.update(
+            _coarse_block_plot_payload(
+                coarse_diag=coarse_diag,
+                coarse_sampler=coarse_sampler,
+                sampler=sampler,
+                coarse_design=fine_design,
             )
-        else:
-            merged_diagnostics["coarse_vi_psd"] = np.real(
-                _rescale_multivar_psd_for_diagnostics(
-                    coarse_sampler,
-                    np.asarray(coarse_design, dtype=np.complex128),
-                )
-            )
-            merged_diagnostics["coarse_vi_label"] = "Coarse-Grid VI Mean"
-        coarse_losses = coarse_diag.get("losses")
-        if coarse_losses is not None:
-            merged_diagnostics["coarse_losses"] = np.asarray(coarse_losses)
-        coarse_per_block = coarse_diag.get("losses_per_block")
-        if coarse_per_block is not None:
-            merged_diagnostics["coarse_losses_per_block"] = np.asarray(
-                coarse_per_block
-            )
+        )
 
         return BlockVIArtifacts(
             init_strategies=fine_setup.init_strategies,

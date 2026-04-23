@@ -824,8 +824,41 @@ class MultivarBlockedNUTSSampler(MultivarBaseSampler):
                 "log_likelihood": np.asarray(log_likelihood_total),
             }
         )
+        self._add_standard_sample_stats(combined_stats)
 
         return self.to_arviz(combined_samples, combined_stats)
+
+    @staticmethod
+    def _add_standard_sample_stats(sample_stats: Dict[str, Any]) -> None:
+        """Add canonical sampler-stat names aggregated across channel blocks."""
+
+        def _channel_arrays(base: str) -> list[np.ndarray]:
+            arrays: list[np.ndarray] = []
+            for key, value in sample_stats.items():
+                if str(key).startswith(f"{base}_channel_"):
+                    arrays.append(np.asarray(value))
+            return arrays
+
+        for base in ("potential_energy", "energy", "num_steps"):
+            if base in sample_stats:
+                continue
+            arrays = _channel_arrays(base)
+            if arrays:
+                sample_stats[base] = np.sum(np.stack(arrays, axis=0), axis=0)
+
+        for base in ("step_size", "accept_prob"):
+            if base in sample_stats:
+                continue
+            arrays = _channel_arrays(base)
+            if arrays:
+                sample_stats[base] = np.mean(np.stack(arrays, axis=0), axis=0)
+
+        if "diverging" not in sample_stats:
+            arrays = _channel_arrays("diverging")
+            if arrays:
+                sample_stats["diverging"] = np.max(
+                    np.stack(arrays, axis=0), axis=0
+                )
 
     def _vi_only_inference_data(
         self, diagnostics: Optional[Dict[str, Any]]

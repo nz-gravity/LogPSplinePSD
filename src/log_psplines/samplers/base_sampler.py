@@ -664,10 +664,30 @@ class BaseSampler(ABC):
                 plot_factor_traces,
             )
 
-            nuts_summary = build_nuts_summary_table(idata_out)
+            nuts_summary = build_nuts_summary_table(
+                idata_out,
+                true_psd=self.config.true_psd,
+            )
             nuts_summary.to_csv(
                 diagnostics_dir / "nuts_summary.csv", index=False
             )
+
+            nuts_metric_attrs: Dict[str, float] = {}
+            for col in ("riae", "l2", "coverage"):
+                if col not in nuts_summary.columns:
+                    continue
+                vals = np.asarray(nuts_summary[col], dtype=float)
+                vals = vals[np.isfinite(vals)]
+                nuts_metric_attrs[col] = (
+                    float(np.median(vals)) if vals.size else float("nan")
+                )
+
+            if nuts_metric_attrs:
+                for target in (idata, idata_out):
+                    if "sample_stats" not in target.children:
+                        continue
+                    sample_stats_ds = _require_dataset(target, "sample_stats")
+                    sample_stats_ds.attrs.update(nuts_metric_attrs)
 
             for factor in nuts_summary["factor"]:
                 fig = plot_factor_traces(idata_out, factor=str(factor))

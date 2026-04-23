@@ -1,4 +1,7 @@
+import csv
 import os
+import shutil
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,6 +31,8 @@ def test_mcmc_univar(outdir: str):
     from log_psplines.example_datasets.ar_data import ARData
 
     outdir = os.path.join(outdir, "out_mcmc/univar")
+    if os.path.exists(outdir):
+        shutil.rmtree(outdir)
     os.makedirs(outdir, exist_ok=True)
 
     print(f"++++ Running univariate MCMC test ++++")
@@ -71,7 +76,11 @@ def test_mcmc_univar(outdir: str):
 
     print(f"Inference data posterior variables: {idata.posterior}")
 
-    fig, ax = plot_pdgrm(idata=idata, show_data=False)
+    fig, ax = plot_pdgrm(
+        idata=idata,
+        show_data=False,
+        true_psd=np.asarray(ar_data.psd_theoretical, dtype=float),
+    )
     ax.set_xscale("linear")
     fig.savefig(
         os.path.join(sampler_out, "test_mcmc_nuts.png"),
@@ -93,6 +102,29 @@ def test_mcmc_univar(outdir: str):
     # Assert that weights are present and have correct shape
     weights = get_weights(idata)
     assert weights is not None, "Weights not found in posterior."
+
+    # Verify VI diagnostics are persisted.
+    univar_diag_csv = os.path.join(
+        sampler_out, "diagnostics", "vi_summary.csv"
+    )
+    assert os.path.exists(univar_diag_csv), "Missing univariate vi_summary.csv"
+
+    # Verify NUTS truth metrics are saved and attached.
+    univar_nuts_csv = os.path.join(
+        sampler_out, "diagnostics", "nuts_summary.csv"
+    )
+    assert os.path.exists(
+        univar_nuts_csv
+    ), "Missing univariate nuts_summary.csv"
+    with open(univar_nuts_csv, newline="", encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    for key in ("riae", "l2", "coverage"):
+        assert (
+            key in row
+        ), f"Column {key} missing from univariate nuts_summary.csv"
+        assert (
+            key in idata.sample_stats.attrs
+        ), f"sample_stats missing NUTS metric attr: {key}"
 
     _, median_psd, _, _ = get_posterior_psd(idata)
     post_psd_scale = float(np.median(median_psd))
@@ -133,10 +165,14 @@ def test_mcmc_multivar(outdir):
     from log_psplines.example_datasets.varma_data import VARMAData
 
     outdir = os.path.join(outdir, "out_mcmc/multivar")
+    if os.path.exists(outdir):
+        shutil.rmtree(outdir)
     os.makedirs(outdir, exist_ok=True)
 
     varma_data = VARMAData(n_samples=2**12, fs=64.0, seed=0)
-    ts_run = MultivariateTimeseries(y=varma_data.data, t=varma_data.time)
+    assert varma_data.data is not None
+    ts_data = cast(np.ndarray, varma_data.data)
+    ts_run = MultivariateTimeseries(y=ts_data, t=varma_data.time)
 
     fmin, fmax = 0, 32
     coarse_cfg = CoarseGrainConfig(
@@ -163,6 +199,7 @@ def test_mcmc_multivar(outdir):
         diffMatrixOrder=2,
         fmin=fmin,
         fmax=fmax,
+        true_psd=varma_data.get_true_psd(),
     )
     diagnostics_cfg = DiagnosticsConfig(verbose=True, outdir=outdir)
     vi_cfg = VIConfig(
@@ -226,6 +263,46 @@ def test_mcmc_multivar(outdir):
     assert vi_log_likelihood["log_likelihood_block_0"].ndim == 3
 
     diagnostics_dir = os.path.join(outdir, "diagnostics")
-    assert os.path.exists(os.path.join(diagnostics_dir, "vi_summary.csv"))
+    summary_path = os.path.join(diagnostics_dir, "vi_summary.csv")
+    assert os.path.exists(summary_path)
+
+    nuts_summary_path = os.path.join(diagnostics_dir, "nuts_summary.csv")
+    assert os.path.exists(nuts_summary_path)
+
+    # Plot should include true PSD overlay when true_psd is provided.
+    assert os.path.exists(os.path.join(outdir, "psd_matrix.png"))
+
+    vi_stats = idata["vi_sample_stats"].dataset
+    for key in ("riae_matrix", "l2_matrix", "coverage"):
+        assert key in vi_stats.attrs, f"Missing VI metric attr: {key}"
+        assert np.isfinite(
+            float(vi_stats.attrs[key])
+        ), f"VI metric {key} should be finite."
+
+    with open(summary_path, newline="", encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    for key in ("riae", "l2", "coverage"):
+        assert (
+            key in row
+        ), f"Column {key} missing from multivariate vi_summary.csv"
+        assert np.isfinite(
+            float(row[key])
+        ), f"Column {key} in multivariate vi_summary.csv should be finite."
+
+    with open(nuts_summary_path, newline="", encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    for key in ("riae", "l2", "coverage"):
+        assert (
+            key in row
+        ), f"Column {key} missing from multivariate nuts_summary.csv"
+        assert np.isfinite(
+            float(row[key])
+        ), f"Column {key} in multivariate nuts_summary.csv should be finite."
+        assert (
+            key in idata.sample_stats.attrs
+        ), f"sample_stats missing NUTS metric attr: {key}"
+        assert np.isfinite(
+            float(idata.sample_stats.attrs[key])
+        ), f"sample_stats NUTS metric attr {key} should be finite."
 
     print(f"++++ multivariate MCMC test COMPLETE ++++")

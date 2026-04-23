@@ -25,12 +25,14 @@ from typing import (
 import arviz_stats as azs
 import jax
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from arviz_base import from_dict, from_numpyro
 from arviz_stats.base import array_stats
 
 from ..arviz_utils._datatree import require_dataset as _require_dataset
+from ..arviz_utils._datatree import save_inference_data as _save_inference_data
 from ..arviz_utils._datatree import select_draw_slice as _select_draw_slice
 from ..logger import logger
 
@@ -648,20 +650,15 @@ class BaseSampler(ABC):
                 f"{max_save_bytes / 1e6:.1f} MB)."
             )
 
-        if not skip_heavy:
-            logger.info("save_results: writing inference_data.nc")
-            idata_out.to_netcdf(
-                f"{self.config.outdir}/inference_data.nc", engine="h5netcdf"
-            )
-            logger.info("save_results: wrote inference_data.nc")
         diagnostics_dir = Path(self.config.outdir) / "diagnostics"
         diagnostics_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.debug("save_results: writing minimal diagnostics")
+        logger.info("save_results: writing minimal diagnostics")
         try:
             from ..diagnostics import (
                 build_nuts_summary_table,
-                plot_factor_traces,
+                plot_energy,
+                plot_traces,
             )
 
             nuts_summary = build_nuts_summary_table(
@@ -689,22 +686,37 @@ class BaseSampler(ABC):
                     sample_stats_ds = _require_dataset(target, "sample_stats")
                     sample_stats_ds.attrs.update(nuts_metric_attrs)
 
-            for factor in nuts_summary["factor"]:
-                fig = plot_factor_traces(idata_out, factor=str(factor))
-                fig.savefig(
-                    diagnostics_dir / f"trace_factor_{factor}.png",
-                    dpi=150,
-                    bbox_inches="tight",
-                )
-                import matplotlib.pyplot as plt
+            fig = plot_traces(idata_out)  # TODO: is this called? i dont see it
+            fig.savefig(
+                diagnostics_dir / f"diagnostic_traces.png",
+                dpi=150,
+                bbox_inches="tight",
+            )
+            plt.close(fig)
 
-                plt.close(fig)
+            fig = plot_energy(idata_out)  # TODO: is this called? i dont see it
+            fig.savefig(
+                diagnostics_dir / "diagnostic_energy.png",
+                dpi=150,
+                bbox_inches="tight",
+            )
+            plt.close(fig)
         except Exception as exc:  # pragma: no cover
             logger.warning(
                 f"Could not save minimal NUTS diagnostics: {exc}",
                 exc_info=True,
             )
         logger.debug("save_results: minimal diagnostics done")
+
+        if not skip_heavy:
+            logger.info("save_results: writing inference_data.nc")
+            _save_inference_data(
+                idata_out,
+                f"{self.config.outdir}/inference_data.nc",
+                engine="h5netcdf",
+            )
+            logger.info("save_results: wrote inference_data.nc")
+
         t0 = time.perf_counter()
         logger.debug("Writing summary_statistics.csv...")
         if not skip_heavy:

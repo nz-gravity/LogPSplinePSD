@@ -16,12 +16,8 @@ except Exception as exc:  # pragma: no cover - environment dependent
     LVKData = None  # type: ignore[assignment]
     _LVK_IMPORT_ERROR = exc
 
-OUT = "out_example_datasets"
-
 
 def test_ar(outdir):
-    outdir = f"{outdir}/{OUT}"
-    os.makedirs(outdir, exist_ok=True)
     fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
     for i, ax in enumerate(axes.flat):
         ar_data = ARData(
@@ -39,8 +35,6 @@ def test_ar(outdir):
 
 
 def test_lisa_data(outdir):
-    outdir = f"{outdir}/{OUT}"
-    os.makedirs(outdir, exist_ok=True)
 
     lisa_data = LISAData.load()
     lisa_data.plot(f"{outdir}/lisa_spectra_trri.png")
@@ -84,9 +78,6 @@ def test_lvk_data(outdir, monkeypatch):
             f"LVK dataset dependencies unavailable: {_LVK_IMPORT_ERROR}"
         )
 
-    outdir = f"{outdir}/{OUT}"
-    os.makedirs(outdir, exist_ok=True)
-
     def _fake_fetch_open_data(detector, gps_start, gps_end):
         from gwpy.timeseries import TimeSeries
 
@@ -110,8 +101,6 @@ def test_lvk_data(outdir, monkeypatch):
 
 
 def test_varma_data(outdir):
-    outdir = f"{outdir}/{OUT}"
-    os.makedirs(outdir, exist_ok=True)
     varma_data = VARMAData(n_samples=512, fs=64.0, seed=0)
     varma_data.plot(fname=f"{outdir}/varma_data_analysis.png")
     freq_hz = np.asarray(varma_data.freq)

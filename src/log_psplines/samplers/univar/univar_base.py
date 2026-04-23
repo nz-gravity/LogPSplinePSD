@@ -6,7 +6,6 @@ Base class for univariate PSD samplers.
 
 import tempfile
 import time
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import jax
@@ -18,9 +17,8 @@ from xarray import DataArray, Dataset
 
 from ...arviz_utils.to_arviz import _pack_spline_model
 from ...datatypes import Periodogram
-from ...diagnostics import build_vi_summary_table
 from ...logger import logger
-from ...plotting import plot_pdgrm, plot_vi_loss
+from ...plotting import plot_pdgrm
 from ...psplines import LogPSplines, build_spline
 from ..base_sampler import BaseSampler, SamplerConfig
 
@@ -173,34 +171,6 @@ class UnivarBaseSampler(BaseSampler):
             f"save_plots(univar): VI diagnostics done in {time.perf_counter() - t0:.2f}s"
         )
 
-    def _save_vi_diagnostics(self, *, log_summary: bool = True) -> None:
-        """Persist VI diagnostics if available."""
-        vi_diag = getattr(self, "_vi_diagnostics", None)
-        if not vi_diag or self.config.outdir is None:
-            return
-
-        diagnostics_dir = Path(self.config.outdir) / "diagnostics"
-        diagnostics_dir.mkdir(parents=True, exist_ok=True)
-
-        summary = build_vi_summary_table(vi_diag)
-        summary.to_csv(diagnostics_dir / "vi_summary.csv", index=False)
-
-        losses = np.asarray(vi_diag.get("losses", []), dtype=np.float64)
-        if losses.size:
-            plot_vi_loss(
-                losses=losses,
-                guide_name=str(vi_diag.get("guide", "vi")),
-                outfile=str(diagnostics_dir / "vi_loss.png"),
-            )
-
-        if log_summary and not summary.empty:
-            row = summary.iloc[0]
-            logger.info(
-                f"VI summary: final_elbo={row['final_elbo']:.3f}, "
-                f"pareto_k_max={row['pareto_k_max']:.3f}, "
-                f"loo_warning={bool(row['loo_warning'])}"
-            )
-
     def _get_lnz(
         self, samples: Dict[str, Any], sample_stats: Dict[str, Any]
     ) -> Tuple[float, float]:
@@ -309,6 +279,13 @@ class UnivarBaseSampler(BaseSampler):
                         array.reshape(1, -1),
                     )
             self._attach_vi_posterior_dataset(idata, sample_vars, coords)
+            vi_log_likelihood = self._build_vi_log_likelihood_dataset(
+                vi_samples
+            )
+            if vi_log_likelihood is not None:
+                idata["vi_log_likelihood"] = xr.DataTree(
+                    dataset=vi_log_likelihood
+                )
 
         self._attach_vi_sample_stats(
             idata,
@@ -322,4 +299,38 @@ class UnivarBaseSampler(BaseSampler):
                 "psis_khat_status",
                 "psis_khat_threshold",
             ),
+        )
+
+    def _build_vi_log_likelihood_dataset(
+        self, vi_samples: Dict[str, Any]
+    ) -> Optional[Dataset]:
+        """Build pointwise VI log-likelihood arrays for univariate VI."""
+
+        weights = vi_samples.get("weights")
+        if weights is None:
+            return None
+
+        weights = np.asarray(weights, dtype=np.float64)
+        if weights.ndim != 2 or weights.shape[0] == 0:
+            return None
+
+        log_psd = (
+            weights @ self.basis_matrix_np.T + self.log_parametric_np[None, :]
+        )
+        pointwise = -0.5 * (
+            float(self.Nh) * log_psd
+            + np.exp(self.log_pdgrm_np[None, :] - log_psd)
+        )
+        return Dataset(
+            {
+                "log_likelihood": DataArray(
+                    pointwise[None, ...].astype(np.float32),
+                    dims=["chain", "draw", "freq"],
+                    coords={
+                        "chain": np.arange(1),
+                        "draw": np.arange(weights.shape[0]),
+                        "freq": self.freq_coords,
+                    },
+                )
+            }
         )

@@ -35,7 +35,10 @@ from arviz_stats.base import array_stats
 from ..arviz_utils._datatree import require_dataset as _require_dataset
 from ..arviz_utils._datatree import save_inference_data as _save_inference_data
 from ..arviz_utils._datatree import select_draw_slice as _select_draw_slice
+from ..diagnostics import build_vi_summary_table
+from ..diagnostics._factors import vi_factor_idatas
 from ..logger import logger
+from ..plotting import plot_vi_loss
 
 ChainMethod = Literal["parallel", "vectorized", "sequential"]
 SampleArray = Union[jnp.ndarray, np.ndarray]
@@ -429,13 +432,75 @@ class BaseSampler(ABC):
         if dataset.data_vars or dataset.attrs:
             idata["vi_sample_stats"] = xr.DataTree(dataset=dataset)
 
-    def _save_vi_diagnostics(self, *args, **kwargs) -> None:
-        # TODO, standardise between both univar and multivar
-        # 0. compute PSIS loo
-        # 1. save vi summary stats csv
-        # 2. save loss plots
-        # 3. Save VI posterior prediction
-        pass
+    def _save_vi_diagnostics(
+        self,
+        *,
+        idata: Optional[xr.DataTree] = None,
+        empirical_psd: Any = None,
+        log_summary: bool = True,
+    ) -> None:
+        """Persist VI diagnostics for both single-factor and blocked VI runs."""
+        vi_diag = getattr(self, "_vi_diagnostics", None)
+        if not vi_diag or self.config.outdir is None:
+            return
+
+        del empirical_psd
+        diagnostics_dir = Path(self.config.outdir) / "diagnostics"
+        diagnostics_dir.mkdir(parents=True, exist_ok=True)
+
+        summary = build_vi_summary_table(vi_diag)
+        factor_idata_map = vi_factor_idatas(idata) if idata is not None else {}
+        has_factor_rows = len(summary) > 1
+
+        if factor_idata_map:
+            try:
+                loo_summary = build_vi_summary_table(factor_idata_map)
+                summary = summary.drop(
+                    columns=["pareto_k_max", "pareto_k_median", "loo_warning"],
+                    errors="ignore",
+                ).merge(
+                    loo_summary[
+                        [
+                            "factor",
+                            "pareto_k_max",
+                            "pareto_k_median",
+                            "loo_warning",
+                        ]
+                    ],
+                    on="factor",
+                    how="left",
+                )
+            except Exception:
+                logger.warning(
+                    "Could not compute ArviZ VI Pareto-k summary.",
+                    exc_info=True,
+                )
+
+        summary.to_csv(diagnostics_dir / "vi_summary.csv", index=False)
+
+        plot_vi_loss(
+            vi_diag,
+            guide_name=str(vi_diag.get("guide", "vi")),
+            outfile=str(diagnostics_dir / "vi_loss.png"),
+        )
+
+        if log_summary and not summary.empty:
+            if has_factor_rows:
+                worst_row = summary.loc[
+                    summary["pareto_k_max"].fillna(-np.inf).idxmax()
+                ]
+                logger.info(
+                    f"VI summary: worst_factor={worst_row['factor']}, "
+                    f"pareto_k_max={worst_row['pareto_k_max']:.3f}, "
+                    f"loo_warning={bool(worst_row['loo_warning'])}"
+                )
+            else:
+                row = summary.iloc[0]
+                logger.info(
+                    f"VI summary: final_elbo={row['final_elbo']:.3f}, "
+                    f"pareto_k_max={row['pareto_k_max']:.3f}, "
+                    f"loo_warning={bool(row['loo_warning'])}"
+                )
 
     def to_arviz(
         self,

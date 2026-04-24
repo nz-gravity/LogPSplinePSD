@@ -12,23 +12,41 @@ import xarray as xr
 from ._factors import factor_idatas
 
 
+def _has_per_channel_stats(idata: xr.DataTree) -> bool:
+    """Return True only if sample_stats has explicit per-channel fields."""
+    try:
+        ss = idata["sample_stats"].dataset
+        if ss is None:
+            return False
+        return any("_channel_" in str(name) for name in ss.data_vars)
+    except (KeyError, AttributeError):
+        return False
+
+
 def plot_energy(posteriors: xr.DataTree | dict[str, xr.DataTree]):
     """Energy diagnostic plot.
 
-    For univariate (single NUTS run): delegates directly to azp.plot_energy.
-    For multivariate blocked NUTS: plots per-factor energy diagnostics stacked
-    vertically, one panel per channel block.
+    For a joint NUTS run (univariate or multivariate joint model): delegates
+    directly to azp.plot_energy on the full idata.
+
+    For blocked multivariate NUTS (per-channel sample_stats present): plots
+    per-factor energy diagnostics stacked vertically, one panel per channel.
     """
+    # If caller already provides a pre-split dict, use it directly.
     if isinstance(posteriors, dict):
         factors = posteriors
+        use_per_channel = True
     else:
-        try:
-            factors = factor_idatas(posteriors)
-        except Exception:
-            factors = {"0": posteriors}
+        use_per_channel = _has_per_channel_stats(posteriors)
+        if use_per_channel:
+            try:
+                factors = factor_idatas(posteriors)
+            except Exception:
+                use_per_channel = False
 
-    if len(factors) <= 1:
-        dt = next(iter(factors.values()))
+    if not use_per_channel:
+        # Single joint NUTS trajectory — standard ArviZ plot.
+        dt = posteriors
         try:
             return azp.plot_energy(dt, backend="matplotlib")
         except Exception:
@@ -38,7 +56,7 @@ def plot_energy(posteriors: xr.DataTree | dict[str, xr.DataTree]):
                 )
             raise
 
-    # Multivariate: render each factor's plot as an image and stack vertically
+    # Blocked multivariate: render each factor's plot as an image and stack.
     images = []
     for factor_name in sorted(factors):
         factor_dt = factors[factor_name]
@@ -62,9 +80,8 @@ def plot_energy(posteriors: xr.DataTree | dict[str, xr.DataTree]):
         plt.close(fig)
 
     if not images:
-        return azp.plot_energy(
-            next(iter(factors.values())), backend="matplotlib"
-        )
+        # Fallback: joint plot on the original idata
+        return azp.plot_energy(posteriors, backend="matplotlib")
 
     p = len(images)
     combined_fig, axes = plt.subplots(p, 1, figsize=(12, 5 * p))

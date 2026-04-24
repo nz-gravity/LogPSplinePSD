@@ -112,8 +112,25 @@ class NUTSStage:
             num_chains=self.num_chains,
             progress_bar=verbose,
         )
-        mcmc.run(rng_key, **kwargs)
-        return az.from_numpyro(mcmc)
+        mcmc.run(
+            rng_key,
+            extra_fields=(
+                "potential_energy",
+                "energy",
+                "num_steps",
+                "accept_prob",
+            ),
+            **kwargs,
+        )
+        idata = az.from_numpyro(mcmc)
+        stats = idata["sample_stats"].dataset
+        if (
+            stats is not None
+            and "lp" not in stats
+            and "potential_energy" in stats
+        ):
+            stats["lp"] = -stats["potential_energy"]
+        return idata
 
 
 __all__ = ["StageResult", "VIStage", "NUTSStage"]

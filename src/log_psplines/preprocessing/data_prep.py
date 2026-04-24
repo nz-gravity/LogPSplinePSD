@@ -19,7 +19,8 @@ from .coarse_grain import (
     apply_coarse_graining_univar,
     compute_binning_structure,
 )
-from .configs import SamplerName
+
+SamplerName = str
 
 
 def _normalize_coarse_grain_config(
@@ -79,6 +80,29 @@ def _build_frequency_exclusion_mask(
     return mask
 
 
+def _apply_frequency_exclusion(
+    data: Union[Periodogram, MultivarFFT],
+    bands: Sequence[tuple[float, float]],
+) -> Union[Periodogram, MultivarFFT]:
+    """Return frequency-domain data with excluded bands removed."""
+    if not bands:
+        return data
+
+    freq = data.freqs if isinstance(data, Periodogram) else data.freq
+    mask = _build_frequency_exclusion_mask(np.asarray(freq), bands)
+    n_excluded = int((~mask).sum())
+    if n_excluded == 0:
+        return data
+    if not np.any(mask):
+        raise ValueError("Frequency masking removed all inference bins.")
+
+    logger.info(
+        f"Null-band excision: removing {n_excluded} bins across "
+        f"{len(bands)} band(s). {int(np.count_nonzero(mask))} bins retained."
+    )
+    return data.apply_mask(mask)
+
+
 def _filter_empirical_psd(
     empirical: EmpiricalPSD,
     bands: Sequence[tuple[float, float]],
@@ -97,18 +121,6 @@ def _filter_empirical_psd(
         coherence=np.asarray(empirical.coherence)[mask],
         channels=empirical.channels,
     )
-
-
-def _apply_multivar_frequency_exclusion(
-    processed_data: Optional[Union[Periodogram, MultivarFFT]],
-    bands: Sequence[tuple[float, float]],
-) -> Optional[Union[Periodogram, MultivarFFT]]:
-    """Apply post-coarse excluded bands to multivariate processed data."""
-    if processed_data is None or not isinstance(processed_data, MultivarFFT):
-        return processed_data
-    if len(bands) == 0:
-        return processed_data
-    return processed_data.exclude_frequency_bands(bands)
 
 
 def _coarse_grain_processed_data(

@@ -83,7 +83,7 @@ def _joint_multivar_model(
 def _build_univar_kwargs(
     data: Periodogram,
     config: "PipelineConfig",
-) -> dict:
+) -> tuple[dict, LogPSplines]:
     spline = LogPSplines.from_periodogram(
         data,
         n_knots=config.n_knots,
@@ -92,7 +92,7 @@ def _build_univar_kwargs(
         parametric_model=config.parametric_model,
         knot_kwargs=config.knot_kwargs or {},
     )
-    return {
+    kwargs = {
         "log_pdgrm": jnp.log(jnp.asarray(data.power, dtype=jnp.float32)),
         "lnspline_basis": jnp.asarray(spline.basis, dtype=jnp.float32),
         "penalty_matrix": jnp.asarray(spline.penalty_matrix),
@@ -103,12 +103,13 @@ def _build_univar_kwargs(
         "alpha_delta": float(config.alpha_delta),
         "beta_delta": float(config.beta_delta),
     }
+    return kwargs, spline
 
 
 def _build_multivar_kwargs(
     data: MultivarFFT,
     config: "PipelineConfig",
-) -> dict:
+) -> tuple[dict, MultivariateLogPSplines]:
     spline = MultivariateLogPSplines.from_multivar_fft(
         data,
         n_knots=config.n_knots,
@@ -158,7 +159,7 @@ def _build_multivar_kwargs(
         else config.beta_phi
     )
 
-    return {
+    kwargs = {
         "u_re": u_re,
         "u_im": u_im,
         "n_channels": p,
@@ -181,6 +182,19 @@ def _build_multivar_kwargs(
         "design_weights": None,
         "tau": None,
     }
+    return kwargs, spline
+
+
+def build_model_kwargs_and_spline(
+    data: Union[Periodogram, MultivarFFT],
+    config: "PipelineConfig",
+    coarse: bool = False,
+) -> tuple[dict, LogPSplines | MultivariateLogPSplines]:
+    """Return model kwargs and the spline model used to build them."""
+    del coarse
+    if isinstance(data, Periodogram):
+        return _build_univar_kwargs(data, config)
+    return _build_multivar_kwargs(data, config)
 
 
 def build_model_kwargs(
@@ -201,6 +215,5 @@ def build_model_kwargs(
         Set to ``True`` when ``data`` is already-coarse-grained.  Currently
         this is informational only — the kwargs are built identically.
     """
-    if isinstance(data, Periodogram):
-        return _build_univar_kwargs(data, config)
-    return _build_multivar_kwargs(data, config)
+    kwargs, _ = build_model_kwargs_and_spline(data, config, coarse=coarse)
+    return kwargs

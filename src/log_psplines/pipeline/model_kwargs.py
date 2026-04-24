@@ -10,12 +10,11 @@ from typing import TYPE_CHECKING, Union
 
 import jax.numpy as jnp
 import numpy as np
-import numpyro
 
 from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
 from ..psplines import LogPSplines, MultivariateLogPSplines
-from ..samplers.multivar.multivar_blocked_nuts import _blocked_channel_model
+from .models import _blocked_channel_model
 
 if TYPE_CHECKING:
     from .config import PipelineConfig

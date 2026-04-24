@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from numpyro.infer.util import init_to_value
@@ -15,7 +16,125 @@ from ...diagnostics.vi_results import (
 from ...logger import logger
 from ..pspline_block import pspline_hyperparameter_initials
 from .common import suggest_guide_multivar, suggest_guide_univar
-from .mixin import VIInitialisationArtifacts
+from .core import VIInitialisationArtifacts, VIResult, fit_vi
+from .loo import compute_vi_loo_approximate_posterior
+
+
+def _run_vi_initialisation(
+    config,
+    rng_key: jax.Array,
+    *,
+    model: Callable[..., Any],
+    model_args: Tuple[Any, ...],
+    model_kwargs: Optional[Dict[str, Any]] = None,
+    guide: Optional[str],
+    init_values: Optional[Dict[str, Any]] = None,
+    postprocess: Callable[
+        [VIResult], Tuple[Dict[str, jnp.ndarray], Dict[str, Any]]
+    ],
+    log_likelihood_fn: Optional[Callable] = None,
+) -> VIInitialisationArtifacts:
+    """Run VI and return init strategy plus diagnostics."""
+    if not getattr(config, "init_from_vi", False):
+        return VIInitialisationArtifacts(None, rng_key, None)
+
+    key_vi, key_run = jax.random.split(rng_key)
+    progress_cfg = getattr(config, "vi_progress_bar", None)
+    if progress_cfg is None:
+        progress_bar = bool(getattr(config, "verbose", False))
+    else:
+        progress_bar = bool(progress_cfg)
+    model_kwargs = model_kwargs or {}
+
+    try:
+        vi_result = fit_vi(
+            model=model,
+            rng_key=key_vi,
+            vi_steps=config.vi_steps,
+            optimizer_lr=config.vi_lr,
+            model_args=model_args,
+            model_kwargs=model_kwargs,
+            guide=guide,
+            posterior_draws=config.vi_posterior_draws,
+            progress_bar=progress_bar,
+            init_values=init_values,
+        )
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        if getattr(config, "verbose", False):
+            logger.warning(
+                f"VI initialisation failed ({exc}) - using default init."
+            )
+        return VIInitialisationArtifacts(None, key_run, None)
+
+    init_vals, diagnostics = postprocess(vi_result)
+    init_strategy = init_to_value(values=init_vals)
+
+    diagnostics = diagnostics or {}
+    diagnostics.setdefault("guide", vi_result.guide_name)
+    diagnostics.setdefault("losses", jnp.asarray(vi_result.losses))
+
+    if vi_result.scales:
+        scales_np = {
+            name: np.asarray(jax.device_get(value))
+            for name, value in vi_result.scales.items()
+        }
+        summary = sorted(
+            (
+                (name, float(np.mean(np.abs(val))), float(np.max(np.abs(val))))
+                for name, val in scales_np.items()
+            ),
+            key=lambda x: x[2],
+            reverse=True,
+        )
+        diagnostics["guide_scale_summary"] = summary[:5]
+
+    losses_np = np.asarray(jax.device_get(vi_result.losses))
+    if losses_np.size >= 2:
+        window = min(200, losses_np.size)
+        start = losses_np[-window]
+        end = losses_np[-1]
+        slope = (end - start) / max(1, window - 1)
+        diagnostics["elbo_slope_recent"] = float(slope)
+        if getattr(config, "verbose", False) and abs(slope) > 1e-3:
+            logger.info(
+                f"VI ELBO trend over last {window} steps: Δ={end - start:.3f}, slope/step={slope:.4f}"
+            )
+
+    loo_diag = compute_vi_loo_approximate_posterior(
+        log_likelihood=(
+            None
+            if log_likelihood_fn is None
+            else log_likelihood_fn(vi_result.samples or {})
+        ),
+        model=model,
+        model_args=model_args,
+        model_kwargs=model_kwargs,
+        guide=vi_result.guide,
+        guide_params=vi_result.params,
+        vi_samples=vi_result.samples,
+        latent_samples=vi_result.latent_samples,
+    )
+    if loo_diag is not None:
+        diagnostics.update(loo_diag)
+        khat_max = float(loo_diag["pareto_k_max"])
+        good_k = float(loo_diag["good_k"])
+        if getattr(config, "verbose", False):
+            logger.info(
+                f"VI Pareto-k max = {khat_max:.3f} (threshold={good_k:.3f})"
+            )
+        if loo_diag["warning"]:
+            logger.warning(
+                "VI Pareto-k exceeds the ArviZ approximate-posterior threshold. "
+                "Consider revisiting the guide or VI settings."
+            )
+
+    return VIInitialisationArtifacts(
+        init_strategy,
+        key_run,
+        diagnostics,
+        means=vi_result.means,
+        posterior_draws=vi_result.samples,
+    )
 
 
 def _hyperparameter_defaults(
@@ -178,7 +297,10 @@ def compute_vi_artifacts_univar(
         diagnostics = _build_univar_vi_diagnostics(sampler, vi_result)
         return means, diagnostics
 
-    return sampler._run_vi_initialisation(
+    log_ll_fn = getattr(sampler, "_build_vi_log_likelihood_dataset", None)
+    return _run_vi_initialisation(
+        sampler.config,
+        sampler.rng_key,
         model=model,
         model_args=_univar_model_args(sampler),
         guide=guide_spec,
@@ -191,6 +313,7 @@ def compute_vi_artifacts_univar(
             beta_delta=sampler.config.beta_delta,
         ),
         postprocess=_postprocess,
+        log_likelihood_fn=log_ll_fn,
     )
 
 
@@ -223,7 +346,10 @@ def compute_vi_artifacts_multivar(
         diagnostics = _build_multivar_vi_diagnostics(sampler, vi_result)
         return init_values, diagnostics
 
-    return sampler._run_vi_initialisation(
+    log_ll_fn = getattr(sampler, "_build_vi_log_likelihood_dataset", None)
+    return _run_vi_initialisation(
+        sampler.config,
+        sampler.rng_key,
         model=model,
         model_args=(
             sampler.u_re,
@@ -247,4 +373,5 @@ def compute_vi_artifacts_multivar(
             beta_delta=sampler.config.beta_delta,
         ),
         postprocess=_postprocess,
+        log_likelihood_fn=log_ll_fn,
     )

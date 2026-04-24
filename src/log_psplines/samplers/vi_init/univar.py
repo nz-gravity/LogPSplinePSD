@@ -15,7 +15,7 @@ from .common import (
     _strip_coarse_vi_plot_arrays,
     _validate_positive_finite_psd,
 )
-from .mixin import VIInitialisationArtifacts
+from .core import VIInitialisationArtifacts
 from .plan import (
     VIWarmStartPlan,
     add_coarse_plot_diagnostics,

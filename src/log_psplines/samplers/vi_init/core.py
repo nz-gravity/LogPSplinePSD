@@ -22,6 +22,17 @@ GuideSpecifier = Any  # Accept strings or callables provided by the caller.
 
 
 @dataclass
+class VIInitialisationArtifacts:
+    """Summary of a VI run used for sampler initialisation."""
+
+    init_strategy: Optional[Callable[[Any], Any]]
+    rng_key: jax.Array
+    diagnostics: Optional[Dict[str, Any]]
+    means: Optional[Dict[str, jnp.ndarray]] = None
+    posterior_draws: Optional[Dict[str, jnp.ndarray]] = None
+
+
+@dataclass
 class VIResult:
     """Container for VI runs used to seed MCMC initial states."""
 

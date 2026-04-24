@@ -3,8 +3,6 @@ from typing import Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 from gwosc import datasets as gwosc_datasets
-from gwpy.frequencyseries import FrequencySeries
-from gwpy.timeseries import TimeSeries
 
 from ..logger import logger
 from .utils import PSD_FILE
@@ -49,6 +47,9 @@ class LVKData:
         fmin: float = 20,
         fmax: float = 512,
     ) -> "LVKData":
+        from gwpy.frequencyseries import FrequencySeries
+        from gwpy.timeseries import TimeSeries
+
         gps_end = gps_start + duration
         logger.info(f"Downloading {detector} data [{gps_start} - {gps_end}]")
         strain = TimeSeries.fetch_open_data(detector, gps_start, gps_end)
@@ -89,6 +90,8 @@ class LVKData:
     def plot_psd(
         self, fname: str | None = None
     ) -> Tuple[plt.Figure, plt.Axes]:
+        from gwpy.frequencyseries import FrequencySeries
+
         freq = FrequencySeries(self.psd, frequencies=self.freqs)
         fig, ax = plt.subplots()
         ax.loglog(freq, color="black")

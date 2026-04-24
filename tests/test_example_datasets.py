@@ -72,6 +72,7 @@ def test_lisa_data(outdir):
     )
 
 
+@pytest.mark.skip(reason="LVK data takes too long to download.")
 def test_lvk_data(outdir, monkeypatch):
     if LVKData is None:
         pytest.skip(

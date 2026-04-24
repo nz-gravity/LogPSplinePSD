@@ -1,4 +1,8 @@
-"""Variational inference helpers for sampler initialisation."""
+"""Pipeline-owned variational inference helpers.
+
+This module mirrors the minimal VI API used by pipeline stages without
+importing from :mod:`log_psplines.samplers`.
+"""
 
 from __future__ import annotations
 
@@ -19,17 +23,6 @@ from numpyro.infer.autoguide import (
 from numpyro.infer.util import init_to_value
 
 GuideSpecifier = Any  # Accept strings or callables provided by the caller.
-
-
-@dataclass
-class VIInitialisationArtifacts:
-    """Summary of a VI run used for sampler initialisation."""
-
-    init_strategy: Optional[Callable[[Any], Any]]
-    rng_key: jax.Array
-    diagnostics: Optional[Dict[str, Any]]
-    means: Optional[Dict[str, jnp.ndarray]] = None
-    posterior_draws: Optional[Dict[str, jnp.ndarray]] = None
 
 
 @dataclass
@@ -79,7 +72,7 @@ def resolve_guide(
     if isinstance(guide, str):
         key = guide.lower()
         # Only pass init_loc_fn when we have actual init values; passing None
-        # triggers a NumPyro ≥0.20.0 error in substitute().
+        # triggers a NumPyro >=0.20.0 error in substitute().
         loc_kwargs = (
             {"init_loc_fn": init_loc_fn} if init_loc_fn is not None else {}
         )
@@ -143,7 +136,7 @@ def _run_svi_with_early_stop(
     rng_key: jax.Array,
     vi_steps: int,
     model_args: tuple,
-    model_kwargs: dict,
+    model_kwargs: Dict[str, Any],
     *,
     progress_bar: bool = False,
     chunk_size: int = 100,
@@ -231,6 +224,8 @@ def fit_vi(
 
     if model_kwargs is None:
         model_kwargs = {}
+    else:
+        model_kwargs = dict(model_kwargs)
 
     if vi_steps <= 0:
         raise ValueError("vi_steps must be positive")
@@ -290,3 +285,6 @@ def fit_vi(
         latent_samples=latent_samples,
         samples=samples,
     )
+
+
+__all__ = ["GuideSpecifier", "VIResult", "resolve_guide", "fit_vi"]

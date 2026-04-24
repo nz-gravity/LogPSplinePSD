@@ -90,6 +90,30 @@ def _univar_log_likelihood(
     return -0.5 * (sum_log_det + quad)
 
 
+def log_likelihood(
+    weights: jnp.ndarray,
+    log_pdgrm: jnp.ndarray,
+    basis_matrix: jnp.ndarray,
+    log_parametric: jnp.ndarray,
+    Nh: int,
+) -> jnp.ndarray:
+    """Public helper for univariate Whittle log-likelihood."""
+    return _univar_log_likelihood(
+        weights,
+        log_pdgrm,
+        basis_matrix,
+        log_parametric,
+        Nh,
+    )
+
+
+__all__ = [
+    "bayesian_model",
+    "log_likelihood",
+    "_blocked_channel_model",
+]
+
+
 def bayesian_model(
     log_pdgrm: jnp.ndarray,
     lnspline_basis: jnp.ndarray,

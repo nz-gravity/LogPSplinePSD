@@ -3,37 +3,13 @@ from __future__ import annotations
 import warnings
 from abc import ABCMeta
 from dataclasses import dataclass, field, fields, is_dataclass
-from pathlib import Path
 from typing import Any, Literal, Optional, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
 
-from .._jaxtypes import Complex, Float
-from .._typecheck import runtime_typecheck
-from ..datatypes import Periodogram
-from ..datatypes.multivar import (
-    EmpiricalPSD,
-    MultivarFFT,
-    MultivariateTimeseries,
-)
-from ..datatypes.multivar_utils import _interp_frequency_indexed_array
-from ..datatypes.univar import Timeseries
-from ..logger import logger
 from ..pipeline.config import PipelineConfig
-from ..psplines import LogPSplines, MultivariateLogPSplines
-from ..samplers import (
-    MultivarBlockedNUTSConfig,
-    MultivarBlockedNUTSSampler,
-    NUTSConfig,
-    NUTSSampler,
-)
-from .coarse_grain import (
-    CoarseGrainConfig,
-    apply_coarse_grain_multivar_fft,
-    apply_coarse_graining_univar,
-    compute_binning_structure,
-)
+from .coarse_grain import CoarseGrainConfig
 
 SamplerName = Literal[
     "nuts",
@@ -103,68 +79,6 @@ class NUTSConfigOverride:
     design_from_vi_tau: float = 10.0
 
 
-def _pipeline_model(self: PipelineConfig) -> ModelConfig:
-    return ModelConfig(
-        n_knots=self.n_knots,
-        degree=self.degree,
-        diffMatrixOrder=self.diffMatrixOrder,
-        knot_kwargs=self.knot_kwargs,
-        parametric_model=self.parametric_model,
-        analytical_psd=self.analytical_psd,
-        true_psd=self.true_psd,
-        fmin=self.fmin,
-        fmax=self.fmax,
-        exclude_freq_bands=self.exclude_freq_bands,
-    )
-
-
-def _pipeline_diagnostics(self: PipelineConfig) -> DiagnosticsConfig:
-    return DiagnosticsConfig(
-        verbose=self.verbose,
-        outdir=self.outdir,
-        compute_lnz=self.compute_lnz,
-    )
-
-
-def _pipeline_vi(self: PipelineConfig) -> VIConfig:
-    return VIConfig(
-        only_vi=self.only_vi,
-        init_from_vi=self.init_from_vi,
-        vi_steps=self.vi_steps,
-        vi_lr=self.vi_lr,
-        vi_guide=self.vi_guide,
-        vi_posterior_draws=self.vi_posterior_draws,
-        vi_progress_bar=self.vi_progress_bar,
-        vi_psd_max_draws=self.vi_psd_max_draws,
-        coarse_grain_config_vi=self.coarse_grain_config_vi,
-        auto_coarse_vi=self.auto_coarse_vi,
-        auto_coarse_vi_target_nfreq=self.auto_coarse_vi_target_nfreq,
-        auto_coarse_vi_min_full_nfreq=self.auto_coarse_vi_min_full_nfreq,
-        use_coarse_vi_for_init=self.use_coarse_vi_for_init,
-        vi_coarse_only=self.vi_coarse_only,
-    )
-
-
-def _pipeline_nuts(self: PipelineConfig) -> NUTSConfigOverride:
-    return NUTSConfigOverride(
-        target_accept_prob=self.target_accept_prob,
-        target_accept_prob_by_channel=self.target_accept_prob_by_channel,
-        max_tree_depth=self.max_tree_depth,
-        max_tree_depth_by_channel=self.max_tree_depth_by_channel,
-        dense_mass=self.dense_mass,
-        alpha_phi_theta=self.alpha_phi_theta,
-        beta_phi_theta=self.beta_phi_theta,
-        design_from_vi=self.design_from_vi,
-        design_from_vi_tau=self.design_from_vi_tau,
-    )
-
-
-PipelineConfig.model = property(_pipeline_model)
-PipelineConfig.diagnostics = property(_pipeline_diagnostics)
-PipelineConfig.vi = property(_pipeline_vi)
-PipelineConfig.nuts = property(_pipeline_nuts)
-
-
 def _merge_legacy_config(
     pipeline_kwargs: dict[str, Any],
     key: str,
@@ -229,7 +143,7 @@ def _build_pipeline_config_from_legacy(
 class RunMCMCConfig(metaclass=ABCMeta):
     """Deprecated compatibility shim for the flat ``PipelineConfig``."""
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> PipelineConfig:
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:
         warnings.warn(
             "RunMCMCConfig is deprecated; use PipelineConfig instead.",
             DeprecationWarning,
@@ -239,15 +153,3 @@ class RunMCMCConfig(metaclass=ABCMeta):
 
 
 RunMCMCConfig.register(PipelineConfig)
-
-
-@dataclass(frozen=True)
-class SamplerFactoryConfig:
-    sampler_type: SamplerName
-    run_config: PipelineConfig
-    scaling_factor: float
-    true_psd: Optional[np.ndarray]
-    channel_stds: Optional[np.ndarray]
-    extra_empirical_psd: list[EmpiricalPSD] | None = None
-    extra_empirical_labels: list[str] | None = None
-    extra_empirical_styles: list[dict] | None = None

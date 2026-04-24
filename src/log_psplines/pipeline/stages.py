@@ -13,7 +13,7 @@ import xarray as xr
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
-from ..samplers.vi_init.core import fit_vi
+from .vi import fit_vi
 
 
 @dataclass

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
+from dataclasses import replace
 from math import ceil
 from typing import Optional, Union
 
@@ -12,22 +14,17 @@ from ..datatypes import Periodogram
 from ..datatypes.multivar import EmpiricalPSD, MultivarFFT
 from ..datatypes.multivar_utils import _interp_frequency_indexed_array
 from ..logger import logger
-from ..samplers.vi_init import VIWarmStartPlan
-from .checks import _run_preprocessing_checks, _save_preprocessing_plot
+from ..pipeline.config import PipelineConfig
+from ..pipeline.warm_start import VIWarmStartPlan
+from .checks import _save_preprocessing_plot
 from .coarse_grain import (
     CoarseGrainConfig,
     _closest_divisor,
     _smallest_divisor_geq,
 )
 from .configs import (
-    DiagnosticsConfig,
-    ModelConfig,
-    NUTSConfigOverride,
-    RunMCMCConfig,
-    SamplerFactoryConfig,
     SamplerName,
     TruePSDInput,
-    VIConfig,
 )
 from .data_prep import (
     _build_welch_overlay,
@@ -50,20 +47,20 @@ class PreprocessedMCMCInput:
     extra_empirical_psd: list[EmpiricalPSD] | None
     extra_empirical_labels: list[str] | None
     extra_empirical_styles: list[dict] | None
-    run_config: RunMCMCConfig
+    run_config: PipelineConfig
     vi_warm_start_plan: Optional[VIWarmStartPlan] = None
 
 
-def _normalize_run_config(config: RunMCMCConfig | None) -> RunMCMCConfig:
+def _normalize_run_config(config: PipelineConfig | None) -> PipelineConfig:
     if config is None:
-        return RunMCMCConfig()
-    if not isinstance(config, RunMCMCConfig):
-        raise TypeError("config must be a RunMCMCConfig instance or None.")
+        return PipelineConfig()
+    if not isinstance(config, PipelineConfig):
+        raise TypeError("config must be a PipelineConfig instance or None.")
     return config
 
 
-def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
-    """Route legacy kwargs into the nested run configuration objects."""
+def _build_config_from_kwargs(**kwargs) -> PipelineConfig:
+    """Build a flat ``PipelineConfig`` from keyword arguments."""
     model_fields = {
         "n_knots",
         "degree",
@@ -162,13 +159,20 @@ def _build_config_from_kwargs(**kwargs) -> RunMCMCConfig:
     extra_kwargs.update(sampler_dict)
     run_mcmc_dict["extra_kwargs"] = extra_kwargs
 
-    return RunMCMCConfig(
-        model=ModelConfig(**model_dict),
-        nuts=NUTSConfigOverride(**nuts_dict),
-        vi=VIConfig(**vi_dict),
-        diagnostics=DiagnosticsConfig(**diagnostics_dict),
+    flat_kwargs = {
         **run_mcmc_dict,
-    )
+        **model_dict,
+        **nuts_dict,
+        **vi_dict,
+        **diagnostics_dict,
+    }
+    valid_keys = {item.name for item in dataclass_fields(PipelineConfig)}
+    unknown = sorted(set(flat_kwargs) - valid_keys)
+    if unknown:
+        raise ValueError(
+            f"Unsupported keyword arguments for PipelineConfig: {unknown}"
+        )
+    return PipelineConfig(**flat_kwargs)
 
 
 def _unpack_true_psd(
@@ -325,15 +329,14 @@ def _apply_frequency_exclusion(
 
 def _derive_vi_coarse_grain_config(
     processed_data: Union[Periodogram, MultivarFFT],
-    run_config: RunMCMCConfig,
+    run_config: PipelineConfig,
 ):
-    vi_cfg = run_config.vi
     full_nfreq = _get_frequency_count(processed_data)
-    max_n_knots = _max_config_n_knots(run_config.model.n_knots)
-    k_basis = int(max_n_knots + run_config.model.degree - 1)
+    max_n_knots = _max_config_n_knots(run_config.n_knots)
+    k_basis = int(max_n_knots + run_config.degree - 1)
 
     explicit_cfg = _normalize_coarse_grain_config(
-        vi_cfg.coarse_grain_config_vi
+        run_config.coarse_grain_config_vi
     )
     if explicit_cfg.enabled:
         metadata: dict[str, object] = {
@@ -376,16 +379,16 @@ def _derive_vi_coarse_grain_config(
 
         return explicit_cfg, metadata
 
-    if not vi_cfg.auto_coarse_vi:
+    if not run_config.auto_coarse_vi:
         return None, None
 
-    min_full_nfreq = int(vi_cfg.auto_coarse_vi_min_full_nfreq)
+    min_full_nfreq = int(run_config.auto_coarse_vi_min_full_nfreq)
     min_required_nfreq = max(1, min_full_nfreq, 20 * k_basis)
     if full_nfreq < min_required_nfreq:
         return None, None
 
     target_nfreq = max(
-        1, min(vi_cfg.auto_coarse_vi_target_nfreq, full_nfreq - 1)
+        1, min(run_config.auto_coarse_vi_target_nfreq, full_nfreq - 1)
     )
     min_nh = max(2, int(ceil(full_nfreq / float(target_nfreq))))
     nh = _smallest_divisor_geq(full_nfreq, min_nh)
@@ -435,14 +438,17 @@ def _build_coarse_vi_warm_start_plan_from_preprocessed(
         coarse_scaled_true_psd,
         coarse_processed_data,
     )
-    model_cfg = preproc_input.run_config.model
     parametric_model_arr: np.ndarray | None = None
-    if model_cfg.parametric_model is not None:
-        parametric_model_arr = np.asarray(model_cfg.parametric_model)
+    if preproc_input.run_config.parametric_model is not None:
+        parametric_model_arr = np.asarray(
+            preproc_input.run_config.parametric_model
+        )
 
     analytical_psd_arr: np.ndarray | None = None
-    if model_cfg.analytical_psd is not None:
-        analytical_psd_arr = np.asarray(model_cfg.analytical_psd)
+    if preproc_input.run_config.analytical_psd is not None:
+        analytical_psd_arr = np.asarray(
+            preproc_input.run_config.analytical_psd
+        )
 
     return VIWarmStartPlan(
         strategy="coarse_vi",
@@ -454,10 +460,10 @@ def _build_coarse_vi_warm_start_plan_from_preprocessed(
             "coarse_vi_success": 0,
             "coarse_vi_nfreq": _get_frequency_count(coarse_processed_data),
         },
-        model_n_knots=model_cfg.n_knots,
-        model_degree=int(model_cfg.degree),
-        model_diff_matrix_order=int(model_cfg.diffMatrixOrder),
-        model_knot_kwargs=dict(model_cfg.knot_kwargs or {}),
+        model_n_knots=preproc_input.run_config.n_knots,
+        model_degree=int(preproc_input.run_config.degree),
+        model_diff_matrix_order=int(preproc_input.run_config.diffMatrixOrder),
+        model_knot_kwargs=dict(preproc_input.run_config.knot_kwargs or {}),
         model_parametric_model=parametric_model_arr,
         model_analytical_psd=analytical_psd_arr,
     )
@@ -465,7 +471,7 @@ def _build_coarse_vi_warm_start_plan_from_preprocessed(
 
 def _preprocess_with_run_config(
     data,
-    run_config: RunMCMCConfig,
+    run_config: PipelineConfig,
     *,
     include_overlays: bool,
 ) -> PreprocessedMCMCInput:
@@ -475,7 +481,7 @@ def _preprocess_with_run_config(
         run_config,
     )
     scaled_true_psd = _align_true_psd_to_freq(
-        run_config.model.true_psd,
+        run_config.true_psd,
         fft_data,
     )
 
@@ -491,7 +497,7 @@ def _preprocess_with_run_config(
     # Frequency-band exclusion is applied after coarse graining so CG divisibility
     # constraints are unaffected.
     exclude_bands = _normalize_excluded_frequency_bands(
-        run_config.model.exclude_freq_bands
+        run_config.exclude_freq_bands
     )
     fft_data = _apply_frequency_exclusion(
         fft_data,
@@ -542,8 +548,7 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
     )
 
     vi_warm_start_plan = None
-    vi_cfg = run_config.vi
-    if vi_cfg.init_from_vi and vi_cfg.use_coarse_vi_for_init:
+    if run_config.init_from_vi and run_config.use_coarse_vi_for_init:
         vi_cg_config, metadata = _derive_vi_coarse_grain_config(
             preproc_input.processed_data,
             run_config,
@@ -556,7 +561,7 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
                     metadata=metadata,
                 )
             )
-            if run_config.diagnostics.verbose:
+            if run_config.verbose:
                 coarse_nfreq = vi_warm_start_plan.metadata["coarse_vi_nfreq"]
                 logger.info(
                     "Using a separate coarse VI grid for warm start: "
@@ -566,216 +571,3 @@ def _preprocess_data(data, config=None, **kwargs) -> PreprocessedMCMCInput:
                 )
 
     return replace(preproc_input, vi_warm_start_plan=vi_warm_start_plan)
-
-
-# ---------------------------------------------------------------------------
-# Sampler factory helpers (previously in sampler_factory.py)
-# ---------------------------------------------------------------------------
-
-from dataclasses import fields, is_dataclass  # noqa: E402
-from typing import Any  # noqa: E402
-
-from ..psplines import LogPSplines, MultivariateLogPSplines  # noqa: E402
-from ..samplers import (  # noqa: E402
-    MultivarBlockedNUTSConfig,
-    MultivarBlockedNUTSSampler,
-    NUTSConfig,
-    NUTSSampler,
-)
-
-
-def _resolve_compute_lnz(
-    sampler_type: SamplerName,
-    compute_lnz: bool | None,
-) -> bool:
-    if compute_lnz is not None:
-        return compute_lnz
-    return sampler_type == "nuts"
-
-
-def _build_model_from_data(
-    processed_data: Union[Periodogram, MultivarFFT],
-    model_config,
-):
-    if isinstance(processed_data, Periodogram):
-        return LogPSplines.from_periodogram(
-            processed_data,
-            n_knots=model_config.n_knots,
-            degree=model_config.degree,
-            diffMatrixOrder=model_config.diffMatrixOrder,
-            parametric_model=model_config.parametric_model,
-            knot_kwargs=model_config.knot_kwargs,
-        )
-    if isinstance(processed_data, MultivarFFT):
-        return MultivariateLogPSplines.from_multivar_fft(
-            processed_data,
-            n_knots=model_config.n_knots,
-            degree=model_config.degree,
-            diffMatrixOrder=model_config.diffMatrixOrder,
-            knot_kwargs=model_config.knot_kwargs,
-            analytical_psd=model_config.analytical_psd,
-        )
-    raise ValueError(
-        f"Unsupported processed data type: {type(processed_data)}."
-    )
-
-
-def _build_sampler_inputs(
-    processed_data: Union[Periodogram, MultivarFFT],
-    config: RunMCMCConfig,
-    sampler_type: SamplerName,
-    scaled_true_psd: np.ndarray | None,
-    extra_empirical_psd,
-    extra_empirical_labels,
-    extra_empirical_styles,
-) -> SamplerFactoryConfig:
-    scaling_factor = (
-        processed_data.scaling_factor
-        if hasattr(processed_data, "scaling_factor")
-        else 1.0
-    )
-    channel_stds = (
-        processed_data.channel_stds
-        if hasattr(processed_data, "channel_stds")
-        else None
-    )
-    return SamplerFactoryConfig(
-        sampler_type=sampler_type,
-        run_config=config,
-        scaling_factor=float(scaling_factor or 1.0),
-        true_psd=scaled_true_psd,
-        channel_stds=channel_stds,
-        extra_empirical_psd=extra_empirical_psd,
-        extra_empirical_labels=extra_empirical_labels,
-        extra_empirical_styles=extra_empirical_styles,
-    )
-
-
-def _build_common_sampler_kwargs(
-    config: SamplerFactoryConfig,
-) -> dict[str, Any]:
-    run = config.run_config
-    compute_lnz = _resolve_compute_lnz(
-        config.sampler_type,
-        run.diagnostics.compute_lnz,
-    )
-    return {
-        "alpha_phi": run.alpha_phi,
-        "beta_phi": run.beta_phi,
-        "alpha_delta": run.alpha_delta,
-        "beta_delta": run.beta_delta,
-        "num_chains": run.num_chains,
-        "chain_method": run.chain_method,
-        "rng_key": run.rng_key,
-        "verbose": run.diagnostics.verbose,
-        "outdir": run.diagnostics.outdir,
-        "compute_psis": True,
-        "compute_lnz": compute_lnz,
-        "scaling_factor": config.scaling_factor,
-        "channel_stds": config.channel_stds,
-        "true_psd": config.true_psd,
-        "vi_psd_max_draws": run.vi.vi_psd_max_draws,
-        "only_vi": run.vi.only_vi,
-        "extra_empirical_psd": config.extra_empirical_psd,
-        "extra_empirical_labels": config.extra_empirical_labels,
-        "extra_empirical_styles": config.extra_empirical_styles,
-    }
-
-
-def _validate_extra_kwargs(
-    config_cls: type,
-    extra_kwargs: dict[str, Any],
-) -> dict[str, Any]:
-    if not extra_kwargs:
-        return {}
-    if not is_dataclass(config_cls):
-        return dict(extra_kwargs)
-    allowed = {item.name for item in fields(config_cls)}
-    unknown = sorted(set(extra_kwargs) - allowed)
-    if unknown:
-        raise ValueError(
-            f"Unsupported keyword arguments for {config_cls.__name__}: {unknown}"
-        )
-    return dict(extra_kwargs)
-
-
-def _build_univar_sampler(
-    data: Periodogram,
-    model,
-    sampler_type: SamplerName,
-    config: SamplerFactoryConfig,
-    common_kwargs: dict[str, Any],
-):
-    run = config.run_config
-    if sampler_type != "nuts":
-        raise ValueError(
-            f"Unknown sampler_type '{sampler_type}' for univariate data. Choose 'nuts'."
-        )
-    nuts_extra_kwargs = _validate_extra_kwargs(NUTSConfig, run.extra_kwargs)
-    nuts_config_kwargs = {
-        **common_kwargs,
-        "target_accept_prob": run.nuts.target_accept_prob,
-        "max_tree_depth": run.nuts.max_tree_depth,
-        "dense_mass": run.nuts.dense_mass,
-        "init_from_vi": run.vi.init_from_vi,
-        "vi_steps": run.vi.vi_steps,
-        "vi_lr": run.vi.vi_lr,
-        "vi_guide": run.vi.vi_guide,
-        "vi_posterior_draws": run.vi.vi_posterior_draws,
-        "vi_progress_bar": run.vi.vi_progress_bar,
-        **nuts_extra_kwargs,
-    }
-    nuts_config = NUTSConfig(**nuts_config_kwargs)
-    return NUTSSampler(data, model, nuts_config)
-
-
-def _build_multivar_blocked_sampler(
-    data: MultivarFFT,
-    model,
-    config: SamplerFactoryConfig,
-    common_kwargs: dict[str, Any],
-):
-    run = config.run_config
-    blocked_extra_kwargs = _validate_extra_kwargs(
-        MultivarBlockedNUTSConfig, run.extra_kwargs
-    )
-    blocked_config_kwargs = {
-        **common_kwargs,
-        "target_accept_prob": run.nuts.target_accept_prob,
-        "target_accept_prob_by_channel": run.nuts.target_accept_prob_by_channel,
-        "max_tree_depth": run.nuts.max_tree_depth,
-        "max_tree_depth_by_channel": run.nuts.max_tree_depth_by_channel,
-        "dense_mass": run.nuts.dense_mass,
-        "init_from_vi": run.vi.init_from_vi,
-        "vi_steps": run.vi.vi_steps,
-        "vi_lr": run.vi.vi_lr,
-        "vi_guide": run.vi.vi_guide,
-        "vi_posterior_draws": run.vi.vi_posterior_draws,
-        "vi_progress_bar": run.vi.vi_progress_bar,
-        "alpha_phi_theta": run.nuts.alpha_phi_theta,
-        "beta_phi_theta": run.nuts.beta_phi_theta,
-        "design_from_vi": run.nuts.design_from_vi,
-        "design_from_vi_tau": run.nuts.design_from_vi_tau,
-        **blocked_extra_kwargs,
-    }
-    blocked_config = MultivarBlockedNUTSConfig(**blocked_config_kwargs)
-    return MultivarBlockedNUTSSampler(data, model, blocked_config)
-
-
-def _create_sampler(
-    data: Union[Periodogram, MultivarFFT],
-    model,
-    config: SamplerFactoryConfig,
-):
-    common_kwargs = _build_common_sampler_kwargs(config)
-    if isinstance(data, Periodogram):
-        return _build_univar_sampler(
-            data, model, "nuts", config, common_kwargs
-        )
-    if isinstance(data, MultivarFFT):
-        return _build_multivar_blocked_sampler(
-            data, model, config, common_kwargs
-        )
-    raise ValueError(
-        f"Unsupported data type: {type(data)}. Expected Periodogram or MultivarFFT."
-    )

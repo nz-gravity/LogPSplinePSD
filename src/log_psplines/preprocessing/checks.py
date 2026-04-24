@@ -8,13 +8,13 @@ import numpy as np
 from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
 from ..logger import logger
-from .configs import RunMCMCConfig
+from ..pipeline.config import PipelineConfig
 from .data_prep import _normalize_excluded_frequency_bands
 
 
 def _run_preprocessing_checks(
     processed_data: Optional[Union[Periodogram, MultivarFFT]],
-    config: RunMCMCConfig,
+    config: PipelineConfig,
 ) -> None:
     """Run eigenvalue separation warnings (lightweight, no plotting)."""
     if not isinstance(processed_data, MultivarFFT):
@@ -43,7 +43,7 @@ def _run_preprocessing_checks(
         if p < 2:
             return
         summaries = None
-        if config.diagnostics.verbose:
+        if config.verbose:
             summaries = diag.ratio_summary(warn_threshold=warn_threshold)
             if diag.lambda1_cutoff is not None:
                 kept = int(np.count_nonzero(diag.mask))
@@ -75,7 +75,7 @@ def _run_preprocessing_checks(
                         f"Worst-separated frequencies for {key}: {joined}"
                     )
                 continue
-            if config.diagnostics.verbose and summaries is not None:
+            if config.verbose and summaries is not None:
                 logger.info(f"Eigenvalue separation {summaries[key]}")
 
     except Exception as exc:
@@ -84,7 +84,7 @@ def _run_preprocessing_checks(
 
 def _save_preprocessing_plot(
     processed_data: Optional[Union[Periodogram, MultivarFFT]],
-    config: RunMCMCConfig,
+    config: PipelineConfig,
     spline_model: object | None = None,
 ) -> None:
     """Save the preprocessing diagnostic plot, optionally with knot locations.
@@ -110,7 +110,7 @@ def _save_preprocessing_plot(
             save_eigenvalue_separation_plot,
         )
 
-        if config.diagnostics.outdir is None:
+        if config.outdir is None:
             logger.warning("Skipping preprocessing plot save: outdir is None.")
             return
 
@@ -125,7 +125,7 @@ def _save_preprocessing_plot(
             return
 
         out_path = (
-            Path(config.diagnostics.outdir)
+            Path(config.outdir)
             / "diagnostics"
             / "preprocessing_eigenvalue_ratios.png"
         )
@@ -164,7 +164,7 @@ def _save_preprocessing_plot(
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
         excluded_bands = _normalize_excluded_frequency_bands(
-            config.model.exclude_freq_bands
+            config.exclude_freq_bands
         )
 
         # Extract knot positions from the built model.
@@ -186,7 +186,7 @@ def _save_preprocessing_plot(
             cholesky_matrix=np.asarray(processed_data.raw_psd),
             component_knots=comp_knots,
         )
-        if config.diagnostics.verbose:
+        if config.verbose:
             logger.info(f"Saved preprocessing eigenvalue plot to {out_path}")
     except Exception as exc:
         logger.warning(f"Preprocessing plot save failed: {exc}")

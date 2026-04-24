@@ -10,10 +10,10 @@ from scipy.interpolate import BSpline
 
 from log_psplines.datatypes import MultivarFFT, Periodogram, Timeseries
 from log_psplines.example_datasets.ar_data import ARData
+from log_psplines.pipeline.models import log_likelihood
 from log_psplines.plotting import plot_pdgrm
 from log_psplines.psplines import LogPSplines
 from log_psplines.psplines.initialisation import init_weights
-from log_psplines.samplers.univar.univar_base import log_likelihood
 
 
 @pytest.fixture

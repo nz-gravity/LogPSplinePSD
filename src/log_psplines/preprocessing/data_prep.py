@@ -12,13 +12,14 @@ from ..datatypes.multivar import (
 )
 from ..datatypes.univar import Timeseries
 from ..logger import logger
+from ..pipeline.config import PipelineConfig
 from .coarse_grain import (
     CoarseGrainConfig,
     apply_coarse_grain_multivar_fft,
     apply_coarse_graining_univar,
     compute_binning_structure,
 )
-from .configs import RunMCMCConfig, SamplerName
+from .configs import SamplerName
 
 
 def _normalize_coarse_grain_config(
@@ -185,7 +186,7 @@ def _coarse_grain_processed_data(
 
 def _prepare_processed_data(
     data: Union[Timeseries, MultivariateTimeseries],
-    config: RunMCMCConfig,
+    config: PipelineConfig,
 ) -> tuple[
     Union[Periodogram, MultivarFFT],
     Optional[MultivariateTimeseries],
@@ -200,8 +201,8 @@ def _prepare_processed_data(
         # Univariate: use NUTS
         sampler: SamplerName = "nuts"
         processed = standardized_ts.to_periodogram(
-            fmin=config.model.fmin,
-            fmax=config.model.fmax,
+            fmin=config.fmin,
+            fmax=config.fmax,
         )
     else:
         # Multivariate: prefer multivar_blocked_nuts, fall back to nuts
@@ -209,14 +210,14 @@ def _prepare_processed_data(
         raw_multivar_ts = data
         processed = standardized_ts.to_wishart_stats(
             Nb=config.Nb,
-            fmin=config.model.fmin,
-            fmax=config.model.fmax,
+            fmin=config.fmin,
+            fmax=config.fmax,
             window=config.wishart_window,
             detrend=config.wishart_detrend,
             wishart_floor_fraction=config.wishart_floor_fraction,
         )
 
-    if config.diagnostics.verbose:
+    if config.verbose:
         logger.info(
             f"Standardized data: original scale ~{processed.scaling_factor:.2e}"
         )
@@ -230,7 +231,7 @@ def _prepare_processed_data(
 def _build_welch_overlay(
     raw_multivar_ts: Optional[MultivariateTimeseries],
     processed_data: Optional[Union[Periodogram, MultivarFFT]],
-    config: RunMCMCConfig,
+    config: PipelineConfig,
 ) -> tuple[
     list[EmpiricalPSD] | None,
     list[str] | None,
@@ -256,7 +257,7 @@ def _build_welch_overlay(
             & (welch_emp.freq <= f_hi)
         )
         if not np.any(keep):
-            if config.diagnostics.verbose:
+            if config.verbose:
                 logger.warning(
                     "Welch overlay requested but produced no in-range positive-frequency bins; skipping."
                 )
@@ -270,9 +271,7 @@ def _build_welch_overlay(
         )
         overlay = _filter_empirical_psd(
             overlay,
-            _normalize_excluded_frequency_bands(
-                config.model.exclude_freq_bands
-            ),
+            _normalize_excluded_frequency_bands(config.exclude_freq_bands),
         )
         return (
             [overlay],
@@ -288,6 +287,6 @@ def _build_welch_overlay(
             ],
         )
     except Exception as exc:
-        if config.diagnostics.verbose:
+        if config.verbose:
             logger.warning(f"Could not compute Welch overlay: {exc}")
         return None, None, None

@@ -205,7 +205,7 @@ def print_table(summary: pd.DataFrame) -> None:
         n_s = int(row.get("n_seeds", 0))
 
         line = (
-            f"  {str(row.get('mode','?')):<12} "
+            f"  {str(row.get('mode', '?')):<12} "
             f"{int(row.get('N', 0)):>6} "
             f"{int(row.get('Nb', 0)):>4} "
             f"{lb:>6} "
@@ -290,10 +290,10 @@ def main():
         ).iterrows():
             print(
                 f"    seed={int(row['seed']):3d}  "
-                f"mode={str(row.get('mode','?')):<12}  "
+                f"mode={str(row.get('mode', '?')):<12}  "
                 f"Nb={int(row.get('Nb', 0)):>3d}  "
                 f"Lb={int(row.get('Lb', 0)):>5d}  "
-                f"Nh={str(row.get('Nh','?')):>5}  "
+                f"Nh={str(row.get('Nh', '?')):>5}  "
                 f"N_ell={int(row.get('N_ell', 0)):>5d}  "
                 f"Nc={int(row.get('Nc', 0)):>5d}  "
                 f"coverage={float(row['coverage']):.4f}"

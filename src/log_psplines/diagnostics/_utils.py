@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional, Tuple
+from collections.abc import Iterable
+from typing import Any
 
 import numpy as np
 from scipy.integrate import simpson
@@ -13,7 +14,7 @@ def interior_frequency_slice(n_freq: int) -> slice:
     return slice(1, -1) if n_freq > 3 else slice(None)
 
 
-def as_scalar(value: Any) -> Optional[float]:
+def as_scalar(value: Any) -> float | None:
     """Best-effort conversion to a Python float."""
     if value is None:
         return None
@@ -31,7 +32,7 @@ def as_scalar(value: Any) -> Optional[float]:
     return None
 
 
-def khat_status(khat_max: Optional[float]) -> Tuple[Optional[float], str]:
+def khat_status(khat_max: float | None) -> tuple[float | None, str]:
     """Map PSIS k-hat into a numeric status and human-readable label."""
     if khat_max is None or not np.isfinite(khat_max):
         return None, "unknown"
@@ -128,39 +129,29 @@ def compute_ci_coverage_univar(
     return float(coverage)
 
 
+def _extract_ci_bounds(
+    arr: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return (lower, upper) CI bounds from samples or a (3,F,p,p) stack."""
+    if arr.ndim == 4 and arr.shape[0] == 3:
+        return _complex_to_real(arr[0]), _complex_to_real(arr[-1])
+    real_arr = (
+        _complex_to_real(arr)
+        if np.iscomplexobj(arr)
+        else np.asarray(arr, dtype=np.float64)
+    )
+    return np.percentile(real_arr, 5.0, axis=0), np.percentile(
+        real_arr, 95.0, axis=0
+    )
+
+
 def compute_ci_coverage_multivar(
     psd_matrix_samples: np.ndarray, true_psd_real: np.ndarray
 ) -> float:
     """Compute 90% credible interval coverage for multivariate PSD matrices."""
-    true_psd_arr = np.asarray(true_psd_real)
-    true_psd = np.zeros(true_psd_arr.shape, dtype=np.float64)
-    for i in range(true_psd_arr.shape[0]):
-        true_psd[i] = _complex_to_real(true_psd_arr[i])
-
-    arr = np.asarray(psd_matrix_samples)
-    if arr.ndim == 4 and arr.shape[0] == 3:
-        posterior_lower_raw = arr[0]
-        posterior_upper_raw = arr[-1]
-        posterior_lower = np.zeros(posterior_lower_raw.shape, dtype=np.float64)
-        posterior_upper = np.zeros(posterior_upper_raw.shape, dtype=np.float64)
-        for i in range(posterior_lower_raw.shape[0]):
-            posterior_lower[i] = _complex_to_real(posterior_lower_raw[i])
-            posterior_upper[i] = _complex_to_real(posterior_upper_raw[i])
-    else:
-        if np.iscomplexobj(arr):
-            psd_matrix_real = np.zeros_like(arr, dtype=np.float64)
-            for i in range(arr.shape[0]):
-                for j in range(arr.shape[1]):
-                    psd_matrix_real[i, j] = _complex_to_real(arr[i, j])
-        else:
-            psd_matrix_real = np.asarray(arr, dtype=np.float64)
-        posterior_lower = np.percentile(psd_matrix_real, 5.0, axis=0)
-        posterior_upper = np.percentile(psd_matrix_real, 95.0, axis=0)
-
-    coverage = np.mean(
-        (true_psd >= posterior_lower) & (true_psd <= posterior_upper)
-    )
-    return float(coverage)
+    true_psd = _complex_to_real(np.asarray(true_psd_real))
+    lower, upper = _extract_ci_bounds(np.asarray(psd_matrix_samples))
+    return float(np.mean((true_psd >= lower) & (true_psd <= upper)))
 
 
 def compute_ci_coverage_multivar_detailed(
@@ -172,8 +163,8 @@ def compute_ci_coverage_multivar_detailed(
     Returns a dict with keys:
     - ``overall``       : same value as :func:`compute_ci_coverage_multivar`
     - ``diag``          : coverage over diagonal (auto-spectral) real parts
-    - ``offdiag_re``    : coverage over upper-triangle real parts (cross-spectral Re)
-    - ``offdiag_im``    : coverage over lower-triangle imaginary parts (cross-spectral Im)
+    - ``offdiag_re``    : upper-triangle real coverage (cross-spectral Re)
+    - ``offdiag_im``    : lower-triangle imaginary coverage (cross-spectral Im)
     - ``n_diag``        : number of (freq, element) pairs in diagonal
     - ``n_offdiag_re``  : number of pairs in real off-diagonal
     - ``n_offdiag_im``  : number of pairs in imaginary off-diagonal
@@ -186,30 +177,8 @@ def compute_ci_coverage_multivar_detailed(
     true_psd_real : ndarray, shape (F, p, p)
         True PSD matrix (complex or real-encoded via :func:`_complex_to_real`).
     """
-    true_psd_arr = np.asarray(true_psd_real)
-    true_enc = np.zeros(true_psd_arr.shape, dtype=np.float64)
-    for i in range(true_psd_arr.shape[0]):
-        true_enc[i] = _complex_to_real(true_psd_arr[i])
-
-    arr = np.asarray(psd_matrix_samples)
-    if arr.ndim == 4 and arr.shape[0] == 3:
-        lower_raw = arr[0]
-        upper_raw = arr[-1]
-        lower = np.zeros(lower_raw.shape, dtype=np.float64)
-        upper = np.zeros(upper_raw.shape, dtype=np.float64)
-        for i in range(lower_raw.shape[0]):
-            lower[i] = _complex_to_real(lower_raw[i])
-            upper[i] = _complex_to_real(upper_raw[i])
-    else:
-        if np.iscomplexobj(arr):
-            real_arr = np.zeros_like(arr, dtype=np.float64)
-            for i in range(arr.shape[0]):
-                for j in range(arr.shape[1]):
-                    real_arr[i, j] = _complex_to_real(arr[i, j])
-        else:
-            real_arr = np.asarray(arr, dtype=np.float64)
-        lower = np.percentile(real_arr, 5.0, axis=0)
-        upper = np.percentile(real_arr, 95.0, axis=0)
+    true_enc = _complex_to_real(np.asarray(true_psd_real))
+    lower, upper = _extract_ci_bounds(np.asarray(psd_matrix_samples))
 
     # covered[f, i, j] = True if true_enc[f, i, j] is inside [lower, upper]
     covered = (true_enc >= lower) & (true_enc <= upper)  # (F, p, p)
@@ -248,10 +217,10 @@ def find_posterior_inflation_factor(
     tol: float = 1e-3,
     max_iter: int = 60,
 ) -> dict[str, float]:
-    """Find the posterior inflation factor needed to achieve ``target_coverage``.
+    """Find the inflation factor needed to achieve ``target_coverage``.
 
     Inflates (or deflates) each posterior sample around the posterior median by
-    a scalar factor ``c``, then recomputes coverage.  Binary-searches for the ``c``
+    a scalar factor ``c``, then recomputes coverage.  Binary-searches for c
     such that coverage ≈ ``target_coverage``.
 
     Useful for quantifying how miscalibrated the Whittle posterior is: a value
@@ -281,7 +250,8 @@ def find_posterior_inflation_factor(
     arr = np.asarray(psd_matrix_samples)
     if not (arr.ndim == 4 and arr.shape[0] == 3):
         raise ValueError(
-            "psd_matrix_samples must have shape (3, F, p, p) with [q05, q50, q95]."
+            "psd_matrix_samples must have shape (3, F, p, p)"
+            " with [q05, q50, q95]."
         )
 
     q05_raw, q50_raw, q95_raw = arr[0], arr[1], arr[2]
@@ -297,7 +267,6 @@ def find_posterior_inflation_factor(
 
     # Check that c=1 gives current coverage
     c_low, c_high = 0.0, 20.0
-    cov_low = _coverage_at_c(c_low)  # 0 at c=0
     cov_high = _coverage_at_c(c_high)  # should be ~1
 
     if cov_high < target_coverage:
@@ -308,7 +277,8 @@ def find_posterior_inflation_factor(
         }
 
     n_iter = 0
-    for n_iter in range(1, max_iter + 1):
+    for _ in range(1, max_iter + 1):
+        n_iter += 1
         c_mid = 0.5 * (c_low + c_high)
         cov_mid = _coverage_at_c(c_mid)
         if abs(cov_mid - target_coverage) < tol:
@@ -381,7 +351,7 @@ def compute_coherence_coverage(
 
 
 def _complex_to_real(mat: np.ndarray) -> np.ndarray:
-    """Convert complex matrices to a real-valued representation for CI checks."""
+    """Convert complex matrices to real representation for CI checks."""
     arr = np.asarray(mat)
     if not np.iscomplexobj(arr):
         return arr

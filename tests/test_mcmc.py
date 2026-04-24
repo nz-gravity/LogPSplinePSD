@@ -1,14 +1,10 @@
 """Integration tests for run_mcmc (pipeline path)."""
 
-import csv
 import os
-import shutil
-from typing import List, cast
+from typing import cast
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pytest
 import xarray as xr
 
 from log_psplines.arviz_utils import (
@@ -26,7 +22,7 @@ from log_psplines.preprocessing.coarse_grain import (
 
 
 def test_mcmc_univar(outdir: str):
-    print(f"++++ Running univariate MCMC test ++++")
+    print("_____________univariate MCMC_____________")
     outdir_str = str(outdir)
     idata_orig, ar_data, psd_scale = _run_univar_mcmc(outdir_str)
 
@@ -74,15 +70,13 @@ def test_mcmc_univar(outdir: str):
         ],
         outdir_str,
     )
-    print(f"++++ univariate MCMC test COMPLETE ++++")
 
 
 def test_mcmc_multivar(outdir):
-    print(f"++++ Running multivariate MCMC test ++++")
     outdir_str = str(outdir)
     idata_orig, expected_freq = _run_multivar_mcmc(outdir_str)
     ### NOW WE CHECK THE OUTPUTS ###
-
+    print("_____________multivariate MCMC_____________")
     _check_for_files(
         [
             "inference_data.nc",
@@ -138,8 +132,6 @@ def test_mcmc_multivar(outdir):
     ]
     _check_for_files(files_to_check, outdir_str)
 
-    print(f"++++ multivariate MCMC test COMPLETE ++++")
-
 
 def _check_stats_are_finite(idata, outdir) -> None:
     vi_stats = idata["vi_sample_stats"].dataset
@@ -147,7 +139,7 @@ def _check_stats_are_finite(idata, outdir) -> None:
     vi_stats_pd = pd.read_csv(f"{outdir}/diagnostics/vi_summary.csv")
     nuts_stats_pd = pd.read_csv(f"{outdir}/diagnostics/nuts_summary.csv")
 
-    def check_finite(d: dict, key: List[str]) -> None:
+    def check_finite(d: dict, key: list[str]) -> None:
         for k in key:
             assert k in d, f"Key '{k}' not found in {d}."
 

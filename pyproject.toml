@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "LogPSplinePSD"
-dynamic = ["version"] # scm versioning (using tags)
+dynamic = ["version"]
 requires-python = ">=3.12"
 description = "LogPsplines in JAX"
 readme = "README.rst"
@@ -20,7 +20,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
     "jax",
@@ -29,6 +29,7 @@ dependencies = [
     "matplotlib",
     "tqdm",
     "numpyro",
+    "h5py",
     "arviz-base[zarr,netcdf4]",
     "arviz-stats",
     "arviz-plots[matplotlib]",
@@ -42,84 +43,53 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gw = [
-    "gwpy>=1.3.0",
-    "gwosc",
-    "pycbc",
-]
 typecheck = [
     "jaxtyping>=0.2.36",
     "beartype>=0.18.5",
 ]
 dev = [
+    "LogPSplinePSD[typecheck]",
     "pytest",
     "pytest-cov",
     "pytest-memray",
     "pytest-durations",
-    "flake8>=5.0.4",
-    "black>=22.12.0",
-    "black[jupyter]>=22.12.0",
-    "isort",
+    "ruff",
     "mypy",
     "jupyter-book<2.0",
     "pre-commit",
-    "jaxtyping>=0.2.36",
-    "beartype>=0.18.5",
-    "gwpy>=1.3.0",
-    "GitPython"
+    "GitPython",
+    "vulture"
 ]
+
+[project.urls]
+"Homepage" = "https://starccato.github.io/log_psplines/"
+"Bug Reports" = "https://github.com/starccato/log_psplines/issues"
+"Source" = "https://github.com/starccato/log_psplines/"
+
+[project.scripts]
+log_psplines_benchmark = "log_psplines.benchmark.cli:main"
 
 [tool.setuptools_scm]
 version_file = "src/log_psplines/_version.py"
 
-[tool.semantic_release]
-version_variable = "src/log_psplines/_version.py:__version__"
-version_source = "commit"
-commit_version_number = true
-commit_subject = "chore(release): {version}"
-commit_message = "chore(release): {version}"
-tag_format = "v{version}"
-no_local_version = true
-
-
-[tool.semantic_release.changelog]
-changelog_file = "CHANGELOG.rst"
-
-[project.urls]  # Optional
-"Homepage" = "https://starccato.github.io/log_psplines/"
-"Bug Reports" = "https://giuthub.com/starccato/log_psplines/issues"
-"Source" = "https://github.com/starccato/log_psplines/"
-
-
-[tool.setuptools]
-package-data = { "log_psplines" = [""] }
-
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"log_psplines" = [""]
 
-
-[tool.black]
+[tool.ruff]
 line-length = 79
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
+target-version = "py312"
+src = ["src"]
 
-[tool.isort]
-profile = "black"
-line_length = 79
+[tool.ruff.lint]
+# E/W: pycodestyle, F: pyflakes, I: isort, UP: pyupgrade, B: bugbear, SIM: flake8-simplify, NPY: numpy-specific rules
+select = ["E", "F", "I", "UP", "B", "SIM", "NPY"]
+ignore = ["B008"] # Useful to ignore for JAX/NumPyro default argument definitions
 
+[tool.ruff.lint.isort]
+known-first-party = ["log_psplines"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -131,21 +101,13 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = [
-    "log_psplines"
-]
+source = ["log_psplines"]
 omit = [
     "src/log_psplines/_version.py",
     "src/log_psplines/logger.py",
     "src/log_psplines/benchmark/*",
     "src/log_psplines/example_datasets/lvk_data.py",
     "src/log_psplines/psplines/knots_locator/lvk_knot_allocator.py"
-]
-
-[tool.coverage.paths]
-source = [
-    "src/log_psplines",
-    "**/site-packages/log_psplines"
 ]
 
 [tool.coverage.report]
@@ -158,15 +120,12 @@ exclude_lines = [
     "if 0:",
     "if __name__ == .__main__.:"
 ]
-
 ignore_errors = true
-
-[tool.coverage.html]
-title = "log_psplines Coverage Test Report"
-
 
 [tool.mypy]
 python_version = "3.12"
+mypy_path = "src"
+explicit_package_bases = true
 show_error_codes = true
 warn_unused_ignores = true
 check_untyped_defs = true
@@ -216,15 +175,18 @@ module = [
 disable_error_code = ["import-untyped", "import-not-found"]
 ignore_errors = true
 
-
-[project.scripts]
-log_psplines_benchmark = "log_psplines.benchmark.cli:main"
-
-
 [tool.vulture]
-# List all directories/files that define code (src) AND use it (tests, docs, studies).
 paths = ["src/", "tests/", "docs/"]
-
-# Set the minimum confidence level to report dead code.
-# 80-90 is a good range to reduce false positives from dynamic code.
 min_confidence = 80
+
+[tool.semantic_release]
+version_variable = "src/log_psplines/_version.py:__version__"
+version_source = "commit"
+commit_version_number = true
+commit_subject = "chore(release): {version}"
+commit_message = "chore(release): {version}"
+tag_format = "v{version}"
+no_local_version = true
+
+[tool.semantic_release.changelog]
+changelog_file = "CHANGELOG.rst"

@@ -10,7 +10,7 @@ from .._typecheck import runtime_typecheck
 
 def _as_positive_int(name: str, value: int) -> int:
     """Validate positive integer inputs used in spectral scaling."""
-    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+    if isinstance(value, bool) or not isinstance(value, int | np.integer):
         raise TypeError(f"{name} must be a positive integer")
     value_int = int(value)
     if value_int < 1:
@@ -76,10 +76,10 @@ def _interp_frequency_indexed_array(
 
 @runtime_typecheck
 def interp_matrix(
-    freq_src: Float[np.ndarray, "f_src"],
-    mat: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],
-    freq_tgt: Float[np.ndarray, "f_tgt"],
-) -> Complex[np.ndarray, "f_tgt ..."]:
+    freq_src: Float[np.ndarray, f_src],  # noqa: F821
+    mat: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],  # noqa: F722
+    freq_tgt: Float[np.ndarray, f_tgt],  # noqa: F821
+) -> Complex[np.ndarray, "f_tgt ..."]:  # noqa: F722
     """Interpolate a frequency-indexed matrix onto a new frequency grid.
 
     Parameters
@@ -102,26 +102,10 @@ def interp_matrix(
 
 
 @runtime_typecheck
-def _interp_complex_matrix(
-    freq_src: Float[np.ndarray, "f_src"],
-    freq_tgt: Float[np.ndarray, "f_tgt"],
-    matrix: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],
-) -> Complex[np.ndarray, "f_tgt ..."]:
-    """Linearly interpolate a complex-valued matrix along the frequency axis."""
-    return _interp_frequency_indexed_array(
-        freq_src,
-        freq_tgt,
-        matrix,
-        sort_and_dedup=True,
-        force_complex_output=True,
-    )
-
-
-@runtime_typecheck
 def u_re_im_to_U(
-    u_re: Float[np.ndarray, "..."],
-    u_im: Float[np.ndarray, "..."],
-) -> Complex[np.ndarray, "..."]:
+    u_re: Float[np.ndarray, ...],
+    u_im: Float[np.ndarray, ...],
+) -> Complex[np.ndarray, ...]:
     """Combine real/imag Wishart factors into a complex U matrix."""
     u_re = np.asarray(u_re, dtype=np.float64)
     u_im = np.asarray(u_im, dtype=np.float64)
@@ -139,13 +123,14 @@ def _ishermitian(Y: np.ndarray, atol: float = 1e-10) -> bool:
 
 @runtime_typecheck
 def U_to_Y(
-    u: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
-) -> Complex[np.ndarray, "..."]:
+    u: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
+) -> Complex[np.ndarray, ...]:
     """Convert eigenvector-weighted periodogram components to Wishart matrices.
 
     Eg:
     u = [[u11, u12], [u21, u22], [u31, u32]]
-    -> Y = [[sum_k u1k*conj(u1k), sum_k u1k*conj(u2k)], [sum_k u2k*conj(u1k), sum_k u2k*conj(u2k)]]
+    -> Y = [[sum_k u1k*conj(u1k), sum_k u1k*conj(u2k)],
+             [sum_k u2k*conj(u1k), sum_k u2k*conj(u2k)]]
     """
 
     u = np.asarray(u, dtype=np.complex128)
@@ -157,8 +142,8 @@ def U_to_Y(
 
 @runtime_typecheck
 def Y_to_U(
-    Y: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
-) -> Complex[np.ndarray, "..."]:
+    Y: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
+) -> Complex[np.ndarray, ...]:
     """Return U factors for Wishart matrices where Y[f] = U[f] U[f]^H."""
     Y = np.asarray(Y, dtype=np.complex128)
     if Y.ndim != 3:
@@ -173,11 +158,11 @@ def Y_to_U(
 
 @runtime_typecheck
 def sum_wishart_outer_products(
-    u_stack: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
-) -> Complex[np.ndarray, "..."]:
+    u_stack: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
+) -> Complex[np.ndarray, ...]:
     """Sum Wishart contributions across a stack of ``U`` matrices.
 
-    This is equivalent to summing the outer products of the rows of each U matrix:
+    Equivalent to summing the outer products of the rows of each U matrix:
     out[i, j] = sum_{r} sum_{k} u_stack[r, i, k] * conj(u_stack[r, j, k])
 
     Eg:
@@ -194,13 +179,13 @@ def sum_wishart_outer_products(
 
 @runtime_typecheck
 def Y_to_S(
-    Y: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
+    Y: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
     Nb: int,
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
     Nh: int = 1,
-) -> Complex[np.ndarray, "..."]:
+) -> Complex[np.ndarray, ...]:
     """Convert Wishart matrices into one-sided PSD matrices.
 
     Eg:
@@ -226,13 +211,13 @@ def Y_to_S(
 
 @runtime_typecheck
 def wishart_u_to_psd(
-    u: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
+    u: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
     Nb: int,
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
     Nh: int = 1,
-) -> Complex[np.ndarray, "..."]:
+) -> Complex[np.ndarray, ...]:
     """Convenience wrapper combining :func:`U_to_Y` and conversion."""
 
     Y = U_to_Y(u)
@@ -247,11 +232,11 @@ def wishart_u_to_psd(
 
 @runtime_typecheck
 def _get_coherence(
-    psd: Complex[np.ndarray, "..."] | Float[np.ndarray, "..."],
-) -> Float[np.ndarray, "..."]:
+    psd: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
+) -> Float[np.ndarray, ...]:
     """Compute coherence matrices from PSD estimates.
 
-    Cxy = |Pxy|^2 / (Pxx * Pyy) with diagonal elements set to 1.0 and clipped to [0, 1].
+    Cxy = |Pxy| / sqrt(Pxx * Pyy), diagonal set to 1.0, clipped to [0, 1].
 
     """
     psd = np.asarray(psd)
@@ -265,11 +250,9 @@ def _get_coherence(
     for i in range(p):
         coh[:, i, i] = 1.0
         for j in range(i + 1, p):
-            denom = np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
+            denom = np.sqrt(np.abs(psd[:, i, i]) * np.abs(psd[:, j, j]))
             with np.errstate(divide="ignore", invalid="ignore"):
-                coh_ij = np.where(
-                    denom > 0, (np.abs(psd[:, i, j]) ** 2) / denom, 0.0
-                )
+                coh_ij = np.where(denom > 0, np.abs(psd[:, i, j]) / denom, 0.0)
             coh[:, i, j] = np.clip(coh_ij.real, a_min=0.0, a_max=1.0)
             coh[:, j, i] = coh[:, i, j]
     return coh
@@ -340,7 +323,6 @@ def psd_to_cholesky_components(
 
 __all__ = [
     "interp_matrix",
-    "_interp_complex_matrix",
     "psd_to_cholesky_components",
     "sum_wishart_outer_products",
     "u_re_im_to_U",

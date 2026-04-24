@@ -541,7 +541,7 @@ def main() -> int:
                 ax.set_xlabel("Frequency (Hz)")
             if j == 0:
                 ax.set_ylabel(ylabel)
-            ax.set_title(f"({i+1},{j+1})", fontsize=9)
+            ax.set_title(f"({i + 1},{j + 1})", fontsize=9)
 
     handles, labels = axes[0, 0].get_legend_handles_labels()
     if handles:

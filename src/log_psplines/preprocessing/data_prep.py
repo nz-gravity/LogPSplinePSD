@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence, Union
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -24,7 +24,7 @@ SamplerName = str
 
 
 def _normalize_coarse_grain_config(
-    coarse_grain_config: Optional[CoarseGrainConfig | dict],
+    coarse_grain_config: CoarseGrainConfig | dict | None,
 ) -> CoarseGrainConfig:
     if coarse_grain_config is None:
         return CoarseGrainConfig()
@@ -81,9 +81,9 @@ def _build_frequency_exclusion_mask(
 
 
 def _apply_frequency_exclusion(
-    data: Union[Periodogram, MultivarFFT],
+    data: Periodogram | MultivarFFT,
     bands: Sequence[tuple[float, float]],
-) -> Union[Periodogram, MultivarFFT]:
+) -> Periodogram | MultivarFFT:
     """Return frequency-domain data with excluded bands removed."""
     if not bands:
         return data
@@ -124,16 +124,24 @@ def _filter_empirical_psd(
 
 
 def _coarse_grain_processed_data(
-    processed_data: Optional[Union[Periodogram, MultivarFFT]],
+    processed_data: Periodogram | MultivarFFT | None,
     cg_config: CoarseGrainConfig,
-    scaled_true_psd: Optional[np.ndarray],
+    scaled_true_psd: np.ndarray | None,
 ) -> tuple[
-    Optional[Union[Periodogram, MultivarFFT]],
-    Optional[np.ndarray],
+    Periodogram | MultivarFFT | None,
+    np.ndarray | None,
 ]:
     """Apply coarse graining to the already-processed data if configured."""
     if processed_data is None or not cg_config.enabled:
         return processed_data, scaled_true_psd
+
+    def _log_cg_stats(label: str, spec) -> None:
+        nl = int(spec.Nc * spec.Nh)
+        pct = 100.0 * float(spec.Nc) / float(nl)
+        logger.info(
+            f"Coarse-grained {label}: {spec} "
+            f"(kept {pct:.1f}%, decimated {100.0 - pct:.1f}%)."
+        )
 
     if isinstance(processed_data, Periodogram):
         spec = compute_binning_structure(
@@ -153,15 +161,7 @@ def _coarse_grain_processed_data(
             scaling_factor=processed_data.scaling_factor,
             Nh=int(spec.Nh),
         )
-
-        nl = int(spec.Nc * spec.Nh)
-        percent_retained = 100.0 * float(spec.Nc) / float(nl)
-        percent_decimated = 100.0 - percent_retained
-        logger.info(
-            f"Coarse-grained periodogram: {spec} "
-            f"(kept {percent_retained:.1f}% of points, "
-            f"decimated {percent_decimated:.1f}%)."
-        )
+        _log_cg_stats("periodogram", spec)
 
         if scaled_true_psd is not None:
             try:
@@ -171,7 +171,7 @@ def _coarse_grain_processed_data(
                 scaled_true_psd = true_coarse
             except Exception:
                 logger.warning(
-                    "Could not coarse-grain provided true_psd; leaving unchanged."
+                    "Could not coarse-grain true_psd; leaving unchanged."
                 )
 
         return processed_data, scaled_true_psd
@@ -183,28 +183,21 @@ def _coarse_grain_processed_data(
             Nh=cg_config.Nh,
         )
         processed_data = apply_coarse_grain_multivar_fft(processed_data, spec)
-        nl = int(spec.Nc * spec.Nh)
-        percent_retained = 100.0 * float(spec.Nc) / float(nl)
-        percent_decimated = 100.0 - percent_retained
-        logger.info(
-            f"Coarse-grained multivariate FFT: {spec} "
-            f"(kept {percent_retained:.1f}% of points, "
-            f"decimated {percent_decimated:.1f}%)."
-        )
+        _log_cg_stats("multivariate FFT", spec)
         return processed_data, scaled_true_psd
 
     return processed_data, scaled_true_psd
 
 
 def _prepare_processed_data(
-    data: Union[Timeseries, MultivariateTimeseries],
+    data: Timeseries | MultivariateTimeseries,
     config: PipelineConfig,
 ) -> tuple[
-    Union[Periodogram, MultivarFFT],
-    Optional[MultivariateTimeseries],
+    Periodogram | MultivarFFT,
+    MultivariateTimeseries | None,
     SamplerName,
 ]:
-    raw_multivar_ts: Optional[MultivariateTimeseries] = None
+    raw_multivar_ts: MultivariateTimeseries | None = None
 
     standardized_ts = data.standardise_for_psd()
 
@@ -231,7 +224,7 @@ def _prepare_processed_data(
 
     if config.verbose:
         logger.info(
-            f"Standardized data: original scale ~{processed.scaling_factor:.2e}"
+            f"Standardized data: scale ~{processed.scaling_factor:.2e}"
         )
         logger.info(f"Inferred sampler type: {sampler}")
 
@@ -241,8 +234,8 @@ def _prepare_processed_data(
 
 
 def _build_welch_overlay(
-    raw_multivar_ts: Optional[MultivariateTimeseries],
-    processed_data: Optional[Union[Periodogram, MultivarFFT]],
+    raw_multivar_ts: MultivariateTimeseries | None,
+    processed_data: Periodogram | MultivarFFT | None,
     config: PipelineConfig,
 ) -> tuple[
     list[EmpiricalPSD] | None,
@@ -271,7 +264,8 @@ def _build_welch_overlay(
         if not np.any(keep):
             if config.verbose:
                 logger.warning(
-                    "Welch overlay requested but produced no in-range positive-frequency bins; skipping."
+                    "Welch overlay: no in-range positive-frequency"
+                    " bins; skipping."
                 )
             return None, None, None
 

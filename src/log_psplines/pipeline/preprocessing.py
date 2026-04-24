@@ -7,7 +7,6 @@ This module converts input data to the frequency-domain objects consumed by
 from __future__ import annotations
 
 from math import ceil
-from typing import Optional, Union
 
 import numpy as np
 
@@ -17,7 +16,6 @@ from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
 from ..datatypes.multivar_utils import _interp_frequency_indexed_array
 from ..logger import logger
-from ..preprocessing.checks import _save_preprocessing_plot
 from ..preprocessing.coarse_grain import (
     CoarseGrainConfig,
     _closest_divisor,
@@ -32,7 +30,7 @@ from ..preprocessing.data_prep import (
 )
 from .config import PipelineConfig
 
-FrequencyData = Union[Periodogram, MultivarFFT]
+FrequencyData = Periodogram | MultivarFFT
 
 
 def preprocess_to_freq_domain(data, config: PipelineConfig) -> FrequencyData:
@@ -45,9 +43,6 @@ def preprocess_to_freq_domain(data, config: PipelineConfig) -> FrequencyData:
 
     excl_bands = _normalize_excluded_frequency_bands(config.exclude_freq_bands)
     freq_data = _apply_frequency_exclusion(freq_data, excl_bands)
-
-    if isinstance(freq_data, MultivarFFT) and config.outdir is not None:
-        _save_preprocessing_plot(freq_data, config)
 
     return freq_data
 
@@ -66,7 +61,7 @@ def _max_n_knots(n_knots: int | dict[str, int]) -> int:
 
 def _unpack_true_psd(
     true_psd,
-) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+) -> tuple[np.ndarray | None, np.ndarray | None]:
     """Return ``(freq, psd)`` from accepted ``true_psd`` formats."""
     if true_psd is None:
         return None, None
@@ -78,7 +73,7 @@ def _unpack_true_psd(
                 "true_psd dict must contain a 'psd' entry (optional 'freq')."
             )
         return None if freq is None else np.asarray(freq), np.asarray(psd)
-    if isinstance(true_psd, (tuple, list)) and len(true_psd) == 2:
+    if isinstance(true_psd, tuple | list) and len(true_psd) == 2:
         freq = None if true_psd[0] is None else np.asarray(true_psd[0])
         return freq, np.asarray(true_psd[1])
     return None, np.asarray(true_psd)
@@ -86,10 +81,10 @@ def _unpack_true_psd(
 
 @runtime_typecheck
 def _interp_psd_array(
-    psd: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],
-    freq_src: Float[np.ndarray, "f_src"],
-    freq_tgt: Float[np.ndarray, "f_tgt"],
-) -> Complex[np.ndarray, "f_tgt ..."] | Float[np.ndarray, "f_tgt ..."]:
+    psd: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],  # noqa: F722
+    freq_src: Float[np.ndarray, f_src],  # noqa: F821
+    freq_tgt: Float[np.ndarray, f_tgt],  # noqa: F821
+) -> Complex[np.ndarray, "f_tgt ..."] | Float[np.ndarray, "f_tgt ..."]:  # noqa: F722
     """Interpolate PSD arrays onto target frequencies."""
     return _interp_frequency_indexed_array(
         freq_src,
@@ -118,7 +113,7 @@ def align_true_psd_to_freq(
             return np.asarray(psd)
         logger.warning(
             f"true_psd length {psd.shape[0]} does not match target "
-            f"frequencies {len(freq_tgt)}; assuming uniform spacing for interpolation."
+            f"frequencies {len(freq_tgt)}; assuming uniform spacing."
         )
         freq_src = np.linspace(freq_tgt[0], freq_tgt[-1], psd.shape[0])
     elif len(freq_src) != psd.shape[0]:
@@ -133,7 +128,7 @@ def align_true_psd_to_freq(
 def _resolve_explicit_coarse_vi_config(
     data: FrequencyData,
     config: PipelineConfig,
-) -> Optional[CoarseGrainConfig]:
+) -> CoarseGrainConfig | None:
     cg_config = _normalize_coarse_grain_config(config.coarse_grain_config_vi)
     if not cg_config.enabled:
         return None
@@ -163,7 +158,7 @@ def _resolve_explicit_coarse_vi_config(
 def coarse_vi_freq_domain(
     data: FrequencyData,
     config: PipelineConfig,
-) -> Optional[FrequencyData]:
+) -> FrequencyData | None:
     """Return a separate coarse VI grid, or ``None`` when not requested."""
     explicit = _resolve_explicit_coarse_vi_config(data, config)
     if explicit is not None:

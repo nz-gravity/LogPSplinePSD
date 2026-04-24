@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Optional, Union
 
 import arviz_plots as azp
 import jax
@@ -38,21 +38,54 @@ def _vi_result_to_idata(result: StageResult) -> xr.DataTree:
     """Wrap VI posterior means into a minimal xr.DataTree."""
     if not result.init_values:
         return xr.DataTree()
-    ds = xr.Dataset(
-        {
-            k: xr.DataArray(np.asarray(v)[None, None, ...])
-            for k, v in result.init_values.items()
-        }
-    )
+    ds = _init_values_to_dataset(result.init_values)
     return xr.DataTree(children={"posterior": xr.DataTree(dataset=ds)})
+
+
+def _init_values_to_dataset(values: dict[str, jnp.ndarray]) -> xr.Dataset:
+    """Pack VI point estimates using variable-specific trailing dimensions."""
+    data_vars = {}
+    for name, value in values.items():
+        array = np.asarray(value)[None, None, ...]
+        tail_dims = tuple(
+            f"{name}_dim_{axis}" for axis in range(array.ndim - 2)
+        )
+        data_vars[name] = xr.DataArray(
+            array,
+            dims=("chain", "draw", *tail_dims),
+        )
+    return xr.Dataset(
+        data_vars,
+        coords={"chain": [0], "draw": [0]},
+    )
+
+
+def _losses_per_block_array(
+    losses_per_block: list[jnp.ndarray] | None,
+) -> np.ndarray:
+    if not losses_per_block:
+        return np.asarray([], dtype=float)
+
+    arrays = [
+        np.asarray(losses, dtype=float).reshape(-1)
+        for losses in losses_per_block
+    ]
+    max_len = max((arr.size for arr in arrays), default=0)
+    if max_len == 0:
+        return np.asarray([], dtype=float)
+
+    padded = np.full((len(arrays), max_len), np.nan, dtype=float)
+    for idx, arr in enumerate(arrays):
+        padded[idx, : arr.size] = arr
+    return padded
 
 
 @dataclass
 class PipelineResult:
     """Outputs from InferencePipeline.run()."""
 
-    vi_coarse: Optional[StageResult]
-    vi: Optional[StageResult]
+    vi_coarse: StageResult | None
+    vi: StageResult | None
     idata: xr.DataTree
 
     @staticmethod
@@ -142,12 +175,12 @@ class PipelineResult:
         self,
         outdir: str,
         *,
-        true_psd: Optional[np.ndarray] = None,
+        true_psd: np.ndarray | None = None,
     ) -> None:
         diagnostics_dir = Path(outdir) / "diagnostics"
         diagnostics_dir.mkdir(parents=True, exist_ok=True)
 
-        vi_summary: Optional[pd.DataFrame] = None
+        vi_summary: pd.DataFrame | None = None
         if self.vi is not None:
             if (
                 isinstance(self.idata.attrs.get("data_type"), str)
@@ -183,8 +216,15 @@ class PipelineResult:
 
             if self.vi.losses is not None:
                 try:
+                    losses_input = {
+                        "losses": np.asarray(self.vi.losses, dtype=float)
+                    }
+                    if self.vi.losses_per_block is not None:
+                        losses_input["losses_per_block"] = (
+                            self.vi.losses_per_block
+                        )
                     plot_vi_loss(
-                        {"losses": np.asarray(self.vi.losses, dtype=float)},
+                        losses_input,
                         guide_name=self.vi.guide_name,
                         outfile=str(diagnostics_dir / "vi_loss.png"),
                     )
@@ -199,7 +239,7 @@ class PipelineResult:
                         "VI loss curve unavailable for this run.",
                     )
 
-        nuts_summary: Optional[pd.DataFrame] = None
+        nuts_summary: pd.DataFrame | None = None
         try:
             nuts_summary = build_nuts_summary_table(
                 self.idata,
@@ -207,7 +247,8 @@ class PipelineResult:
             )
         except Exception as exc:
             logger.debug(
-                f"NUTS summary with truth metrics failed, retrying without truth: {exc}"
+                f"NUTS summary with truth metrics failed, "
+                f"retrying without truth: {exc}"
             )
             try:
                 nuts_summary = build_nuts_summary_table(self.idata)
@@ -222,22 +263,27 @@ class PipelineResult:
                 diagnostics_dir / "nuts_summary.csv",
                 index=False,
             )
-            sample_stats = self.idata["sample_stats"]
-            for col in ("divergences", "rhat_max", "riae", "l2", "coverage"):
-                if col in nuts_summary.columns and not nuts_summary.empty:
-                    sample_stats.attrs[col] = self._median_numeric(
-                        nuts_summary[col]
-                    )
+            sample_stats = self.idata.children.get("sample_stats")
+            if sample_stats is not None:
+                for col in (
+                    "divergences",
+                    "rhat_max",
+                    "riae",
+                    "l2",
+                    "coverage",
+                ):
+                    if col in nuts_summary.columns and not nuts_summary.empty:
+                        sample_stats.attrs[col] = self._median_numeric(
+                            nuts_summary[col]
+                        )
 
         if "sample_stats" in self.idata.children:
-
             try:
-                trace_plot = azp.plot_trace_dist(
+                azp.plot_trace_dist(
                     self.idata,
                     compact=True,
                     backend="matplotlib",
-                )
-                trace_plot.savefig(
+                ).savefig(
                     diagnostics_dir / "traces.png",
                     dpi=150,
                     bbox_inches="tight",
@@ -248,15 +294,9 @@ class PipelineResult:
                     f"Could not save traces.png: {exc}",
                     exc_info=True,
                 )
-                self._save_placeholder_plot(
-                    diagnostics_dir / "traces.png",
-                    "Trace Diagnostics",
-                    "Trace diagnostics unavailable for this run.",
-                )
 
             try:
-                energy_plot = plot_energy(self.idata)
-                energy_plot.savefig(
+                plot_energy(self.idata).savefig(
                     diagnostics_dir / "energy.png",
                     dpi=150,
                     bbox_inches="tight",
@@ -267,24 +307,8 @@ class PipelineResult:
                     f"Could not save energy.png: {exc}",
                     exc_info=True,
                 )
-                self._save_placeholder_plot(
-                    diagnostics_dir / "energy.png",
-                    "Energy Diagnostics",
-                    "Energy diagnostics unavailable (missing sample_stats).",
-                )
-        else:
-            self._save_placeholder_plot(
-                diagnostics_dir / "traces.png",
-                "Trace Diagnostics",
-                "Trace diagnostics unavailable (missing sample_stats).",
-            )
-            self._save_placeholder_plot(
-                diagnostics_dir / "energy.png",
-                "Energy Diagnostics",
-                "Energy diagnostics unavailable (missing sample_stats).",
-            )
 
-        row: Dict[str, float] = {}
+        row: dict[str, float] = {}
         if vi_summary is not None and not vi_summary.empty:
             for col in (
                 "pareto_k_max",
@@ -322,7 +346,7 @@ class PipelineResult:
         self,
         outdir: str,
         *,
-        true_psd: Optional[np.ndarray] = None,
+        true_psd: np.ndarray | None = None,
     ) -> None:
         os.makedirs(outdir, exist_ok=True)
         self._save_posterior_predictive(outdir)
@@ -337,6 +361,14 @@ class PipelineResult:
                 os.path.join(outdir, "vi_losses.npy"),
                 np.asarray(self.vi.losses),
             )
+            losses_per_block = _losses_per_block_array(
+                self.vi.losses_per_block
+            )
+            if losses_per_block.size:
+                np.save(
+                    os.path.join(outdir, "vi_losses_per_block.npy"),
+                    losses_per_block,
+                )
         if self.vi_coarse is not None and self.vi_coarse.losses is not None:
             np.save(
                 os.path.join(outdir, "vi_coarse_losses.npy"),
@@ -355,16 +387,16 @@ class InferencePipeline:
         self,
         model_fn: Callable,
         full_model_kwargs: dict,
-        coarse_model_kwargs: Optional[dict],
+        coarse_model_kwargs: dict | None,
         data: Periodogram | MultivarFFT,
         spline_model,
         config,
         vi_stage: VIStage,
         nuts_stage: NUTSStage,
         *,
-        rng_key: Union[int, jax.Array] = 42,
+        rng_key: int | jax.Array = 42,
         verbose: bool = False,
-        vi_progress_bar: Optional[bool] = None,
+        vi_progress_bar: bool | None = None,
         only_vi: bool = False,
         init_from_vi: bool = True,
         vi_coarse_only: bool = False,
@@ -418,18 +450,12 @@ class InferencePipeline:
     def _vi_posterior_dataset(self, vi: StageResult) -> xr.Dataset:
         if not vi.init_values:
             return xr.Dataset()
-        return xr.Dataset(
-            {
-                name: xr.DataArray(np.asarray(value)[None, None, ...])
-                for name, value in vi.init_values.items()
-            },
-            coords={"chain": [0], "draw": [0]},
-        )
+        return _init_values_to_dataset(vi.init_values)
 
     def _attach_pipeline_metadata(
         self,
         idata: xr.DataTree,
-        vi: Optional[StageResult],
+        vi: StageResult | None,
     ) -> xr.DataTree:
         """Attach model/data groups needed by diagnostics and plotting."""
         if isinstance(self.data, Periodogram):
@@ -448,6 +474,7 @@ class InferencePipeline:
                     if self.data.channel_stds is None
                     else np.asarray(self.data.channel_stds)
                 ),
+                "sampler": "factorized_multivar_nuts",
             }
 
         attrs.update(
@@ -459,8 +486,23 @@ class InferencePipeline:
                 "beta_phi": float(self.config.beta_phi),
                 "alpha_delta": float(self.config.alpha_delta),
                 "beta_delta": float(self.config.beta_delta),
+                "eta": float(self.config.eta),
+                "sampling_eta": float(self.nuts_stage.eta),
             }
         )
+        if self.config.target_accept_prob_by_channel is not None:
+            attrs["target_accept_prob_by_channel"] = list(
+                self.config.target_accept_prob_by_channel
+            )
+        if self.config.max_tree_depth_by_channel is not None:
+            attrs["max_tree_depth_by_channel"] = list(
+                self.config.max_tree_depth_by_channel
+            )
+        if isinstance(self.data, MultivarFFT):
+            for channel_index in range(int(self.data.p)):
+                attrs[f"sampling_eta_channel_{channel_index}"] = float(
+                    self.nuts_stage.eta
+                )
         idata.attrs.update(attrs)
         idata["observed_data"] = xr.DataTree(
             dataset=self._observed_data_dataset()
@@ -485,6 +527,18 @@ class InferencePipeline:
                     )
                 }
             )
+            losses_per_block = _losses_per_block_array(vi.losses_per_block)
+            if losses_per_block.size:
+                vi_stats["losses_per_block"] = xr.DataArray(
+                    losses_per_block,
+                    dims=("factor", "draw_per_factor"),
+                    coords={
+                        "factor": np.arange(losses_per_block.shape[0]),
+                        "draw_per_factor": np.arange(
+                            losses_per_block.shape[1]
+                        ),
+                    },
+                )
             idata["vi_sample_stats"] = xr.DataTree(dataset=vi_stats)
             if isinstance(self.data, MultivarFFT):
                 idata["vi_log_likelihood"] = xr.DataTree(
@@ -515,8 +569,8 @@ class InferencePipeline:
             else self.rng_key
         )
 
-        vi_coarse: Optional[StageResult] = None
-        init_values: Optional[Dict[str, jnp.ndarray]] = None
+        vi_coarse: StageResult | None = None
+        init_values: dict[str, jnp.ndarray] | None = None
 
         if self.coarse_model_kwargs is not None:
             rng, key = jax.random.split(rng)

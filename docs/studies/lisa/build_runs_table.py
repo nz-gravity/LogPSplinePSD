@@ -320,28 +320,28 @@ def build_html(rows: list[dict[str, Any]]) -> str:
     total_rows = len(rows)
     preview_rows = "\n".join(
         f"""
-        <tr data-search="{escape(' '.join(str(value) for value in row.values()).lower(), quote=True)}">
-          <td class="sticky-col run-col">{escape(str(row['run_label']))}</td>
-          <td class="sticky-col thumb-col">{_render_thumb_cell(row['plot_relpath'], str(row['run_label']))}</td>
-          <td>{escape(str(row['duration_days']))}</td>
-          <td>{escape(str(row['seed']))}</td>
-          <td>{escape(str(row['seed_count']))}</td>
-          <td>{escape(str(row['Nc']))}</td>
-          <td>{escape(str(row['K']))}</td>
-          <td>{escape(str(row['diff_order']))}</td>
-          <td>{escape(str(row['knot_method']))}</td>
-          <td>{escape(str(row['alpha_beta']))}</td>
-          <td>{escape(str(row['null_excision']))}</td>
-          <td>{escape(str(row['floor']))}</td>
-          <td>{escape(_format_number(row['ess_median']))}</td>
-          <td>{escape(_format_number(row['riae_matrix']))}</td>
-          <td>{escape(_format_number(row['coherence_riae']))}</td>
-          <td>{escape(_format_number(row['coverage']))}</td>
-          <td>{escape(_format_number(row['ciw_psd_diag_median']))}</td>
-          <td>{escape(_format_number(row['n_divergences'], digits=0))}</td>
-          <td>{escape(_format_number(row['rhat_max']))}</td>
-          <td class="notes">{escape(str(row['notes']))}</td>
-          <td class="path-cell"><code>{escape(str(row['seed_dir_relpath']))}</code></td>
+        <tr data-search="{escape(" ".join(str(value) for value in row.values()).lower(), quote=True)}">
+          <td class="sticky-col run-col">{escape(str(row["run_label"]))}</td>
+          <td class="sticky-col thumb-col">{_render_thumb_cell(row["plot_relpath"], str(row["run_label"]))}</td>
+          <td>{escape(str(row["duration_days"]))}</td>
+          <td>{escape(str(row["seed"]))}</td>
+          <td>{escape(str(row["seed_count"]))}</td>
+          <td>{escape(str(row["Nc"]))}</td>
+          <td>{escape(str(row["K"]))}</td>
+          <td>{escape(str(row["diff_order"]))}</td>
+          <td>{escape(str(row["knot_method"]))}</td>
+          <td>{escape(str(row["alpha_beta"]))}</td>
+          <td>{escape(str(row["null_excision"]))}</td>
+          <td>{escape(str(row["floor"]))}</td>
+          <td>{escape(_format_number(row["ess_median"]))}</td>
+          <td>{escape(_format_number(row["riae_matrix"]))}</td>
+          <td>{escape(_format_number(row["coherence_riae"]))}</td>
+          <td>{escape(_format_number(row["coverage"]))}</td>
+          <td>{escape(_format_number(row["ciw_psd_diag_median"]))}</td>
+          <td>{escape(_format_number(row["n_divergences"], digits=0))}</td>
+          <td>{escape(_format_number(row["rhat_max"]))}</td>
+          <td class="notes">{escape(str(row["notes"]))}</td>
+          <td class="path-cell"><code>{escape(str(row["seed_dir_relpath"]))}</code></td>
         </tr>
         """.strip()
         for row in rows

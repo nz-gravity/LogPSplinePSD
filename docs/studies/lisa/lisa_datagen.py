@@ -18,7 +18,7 @@ try:
     from lisatools.sensitivity import XYZ2SensitivityMatrix
 except Exception as exc:
     raise SystemExit(
-        "lisatools is required for this script. " "Install it and re-run."
+        "lisatools is required for this script. Install it and re-run."
     ) from exc
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -27,13 +27,13 @@ for path in (SRC_ROOT, PROJECT_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from log_psplines.datatypes import MultivariateTimeseries  # noqa: E402
 from log_psplines.example_datasets.lisa_data import (  # noqa: E402
     plot_psd_coherence,
     spectral_matrix_from_components,
     strain_to_freq_psd,
     welch_spectral_matrix_xyz,
 )
-from log_psplines.datatypes import MultivariateTimeseries  # noqa: E402
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results" / "lisa"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -100,9 +100,7 @@ def estimate_h5_filesize_gib(
     # Arrays stored in the output payload:
     # time(float64), data(float32, N x 3), freq_true(float64),
     # true_matrix(complex128, N_active x 3 x 3), true_matrix_freq (optional).
-    payload_bytes = (
-        8 * n + 4 * 3 * n + 8 * n_active + 16 * 9 * n_active
-    )
+    payload_bytes = 8 * n + 4 * 3 * n + 8 * n_active + 16 * 9 * n_active
     if use_freq_units:
         payload_bytes += 16 * 9 * n_active
 
@@ -237,7 +235,15 @@ def _one_sided_periodogram_components(
     z: np.ndarray,
     *,
     delta_t: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
     """Return one-sided periodogram PSD/CSD components for XYZ."""
     n = int(x.shape[0])
     if n <= 1:
@@ -329,15 +335,11 @@ def generate_lisatools_xyz_noise_timeseries(
             np.complex128
         )
         cov_chunk = fft_scale * s_chunk
-        cov_chunk = 0.5 * (
-            cov_chunk + np.conj(np.swapaxes(cov_chunk, 1, 2))
-        )
+        cov_chunk = 0.5 * (cov_chunk + np.conj(np.swapaxes(cov_chunk, 1, 2)))
 
         if floor_rel > 0.0 or floor_abs > 0.0:
             min_eig = np.linalg.eigvalsh(cov_chunk)[:, 0].real
-            diag_scale = (
-                np.real(np.trace(cov_chunk, axis1=1, axis2=2)) / 3.0
-            )
+            diag_scale = np.real(np.trace(cov_chunk, axis1=1, axis2=2)) / 3.0
             target_floor = np.maximum(
                 floor_abs, floor_rel * np.maximum(diag_scale, 0.0)
             )
@@ -442,7 +444,7 @@ def main() -> None:
         L = int(round(1.0 / (delta_t * fmin_diag)))
     else:
         L = int(round(float(WELCH_SEGMENT_DAYS) * 86_400.0 / delta_t))
-    if L > len(x_t):
+    if len(x_t) < L:
         L = len(x_t)
     overlap = float(WELCH_OVERLAP)
     if not (0.0 <= overlap < 1.0):
@@ -459,7 +461,7 @@ def main() -> None:
             f"(Nb={Nb}, Lb={Lb})."
         )
     block_seconds = Lb * delta_t
-    if L > Lb:
+    if Lb < L:
         L = Lb
     print(
         "Welch segment length: "

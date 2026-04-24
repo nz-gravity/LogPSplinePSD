@@ -202,7 +202,7 @@ def main() -> None:
 
         ax.axhline(1.0, color="k", ls="--", lw=0.8)
         ax.set_ylabel(
-            f"S_{channel_labels[ch]}{channel_labels[ch]}" " (Wishart / True)"
+            f"S_{channel_labels[ch]}{channel_labels[ch]} (Wishart / True)"
         )
         ax.set_ylim(0.0, 3.0)
         ax.set_xlim(FMIN, FMAX)

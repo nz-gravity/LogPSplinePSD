@@ -1,16 +1,17 @@
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, cast
+from typing import Any, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from ..arviz_utils.from_arviz import get_spline_model
 from ..datatypes.multivar import EmpiricalPSD, _get_coherence
+from ..diagnostics._utils import interior_frequency_slice
 from ..logger import logger
 from .base import (
     extract_plotting_data,
-    interior_frequency_slice,
     setup_plot_style,
 )
 
@@ -31,7 +32,7 @@ TRUE_KWGS: dict[str, Any] = dict(
 )
 
 
-def _get_knots_from_idata(idata) -> Optional[np.ndarray]:
+def _get_knots_from_idata(idata) -> np.ndarray | None:
     """
     Extract knots from idata, handling both univariate and multivariate cases.
 
@@ -55,7 +56,7 @@ def _get_panel_knots_from_idata(
 ) -> tuple[
     dict[int, np.ndarray],
     dict[tuple[int, int], np.ndarray],
-    Optional[np.ndarray],
+    np.ndarray | None,
 ]:
     """Extract per-panel knot arrays for multivariate plotting.
 
@@ -473,21 +474,21 @@ class PSDMatrixPlotSpec:
     diag_yscale: str = "log"
     offdiag_yscale: str = "linear"
     xscale: str = "linear"
-    label: Optional[str] = None
-    model_color: Optional[str] = "tab:blue"
-    fig: Optional[plt.Figure] = None
-    ax: Optional[np.ndarray] = None
+    label: str | None = None
+    model_color: str | None = "tab:blue"
+    fig: plt.Figure | None = None
+    ax: np.ndarray | None = None
     save: bool = True
-    close: Optional[bool] = None
+    close: bool | None = None
     overlay_vi: bool = False
-    vi_color: Optional[str] = "tab:orange"
+    vi_color: str | None = "tab:orange"
     vi_label: str = "VI median"
     vi_alpha: float = 0.2
     overlay_prior: bool = False
-    prior_color: Optional[str] = "tab:green"
+    prior_color: str | None = "tab:green"
     prior_label: str = "Prior"
     prior_alpha: float = 0.15
-    freq_range: Optional[tuple[float, float]] = None
+    freq_range: tuple[float, float] | None = None
     excluded_bands: tuple[tuple[float, float], ...] = ()
     psd_scale: (
         np.ndarray | float | Callable[[np.ndarray], np.ndarray] | None
@@ -729,7 +730,7 @@ def _render_diag_panel(
     spec: PSDMatrixPlotSpec,
     vi_ci_dict: dict | None,
     vi_label_added: bool,
-    knots: Optional[np.ndarray] = None,
+    knots: np.ndarray | None = None,
     prior_ci_dict: dict | None = None,
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
@@ -816,7 +817,7 @@ def _render_coherence_panel(
     spec: PSDMatrixPlotSpec,
     vi_ci_dict: dict | None,
     vi_label_added: bool,
-    knots: Optional[np.ndarray] = None,
+    knots: np.ndarray | None = None,
     prior_ci_dict: dict | None = None,
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
@@ -904,7 +905,7 @@ def _render_magnitude_panel(
     spec: PSDMatrixPlotSpec,
     vi_ci_dict: dict | None,
     vi_label_added: bool,
-    knots: Optional[np.ndarray] = None,
+    knots: np.ndarray | None = None,
     prior_ci_dict: dict | None = None,
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
@@ -989,7 +990,7 @@ def _render_re_panel(
     spec: PSDMatrixPlotSpec,
     vi_ci_dict: dict | None,
     vi_label_added: bool,
-    knots: Optional[np.ndarray] = None,
+    knots: np.ndarray | None = None,
     prior_ci_dict: dict | None = None,
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
@@ -1070,7 +1071,7 @@ def _render_im_panel(
     spec: PSDMatrixPlotSpec,
     vi_ci_dict: dict | None,
     vi_label_added: bool,
-    knots: Optional[np.ndarray] = None,
+    knots: np.ndarray | None = None,
     prior_ci_dict: dict | None = None,
     prior_label_added: bool = False,
 ) -> tuple[bool, bool]:
@@ -1142,7 +1143,7 @@ def _finalize_psd_matrix_figure(
     fig: plt.Figure,
     axes: np.ndarray,
     p: int,
-    freq_range: Optional[tuple[float, float]],
+    freq_range: tuple[float, float] | None,
     created_fig: bool,
     spec: PSDMatrixPlotSpec,
 ) -> None:
@@ -1245,13 +1246,13 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
     # Extract knots if show_knots is enabled
     diag_knots: dict[int, np.ndarray] = {}
     offdiag_knots: dict[tuple[int, int], np.ndarray] = {}
-    fallback_knots: Optional[np.ndarray] = None
+    fallback_knots: np.ndarray | None = None
     if spec.show_knots:
         diag_knots, offdiag_knots, fallback_knots = (
             _get_panel_knots_from_idata(spec.idata)
         )
 
-    def _resolve_offdiag_knots(i_idx: int, j_idx: int) -> Optional[np.ndarray]:
+    def _resolve_offdiag_knots(i_idx: int, j_idx: int) -> np.ndarray | None:
         pair = (i_idx, j_idx) if i_idx > j_idx else (j_idx, i_idx)
         return offdiag_knots.get(pair, fallback_knots)
 

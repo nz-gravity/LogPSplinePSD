@@ -132,7 +132,7 @@ def plot_metrics_vs_eta(groups: dict[int, list[dict]], outpath: Path) -> None:
         lw=0.8,
         ls="--",
         alpha=0.5,
-        label=f"{int(COVERAGE_TARGET*100)}% threshold",
+        label=f"{int(COVERAGE_TARGET * 100)}% threshold",
     )
     ax_rhat.axhline(1.01, color="k", lw=1, ls="--", label="R-hat = 1.01")
 
@@ -178,9 +178,9 @@ def plot_metrics_vs_eta(groups: dict[int, list[dict]], outpath: Path) -> None:
 def plot_eta_vs_nb(groups: dict[int, list[dict]], outpath: Path) -> None:
     """Scatter of eta_opt vs Nb, overlaid with the formula eta = 2/Nb."""
     # For each duration, find the smallest eta with coverage_diag >= threshold.
-    records: list[tuple[int, int, float, float]] = (
-        []
-    )  # (dur, Nb, eta_opt, cov)
+    records: list[
+        tuple[int, int, float, float]
+    ] = []  # (dur, Nb, eta_opt, cov)
     for dur, rows in sorted(groups.items()):
         nb = _nb(dur)
         for r in rows:

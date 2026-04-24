@@ -108,9 +108,9 @@ def _compute_coherence_from_spectral_density(
     """Compute coherence from spectral matrices with shape ``(..., p, p, F)``."""
     diag = np.real(np.diagonal(posterior_psd, axis1=2, axis2=3))  # (..., F, p)
     diag = np.moveaxis(diag, -1, -2)  # (..., p, F)
-    denom = diag[..., :, None, :] * diag[..., None, :, :]
+    denom = np.sqrt(diag[..., :, None, :] * diag[..., None, :, :])
     denom = np.where(denom > 0.0, denom, np.nan)
-    coherence = (np.abs(posterior_psd) ** 2) / denom
+    coherence = np.abs(posterior_psd) / denom
     coherence = np.nan_to_num(coherence, nan=0.0, posinf=0.0, neginf=0.0)
     p = posterior_psd.shape[2]
     for channel in range(p):

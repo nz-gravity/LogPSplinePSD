@@ -1,14 +1,8 @@
 import os
 
 import arviz as az
-import matplotlib.pyplot as plt
 import numpy as np
 
-from log_psplines.arviz_utils import (
-    get_periodogram,
-    get_spline_model,
-    get_weights,
-)
 from log_psplines.datatypes import Periodogram, Timeseries
 from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.mcmc import run_mcmc
@@ -45,7 +39,6 @@ if os.path.exists(idata_fname):
     print(f"Loading existing inference data from {idata_fname}")
     idata = az.from_netcdf(idata_fname)
 else:
-
     spline_model = LogPSplines.from_periodogram(
         pdgrm,
         n_knots=len(lvk_data.knots_locations),
@@ -58,7 +51,7 @@ else:
         pdgrm=pdgrm, spline_model=spline_model, figsize=(12, 6)
     )
     ax.set_xscale("linear")
-    fig.savefig(os.path.join(out, f"test_spline_init.png"))
+    fig.savefig(os.path.join(out, "test_spline_init.png"))
 
     idata = run_mcmc(
         ts,
@@ -73,22 +66,22 @@ else:
 
     fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6))
     ax.set_xscale("linear")
-    fig.savefig(os.path.join(out, f"test_mcmc.png"))
+    fig.savefig(os.path.join(out, "test_mcmc.png"))
 
     fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6))
     ax.set_xscale("log")
-    fig.savefig(os.path.join(out, f"test_mcmc_log.png"))
+    fig.savefig(os.path.join(out, "test_mcmc_log.png"))
 
     fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6), show_knots=False)
     ax.set_xscale("linear")
-    fig.savefig(os.path.join(out, f"test_mcmc_no_knots.png"))
+    fig.savefig(os.path.join(out, "test_mcmc_no_knots.png"))
 
     fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6), show_knots=False)
     ax.set_xscale("log")
-    fig.savefig(os.path.join(out, f"test_mcmc_log_no_knots.png"))
+    fig.savefig(os.path.join(out, "test_mcmc_log_no_knots.png"))
 
 
 fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6), show_knots=True)
 ax.set_xscale("log")
-fig.savefig(os.path.join(out, f"test_mcmc_log_no_knots.png"))
+fig.savefig(os.path.join(out, "test_mcmc_log_no_knots.png"))
 # plt.show()

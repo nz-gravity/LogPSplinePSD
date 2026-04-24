@@ -3,9 +3,17 @@
 from .config import PipelineConfig
 from .make_pipeline import make_pipeline
 from .pipeline import InferencePipeline, PipelineResult
-from .stages import NUTSStage, StageResult, VIStage
+from .stages import (
+    FactorizedMultivarNUTSStage,
+    FactorizedMultivarVIStage,
+    NUTSStage,
+    StageResult,
+    VIStage,
+)
 
 __all__ = [
+    "FactorizedMultivarNUTSStage",
+    "FactorizedMultivarVIStage",
     "InferencePipeline",
     "NUTSStage",
     "PipelineConfig",

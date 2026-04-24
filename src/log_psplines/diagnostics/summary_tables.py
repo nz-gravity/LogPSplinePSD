@@ -167,6 +167,27 @@ def _n_draws(idata: xr.DataTree, *, group: str = "posterior") -> int:
     return n_chains * n_draws
 
 
+def _summary_reduction(
+    summary: pd.DataFrame, column: str, reducer: str
+) -> float:
+    """Safely reduce an ArviZ summary column to a finite scalar."""
+    if column not in summary:
+        return np.nan
+
+    values = pd.to_numeric(summary[column], errors="coerce").to_numpy(
+        dtype=float
+    )
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return np.nan
+
+    if reducer == "max":
+        return float(np.max(finite))
+    if reducer == "min":
+        return float(np.min(finite))
+    raise ValueError(f"Unsupported reducer: {reducer}")
+
+
 def build_nuts_summary_table(
     idata_or_factors: (
         xr.DataTree | Mapping[str, xr.DataTree] | Sequence[xr.DataTree]
@@ -192,19 +213,9 @@ def build_nuts_summary_table(
             ),
             "max_treedepth_hits": _tree_depth_hits(idata),
             "step_size": _step_size(idata),
-            "rhat_max": (
-                float(summary["r_hat"].max()) if "r_hat" in summary else np.nan
-            ),
-            "ess_bulk_min": (
-                float(summary["ess_bulk"].min())
-                if "ess_bulk" in summary
-                else np.nan
-            ),
-            "ess_tail_min": (
-                float(summary["ess_tail"].min())
-                if "ess_tail" in summary
-                else np.nan
-            ),
+            "rhat_max": _summary_reduction(summary, "r_hat", "max"),
+            "ess_bulk_min": _summary_reduction(summary, "ess_bulk", "min"),
+            "ess_tail_min": _summary_reduction(summary, "ess_tail", "min"),
             "n_draws": _n_draws(idata),
             "riae": np.nan,
             "l2": np.nan,

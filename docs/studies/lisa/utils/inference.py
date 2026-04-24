@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Optional, Sequence
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 import xarray as xr
@@ -126,12 +125,11 @@ def run_lisa_mcmc(
     wishart_detrend: str | bool = "constant",
     wishart_floor_fraction: float | None = None,
     exclude_freq_bands: Sequence[tuple[float, float]] = (),
-    tau: Optional[float] = None,
+    tau: float | None = None,
     only_vi: bool = False,
     use_analytical_psd_for_knots: bool = True,
     outdir: str = ".",
-    eta: float | str = "auto",
-    eta_c: float = 2.0,
+    eta: float = 1.0,
 ) -> xr.DataTree:
     """Run multivariate MCMC on LISA data.
 
@@ -167,8 +165,13 @@ def run_lisa_mcmc(
         f"wishart_floor_fraction={wishart_floor_fraction}, "
         f"vi={'on' if vi else 'off'}, only_vi={only_vi}, "
         f"auto_coarse_vi={'on' if auto_coarse_vi else 'off'}, "
-        f"n_excluded_bands={len(exclude_freq_bands_tuple)}, tau={tau}."
+        f"n_excluded_bands={len(exclude_freq_bands_tuple)}, eta={eta}."
     )
+    if tau is not None:
+        logger.warning(
+            "Ignoring tau: design-PSD shrinkage is not part of the current "
+            "pipeline API."
+        )
 
     idata = run_mcmc(
         data=ts,
@@ -207,10 +210,7 @@ def run_lisa_mcmc(
         dense_mass=dense_mass,
         true_psd=true_psd_source,
         compute_lnz=False,
-        design_psd=true_psd_source if tau is not None else None,
-        tau=tau,
-        eta=eta,
-        eta_c=eta_c,
+        eta=float(eta),
     )
 
     attach_truth_psd_group(idata, freq_true=freq_true, S_true=S_true)

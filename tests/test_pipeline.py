@@ -10,8 +10,15 @@ from log_psplines import make_pipeline
 from log_psplines.datatypes import Periodogram
 from log_psplines.datatypes.multivar import MultivarFFT, MultivariateTimeseries
 from log_psplines.pipeline.config import PipelineConfig
-from log_psplines.pipeline.pipeline import InferencePipeline, PipelineResult
-from log_psplines.pipeline.stages import NUTSStage, VIStage
+from log_psplines.pipeline.pipeline import (
+    InferencePipeline,
+    PipelineResult,
+    _init_values_to_dataset,
+)
+from log_psplines.pipeline.stages import (
+    FactorizedMultivarNUTSStage,
+    FactorizedMultivarVIStage,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -51,6 +58,29 @@ def _fast_config(**extra) -> PipelineConfig:
     )
 
 
+def test_vi_init_values_dataset_uses_variable_specific_dims():
+    ds = _init_values_to_dataset(
+        {
+            "delta_0": np.zeros(3),
+            "weights_delta_0": np.zeros(51),
+            "weights_theta_re_1_0": np.zeros((3, 51)),
+        }
+    )
+
+    assert ds["delta_0"].dims == ("chain", "draw", "delta_0_dim_0")
+    assert ds["weights_delta_0"].dims == (
+        "chain",
+        "draw",
+        "weights_delta_0_dim_0",
+    )
+    assert ds["weights_theta_re_1_0"].dims == (
+        "chain",
+        "draw",
+        "weights_theta_re_1_0_dim_0",
+        "weights_theta_re_1_0_dim_1",
+    )
+
+
 # ---------------------------------------------------------------------------
 # make_pipeline construction
 # ---------------------------------------------------------------------------
@@ -68,6 +98,8 @@ def test_make_pipeline_multivar_returns_inference_pipeline(multivar_data):
     pipeline = make_pipeline(multivar_data, _fast_config())
     assert isinstance(pipeline, InferencePipeline)
     assert pipeline.coarse_model_kwargs is None
+    assert isinstance(pipeline.vi_stage, FactorizedMultivarVIStage)
+    assert isinstance(pipeline.nuts_stage, FactorizedMultivarNUTSStage)
 
 
 def test_make_pipeline_vi_stage_uses_config(univar_data):
@@ -138,11 +170,15 @@ def test_pipeline_multivar_only_vi(multivar_data):
     assert isinstance(result, PipelineResult)
     assert result.vi is not None
     assert result.vi.losses.shape[0] > 0
+    assert result.vi.losses_per_block is not None
+    assert len(result.vi.losses_per_block) == multivar_data.p
     posterior = result.idata.children.get("posterior")
     assert posterior is not None
     # All per-channel weight sites should be present in VI means
     assert "weights_delta_0" in result.vi.init_values
     assert "weights_delta_1" in result.vi.init_values
+    vi_stats = result.idata["vi_sample_stats"].dataset
+    assert "losses_per_block" in vi_stats
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +231,12 @@ def test_pipeline_multivar_nuts(multivar_data):
     assert posterior is not None
     ds = posterior.dataset
     assert "weights_delta_0" in ds
+    assert "weights_delta_1" in ds
     assert ds["weights_delta_0"].sizes["draw"] == config.n_samples
+    stats = result.idata["sample_stats"].dataset
+    assert "acceptance_rate_channel_0" in stats
+    assert "acceptance_rate_channel_1" in stats
+    assert result.idata.attrs["factorized"] is True
 
 
 # ---------------------------------------------------------------------------

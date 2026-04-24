@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any, Optional
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
@@ -13,10 +13,10 @@ __all__ = ["unpack_data"]
 
 @dataclasses.dataclass
 class PlottingData:
-    freqs: Optional[np.ndarray] = None
-    pdgrm: Optional[np.ndarray] = None
-    model: Optional[np.ndarray] = None
-    ci: Optional[np.ndarray] = None
+    freqs: np.ndarray | None = None
+    pdgrm: np.ndarray | None = None
+    model: np.ndarray | None = None
+    ci: np.ndarray | None = None
 
     @property
     def n(self) -> int:
@@ -33,13 +33,13 @@ class PlottingData:
 def unpack_data(
     pdgrm: Periodogram | None = None,
     spline_model: LogPSplines | None = None,
-    weights: Optional[np.ndarray] = None,
+    weights: np.ndarray | None = None,
     yscalar: float = 1.0,
     use_uniform_ci: bool = True,
     use_parametric_model: bool = True,
-    freqs: Optional[np.ndarray] = None,
-    posterior_psd_quantiles: Optional[dict[str, Any]] = None,
-    model_ci: Optional[np.ndarray] = None,
+    freqs: np.ndarray | None = None,
+    posterior_psd_quantiles: dict[str, Any] | None = None,
+    model_ci: np.ndarray | None = None,
 ) -> PlottingData:
     plt_dat = PlottingData()
     if pdgrm is not None:
@@ -71,7 +71,6 @@ def unpack_data(
         plt_dat.model = q50
 
     if plt_dat.model is None and spline_model is not None:
-
         if weights is None:
             # just use the initial weights/0 weights
             ln_spline = np.asarray(
@@ -87,13 +86,7 @@ def unpack_data(
         else:  # weights.ndim == 2
             # multiple sets of weights -- CI possible
 
-            weights_arr = np.asarray(weights)
-            if weights_arr.shape[0] > 500:
-                # subsample to speed up
-                idx = np.random.choice(
-                    weights_arr.shape[0], size=500, replace=False
-                )
-                weights_arr = weights_arr[idx]
+            weights_arr = subsample_weights(np.asarray(weights))
 
             ln_splines = jnp.array(
                 [

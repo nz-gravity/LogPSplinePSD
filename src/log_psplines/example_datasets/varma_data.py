@@ -1,5 +1,3 @@
-from typing import Optional
-
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.fft import rfft
@@ -180,6 +178,17 @@ class VARMAData:
             )
             return
 
+        if self.is_valid_var_dataset and not is_empirical:
+            logger.info(
+                f"VAR sanity check passed (structural): stationary AR dynamics "
+                f"(companion spectral radius={spectral_radius:.6f}) with finite samples. "
+                f"Empirical stationarity check suggests moment drift "
+                f"(max_mean_shift_z={empirical_metrics['max_mean_shift_z']:.3f}, "
+                f"max_var_ratio={empirical_metrics['max_var_ratio']:.3f}, "
+                f"covariance_rel_drift={empirical_metrics['covariance_rel_drift']:.3f})."
+            )
+            return
+
         issues: list[str] = []
         if not is_stationary:
             issues.append(
@@ -233,7 +242,7 @@ class VARMAData:
         return true_psd
 
     def plot(
-        self, axs: Optional[np.ndarray] = None, fname: Optional[str] = None
+        self, axs: np.ndarray | None = None, fname: str | None = None
     ) -> np.ndarray:
         """Plot PSD/CSD panels for true PSD and empirical periodogram.
 
@@ -326,8 +335,8 @@ def _calculate_true_varma_psd(
     vma_coeffs: np.ndarray,
     sigma: np.ndarray,
     fs: float,
-    channel_stds: Optional[np.ndarray],
-    scaling_factor: Optional[float],
+    channel_stds: np.ndarray | None,
+    scaling_factor: float | None,
 ) -> np.ndarray:
     """Calculate the one-sided theoretical VARMA spectral matrix.
 

@@ -22,9 +22,8 @@ from ..pspline_block import (
     evaluate_log_density_batch,
     sample_pspline_block,
 )
-from ..vi_init import VIInitialisationMixin
 from ..vi_init.common import _median_vi_values
-from ..vi_init.mixin import VIInitialisationArtifacts
+from ..vi_init.core import VIInitialisationArtifacts
 from ..vi_init.plan import VIWarmStartPlan
 from ..vi_init.runner import (
     compute_vi_artifacts_univar,
@@ -87,7 +86,7 @@ def bayesian_model(
     numpyro.factor("ln_likelihood", eta * lnl)
 
 
-class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):
+class NUTSSampler(UnivarBaseSampler):
     """NUTS sampler for univariate PSD estimation."""
 
     def __init__(

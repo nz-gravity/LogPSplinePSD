@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import time
 from typing import Literal
 
 import jax
@@ -8,12 +9,8 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from log_psplines.example_datasets.ar_data import ARData
-from log_psplines.mcmc import (
-    DiagnosticsConfig,
-    ModelConfig,
-    RunMCMCConfig,
-    run_mcmc,
-)
+from log_psplines.mcmc import run_mcmc
+from log_psplines.pipeline.config import PipelineConfig
 
 from ..logger import logger
 from .plotting import plot_data_size_results, plot_knots_results
@@ -29,6 +26,16 @@ AR_DEFAULTS = dict(
     sigma=1.0,
     seed=42,
 )
+
+
+def _compute_ess(idata) -> np.ndarray:
+    """Compute ESS from posterior weights (chain × draw)."""
+    try:
+        import arviz as az
+
+        return np.asarray(az.ess(idata).to_array().values.ravel())
+    except Exception:
+        return np.array([float("nan")])
 
 
 class RuntimeBenchmark:
@@ -55,18 +62,12 @@ class RuntimeBenchmark:
         reps: int = 3,
     ) -> None:
         """Analyze runtime vs data size (duration)."""
-        diagnostics_cfg = DiagnosticsConfig(verbose=self.verbose)
-        model_cfg = ModelConfig(
-            n_knots=10,
-            knot_kwargs={"frac_uniform": 1.0},
-        )
-
         if min_n >= max_n:
             raise ValueError(
                 f"min_n ({min_n}) must be strictly less than max_n ({max_n})."
             )
         _ns = np.geomspace(min_n, max_n, num=num_points, dtype=int)
-        durations = _ns / AR_DEFAULTS["fs"]  # Convert to durations in seconds
+        durations = _ns / AR_DEFAULTS["fs"]
         runtimes = []
         ns = []
         ess = []
@@ -74,7 +75,6 @@ class RuntimeBenchmark:
         for duration in tqdm(
             durations, desc=f"Varying data sizes [{sampler}, {DEVICE}]"
         ):
-            # Generate AR data with specified duration
             ar_data = ARData(
                 order=int(AR_DEFAULTS["order"]),
                 duration=float(duration),
@@ -86,36 +86,31 @@ class RuntimeBenchmark:
             runtimes_i = []
             ess_i = []
             for rep in range(reps):
-                run_cfg = RunMCMCConfig(
+                config = PipelineConfig(
                     n_samples=self.n_mcmc,
                     n_warmup=self.n_warmup,
                     rng_key=rep,
-                    model=model_cfg,
-                    diagnostics=diagnostics_cfg,
+                    n_knots=10,
+                    knot_kwargs={"frac_uniform": 1.0},
+                    verbose=self.verbose,
                 )
-                idata = run_mcmc(
-                    data=ar_data.ts,
-                    config=run_cfg,
-                )
-                runtimes_i.append(idata.attrs["runtime"])
-                ess_i.append(idata.attrs["ess"])
+                t0 = time.perf_counter()
+                idata = run_mcmc(data=ar_data.ts, config=config)
+                runtimes_i.append(time.perf_counter() - t0)
+                ess_i.append(_compute_ess(idata))
 
             runtimes.append(runtimes_i)
             ns.append(len(ar_data.ts.t))
             ess.append(np.concatenate(ess_i))
 
-        # Save results
         data_file = f"{self.outdir}/data_size_runtimes_{sampler}_{DEVICE}.json"
-        runtimes_array = np.asarray(runtimes)
-        ess_array = np.asarray(ess)
-
         with open(data_file, "w") as f:
             json.dump(
                 {
                     "ns": ns,
                     "durations": durations.tolist(),
-                    "runtimes": runtimes_array.tolist(),
-                    "ess": ess_array.tolist(),
+                    "runtimes": np.asarray(runtimes).tolist(),
+                    "ess": np.asarray(ess).tolist(),
                     "sampler": sampler,
                     "device": DEVICE,
                 },
@@ -132,7 +127,6 @@ class RuntimeBenchmark:
         reps: int = 3,
     ) -> None:
         """Analyze runtime vs number of knots."""
-        # Fixed AR data
         ar_data = ARData(
             order=int(AR_DEFAULTS["order"]),
             duration=float(AR_DEFAULTS["duration"]),
@@ -142,8 +136,6 @@ class RuntimeBenchmark:
         )
         ts_data = ar_data.ts
 
-        diagnostics_cfg = DiagnosticsConfig(verbose=self.verbose)
-
         ks = np.linspace(min_knots, max_knots, num=num_points, dtype=int)
         runtimes = []
         ess = []
@@ -152,33 +144,28 @@ class RuntimeBenchmark:
             runtimes_i = []
             ess_i = []
             for rep in range(reps):
-                run_cfg = RunMCMCConfig(
+                config = PipelineConfig(
                     n_samples=self.n_mcmc,
                     n_warmup=self.n_warmup,
                     rng_key=rep,
-                    model=ModelConfig(
-                        n_knots=int(k),
-                        knot_kwargs={"frac_uniform": 1.0},
-                    ),
-                    diagnostics=diagnostics_cfg,
+                    n_knots=int(k),
+                    knot_kwargs={"frac_uniform": 1.0},
+                    verbose=self.verbose,
                 )
-                idata = run_mcmc(data=ts_data, config=run_cfg)
-                runtimes_i.append(idata.attrs["runtime"])
-                ess_i.append(idata.attrs["ess"])
+                t0 = time.perf_counter()
+                idata = run_mcmc(data=ts_data, config=config)
+                runtimes_i.append(time.perf_counter() - t0)
+                ess_i.append(_compute_ess(idata))
             ess.append(np.concatenate(ess_i))
             runtimes.append(runtimes_i)
 
-        # Save results
         data_file = f"{self.outdir}/knots_runtimes_{sampler}_{DEVICE}.json"
-        runtimes_array = np.asarray(runtimes)
-        ess_array = np.asarray(ess)
-
         with open(data_file, "w") as f:
             json.dump(
                 {
                     "ks": ks.tolist(),
-                    "ess": ess_array.tolist(),
-                    "runtimes": runtimes_array.tolist(),
+                    "ess": np.asarray(ess).tolist(),
+                    "runtimes": np.asarray(runtimes).tolist(),
                     "sampler": sampler,
                     "device": DEVICE,
                 },
@@ -197,13 +184,11 @@ class RuntimeBenchmark:
         sampler: Literal["nuts", "all"] = "all",
     ):
         """Run analyses for the NUTS sampler."""
-
         if sampler not in ["nuts", "all"]:
             raise ValueError(
                 f"Invalid sampler: {sampler}. Choose from 'nuts' or 'all'."
             )
 
-        # 'all' defaults to NUTS since other samplers are not yet supported
         if sampler == "all":
             logger.warning(
                 "Only NUTS sampler is currently supported. "
@@ -226,7 +211,6 @@ class RuntimeBenchmark:
 
     def plot(self) -> None:
         """Plot all analyses."""
-
         runtimes_n = glob.glob(f"{self.outdir}/data_size_runtimes_*.json")
         runtimes_knots = glob.glob(f"{self.outdir}/knots_runtimes_*.json")
 

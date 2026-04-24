@@ -30,10 +30,12 @@ def plot_energy(posteriors: xr.DataTree | dict[str, xr.DataTree]):
     if len(factors) <= 1:
         dt = next(iter(factors.values()))
         try:
-            return azp.plot_energy(dt)
+            return azp.plot_energy(dt, backend="matplotlib")
         except Exception:
             if isinstance(dt, xr.DataTree) and "sample_stats" in dt.children:
-                return azp.plot_energy(dt["sample_stats"])
+                return azp.plot_energy(
+                    dt["sample_stats"], backend="matplotlib"
+                )
             raise
 
     # Multivariate: render each factor's plot as an image and stack vertically
@@ -41,13 +43,15 @@ def plot_energy(posteriors: xr.DataTree | dict[str, xr.DataTree]):
     for factor_name in sorted(factors):
         factor_dt = factors[factor_name]
         try:
-            pc = azp.plot_energy(factor_dt)
+            pc = azp.plot_energy(factor_dt, backend="matplotlib")
         except Exception:
             if (
                 isinstance(factor_dt, xr.DataTree)
                 and "sample_stats" in factor_dt.children
             ):
-                pc = azp.plot_energy(factor_dt["sample_stats"])
+                pc = azp.plot_energy(
+                    factor_dt["sample_stats"], backend="matplotlib"
+                )
             else:
                 continue
         fig = pc.viz["figure"].item()
@@ -58,7 +62,9 @@ def plot_energy(posteriors: xr.DataTree | dict[str, xr.DataTree]):
         plt.close(fig)
 
     if not images:
-        return azp.plot_energy(next(iter(factors.values())))
+        return azp.plot_energy(
+            next(iter(factors.values())), backend="matplotlib"
+        )
 
     p = len(images)
     combined_fig, axes = plt.subplots(p, 1, figsize=(12, 5 * p))

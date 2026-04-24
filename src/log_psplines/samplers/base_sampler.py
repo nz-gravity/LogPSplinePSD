@@ -776,7 +776,9 @@ class BaseSampler(ABC):
                     sample_stats_ds = _require_dataset(target, "sample_stats")
                     sample_stats_ds.attrs.update(nuts_metric_attrs)
 
-            trace_plot = azp.plot_trace_dist(idata_out, compact=True)
+            trace_plot = azp.plot_trace_dist(
+                idata_out, compact=True, backend="matplotlib"
+            )
             trace_plot.savefig(
                 diagnostics_dir / "traces.png",
                 dpi=150,
@@ -784,10 +786,11 @@ class BaseSampler(ABC):
             )
             plt.close("all")
 
-        except Exception as exc:  # pragma: no cover
+        except ValueError as exc:  # pragma: no cover
             logger.warning(
                 f"Could not save minimal NUTS diagnostics: {exc}",
                 exc_info=True,
+                stack_info=True,
             )
         try:
             energy_plot = plot_energy(idata_out)

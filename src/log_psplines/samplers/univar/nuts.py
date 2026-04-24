@@ -61,6 +61,7 @@ def bayesian_model(
     beta_phi,
     alpha_delta,
     beta_delta,
+    eta: float = 1.0,
 ):
     """NumPyro model for univariate PSD estimation."""
     block = sample_pspline_block(
@@ -83,7 +84,7 @@ def bayesian_model(
         ln_parametric,
         Nh,
     )
-    numpyro.factor("ln_likelihood", lnl)
+    numpyro.factor("ln_likelihood", eta * lnl)
 
 
 class NUTSSampler(VIInitialisationMixin, UnivarBaseSampler):

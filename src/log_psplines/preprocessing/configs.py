@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+from abc import ABCMeta
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Literal, Optional, Tuple, Union
@@ -18,6 +20,7 @@ from ..datatypes.multivar import (
 from ..datatypes.multivar_utils import _interp_frequency_indexed_array
 from ..datatypes.univar import Timeseries
 from ..logger import logger
+from ..pipeline.config import PipelineConfig
 from ..psplines import LogPSplines, MultivariateLogPSplines
 from ..samplers import (
     MultivarBlockedNUTSConfig,
@@ -100,54 +103,148 @@ class NUTSConfigOverride:
     design_from_vi_tau: float = 10.0
 
 
-@dataclass(frozen=True)
-class RunMCMCConfig:
-    """MCMC and data-processing configuration.
-
-    Sampler type is automatically inferred from input data:
-    - Timeseries (1D) → 'nuts'
-    - MultivariateTimeseries (P-D) → 'multivar_blocked_nuts'
-    """
-
-    n_samples: int = 1000
-    n_warmup: int = 500
-    num_chains: int = 1
-    chain_method: Optional[Literal["parallel", "vectorized", "sequential"]] = (
-        None
+def _pipeline_model(self: PipelineConfig) -> ModelConfig:
+    return ModelConfig(
+        n_knots=self.n_knots,
+        degree=self.degree,
+        diffMatrixOrder=self.diffMatrixOrder,
+        knot_kwargs=self.knot_kwargs,
+        parametric_model=self.parametric_model,
+        analytical_psd=self.analytical_psd,
+        true_psd=self.true_psd,
+        fmin=self.fmin,
+        fmax=self.fmax,
+        exclude_freq_bands=self.exclude_freq_bands,
     )
-    alpha_phi: float = 1.0
-    beta_phi: float = 1.0
-    alpha_delta: float = 1e-4
-    beta_delta: float = 1e-4
-    rng_key: int = 42
-    coarse_grain_config: Optional[CoarseGrainConfig | dict] = None
-    Nb: int = 1
-    # Window applied to each block before the Wishart (likelihood) FFT.
-    # Defaults to None for a rectangular window (no tapering).
-    # Tapered windows like "hann" reduce spectral leakage at the cost of
-    # larger equivalent noise bandwidth (ENBW). Changing this affects the
-    # likelihood, not just plots.
-    wishart_window: Optional[str | tuple] = None
-    wishart_detrend: str | bool = "constant"
-    # Floor the eigenvalues of each Wishart matrix at this fraction of the
-    # median trace.  Useful for spectra with deterministic nulls (e.g. LISA
-    # TDI transfer functions).  Set to e.g. 1e-6 to stabilise Cholesky /
-    # likelihood near nulls without affecting bins with real power.
-    wishart_floor_fraction: Optional[float] = None
-    welch_nperseg: int | None = None
-    welch_noverlap: int | None = None
-    welch_window: str = "hann"
-    model: ModelConfig = field(default_factory=ModelConfig)
-    diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
-    vi: VIConfig = field(default_factory=VIConfig)
-    nuts: NUTSConfigOverride = field(default_factory=NUTSConfigOverride)
-    extra_kwargs: dict[str, Any] = field(default_factory=dict)
+
+
+def _pipeline_diagnostics(self: PipelineConfig) -> DiagnosticsConfig:
+    return DiagnosticsConfig(
+        verbose=self.verbose,
+        outdir=self.outdir,
+        compute_lnz=self.compute_lnz,
+    )
+
+
+def _pipeline_vi(self: PipelineConfig) -> VIConfig:
+    return VIConfig(
+        only_vi=self.only_vi,
+        init_from_vi=self.init_from_vi,
+        vi_steps=self.vi_steps,
+        vi_lr=self.vi_lr,
+        vi_guide=self.vi_guide,
+        vi_posterior_draws=self.vi_posterior_draws,
+        vi_progress_bar=self.vi_progress_bar,
+        vi_psd_max_draws=self.vi_psd_max_draws,
+        coarse_grain_config_vi=self.coarse_grain_config_vi,
+        auto_coarse_vi=self.auto_coarse_vi,
+        auto_coarse_vi_target_nfreq=self.auto_coarse_vi_target_nfreq,
+        auto_coarse_vi_min_full_nfreq=self.auto_coarse_vi_min_full_nfreq,
+        use_coarse_vi_for_init=self.use_coarse_vi_for_init,
+        vi_coarse_only=self.vi_coarse_only,
+    )
+
+
+def _pipeline_nuts(self: PipelineConfig) -> NUTSConfigOverride:
+    return NUTSConfigOverride(
+        target_accept_prob=self.target_accept_prob,
+        target_accept_prob_by_channel=self.target_accept_prob_by_channel,
+        max_tree_depth=self.max_tree_depth,
+        max_tree_depth_by_channel=self.max_tree_depth_by_channel,
+        dense_mass=self.dense_mass,
+        alpha_phi_theta=self.alpha_phi_theta,
+        beta_phi_theta=self.beta_phi_theta,
+        design_from_vi=self.design_from_vi,
+        design_from_vi_tau=self.design_from_vi_tau,
+    )
+
+
+PipelineConfig.model = property(_pipeline_model)
+PipelineConfig.diagnostics = property(_pipeline_diagnostics)
+PipelineConfig.vi = property(_pipeline_vi)
+PipelineConfig.nuts = property(_pipeline_nuts)
+
+
+def _merge_legacy_config(
+    pipeline_kwargs: dict[str, Any],
+    key: str,
+    value: Any,
+) -> None:
+    if value is None:
+        return
+    if isinstance(value, dict):
+        source = dict(value)
+    elif is_dataclass(value):
+        source = {
+            item.name: getattr(value, item.name) for item in fields(value)
+        }
+    else:
+        raise TypeError(
+            f"{key} must be a dataclass instance, dict, or None; "
+            f"got {type(value).__name__}."
+        )
+    for field_name, field_value in source.items():
+        if field_name in pipeline_kwargs:
+            raise TypeError(
+                f"Received both '{field_name}' and legacy '{key}' values."
+            )
+        pipeline_kwargs[field_name] = field_value
+
+
+def _build_pipeline_config_from_legacy(
+    *args: Any,
+    **kwargs: Any,
+) -> PipelineConfig:
+    if args:
+        raise TypeError(
+            "RunMCMCConfig no longer accepts positional arguments."
+        )
+
+    pipeline_kwargs = dict(kwargs)
+    _merge_legacy_config(
+        pipeline_kwargs, "model", pipeline_kwargs.pop("model", None)
+    )
+    _merge_legacy_config(
+        pipeline_kwargs,
+        "diagnostics",
+        pipeline_kwargs.pop("diagnostics", None),
+    )
+    _merge_legacy_config(
+        pipeline_kwargs, "vi", pipeline_kwargs.pop("vi", None)
+    )
+    _merge_legacy_config(
+        pipeline_kwargs, "nuts", pipeline_kwargs.pop("nuts", None)
+    )
+
+    allowed = {item.name for item in fields(PipelineConfig)}
+    unknown = sorted(set(pipeline_kwargs) - allowed)
+    if unknown:
+        raise TypeError(
+            f"Unexpected RunMCMCConfig keyword arguments: {unknown}"
+        )
+
+    return PipelineConfig(**pipeline_kwargs)
+
+
+class RunMCMCConfig(metaclass=ABCMeta):
+    """Deprecated compatibility shim for the flat ``PipelineConfig``."""
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> PipelineConfig:
+        warnings.warn(
+            "RunMCMCConfig is deprecated; use PipelineConfig instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _build_pipeline_config_from_legacy(*args, **kwargs)
+
+
+RunMCMCConfig.register(PipelineConfig)
 
 
 @dataclass(frozen=True)
 class SamplerFactoryConfig:
     sampler_type: SamplerName
-    run_config: RunMCMCConfig
+    run_config: PipelineConfig
     scaling_factor: float
     true_psd: Optional[np.ndarray]
     channel_stds: Optional[np.ndarray]

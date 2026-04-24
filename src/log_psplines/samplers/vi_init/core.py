@@ -67,11 +67,16 @@ def resolve_guide(
 
     if isinstance(guide, str):
         key = guide.lower()
+        # Only pass init_loc_fn when we have actual init values; passing None
+        # triggers a NumPyro ≥0.20.0 error in substitute().
+        loc_kwargs = (
+            {"init_loc_fn": init_loc_fn} if init_loc_fn is not None else {}
+        )
         if key == "diag":
-            return AutoDiagonalNormal(model, init_loc_fn=init_loc_fn), "diag"
+            return AutoDiagonalNormal(model, **loc_kwargs), "diag"
         if key == "mvn":
             return (
-                AutoMultivariateNormal(model, init_loc_fn=init_loc_fn),
+                AutoMultivariateNormal(model, **loc_kwargs),
                 "mvn",
             )
         if key.startswith("lowrank"):
@@ -80,7 +85,7 @@ def resolve_guide(
             if len(parts) == 2 and parts[1]:
                 rank = int(parts[1])
             guide_instance = AutoLowRankMultivariateNormal(
-                model, rank=rank, init_loc_fn=init_loc_fn
+                model, rank=rank, **loc_kwargs
             )
             return guide_instance, f"lowrank:{rank}"
         if key.startswith("flow"):
@@ -91,11 +96,11 @@ def resolve_guide(
             # Use IAF for speed; allow switching to BNAF by prefix.
             if key.startswith("flowbnaf"):
                 guide_instance = AutoBNAFNormal(
-                    model, num_flows=layers, init_loc_fn=init_loc_fn
+                    model, num_flows=layers, **loc_kwargs
                 )
                 return guide_instance, f"flowbnaf:{layers}"
             guide_instance = AutoIAFNormal(
-                model, num_flows=layers, init_loc_fn=init_loc_fn
+                model, num_flows=layers, **loc_kwargs
             )
             return guide_instance, f"flow:{layers}"
         raise ValueError(f"Unknown VI guide specifier: {guide}")

@@ -1,5 +1,6 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Union
+from typing import Any
 
 import jax
 import matplotlib.pyplot as plt
@@ -180,11 +181,11 @@ class LogPSplines:
     diffMatrixOrder: int
     n: int
     knots: np.ndarray
-    basis: Optional[jnp.ndarray] = None
-    penalty_matrix: Optional[jnp.ndarray] = None
-    weights: Optional[jnp.ndarray] = None
-    parametric_model: Union[jnp.ndarray, None] = None
-    grid_points: Optional[np.ndarray] = None
+    basis: jnp.ndarray | None = None
+    penalty_matrix: jnp.ndarray | None = None
+    weights: jnp.ndarray | None = None
+    parametric_model: jnp.ndarray | None = None
+    grid_points: np.ndarray | None = None
 
     def __post_init__(self):
         """Validate model parameters and check mathematical consistency."""
@@ -210,7 +211,9 @@ class LogPSplines:
 
         self.knots = np.asarray(self.knots, dtype=np.float64)
         if self.knots.ndim != 1:
-            raise ValueError(f"knots must be 1-D, got shape {self.knots.shape}")
+            raise ValueError(
+                f"knots must be 1-D, got shape {self.knots.shape}"
+            )
         if self.knots.size == 0:
             raise ValueError("knots must be non-empty")
         if not np.all(np.isfinite(self.knots)):
@@ -273,7 +276,9 @@ class LogPSplines:
             )
 
         if self.weights is None:
-            self.weights = jnp.zeros(self.basis.shape[1], dtype=self.basis.dtype)
+            self.weights = jnp.zeros(
+                self.basis.shape[1], dtype=self.basis.dtype
+            )
         else:
             self.weights = jnp.asarray(self.weights)
             if self.weights.ndim != 1:
@@ -307,7 +312,15 @@ class LogPSplines:
         ), "parametric_model must be provided or initialized."
 
     def __repr__(self):
-        return f"LogPSplines(knots={self.n_knots}, degree={self.degree}, penaltyOrder={self.diffMatrixOrder}, n={self.n})"  # , sparsity={self.basis_sparsity:.2f}, penalty_sparsity={self.penalty_sparsity:.2f})"
+        basis_shape = (
+            int(self.n),
+            int(self.n_knots + self.degree - 1),
+        )
+        return (
+            f"LogPSplines(knots={self.n_knots}, degree={self.degree}, "
+            f"penaltyOrder={self.diffMatrixOrder}, n={self.n}, "
+            f"basis_shapes={[basis_shape]})"
+        )
 
     @staticmethod
     def _storage_name(field: str, prefix: str | None = None) -> str:
@@ -332,7 +345,9 @@ class LogPSplines:
             return value.item()
         if value.size == 1:
             return value.reshape(()).item()
-        raise ValueError(f"Expected scalar at key '{key}', got shape {value.shape}")
+        raise ValueError(
+            f"Expected scalar at key '{key}', got shape {value.shape}"
+        )
 
     def to_storage_payload(
         self,
@@ -349,7 +364,10 @@ class LogPSplines:
 
         data: dict[str, tuple[list[str], np.ndarray]] = {
             knots_key: ([knots_dim], np.asarray(self.knots, dtype=np.float64)),
-            grid_key: ([freq_dim], np.asarray(self.grid_points, dtype=np.float64)),
+            grid_key: (
+                [freq_dim],
+                np.asarray(self.grid_points, dtype=np.float64),
+            ),
             param_key: ([freq_dim], np.asarray(self.parametric_model)),
         }
         coords: dict[str, np.ndarray] = {
@@ -404,7 +422,9 @@ class LogPSplines:
         if diffMatrixOrder is None:
             if "diffMatrixOrder" not in dataset:
                 raise KeyError("Missing required scalar 'diffMatrixOrder'.")
-            diffMatrixOrder = int(cls._dataset_scalar(dataset, "diffMatrixOrder"))
+            diffMatrixOrder = int(
+                cls._dataset_scalar(dataset, "diffMatrixOrder")
+            )
 
         grid_key = cls._storage_name("grid_points", prefix)
         param_key = cls._storage_name("parametric_model", prefix)
@@ -515,7 +535,7 @@ class LogPSplines:
         degree: int,
         diffMatrixOrder: int = 3,
         parametric_model: jnp.ndarray | None = None,
-        knot_kwargs: Optional[dict] = None,
+        knot_kwargs: dict | None = None,
     ):
         """
         Construct LogPSplines model from periodogram data.

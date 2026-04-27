@@ -1,23 +1,15 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import (
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Sequence,
-    Tuple,
     cast,
 )
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
 from ..datatypes import MultivarFFT, Periodogram
 from ..datatypes.multivar_utils import U_to_Y, psd_to_cholesky_components
-from ..logger import logger
 from .initialisation import init_weights
 from .knots_locator import init_knots, multivar_psd_knot_scores
 from .psplines import LogPSplines
@@ -32,8 +24,8 @@ class MultivarComponentKey:
 
     family: Literal["delta", "theta"]
     j: int
-    l: Optional[int] = None
-    part: Optional[Literal["re", "im"]] = None
+    l: int | None = None
+    part: Literal["re", "im"] | None = None
 
     def __post_init__(self):
         if int(self.j) < 0:
@@ -74,7 +66,7 @@ class MultivarComponentSpec:
 
     key: MultivarComponentKey
     model: LogPSplines
-    score: Optional[np.ndarray] = None
+    score: np.ndarray | None = None
 
 
 def _resolve_family_knot_counts(
@@ -202,20 +194,20 @@ class MultivariateLogPSplines:
     p: int
 
     # P-spline components for each Cholesky parameter
-    diagonal_models: List[LogPSplines]  # One per channel
-    offdiag_re_models: Dict[Tuple[int, int], LogPSplines] = field(
+    diagonal_models: list[LogPSplines]  # One per channel
+    offdiag_re_models: dict[tuple[int, int], LogPSplines] = field(
         default_factory=dict
     )
-    offdiag_im_models: Dict[Tuple[int, int], LogPSplines] = field(
+    offdiag_im_models: dict[tuple[int, int], LogPSplines] = field(
         default_factory=dict
     )
-    component_specs: Dict[MultivarComponentKey, MultivarComponentSpec] = field(
+    component_specs: dict[MultivarComponentKey, MultivarComponentSpec] = field(
         default_factory=dict, repr=False
     )
-    component_order: List[MultivarComponentKey] = field(
+    component_order: list[MultivarComponentKey] = field(
         default_factory=list, repr=False
     )
-    component_scores: Dict[MultivarComponentKey, np.ndarray] = field(
+    component_scores: dict[MultivarComponentKey, np.ndarray] = field(
         default_factory=dict, repr=False
     )
 
@@ -408,7 +400,7 @@ class MultivariateLogPSplines:
                         )
                     )
 
-        component_scores: Dict[MultivarComponentKey, np.ndarray] = {}
+        component_scores: dict[MultivarComponentKey, np.ndarray] = {}
 
         # Create diagonal models (one per channel), each with its own
         # knot placement and basis construction.
@@ -451,8 +443,8 @@ class MultivariateLogPSplines:
             diagonal_models.append(diagonal_model)
 
         # Create off-diagonal models if needed
-        offdiag_re_models: Dict[Tuple[int, int], LogPSplines] = {}
-        offdiag_im_models: Dict[Tuple[int, int], LogPSplines] = {}
+        offdiag_re_models: dict[tuple[int, int], LogPSplines] = {}
+        offdiag_im_models: dict[tuple[int, int], LogPSplines] = {}
         theta_pairs = [(j, l) for j in range(1, p) for l in range(j)]
 
         if p > 1:
@@ -567,7 +559,7 @@ class MultivariateLogPSplines:
         return int(self.p * (self.p - 1) / 2)
 
     @property
-    def theta_pairs(self) -> List[Tuple[int, int]]:
+    def theta_pairs(self) -> list[tuple[int, int]]:
         """Lower-triangular (j, l) index pairs with j > l in model order."""
         return [(j, l) for j in range(1, self.p) for l in range(j)]
 
@@ -586,7 +578,7 @@ class MultivariateLogPSplines:
         )
 
     @property
-    def expected_component_order(self) -> List[MultivarComponentKey]:
+    def expected_component_order(self) -> list[MultivarComponentKey]:
         order = [self.delta_key(j) for j in range(self.p)]
         order.extend(self.theta_key("re", j, l) for j, l in self.theta_pairs)
         order.extend(self.theta_key("im", j, l) for j, l in self.theta_pairs)
@@ -599,7 +591,7 @@ class MultivariateLogPSplines:
             self.component_order = list(expected_order)
 
         if not self.component_specs:
-            specs: Dict[MultivarComponentKey, MultivarComponentSpec] = {}
+            specs: dict[MultivarComponentKey, MultivarComponentSpec] = {}
             for j, model in enumerate(self.diagonal_models):
                 key = self.delta_key(j)
                 specs[key] = MultivarComponentSpec(
@@ -644,7 +636,7 @@ class MultivariateLogPSplines:
                 "component_order must contain exactly the expected keys."
             )
 
-    def theta_pair_from_index(self, theta_idx: int) -> Tuple[int, int]:
+    def theta_pair_from_index(self, theta_idx: int) -> tuple[int, int]:
         pairs = self.theta_pairs
         if theta_idx < 0 or theta_idx >= len(pairs):
             raise IndexError(
@@ -657,7 +649,7 @@ class MultivariateLogPSplines:
     ) -> MultivarComponentSpec:
         return self.component_specs[key]
 
-    def iter_component_specs(self) -> List[MultivarComponentSpec]:
+    def iter_component_specs(self) -> list[MultivarComponentSpec]:
         return [self.component_specs[key] for key in self.component_order]
 
     def theta_index(self, j: int, l: int) -> int:
@@ -679,7 +671,7 @@ class MultivariateLogPSplines:
 
     def get_all_bases_and_penalties(
         self,
-    ) -> Tuple[List[jnp.ndarray], List[jnp.ndarray]]:
+    ) -> tuple[list[jnp.ndarray], list[jnp.ndarray]]:
         """
         Get basis and penalty matrices for all components (for NumPyro model).
 
@@ -814,8 +806,8 @@ class MultivariateLogPSplines:
     def _psd_chunk_iterator(
         self,
         log_delta_sq_samples: np.ndarray,
-        theta_re_samples: Optional[np.ndarray],
-        theta_im_samples: Optional[np.ndarray],
+        theta_re_samples: np.ndarray | None,
+        theta_im_samples: np.ndarray | None,
         *,
         n_samps: int,
         chunk_size: int,
@@ -867,9 +859,9 @@ class MultivariateLogPSplines:
                         )
                         n_use = min(theta_complex.shape[0], n_lower)
                         if n_use:
-                            T[tril_row[:n_use], tril_col[:n_use]] = (
-                                -theta_complex[:n_use]
-                            )
+                            T[
+                                tril_row[:n_use], tril_col[:n_use]
+                            ] = -theta_complex[:n_use]
 
                     Tinverse = np.linalg.inv(T)
                     D = np.diag(diag_vals)
@@ -936,11 +928,11 @@ class MultivariateLogPSplines:
         theta_re_samples: jnp.ndarray,
         theta_im_samples: jnp.ndarray,
         *,
-        percentiles: Optional[Sequence[float]] = None,
+        percentiles: Sequence[float] | None = None,
         n_samples_max: int = 50,
         chunk_size: int = 2048,
         compute_coherence: bool = False,
-    ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         """
         Compute PSD (and optional coherence) percentiles without storing all draws.
 
@@ -1037,8 +1029,13 @@ class MultivariateLogPSplines:
             knot_label = str(next(iter(knot_counts)))
         else:
             knot_label = f"mixed[{min(knot_counts)}-{max(knot_counts)}]"
+        basis_shapes = [
+            tuple(int(v) for v in spec.model.basis.shape)
+            for spec in self.iter_component_specs()
+        ]
         return (
             f"MultivariateLogPSplines(channels={self.p}, "
             f"knots={knot_label}, degree={self.degree}, "
-            f"penaltyOrder={self.diffMatrixOrder}, N={self.N})"
+            f"penaltyOrder={self.diffMatrixOrder}, N={self.N}, "
+            f"basis_shapes={basis_shapes})"
         )

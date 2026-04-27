@@ -1,2 +1,5 @@
 README.rst
 _build/
+
+*.soc
+*.pdf

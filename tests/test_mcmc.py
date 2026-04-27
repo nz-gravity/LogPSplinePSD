@@ -46,6 +46,9 @@ def test_mcmc_univar(outdir: str):
     assert idata["posterior"].dataset is not None
     assert idata["sample_stats"].dataset is not None
     assert "lp" in idata["sample_stats"].dataset
+    assert "step_size" in idata["sample_stats"].dataset
+    assert "n_steps" in idata["sample_stats"].dataset
+    assert "max_treedepth_hits" in idata["sample_stats"].attrs
     assert "riae" in idata["sample_stats"].attrs
     assert "l2" in idata["sample_stats"].attrs
     assert "coverage" in idata["sample_stats"].attrs
@@ -143,7 +146,14 @@ def _check_stats_are_finite(idata, outdir) -> None:
         for k in key:
             assert k in d, f"Key '{k}' not found in {d}."
 
-    nuts_keys = ["riae", "l2", "coverage", "rhat_max"]
+    nuts_keys = [
+        "riae",
+        "l2",
+        "coverage",
+        "rhat_max",
+        "step_size",
+        "max_treedepth_hits",
+    ]
     vi_keys = ["riae", "l2", "coverage", "pareto_k_max"]
 
     check_finite(nuts_stats.attrs, nuts_keys)

@@ -1,16 +1,11 @@
-import jax.numpy as jnp
 import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
 
 from ..datatypes import Periodogram
+from ..diagnostics._utils import interior_frequency_slice
 from ..psplines import LogPSplines
 from .base import (
     COLORS,
-    compute_confidence_intervals,
     extract_plotting_data,
-    interior_frequency_slice,
-    setup_plot_style,
-    validate_plotting_data,
 )
 from .utils import unpack_data
 
@@ -45,7 +40,6 @@ def plot_pdgrm(
     figsize=(4, 3),
     interactive=False,
 ):
-
     # Extract data from idata if provided
     if idata:
         extracted_data = extract_plotting_data(idata, weights)
@@ -117,7 +111,6 @@ def _plt_backend(
     figsize,
     ax=None,
 ):
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
 
     if ax is None:
@@ -207,7 +200,6 @@ def _plotly_backend(
     show_data,
     figsize,
 ):
-    import jax.numpy as jnp
     import plotly.graph_objects as go
 
     fig = go.Figure()

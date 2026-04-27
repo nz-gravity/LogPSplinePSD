@@ -34,8 +34,7 @@ def _resolve_truth_npz(truth_npz: Path | None) -> Path:
 
     candidate_text = ", ".join(str(path) for path in DEFAULT_TRUTH_CANDIDATES)
     raise FileNotFoundError(
-        "Could not find a truth NPZ automatically. Checked: "
-        f"{candidate_text}"
+        f"Could not find a truth NPZ automatically. Checked: {candidate_text}"
     )
 
 

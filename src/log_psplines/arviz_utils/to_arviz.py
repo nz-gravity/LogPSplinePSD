@@ -13,7 +13,7 @@ from log_psplines.datatypes import MultivarFFT
 from ..logger import logger
 
 if TYPE_CHECKING:
-    from ..samplers.base_sampler import SamplerConfig
+    SamplerConfig = Any
 
 
 def _pack_spline_model(spline_model) -> Dataset:

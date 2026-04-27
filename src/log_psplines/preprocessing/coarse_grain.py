@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isqrt
-from typing import Optional
 
 import numpy as np
 
@@ -67,8 +66,8 @@ class CoarseGrainConfig:
     """
 
     enabled: bool = False
-    Nc: Optional[int] = 1000
-    Nh: Optional[int] = None
+    Nc: int | None = 1000
+    Nh: int | None = None
 
     def __post_init__(self) -> None:
         if (self.Nc is None) == (self.Nh is None):
@@ -120,7 +119,7 @@ class CoarseGrainSpec:
 
 
 def _resolve_equal_bin_params(
-    *, Nl: int, Nc: Optional[int], Nh: Optional[int]
+    *, Nl: int, Nc: int | None, Nh: int | None
 ) -> tuple[int, int]:
     """Resolve (Nc, Nh) for equal-sized bins.
 
@@ -147,8 +146,16 @@ def _resolve_equal_bin_params(
     # Nc provided
     assert Nc is not None
     Nc_int = _as_int("Nc", Nc)
-    if Nc_int <= 0 or Nl % Nc_int != 0:
-        raise ValueError(f"Nc={Nc_int} must be a positive divisor of Nl={Nl}.")
+    if Nc_int <= 0:
+        raise ValueError(f"Nc={Nc_int} must be positive.")
+    if Nl % Nc_int != 0:
+        # Trim the last (Nl % Nc_int) bins so bins are exactly equal-sized.
+        n_dropped = Nl % Nc_int
+        Nl = Nl - n_dropped
+        logger.info(
+            f"Nl trimmed to {Nl} (dropped {n_dropped} trailing bins) "
+            f"to make Nc={Nc_int} an exact divisor."
+        )
     Nh_int = Nl // Nc_int
     return int(Nc_int), int(Nh_int)
 
@@ -203,10 +210,10 @@ def _coarse_grain_wishart_y_to_u(
 
 @runtime_typecheck
 def compute_binning_structure(
-    freqs: Float[np.ndarray, "nl"],
+    freqs: Float[np.ndarray, nl],
     *,
-    Nc: Optional[int] = None,
-    Nh: Optional[int] = None,
+    Nc: int | None = None,
+    Nh: int | None = None,
 ) -> CoarseGrainSpec:
     """Compute equal-sized, consecutive coarse bins for a frequency grid.
 
@@ -231,16 +238,16 @@ def compute_binning_structure(
 
     Nc, Nh = _resolve_equal_bin_params(Nl=Nl, Nc=Nc, Nh=Nh)
 
-    J_start: Int[np.ndarray, "nc"] = (
-        np.arange(Nc, dtype=np.int64) * Nh
-    ).astype(np.int32)
+    J_start: Int[np.ndarray, nc] = (np.arange(Nc, dtype=np.int64) * Nh).astype(
+        np.int32
+    )
 
     if (Nh % 2) == 0:
         logger.info(f"Nl={Nl} and Nc={Nc} imply even Nh={Nh}. ")
-        J_mid: Int[np.ndarray, "nc"] = J_start + (Nh // 2) - 1
+        J_mid: Int[np.ndarray, nc] = J_start + (Nh // 2) - 1
     else:
         J_mid = J_start + (Nh // 2)
-    f_coarse: Float[np.ndarray, "nc"] = freqs[J_mid].astype(np.float64)
+    f_coarse: Float[np.ndarray, nc] = freqs[J_mid].astype(np.float64)
 
     return CoarseGrainSpec(
         f_coarse=f_coarse,
@@ -253,10 +260,10 @@ def compute_binning_structure(
 
 @runtime_typecheck
 def apply_coarse_graining_univar(
-    power: Float[np.ndarray, "nl"] | Int[np.ndarray, "nl"],
+    power: Float[np.ndarray, nl] | Int[np.ndarray, nl],
     spec: CoarseGrainSpec,
-    freqs: Optional[Float[np.ndarray, "nl"]] = None,
-) -> Float[np.ndarray, "nc"]:
+    freqs: Float[np.ndarray, nl] | None = None,
+) -> Float[np.ndarray, nc]:
     """Apply coarse graining to a univariate array defined on the retained grid.
 
     Parameters
@@ -286,7 +293,7 @@ def apply_coarse_graining_univar(
         if freqs.ndim != 1 or freqs.size != Nl:
             raise ValueError("freqs must match retained grid size")
 
-    out: Float[np.ndarray, "nc"] = _sum_bins_equal(
+    out: Float[np.ndarray, nc] = _sum_bins_equal(
         power, Nh=int(spec.Nh)
     ).astype(np.float64, copy=False)
     return out
@@ -312,9 +319,15 @@ def apply_coarse_grain_multivar_fft(
     Nh = int(spec.Nh)
     if Nc <= 0:
         raise ValueError("Coarse-graining spec has no bins.")
-    if fft.freq.shape[0] != Nc * Nh:
+    n_spec = Nc * Nh
+    if fft.freq.shape[0] > n_spec:
+        # Trim trailing bins so the grid matches the spec (happens when Nl is not
+        # divisible by Nc and _resolve_equal_bin_params silently trimmed Nl).
+        u_sel = u_sel[:n_spec]
+    elif fft.freq.shape[0] != n_spec:
         raise ValueError(
-            "FFT frequency grid does not match coarse-grain spec."
+            f"FFT frequency grid ({fft.freq.shape[0]}) is smaller than "
+            f"coarse-grain spec ({n_spec} = Nc={Nc} × Nh={Nh})."
         )
 
     # Build Y(f_k) explicitly (used only as an intermediate), then coarse-grain

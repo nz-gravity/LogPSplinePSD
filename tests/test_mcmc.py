@@ -1,12 +1,10 @@
-import csv
-import os
-import shutil
-from typing import List, cast
+"""Integration tests for run_mcmc (pipeline path)."""
 
-import matplotlib.pyplot as plt
+import os
+from typing import cast
+
 import numpy as np
 import pandas as pd
-import pytest
 import xarray as xr
 
 from log_psplines.arviz_utils import (
@@ -15,14 +13,8 @@ from log_psplines.arviz_utils import (
     get_weights,
     open_inference_data,
 )
-from log_psplines.mcmc import (
-    DiagnosticsConfig,
-    ModelConfig,
-    MultivariateTimeseries,
-    RunMCMCConfig,
-    VIConfig,
-    run_mcmc,
-)
+from log_psplines.mcmc import run_mcmc
+from log_psplines.pipeline.config import PipelineConfig
 from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
     compute_binning_structure,
@@ -30,8 +22,9 @@ from log_psplines.preprocessing.coarse_grain import (
 
 
 def test_mcmc_univar(outdir: str):
-    print(f"++++ Running univariate MCMC test ++++")
-    idata_orig, ar_data, psd_scale = _run_univar_mcmc(outdir)
+    print("_____________univariate MCMC_____________")
+    outdir_str = str(outdir)
+    idata_orig, ar_data, psd_scale = _run_univar_mcmc(outdir_str)
 
     ### NOW WE CHECK THE OUTPUTS ###
     files_to_check = [
@@ -40,10 +33,10 @@ def test_mcmc_univar(outdir: str):
         "diagnostics/vi_summary.csv",
         "diagnostics/nuts_summary.csv",
     ]
-    _check_for_files(files_to_check, outdir)
+    _check_for_files(files_to_check, outdir_str)
 
     # load idata
-    idata_path = os.path.join(outdir, "inference_data.nc")
+    idata_path = os.path.join(outdir_str, "inference_data.nc")
     idata = open_inference_data(idata_path)
     xr.testing.assert_identical(idata_orig, idata)
 
@@ -53,12 +46,15 @@ def test_mcmc_univar(outdir: str):
     assert idata["posterior"].dataset is not None
     assert idata["sample_stats"].dataset is not None
     assert "lp" in idata["sample_stats"].dataset
+    assert "step_size" in idata["sample_stats"].dataset
+    assert "n_steps" in idata["sample_stats"].dataset
+    assert "max_treedepth_hits" in idata["sample_stats"].attrs
     assert "riae" in idata["sample_stats"].attrs
     assert "l2" in idata["sample_stats"].attrs
     assert "coverage" in idata["sample_stats"].attrs
     assert get_weights(idata) is not None
 
-    _check_stats_are_finite(idata, outdir)
+    _check_stats_are_finite(idata, outdir_str)
 
     # numerical checks
     _, median_psd, _, _ = get_posterior_psd(idata)
@@ -75,14 +71,15 @@ def test_mcmc_univar(outdir: str):
             "diagnostics/traces.png",
             "diagnostics/energy.png",
         ],
-        outdir,
+        outdir_str,
     )
 
 
 def test_mcmc_multivar(outdir):
-    idata_orig, expected_freq = _run_multivar_mcmc(outdir)
+    outdir_str = str(outdir)
+    idata_orig, expected_freq = _run_multivar_mcmc(outdir_str)
     ### NOW WE CHECK THE OUTPUTS ###
-
+    print("_____________multivariate MCMC_____________")
     _check_for_files(
         [
             "inference_data.nc",
@@ -91,11 +88,11 @@ def test_mcmc_multivar(outdir):
             "diagnostics/nuts_summary.csv",
             "diagnostics/preprocessing_eigenvalue_ratios.png",
         ],
-        outdir,
+        outdir_str,
     )
 
     # load idata
-    idata_path = os.path.join(outdir, "inference_data.nc")
+    idata_path = os.path.join(outdir_str, "inference_data.nc")
     idata = open_inference_data(idata_path)
     xr.testing.assert_identical(idata_orig, idata)
 
@@ -128,7 +125,7 @@ def test_mcmc_multivar(outdir):
     assert "log_likelihood_block_1" in vi_log_likelihood
     assert vi_log_likelihood["log_likelihood_block_0"].ndim == 3
 
-    _check_stats_are_finite(idata, outdir)
+    _check_stats_are_finite(idata, outdir_str)
 
     ## Check that all expected output files are present
     files_to_check = [
@@ -136,9 +133,7 @@ def test_mcmc_multivar(outdir):
         "diagnostics/energy.png",
         "diagnostics/vi_loss.png",
     ]
-    _check_for_files(files_to_check, outdir)
-
-    print(f"++++ multivariate MCMC test COMPLETE ++++")
+    _check_for_files(files_to_check, outdir_str)
 
 
 def _check_stats_are_finite(idata, outdir) -> None:
@@ -147,11 +142,18 @@ def _check_stats_are_finite(idata, outdir) -> None:
     vi_stats_pd = pd.read_csv(f"{outdir}/diagnostics/vi_summary.csv")
     nuts_stats_pd = pd.read_csv(f"{outdir}/diagnostics/nuts_summary.csv")
 
-    def check_finite(d: dict, key: List[str]) -> None:
+    def check_finite(d: dict, key: list[str]) -> None:
         for k in key:
             assert k in d, f"Key '{k}' not found in {d}."
 
-    nuts_keys = ["riae", "l2", "coverage", "rhat_max"]
+    nuts_keys = [
+        "riae",
+        "l2",
+        "coverage",
+        "rhat_max",
+        "step_size",
+        "max_treedepth_hits",
+    ]
     vi_keys = ["riae", "l2", "coverage", "pareto_k_max"]
 
     check_finite(nuts_stats.attrs, nuts_keys)
@@ -175,7 +177,7 @@ def _check_for_files(expected_files, outdir):
 def _run_univar_mcmc(outdir):
     from log_psplines.example_datasets.ar_data import ARData
 
-    psd_scale = 1  # e-42
+    psd_scale = 1.0
 
     n = 2048
     n_samples = n_warmup = 500
@@ -187,34 +189,27 @@ def _run_univar_mcmc(outdir):
     )
     print(f"{ar_data.ts}")
 
-    model_cfg = ModelConfig(
+    config = PipelineConfig(
         n_knots=n_knots,
-        true_psd=ar_data.psd_theoretical,
-    )
-    diagnostics_cfg = DiagnosticsConfig(
-        outdir=outdir,
-        verbose=True,
-        compute_lnz=compute_lnz,
-    )
-    vi_cfg = VIConfig(init_from_vi=True)
-    run_cfg = RunMCMCConfig(
         n_samples=n_samples,
         n_warmup=n_warmup,
         rng_key=42,
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
+        true_psd=ar_data.psd_theoretical,
+        verbose=True,
+        outdir=outdir,
+        compute_lnz=compute_lnz,
+        init_from_vi=True,
         num_chains=2,
     )
     idata = run_mcmc(
         ar_data.ts,
-        config=run_cfg,
+        config=config,
     )
     return idata, ar_data, psd_scale
 
 
 def _expected_coarse_freq_multivar(
-    ts: MultivariateTimeseries,
+    ts,
     Nb: int,
     fmin: float,
     fmax: float,
@@ -235,6 +230,7 @@ def _expected_coarse_freq_multivar(
 
 
 def _run_multivar_mcmc(outdir):
+    from log_psplines.datatypes.multivar import MultivariateTimeseries
     from log_psplines.example_datasets.varma_data import VARMAData
 
     varma_data = VARMAData(n_samples=2**12, fs=64.0, seed=0)
@@ -260,16 +256,19 @@ def _run_multivar_mcmc(outdir):
         cfg=coarse_cfg,
     )
 
-    model_cfg = ModelConfig(
+    config = PipelineConfig(
         n_knots=10,
         degree=3,
         diffMatrixOrder=2,
         fmin=fmin,
         fmax=fmax,
+        n_samples=n_samples,
+        n_warmup=n_warmup,
+        Nb=Nb,
+        coarse_grain_config=coarse_cfg,
         true_psd=varma_data.get_true_psd(),
-    )
-    diagnostics_cfg = DiagnosticsConfig(verbose=True, outdir=outdir)
-    vi_cfg = VIConfig(
+        verbose=True,
+        outdir=outdir,
         init_from_vi=True,
         only_vi=False,
         vi_steps=vi_steps,
@@ -278,17 +277,8 @@ def _run_multivar_mcmc(outdir):
         vi_posterior_draws=100,
         vi_psd_max_draws=100,
     )
-    run_cfg = RunMCMCConfig(
-        n_samples=n_samples,
-        n_warmup=n_warmup,
-        Nb=Nb,
-        coarse_grain_config=coarse_cfg,
-        model=model_cfg,
-        diagnostics=diagnostics_cfg,
-        vi=vi_cfg,
-    )
     idata = run_mcmc(
         data=ts_run,
-        config=run_cfg,
+        config=config,
     )
     return idata, expected_freq

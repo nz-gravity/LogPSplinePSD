@@ -1,35 +1,15 @@
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.0
+    hooks:
+      - id: ruff
+        args: [ --fix ]
+      - id: ruff-format
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v4.5.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-merge-conflict
       - id: check-yaml
-        args: [ --unsafe ]
-  - repo: https://github.com/PyCQA/isort
-    rev: 6.0.1
-    hooks:
-      - id: isort
-        args: ["--profile", "black"]
-  - repo: https://github.com/psf/black
-    rev: 25.1.0
-    hooks:
-      - id: black
-  - repo: https://github.com/psf/black
-    rev: "25.1.0"
-    hooks:
-      - id: black-jupyter
-  # - repo: local
-  #   hooks:
-  #     - id: mypy-full-package-local
-  #       name: mypy (full package)
-  #       entry: bash -c 'python3 -m mypy --config-file pyproject.toml src/log_psplines "$@" || true'
-  #       language: system
-  #       pass_filenames: false
-  #     - id: vulture-local
-  #       name: Vulture (Dead Code Check)
-  #       entry: bash -c 'vulture "$@" 2>&1 || true'
-  #       language: system
-  #       types: [python]
-  #       files: '\.py$'
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files

@@ -2,11 +2,8 @@
 Base plotting utilities for shared functionality across plotting modules.
 """
 
-import copy
-import os
 from dataclasses import dataclass
-from functools import wraps
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -42,14 +39,9 @@ class PlotConfig:
     alpha: float = 0.7
 
 
-def interior_frequency_slice(n_freq: int) -> slice:
-    """Return a slice that drops first/last frequency bins when possible."""
-    return slice(1, -1) if n_freq > 3 else slice(None)
-
-
 def _quantiles_from_standard_psd_dataset(
     psd_ds,
-) -> Dict[str, np.ndarray | None]:
+) -> dict[str, np.ndarray | None]:
     """Compute fixed 5/50/95 quantiles from normalized PSD draw datasets."""
     percentiles = np.asarray([5.0, 50.0, 95.0], dtype=float)
     posterior_psd = np.asarray(psd_ds["spectral_density"].values).reshape(
@@ -87,7 +79,7 @@ def _quantiles_from_standard_psd_dataset(
 
 def extract_plotting_data(
     idata, weights_key: int | None = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Extract common plotting data from inference data object.
 
@@ -106,7 +98,7 @@ def extract_plotting_data(
         get_weights,
     )
 
-    data: Dict[str, Any] = {}
+    data: dict[str, Any] = {}
 
     # Extract core data
     try:
@@ -217,10 +209,10 @@ def extract_plotting_data(
 
 def compute_confidence_intervals(
     samples: np.ndarray,
-    quantiles: Tuple[float, float, float] = (16, 50, 84),
+    quantiles: tuple[float, float, float] = (16, 50, 84),
     method: str = "percentile",
     alpha: float = 0.1,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute confidence intervals from posterior samples.
 
@@ -277,7 +269,7 @@ def _compute_uniform_ci(samples: np.ndarray, alpha: float = 0.1):
 
 def compute_coherence_ci(
     psd_samples: np.ndarray,
-) -> Dict[Tuple[int, int], Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+) -> dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """
     Compute coherence confidence intervals from multivariate PSD samples.
 
@@ -305,7 +297,7 @@ def compute_coherence_ci(
     return ci_dict
 
 
-def compute_cross_spectra_ci(psd_samples: np.ndarray) -> Tuple[Dict, Dict]:
+def compute_cross_spectra_ci(psd_samples: np.ndarray) -> tuple[dict, dict]:
     """
     Compute real and imaginary parts of cross-spectra.
 
@@ -345,7 +337,7 @@ def compute_cross_spectra_ci(psd_samples: np.ndarray) -> Tuple[Dict, Dict]:
     return real_dict, imag_dict
 
 
-def setup_plot_style(config: Optional[PlotConfig] = None) -> PlotConfig:
+def setup_plot_style(config: PlotConfig | None = None) -> PlotConfig:
     """Setup consistent matplotlib styling for plots."""
     if config is None:
         config = PlotConfig()
@@ -369,7 +361,7 @@ def setup_plot_style(config: Optional[PlotConfig] = None) -> PlotConfig:
     return config
 
 
-def validate_plotting_data(data: Dict[str, Any], required_keys: list) -> bool:
+def validate_plotting_data(data: dict[str, Any], required_keys: list) -> bool:
     """Validate that required data is available for plotting."""
     missing_keys = [
         key for key in required_keys if key not in data or data[key] is None
@@ -385,8 +377,7 @@ def subsample_weights(
 ) -> np.ndarray:
     """Subsample weights array if it's too large for efficient computation."""
     if weights.shape[0] > max_samples:
-        idx = np.random.choice(
-            weights.shape[0], size=max_samples, replace=False
-        )
+        rng = np.random.default_rng()
+        idx = rng.choice(weights.shape[0], size=max_samples, replace=False)
         return weights[idx]
     return weights

@@ -144,11 +144,11 @@ def _tree_depth_hits(idata: xr.DataTree) -> int:
     if tree_depth.size:
         return int(np.sum(tree_depth >= max_tree_depth))
 
-    num_steps = _sample_stats_array(idata, "num_steps")
-    num_steps = num_steps[np.isfinite(num_steps)]
-    if num_steps.size == 0:
+    n_steps = _sample_stats_array(idata, "n_steps")
+    n_steps = n_steps[np.isfinite(n_steps)]
+    if n_steps.size == 0:
         return 0
-    return int(np.sum(num_steps >= 2**max_tree_depth))
+    return int(np.sum(n_steps >= 2**max_tree_depth))
 
 
 def _step_size(idata: xr.DataTree) -> float:

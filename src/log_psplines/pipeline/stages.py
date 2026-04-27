@@ -199,6 +199,7 @@ class NUTSStage:
                 "energy",
                 "num_steps",
                 "accept_prob",
+                "adapt_state.step_size",
             ),
             **kwargs,
         )
@@ -422,6 +423,7 @@ class FactorizedMultivarNUTSStage(NUTSStage):
                     "energy",
                     "num_steps",
                     "accept_prob",
+                    "adapt_state.step_size",
                 ),
                 **channel_kwargs,
             )

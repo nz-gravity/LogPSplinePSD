@@ -267,10 +267,12 @@ class PipelineResult:
             if sample_stats is not None:
                 for col in (
                     "divergences",
+                    "max_treedepth_hits",
                     "rhat_max",
                     "riae",
                     "l2",
                     "coverage",
+                    "step_size",
                 ):
                     if col in nuts_summary.columns and not nuts_summary.empty:
                         sample_stats.attrs[col] = self._median_numeric(
@@ -323,6 +325,7 @@ class PipelineResult:
         if nuts_summary is not None and not nuts_summary.empty:
             for col in (
                 "divergences",
+                "max_treedepth_hits",
                 "rhat_max",
                 "riae",
                 "l2",
@@ -607,6 +610,8 @@ class InferencePipeline:
             idata = _vi_result_to_idata(vi)
             idata = self._attach_pipeline_metadata(idata, vi)
             return PipelineResult(vi_coarse=vi_coarse, vi=vi, idata=idata)
+
+        logger.info(f"Spline model: {self.spline_model}")
 
         rng, key = jax.random.split(rng)
         idata = self.nuts_stage.run(

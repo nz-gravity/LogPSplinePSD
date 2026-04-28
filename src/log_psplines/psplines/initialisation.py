@@ -1,5 +1,4 @@
-import warnings
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
@@ -9,7 +8,6 @@ from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
 
-from ..datatypes import Periodogram
 from .knots_locator import init_knots
 
 __all__ = ["init_weights", "init_basis_and_penalty", "init_knots"]
@@ -24,9 +22,7 @@ def _least_squares_weight_initialiser(
 ) -> jnp.ndarray:
     """Return a stabilized least-squares fit for the spline weights."""
     basis = jnp.asarray(log_psplines.basis)
-    target = jnp.asarray(log_pdgrm) - jnp.asarray(
-        log_psplines.log_parametric_model
-    )
+    target = jnp.asarray(log_pdgrm)
     gram = basis.T @ basis
     rhs = basis.T @ target
 
@@ -80,8 +76,7 @@ def init_weights(
     @jax.jit
     def compute_loss(weights: jnp.ndarray) -> jnp.ndarray:
         """Compute MSE loss between log periodogram and log model"""
-        log_model = log_psplines(weights) + log_psplines.log_parametric_model
-        return jnp.mean((log_pdgrm - log_model) ** 2)
+        return jnp.mean((log_pdgrm - log_psplines(weights)) ** 2)
 
     def step(i, state):
         """Single optimization step"""
@@ -106,7 +101,7 @@ def init_basis_and_penalty(
     diff_matrix_order: int,
     epsilon: float = 1e-6,
     grid_points: np.ndarray | None = None,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+) -> tuple[jnp.ndarray, jnp.ndarray]:
     """
     Generate B-spline basis matrix and penalty matrix.
 

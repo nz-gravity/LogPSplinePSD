@@ -4,10 +4,42 @@ import arviz as az
 import numpy as np
 
 from log_psplines.datatypes import Periodogram, Timeseries
+from log_psplines.datatypes.multivar import EmpiricalPSD
 from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.mcmc import run_mcmc
-from log_psplines.plotting import plot_pdgrm
+from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 from log_psplines.psplines import LogPSplines
+
+
+def _plot_univariate_periodogram(
+    pdgrm: Periodogram,
+    spline_model: LogPSplines,
+):
+    freq = np.asarray(pdgrm.freqs, dtype=np.float64)
+    model = np.exp(np.asarray(spline_model(), dtype=np.float64))
+    empirical = EmpiricalPSD(
+        freq=freq,
+        psd=np.asarray(pdgrm.power, dtype=np.complex128)[:, None, None],
+        coherence=np.zeros((freq.size, 1, 1), dtype=np.float64),
+        channels=np.asarray(["1"]),
+    )
+    return plot_psd_matrix(
+        PSDMatrixPlotSpec(
+            freq=freq,
+            ci_dict={
+                "psd": {(0, 0): (model, model, model)},
+                "coh": {},
+                "re": {},
+                "im": {},
+                "mag": {},
+            },
+            empirical_psd=empirical,
+            save=False,
+            close=False,
+            show_knots=False,
+        )
+    )
+
 
 FMIN, FMAX = 20, 1024
 DURATION = 4.0
@@ -47,9 +79,8 @@ else:
         knot_kwargs=dict(knots=lvk_data.knots_locations),
     )
     # plot initial fit with optimised weights
-    fig, ax = plot_pdgrm(
-        pdgrm=pdgrm, spline_model=spline_model, figsize=(12, 6)
-    )
+    fig, axes = _plot_univariate_periodogram(pdgrm, spline_model)
+    ax = axes[0, 0]
     ax.set_xscale("linear")
     fig.savefig(os.path.join(out, "test_spline_init.png"))
 
@@ -64,24 +95,43 @@ else:
         fmax=FMAX,
     )
 
-    fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6))
+    fig, axes = plot_psd_matrix(
+        PSDMatrixPlotSpec(idata=idata, save=False, close=False)
+    )
+    ax = axes[0, 0]
     ax.set_xscale("linear")
     fig.savefig(os.path.join(out, "test_mcmc.png"))
 
-    fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6))
+    fig, axes = plot_psd_matrix(
+        PSDMatrixPlotSpec(idata=idata, save=False, close=False)
+    )
+    ax = axes[0, 0]
     ax.set_xscale("log")
     fig.savefig(os.path.join(out, "test_mcmc_log.png"))
 
-    fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6), show_knots=False)
+    fig, axes = plot_psd_matrix(
+        PSDMatrixPlotSpec(
+            idata=idata, save=False, close=False, show_knots=False
+        )
+    )
+    ax = axes[0, 0]
     ax.set_xscale("linear")
     fig.savefig(os.path.join(out, "test_mcmc_no_knots.png"))
 
-    fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6), show_knots=False)
+    fig, axes = plot_psd_matrix(
+        PSDMatrixPlotSpec(
+            idata=idata, save=False, close=False, show_knots=False
+        )
+    )
+    ax = axes[0, 0]
     ax.set_xscale("log")
     fig.savefig(os.path.join(out, "test_mcmc_log_no_knots.png"))
 
 
-fig, ax = plot_pdgrm(idata=idata, figsize=(12, 6), show_knots=True)
+fig, axes = plot_psd_matrix(
+    PSDMatrixPlotSpec(idata=idata, save=False, close=False, show_knots=True)
+)
+ax = axes[0, 0]
 ax.set_xscale("log")
 fig.savefig(os.path.join(out, "test_mcmc_log_no_knots.png"))
 # plt.show()

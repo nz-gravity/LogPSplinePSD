@@ -27,10 +27,10 @@ from ..diagnostics.plot_nuts import plot_energy
 from ..logger import logger
 from ..plotting import (
     PSDMatrixPlotSpec,
-    plot_pdgrm,
     plot_psd_matrix,
     plot_vi_loss,
 )
+from .evidence import compute_pointwise_lnl, estimate_pipeline_lnz
 from .stages import NUTSStage, StageResult, VIStage
 
 
@@ -104,20 +104,18 @@ class PipelineResult:
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
-    def _save_posterior_predictive(self, outdir: str) -> None:
+    def _save_posterior_predictive(
+        self,
+        outdir: str,
+        *,
+        true_psd: np.ndarray | None = None,
+    ) -> None:
         outfile = Path(outdir) / "posterior_predictive.png"
-        try:
-            fig, _ = plot_pdgrm(idata=self.idata)
-            fig.savefig(outfile, dpi=150, bbox_inches="tight")
-            plt.close(fig)
-            return
-        except Exception as exc:
-            logger.debug(f"Univariate posterior plot unavailable: {exc}")
-
         try:
             plot_psd_matrix(
                 PSDMatrixPlotSpec(
                     idata=self.idata,
+                    true_psd=true_psd,
                     outdir=str(outdir),
                     filename="posterior_predictive.png",
                     save=True,
@@ -126,7 +124,7 @@ class PipelineResult:
             )
             return
         except Exception as exc:
-            logger.debug(f"Multivariate posterior plot unavailable: {exc}")
+            logger.debug(f"Posterior PSD plot unavailable: {exc}")
 
         try:
             trace_plot = azp.plot_trace_dist(
@@ -352,7 +350,7 @@ class PipelineResult:
         true_psd: np.ndarray | None = None,
     ) -> None:
         os.makedirs(outdir, exist_ok=True)
-        self._save_posterior_predictive(outdir)
+        self._save_posterior_predictive(outdir, true_psd=true_psd)
         self._save_diagnostics(outdir, true_psd=true_psd)
         _save_inference_data(
             self.idata,
@@ -424,28 +422,41 @@ class InferencePipeline:
     def _observed_data_dataset(self) -> xr.Dataset:
         if isinstance(self.data, Periodogram):
             freq = np.asarray(self.data.freqs, dtype=float)
-            values = np.asarray(self.data.power, dtype=float)
+            values = np.asarray(self.data.power, dtype=float) * float(
+                self.data.scaling_factor
+            )
+            coords = {"freq": freq}
+            dims = ("freq",)
         else:
             freq = np.asarray(self.data.freq, dtype=float)
             if self.data.raw_psd is not None:
-                values = np.real(
-                    np.diagonal(
-                        np.asarray(self.data.raw_psd),
-                        axis1=1,
-                        axis2=2,
-                    )
-                )
+                values = np.asarray(self.data.raw_psd, dtype=np.complex128)
+                channel_coords = np.arange(int(self.data.p))
+                coords = {
+                    "freq": freq,
+                    "channels": channel_coords,
+                    "channels_aux": channel_coords,
+                }
+                dims = ("freq", "channels", "channels_aux")
             else:
-                values = np.zeros((freq.size, int(self.data.p)), dtype=float)
+                values = np.zeros(
+                    (freq.size, int(self.data.p), int(self.data.p)),
+                    dtype=np.complex128,
+                )
+                channel_coords = np.arange(int(self.data.p))
+                coords = {
+                    "freq": freq,
+                    "channels": channel_coords,
+                    "channels_aux": channel_coords,
+                }
+                dims = ("freq", "channels", "channels_aux")
 
         return xr.Dataset(
             {
                 "periodogram": xr.DataArray(
                     values,
-                    dims=(
-                        ("freq",) if values.ndim == 1 else ("freq", "channel")
-                    ),
-                    coords={"freq": freq},
+                    dims=dims,
+                    coords=coords,
                 )
             }
         )
@@ -493,6 +504,7 @@ class InferencePipeline:
                 "sampling_eta": float(self.nuts_stage.eta),
             }
         )
+        attrs["compute_lnz"] = bool(self.config.compute_lnz)
         if self.config.target_accept_prob_by_channel is not None:
             attrs["target_accept_prob_by_channel"] = list(
                 self.config.target_accept_prob_by_channel
@@ -564,6 +576,76 @@ class InferencePipeline:
                 )
         return idata
 
+    def _attach_lnz_metadata(self, idata: xr.DataTree) -> xr.DataTree:
+        """Compute optional lnZ and store summary attrs on ``idata``."""
+        if not bool(self.config.compute_lnz):
+            return idata
+
+        try:
+            result = estimate_pipeline_lnz(
+                idata=idata,
+                data=self.data,
+                model_kwargs=self.full_model_kwargs,
+                outdir=self.config.outdir,
+                extra_kwargs=self.config.extra_kwargs,
+                verbose=self.verbose,
+            )
+        except Exception as exc:
+            logger.warning(f"Could not compute lnZ: {exc}", exc_info=True)
+            idata.attrs.update(
+                {
+                    "lnz": float("nan"),
+                    "lnz_err": float("nan"),
+                    "lnz_valid": False,
+                    "lnz_n_estimations": 0,
+                    "lnz_nonconverged_count": 0,
+                    "lnz_method": "morphZ",
+                }
+            )
+            return idata
+
+        idata.attrs.update(
+            {
+                "lnz": float(result.lnz),
+                "lnz_err": float(result.lnz_err),
+                "lnz_valid": bool(result.is_valid),
+                "lnz_n_estimations": int(result.n_estimations),
+                "lnz_nonconverged_count": int(result.nonconverged_count),
+                "lnz_method": "morphZ",
+            }
+        )
+        for factor_index, factor_result in enumerate(result.factor_results):
+            idata.attrs[f"lnz_factor_{factor_index}"] = float(
+                factor_result.lnz
+            )
+            idata.attrs[f"lnz_err_factor_{factor_index}"] = float(
+                factor_result.lnz_err
+            )
+            idata.attrs[f"lnz_valid_factor_{factor_index}"] = bool(
+                factor_result.is_valid
+            )
+        return idata
+
+    def _attach_pointwise_log_likelihood(
+        self, idata: xr.DataTree
+    ) -> xr.DataTree:
+        """Attach per-frequency pointwise log-likelihood draws for PSIS-LOO."""
+        try:
+            log_likelihood = compute_pointwise_lnl(
+                idata=idata,
+                data=self.data,
+                model_kwargs=self.full_model_kwargs,
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Could not compute pointwise log-likelihood: {exc}",
+                exc_info=True,
+            )
+            return idata
+
+        idata["log_likelihood"] = xr.DataTree(dataset=log_likelihood)
+        return idata
+
     def run(self) -> PipelineResult:
         """Execute the pipeline and return a PipelineResult."""
         rng = (
@@ -622,4 +704,6 @@ class InferencePipeline:
             verbose=self.verbose,
         )
         idata = self._attach_pipeline_metadata(idata, vi)
+        idata = self._attach_pointwise_log_likelihood(idata)
+        idata = self._attach_lnz_metadata(idata)
         return PipelineResult(vi_coarse=vi_coarse, vi=vi, idata=idata)

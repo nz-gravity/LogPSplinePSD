@@ -177,6 +177,8 @@ coverage.xml
 cover/
 graphify-out
 
+
+
 # Translations
 *.mo
 *.pot

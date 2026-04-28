@@ -6,7 +6,7 @@ dependencies on sampler implementations.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import jax.numpy as jnp
 import numpyro
@@ -25,8 +25,8 @@ def _sample_pspline_block(
     alpha_delta: float,
     beta_delta: float,
     factor_name: str | None = None,
-    w_design: Optional[jnp.ndarray] = None,
-    tau: Optional[float] = None,
+    w_design: jnp.ndarray | None = None,
+    tau: float | None = None,
 ) -> dict[str, Any]:
     """Draw hierarchical Gamma-Normal P-spline weights and record log priors."""
     log_delta_base = dist.Normal(0.0, 1.0)
@@ -79,11 +79,10 @@ def _univar_log_likelihood(
     weights: jnp.ndarray,
     log_pdgrm: jnp.ndarray,
     basis_matrix: jnp.ndarray,
-    log_parametric: jnp.ndarray,
     Nh: int,
 ) -> jnp.ndarray:
     """Univariate Whittle log-likelihood for spline coefficients."""
-    ln_model = build_spline(basis_matrix, weights, log_parametric)
+    ln_model = build_spline(basis_matrix, weights)
     nh = jnp.asarray(Nh, dtype=ln_model.dtype)
     sum_log_det = nh * jnp.sum(ln_model)
     quad = jnp.sum(jnp.exp(log_pdgrm - ln_model))
@@ -94,7 +93,6 @@ def log_likelihood(
     weights: jnp.ndarray,
     log_pdgrm: jnp.ndarray,
     basis_matrix: jnp.ndarray,
-    log_parametric: jnp.ndarray,
     Nh: int,
 ) -> jnp.ndarray:
     """Public helper for univariate Whittle log-likelihood."""
@@ -102,7 +100,6 @@ def log_likelihood(
         weights,
         log_pdgrm,
         basis_matrix,
-        log_parametric,
         Nh,
     )
 
@@ -118,7 +115,6 @@ def bayesian_model(
     log_pdgrm: jnp.ndarray,
     lnspline_basis: jnp.ndarray,
     penalty_matrix: jnp.ndarray,
-    ln_parametric: jnp.ndarray,
     Nh: int,
     alpha_phi,
     beta_phi,
@@ -143,7 +139,6 @@ def bayesian_model(
         block["weights"],
         log_pdgrm,
         lnspline_basis,
-        ln_parametric,
         Nh,
     )
     numpyro.factor("ln_likelihood", eta * lnl)
@@ -171,7 +166,7 @@ def _blocked_channel_model(
     Nb: int,
     Nh: int,
     design_weights: dict | None = None,
-    tau: Optional[float] = None,
+    tau: float | None = None,
     enbw: float = 1.0,
     eta: float = 1.0,
 ) -> None:
@@ -179,6 +174,10 @@ def _blocked_channel_model(
     channel_label = f"{channel_index}"
     _dw = design_weights or {}
 
+    # --- Spline model for log(δ²_{jh}) ---
+    # Sample P-spline weights and evaluate: log_delta_sq[h] = log(δ²_{jh})
+    # δ²_{jh} is the j-th diagonal of D_h (the noise variance for this channel
+    # at coarse bin h in the Cholesky factorisation S^{-1} = T* D^{-1} T).
     delta_block = _sample_pspline_block(
         delta_name=f"delta_{channel_label}",
         phi_name=f"phi_delta_{channel_label}",
@@ -191,12 +190,18 @@ def _blocked_channel_model(
         w_design=_dw.get(f"delta_{channel_index}"),
         tau=tau,
     )
+    # log_delta_sq[h] = B_h @ w  →  log(δ²_{jh}), shape (n_coarse_bins,)
     log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
     log_delta_sq_safe = jnp.clip(log_delta_sq, a_min=-80.0, a_max=80.0)
 
     n_freq = u_re_channel.shape[0]
+    # channel_index == j means there are j preceding channels (l = 0, …, j-1)
+    # whose Cholesky coefficients θ_{jl} couple into this channel's residual.
     n_theta_block = channel_index
 
+    # --- Spline models for the complex Cholesky off-diagonal coefficients θ_{jl} ---
+    # For each preceding channel l < j, sample Re(θ_{jl}^(h)) and Im(θ_{jl}^(h))
+    # independently as P-splines over the coarse-bin axis h.
     if n_theta_block > 0:
         theta_re_components = []
         theta_im_components = []
@@ -217,6 +222,7 @@ def _blocked_channel_model(
                 w_design=_dw.get(f"theta_re_{channel_index}_{theta_idx}"),
                 tau=tau,
             )
+            # Re(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
             theta_re_components.append(
                 jnp.einsum(
                     "nk,k->n", basis_theta_re, theta_re_block["weights"]
@@ -238,44 +244,70 @@ def _blocked_channel_model(
                 w_design=_dw.get(f"theta_im_{channel_index}_{theta_idx}"),
                 tau=tau,
             )
+            # Im(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
             theta_im_components.append(
                 jnp.einsum(
                     "nk,k->n", basis_theta_im, theta_im_block["weights"]
                 )
             )
 
+        # theta_re/im: shape (n_coarse_bins, n_theta_block=j)
+        # theta_re[h, l] = Re(θ_{jl}^(h)),  theta_im[h, l] = Im(θ_{jl}^(h))
         theta_re = jnp.stack(theta_re_components, axis=1)
         theta_im = jnp.stack(theta_im_components, axis=1)
     else:
+        # Channel 0 has no preceding channels; residual equals the observation.
         theta_re = jnp.zeros((n_freq, 0))
         theta_im = jnp.zeros((n_freq, 0))
 
-    delta_eff_sq = jnp.exp(log_delta_sq_safe)
+    # --- Log-likelihood: Eq. 13 ---
+    # ln L_j = -N_b N_h ∑_h log(δ²_{jh})          [determinant term]
+    #          - ∑_h ∑_ν |u_{jν}^(h) - ∑_{l<j} θ_{jl}^(h) u_{lν}^(h)|²
+    #            / (T_b δ²_{jh})                    [quadratic term]
+    #
+    # The determinant term comes from |S(f̄_h)|^{-N_b N_h} after factoring
+    # through the Cholesky: |T|=1, so |S|^{-1} = |D^{-1}| = ∏_j δ_j^{-2}.
+    # Raising to N_b N_h gives -N_b N_h ∑_h log(δ²_{jh}) = -2 N_b N_h ∑_h log(δ_{jh}).
+
+    delta_eff_sq = jnp.exp(
+        log_delta_sq_safe
+    )  # δ²_{jh}, shape (n_coarse_bins,)
     nh = jnp.asarray(Nh, dtype=log_delta_sq.dtype)
+    # Determinant term: -N_b N_h ∑_h log(δ²_{jh})
     sum_log_det = -float(Nb) * nh * jnp.sum(jnp.log(delta_eff_sq))
 
     if n_theta_block > 0:
+        # Regression mean: ∑_{l<j} θ_{jl}^(h) u_{lν}^(h)  (complex product)
+        # Split into real and imaginary parts using Re(θ u) = Re(θ)Re(u) - Im(θ)Im(u)
+        # and Im(θ u) = Re(θ)Im(u) + Im(θ)Re(u).
+        # u_re_prev/u_im_prev shape: (n_coarse_bins, n_theta_block, n_eigenvectors)
         contrib_re = jnp.einsum(
             "fl,flr->fr", theta_re, u_re_prev
         ) - jnp.einsum("fl,flr->fr", theta_im, u_im_prev)
         contrib_im = jnp.einsum(
             "fl,flr->fr", theta_re, u_im_prev
         ) + jnp.einsum("fl,flr->fr", theta_im, u_re_prev)
+        # Residual: u_{jν}^(h) - ∑_{l<j} θ_{jl}^(h) u_{lν}^(h), split Re/Im
         u_re_resid = u_re_channel - contrib_re
         u_im_resid = u_im_channel - contrib_im
     else:
         u_re_resid = u_re_channel
         u_im_resid = u_im_channel
 
+    # |residual|²_{hν} = Re(resid)² + Im(resid)², shape (n_coarse_bins, n_eigenvectors)
     residual_power = u_re_resid**2 + u_im_resid**2
+    # Sum over eigenvectors ν → ∑_ν |resid_{hν}|², shape (n_coarse_bins,)
     residual_power_sum = jnp.sum(residual_power, axis=1)
     duration_scale = jnp.asarray(duration, dtype=log_delta_sq.dtype)
+    # Quadratic term: -∑_h ∑_ν |resid|² / (T_b δ²_{jh})
     log_likelihood = sum_log_det - jnp.sum(
         residual_power_sum / (duration_scale * delta_eff_sq)
     )
+    # enbw corrects for the effective noise bandwidth of the window function
     log_likelihood = log_likelihood / jnp.asarray(
         enbw, dtype=log_delta_sq.dtype
     )
+    # η ∈ (0,1] tempers the likelihood to widen posteriors (see Eq. 14)
     log_likelihood = log_likelihood * jnp.asarray(
         eta, dtype=log_delta_sq.dtype
     )

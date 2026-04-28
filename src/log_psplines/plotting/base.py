@@ -77,6 +77,24 @@ def _quantiles_from_standard_psd_dataset(
     }
 
 
+def _as_matrix_quantiles(
+    quantiles: dict[str, np.ndarray | None],
+) -> dict[str, np.ndarray | None]:
+    """Convert univariate quantiles into the matrix-quantile shape."""
+    spectral_density = np.asarray(
+        quantiles["spectral_density"], dtype=np.complex128
+    )
+    return {
+        "percentile": np.asarray(quantiles["percentile"], dtype=float),
+        "spectral_density": spectral_density,
+        "coherence": (
+            np.asarray(quantiles["coherence"], dtype=np.float64)
+            if quantiles["coherence"] is not None
+            else None
+        ),
+    }
+
+
 def extract_plotting_data(
     idata, weights_key: int | None = None
 ) -> dict[str, Any]:
@@ -103,7 +121,7 @@ def extract_plotting_data(
     # Extract core data
     try:
         data["periodogram"] = get_periodogram(idata)
-    except KeyError:
+    except (KeyError, ValueError):
         data["periodogram"] = None
 
     try:
@@ -128,27 +146,9 @@ def extract_plotting_data(
     if psd_ds is not None:
         quantiles = _quantiles_from_standard_psd_dataset(psd_ds)
         data["frequencies"] = np.asarray(quantiles["freq"], dtype=float)
-        n_channels = int(psd_ds["spectral_density"].shape[2])
-        if n_channels > 1:
-            data["posterior_psd_matrix_quantiles"] = {
-                "percentile": np.asarray(quantiles["percentile"], dtype=float),
-                "spectral_density": np.asarray(
-                    quantiles["spectral_density"], dtype=np.complex128
-                ),
-                "coherence": (
-                    np.asarray(quantiles["coherence"], dtype=np.float64)
-                    if quantiles["coherence"] is not None
-                    else None
-                ),
-            }
-        else:
-            psd_q = np.asarray(
-                quantiles["spectral_density"], dtype=np.complex128
-            )
-            data["posterior_psd_quantiles"] = {
-                "percentile": np.asarray(quantiles["percentile"], dtype=float),
-                "values": np.asarray(psd_q.real[:, :, 0, 0], dtype=np.float64),
-            }
+        data["posterior_psd_matrix_quantiles"] = _as_matrix_quantiles(
+            quantiles
+        )
 
     try:
         vi_psd_ds = get_psd_dataset(idata, source="vi")
@@ -156,33 +156,7 @@ def extract_plotting_data(
         vi_psd_ds = None
     if vi_psd_ds is not None:
         vi_quantiles = _quantiles_from_standard_psd_dataset(vi_psd_ds)
-        n_channels = int(vi_psd_ds["spectral_density"].shape[2])
-        if n_channels > 1:
-            data["vi_psd_matrix_quantiles"] = {
-                "percentile": np.asarray(
-                    vi_quantiles["percentile"], dtype=float
-                ),
-                "spectral_density": np.asarray(
-                    vi_quantiles["spectral_density"], dtype=np.complex128
-                ),
-                "coherence": (
-                    np.asarray(vi_quantiles["coherence"], dtype=np.float64)
-                    if vi_quantiles["coherence"] is not None
-                    else None
-                ),
-            }
-        else:
-            vi_psd_q = np.asarray(
-                vi_quantiles["spectral_density"], dtype=np.complex128
-            )
-            data["vi_psd_quantiles"] = {
-                "percentile": np.asarray(
-                    vi_quantiles["percentile"], dtype=float
-                ),
-                "values": np.asarray(
-                    vi_psd_q.real[:, :, 0, 0], dtype=np.float64
-                ),
-            }
+        data["vi_psd_matrix_quantiles"] = _as_matrix_quantiles(vi_quantiles)
 
     if attrs.get("tau") is not None and attrs.get("design_psd") is not None:
         prior_quantiles = get_multivar_prior_psd_quantiles(idata)

@@ -1,7 +1,6 @@
 import warnings
 
 import numpy as np
-from scipy.ndimage import uniform_filter1d
 from scipy.signal import medfilt, savgol_filter
 
 from ...datatypes import Periodogram
@@ -64,7 +63,6 @@ def _enforce_exact_knot_count(
 def init_knots(
     n_knots: int,
     periodogram: Periodogram,
-    parametric_model: np.ndarray | None = None,
     guide_power: np.ndarray | None = None,
     method: str = "density",
     knots: np.ndarray | None = None,
@@ -79,8 +77,6 @@ def init_knots(
         Total number of knots to select
     periodogram : Periodogram
         Periodogram object with freqs and power
-    parametric_model : jnp.ndarray, optional
-        Parametric model to subtract from power before knot placement
     method : str, default="density"
         Knot placement method:
         - "uniform": Uniformly spaced knots
@@ -97,7 +93,6 @@ def init_knots(
         n_knots=n_knots,
         freqs=np.asarray(periodogram.freqs),
         power=np.asarray(periodogram.power),
-        parametric_model=parametric_model,
         guide_power=guide_power,
         method=method,
         knots=knots,
@@ -109,7 +104,6 @@ def _init_knots_from_arrays(
     n_knots: int,
     freqs: np.ndarray,
     power: np.ndarray,
-    parametric_model: np.ndarray | None = None,
     guide_power: np.ndarray | None = None,
     method: str = "density",
     knots: np.ndarray | None = None,
@@ -138,7 +132,6 @@ def _init_knots_from_arrays(
     if knots is not None:
         knots = np.array(knots)
     else:
-
         if method == "uniform":
             knots = np.linspace(min_freq, max_freq, n_knots)
 
@@ -153,7 +146,6 @@ def _init_knots_from_arrays(
             knots = _quantile_based_knots(
                 n_knots,
                 periodogram,
-                parametric_model,
                 guide_power=guide_power,
                 guide_strength=float(kwargs.get("guide_strength", 1.0)),
             )
@@ -266,7 +258,6 @@ def denoise_score(
 def _quantile_based_knots(
     n_knots: int,
     periodogram: Periodogram,
-    parametric_model: np.ndarray | None = None,
     *,
     guide_power: np.ndarray | None = None,
     guide_strength: float = 1.0,
@@ -283,10 +274,6 @@ def _quantile_based_knots(
     """
     power = np.asarray(periodogram.power, dtype=np.float64)
     freqs = np.asarray(periodogram.freqs, dtype=np.float64)
-
-    if parametric_model is not None:
-        power = power - parametric_model
-        power = power + np.abs(np.min(power))
 
     n = power.size
     if n < 3:

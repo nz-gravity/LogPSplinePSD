@@ -150,10 +150,19 @@ def _coarse_grain_processed_data(
             Nh=cg_config.Nh,
         )
 
-        freqs = processed_data.freqs
-        power_coarse = apply_coarse_graining_univar(
-            np.asarray(processed_data.power), spec, freqs
-        )
+        n_spec = int(spec.Nc * spec.Nh)
+        freqs = np.asarray(processed_data.freqs, dtype=np.float64)
+        power = np.asarray(processed_data.power)
+        if freqs.shape[0] > n_spec:
+            freqs = freqs[:n_spec]
+            power = power[:n_spec]
+        elif freqs.shape[0] != n_spec:
+            raise ValueError(
+                f"Periodogram frequency grid ({freqs.shape[0]}) is smaller than "
+                f"coarse-grain spec ({n_spec} = Nc={spec.Nc} × Nh={spec.Nh})."
+            )
+
+        power_coarse = apply_coarse_graining_univar(power, spec, freqs)
 
         processed_data = Periodogram(
             spec.f_coarse,
@@ -165,8 +174,15 @@ def _coarse_grain_processed_data(
 
         if scaled_true_psd is not None:
             try:
+                true_psd = np.asarray(scaled_true_psd)
+                if true_psd.shape[0] > n_spec:
+                    true_psd = true_psd[:n_spec]
+                elif true_psd.shape[0] != n_spec:
+                    raise ValueError(
+                        "true_psd length is smaller than the coarse-grain spec."
+                    )
                 true_coarse = apply_coarse_graining_univar(
-                    np.asarray(scaled_true_psd), spec, freqs
+                    true_psd, spec, freqs
                 )
                 scaled_true_psd = true_coarse
             except Exception:

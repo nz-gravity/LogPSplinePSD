@@ -6,10 +6,9 @@ This is the only place in the codebase that branches on the data type
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
-import numpy as np
 
 from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
@@ -82,21 +81,19 @@ def _joint_multivar_model(
 
 def _build_univar_kwargs(
     data: Periodogram,
-    config: "PipelineConfig",
+    config: PipelineConfig,
 ) -> tuple[dict, LogPSplines]:
     spline = LogPSplines.from_periodogram(
         data,
         n_knots=config.n_knots,
         degree=config.degree,
         diffMatrixOrder=config.diffMatrixOrder,
-        parametric_model=config.parametric_model,
         knot_kwargs=config.knot_kwargs or {},
     )
     kwargs = {
         "log_pdgrm": jnp.log(jnp.asarray(data.power, dtype=jnp.float32)),
         "lnspline_basis": jnp.asarray(spline.basis, dtype=jnp.float32),
         "penalty_matrix": jnp.asarray(spline.penalty_matrix),
-        "ln_parametric": jnp.asarray(spline.log_parametric_model),
         "Nh": int(data.Nh),
         "alpha_phi": float(config.alpha_phi),
         "beta_phi": float(config.beta_phi),
@@ -108,7 +105,7 @@ def _build_univar_kwargs(
 
 def _build_multivar_kwargs(
     data: MultivarFFT,
-    config: "PipelineConfig",
+    config: PipelineConfig,
 ) -> tuple[dict, MultivariateLogPSplines]:
     spline = MultivariateLogPSplines.from_multivar_fft(
         data,
@@ -186,8 +183,8 @@ def _build_multivar_kwargs(
 
 
 def build_model_kwargs_and_spline(
-    data: Union[Periodogram, MultivarFFT],
-    config: "PipelineConfig",
+    data: Periodogram | MultivarFFT,
+    config: PipelineConfig,
     coarse: bool = False,
 ) -> tuple[dict, LogPSplines | MultivariateLogPSplines]:
     """Return model kwargs and the spline model used to build them."""
@@ -198,8 +195,8 @@ def build_model_kwargs_and_spline(
 
 
 def build_model_kwargs(
-    data: Union[Periodogram, MultivarFFT],
-    config: "PipelineConfig",
+    data: Periodogram | MultivarFFT,
+    config: PipelineConfig,
     coarse: bool = False,
 ) -> dict:
     """Return model kwargs for the appropriate inference model.

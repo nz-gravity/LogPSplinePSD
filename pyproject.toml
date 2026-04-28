@@ -157,7 +157,6 @@ module = [
     "log_psplines.diagnostics.posterior_diagnostics",
     "log_psplines.diagnostics.derived_weights",
     "log_psplines.diagnostics.mcmc",
-    "log_psplines.plotting.pdgrm",
     "log_psplines.samplers.univar.univar_base",
     "log_psplines.samplers.univar.nuts",
     "log_psplines.samplers.utils",

@@ -9,7 +9,7 @@ from log_psplines.mcmc import (
     VIConfig,
     run_mcmc,
 )
-from log_psplines.plotting import plot_pdgrm
+from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 
 ar4 = ARData(order=4, duration=2.0, fs=512.0, sigma=1.0, seed=42)
 model_cfg = ModelConfig(n_knots=15, knot_kwargs={"method": "uniform"})
@@ -34,13 +34,15 @@ ax.plot(
     label="True PSD",
     zorder=10,
 )
-plot_pdgrm(
-    idata=inference_nuts,
-    ax=ax,
-    model_color="tab:orange",
-    model_label="NUTS",
-    data_label="_",
-    show_knots=True,
+plot_psd_matrix(
+    PSDMatrixPlotSpec(
+        idata=inference_nuts,
+        fig=fig,
+        ax=ax,
+        model_color="tab:orange",
+        label="NUTS",
+        show_knots=True,
+    )
 )
 
 ax.set_xscale("linear")

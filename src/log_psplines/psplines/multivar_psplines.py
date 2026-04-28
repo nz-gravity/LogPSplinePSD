@@ -119,7 +119,6 @@ def _build_component_knots(
     knots = init_knots(
         n_knots=n_knots,
         periodogram=knot_periodogram,
-        parametric_model=None,
         guide_power=(
             None
             if guide_score is None
@@ -146,7 +145,6 @@ def _build_pspline_from_log_target(
         diffMatrixOrder=diff_matrix_order,
         n=n_freq,
         grid_points=np.asarray(grid_points, dtype=np.float64),
-        parametric_model=jnp.ones(n_freq),
         log_target=np.asarray(log_target, dtype=np.float64),
         init_num_steps=5000,
     )

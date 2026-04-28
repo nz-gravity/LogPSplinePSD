@@ -5,9 +5,7 @@ from .base import (
     extract_plotting_data,
     setup_plot_style,
 )
-from .pdgrm import plot_pdgrm
 from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
-from .utils import PlottingData, unpack_data
 from .vi import plot_vi_loss
 
 __all__ = [
@@ -17,10 +15,7 @@ __all__ = [
     "extract_plotting_data",
     "compute_confidence_intervals",
     "setup_plot_style",
-    "unpack_data",
-    "PlottingData",
     # Main plotting functions
-    "plot_pdgrm",
     "plot_psd_matrix",
     "PSDMatrixPlotSpec",
     "plot_vi_loss",

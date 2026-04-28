@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ..arviz_utils.from_arviz import get_spline_model
+from ..datatypes import Periodogram
 from ..datatypes.multivar import EmpiricalPSD, _get_coherence
 from ..diagnostics._utils import interior_frequency_slice
 from ..logger import logger
@@ -30,6 +31,34 @@ EMPIRICAL_KWGS: dict[str, Any] = dict(
 TRUE_KWGS: dict[str, Any] = dict(
     color="k", lw=1.6, label="Analytical", zorder=6
 )
+
+
+def _periodogram_to_empirical_psd(
+    pdgrm: Periodogram,
+) -> EmpiricalPSD | None:
+    """Convert a univariate periodogram into a p=1 empirical PSD matrix."""
+    freq = np.asarray(pdgrm.freqs, dtype=np.float64)
+    power = np.asarray(pdgrm.power, dtype=np.float64)
+    if power.ndim != 1:
+        return None
+    psd = power.astype(np.complex128)[:, None, None]
+    coherence = np.zeros((freq.size, 1, 1), dtype=np.float64)
+    return EmpiricalPSD(
+        freq=freq,
+        psd=psd,
+        coherence=coherence,
+        channels=np.asarray(["1"]),
+    )
+
+
+def _normalize_true_psd(true_psd: np.ndarray | None) -> np.ndarray | None:
+    """Normalize true PSD inputs to shape (F, p, p)."""
+    if true_psd is None:
+        return None
+    true_psd_arr = np.asarray(true_psd)
+    if true_psd_arr.ndim == 1:
+        return true_psd_arr.astype(np.complex128)[:, None, None]
+    return true_psd_arr
 
 
 def _get_knots_from_idata(idata) -> np.ndarray | None:
@@ -476,6 +505,7 @@ class PSDMatrixPlotSpec:
     xscale: str = "linear"
     label: str | None = None
     model_color: str | None = "tab:blue"
+    show_empirical: bool = True
     fig: plt.Figure | None = None
     ax: np.ndarray | None = None
     save: bool = True
@@ -542,7 +572,11 @@ def _prepare_plot_inputs(
         if extracted_true_psd is not None:
             true_psd = extracted_true_psd
         if empirical_psd is None:
-            empirical_psd = _extract_empirical_psd_from_idata(spec.idata)
+            periodogram = extracted.get("periodogram")
+            if periodogram is not None:
+                empirical_psd = _periodogram_to_empirical_psd(periodogram)
+            if empirical_psd is None:
+                empirical_psd = _extract_empirical_psd_from_idata(spec.idata)
 
         ci_dict = _quantiles_to_ci_dict(
             quantiles,
@@ -575,8 +609,8 @@ def _prepare_plot_inputs(
     if freq is None:
         raise ValueError("Frequency array `freq` is required.")
 
+    true_psd = _normalize_true_psd(true_psd)
     if true_psd is not None:
-        true_psd = np.asarray(true_psd)
         if true_psd.shape[0] != len(freq):
             logger.warning(
                 f"Skipping true PSD overlay: expected {len(freq)} frequency bins, got {true_psd.shape[0]}."
@@ -672,13 +706,15 @@ def _plot_ci_band(
 def _plot_empirical_overlays(
     ax: plt.Axes,
     series_getter: Callable[[EmpiricalPSD], np.ndarray],
-    i: int,
-    j: int,
     empirical_psd: EmpiricalPSD | None,
     extra_empirical_psd: list[EmpiricalPSD],
     extra_empirical_labels: list[str],
     extra_empirical_styles: list[dict],
+    *,
+    show_empirical: bool,
 ) -> None:
+    if not show_empirical:
+        return
     if empirical_psd is not None:
         ax.plot(
             empirical_psd.freq,
@@ -757,12 +793,11 @@ def _render_diag_panel(
     _plot_empirical_overlays(
         ax,
         lambda emp: emp.psd[:, i, i].real,
-        i,
-        j,
         empirical_psd,
         extra_empirical_psd,
         extra_empirical_labels,
         extra_empirical_styles,
+        show_empirical=spec.show_empirical,
     )
     line_label = (
         spec.label
@@ -848,12 +883,11 @@ def _render_coherence_panel(
     _plot_empirical_overlays(
         ax,
         lambda emp: emp.coherence[:, i, j],
-        i,
-        j,
         empirical_psd,
         extra_empirical_psd,
         extra_empirical_labels,
         extra_empirical_styles,
+        show_empirical=spec.show_empirical,
     )
     _plot_ci_band(
         ax,
@@ -946,12 +980,11 @@ def _render_magnitude_panel(
     _plot_empirical_overlays(
         ax,
         lambda emp: np.abs(emp.psd[:, i, j]),
-        i,
-        j,
         empirical_psd,
         extra_empirical_psd,
         extra_empirical_labels,
         extra_empirical_styles,
+        show_empirical=spec.show_empirical,
     )
     if true_psd is not None:
         ax.plot(freq, np.abs(true_psd[:, i, j]), **TRUE_KWGS)
@@ -1027,12 +1060,11 @@ def _render_re_panel(
     _plot_empirical_overlays(
         ax,
         lambda emp: emp.psd[:, i, j].real,
-        i,
-        j,
         empirical_psd,
         extra_empirical_psd,
         extra_empirical_labels,
         extra_empirical_styles,
+        show_empirical=spec.show_empirical,
     )
     if true_psd is not None:
         ax.plot(freq, true_psd[:, i, j].real, **TRUE_KWGS)
@@ -1108,12 +1140,11 @@ def _render_im_panel(
     _plot_empirical_overlays(
         ax,
         lambda emp: emp.psd[:, i, j].imag,
-        i,
-        j,
         empirical_psd,
         extra_empirical_psd,
         extra_empirical_labels,
         extra_empirical_styles,
+        show_empirical=spec.show_empirical,
     )
     if true_psd is not None:
         ax.plot(freq, true_psd[:, i, j].imag, **TRUE_KWGS)
@@ -1266,7 +1297,10 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec):
     fig_provided = spec.fig is not None and spec.ax is not None
     if fig_provided:
         provided_axes = spec.ax
-        axes_arr = np.asarray(provided_axes)
+        if p == 1 and isinstance(provided_axes, plt.Axes):
+            axes_arr = np.array([[provided_axes]])
+        else:
+            axes_arr = np.asarray(provided_axes)
         if axes_arr.shape != (p, p):
             raise ValueError(
                 f"Provided axes have shape {axes_arr.shape}, expected ({p}, {p})."

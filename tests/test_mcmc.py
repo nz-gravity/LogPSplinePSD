@@ -5,6 +5,7 @@ from typing import cast
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from log_psplines.arviz_utils import (
@@ -15,6 +16,11 @@ from log_psplines.arviz_utils import (
 )
 from log_psplines.mcmc import run_mcmc
 from log_psplines.pipeline.config import PipelineConfig
+from log_psplines.pipeline.evidence import (
+    MorphZEvidenceResult,
+    estimate_pipeline_lnz,
+    run_morphz_evidence,
+)
 from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
     compute_binning_structure,
@@ -53,6 +59,10 @@ def test_mcmc_univar(outdir: str):
     assert "l2" in idata["sample_stats"].attrs
     assert "coverage" in idata["sample_stats"].attrs
     assert get_weights(idata) is not None
+    assert bool(idata.attrs["compute_lnz"])
+    assert bool(idata.attrs["lnz_valid"])
+    assert np.isfinite(idata.attrs["lnz"])
+    assert np.isfinite(idata.attrs["lnz_err"])
 
     _check_stats_are_finite(idata, outdir_str)
 
@@ -124,6 +134,25 @@ def test_mcmc_multivar(outdir):
     assert "log_likelihood_block_0" in vi_log_likelihood
     assert "log_likelihood_block_1" in vi_log_likelihood
     assert vi_log_likelihood["log_likelihood_block_0"].ndim == 3
+    assert bool(idata.attrs["compute_lnz"])
+    assert bool(idata.attrs["lnz_valid"])
+    assert np.isfinite(idata.attrs["lnz"])
+    assert np.isfinite(idata.attrs["lnz_err"])
+    assert bool(idata.attrs["lnz_valid_factor_0"])
+    assert bool(idata.attrs["lnz_valid_factor_1"])
+    assert np.isfinite(idata.attrs["lnz_factor_0"])
+    assert np.isfinite(idata.attrs["lnz_factor_1"])
+    assert np.isfinite(idata.attrs["lnz_err_factor_0"])
+    assert np.isfinite(idata.attrs["lnz_err_factor_1"])
+    assert idata.attrs["lnz"] == pytest.approx(
+        idata.attrs["lnz_factor_0"] + idata.attrs["lnz_factor_1"]
+    )
+    assert idata.attrs["lnz_err"] == pytest.approx(
+        np.sqrt(
+            idata.attrs["lnz_err_factor_0"] ** 2
+            + idata.attrs["lnz_err_factor_1"] ** 2
+        )
+    )
 
     _check_stats_are_finite(idata, outdir_str)
 
@@ -134,6 +163,123 @@ def test_mcmc_multivar(outdir):
         "diagnostics/vi_loss.png",
     ]
     _check_for_files(files_to_check, outdir_str)
+
+
+def test_multivar_morphz_all_nonconverged_is_invalid(outdir) -> None:
+    rng = np.random.default_rng(0)
+    post_samples = rng.normal(size=(96, 2))
+
+    def log_posterior_fn(theta: np.ndarray) -> float:
+        theta = np.asarray(theta, dtype=np.float64)
+        return float(
+            -0.5 * np.sum(theta**2) - 0.5 * theta.size * np.log(2.0 * np.pi)
+        )
+
+    log_posterior_values = np.apply_along_axis(
+        log_posterior_fn, 1, post_samples
+    )
+    result = run_morphz_evidence(
+        post_samples=post_samples,
+        log_posterior_values=log_posterior_values,
+        log_posterior_function=log_posterior_fn,
+        n_resamples=48,
+        thin=2,
+        kde_fraction=0.5,
+        bridge_start_fraction=0.5,
+        max_iter=1,
+        tol=0.0,
+        morph_type="pair",
+        output_path=str(outdir),
+        n_estimations=2,
+        kde_bw="silverman",
+        verbose=False,
+        plot=False,
+        show_progress=False,
+    )
+
+    assert result.n_estimations == 2
+    assert result.nonconverged_count == 2
+    assert not result.is_valid
+    assert np.isnan(result.lnz)
+    assert np.isnan(result.lnz_err)
+
+
+def test_multivar_lnz_sums_factor_results(monkeypatch) -> None:
+    from log_psplines.datatypes.multivar import MultivariateTimeseries
+    from log_psplines.example_datasets.varma_data import VARMAData
+    from log_psplines.pipeline.make_pipeline import make_pipeline
+
+    factor_calls: list[int] = []
+
+    def _fake_run_morphz_evidence(**kwargs) -> MorphZEvidenceResult:
+        factor_index = len(factor_calls)
+        factor_calls.append(factor_index)
+        if factor_index == 0:
+            return MorphZEvidenceResult(
+                lnz=10.0,
+                lnz_err=0.3,
+                is_valid=True,
+                n_estimations=1,
+                nonconverged_count=0,
+                estimates=np.asarray([[10.0, 0.3]], dtype=float),
+            )
+        return MorphZEvidenceResult(
+            lnz=20.0,
+            lnz_err=0.4,
+            is_valid=True,
+            n_estimations=1,
+            nonconverged_count=0,
+            estimates=np.asarray([[20.0, 0.4]], dtype=float),
+        )
+
+    monkeypatch.setattr(
+        "log_psplines.pipeline.evidence.run_morphz_evidence",
+        _fake_run_morphz_evidence,
+    )
+
+    varma_data = VARMAData(n_samples=2**8, fs=32.0, seed=1)
+    ts_run = MultivariateTimeseries(
+        y=cast(np.ndarray, varma_data.data),
+        t=varma_data.time,
+    )
+    config = PipelineConfig(
+        n_knots=6,
+        degree=3,
+        diffMatrixOrder=2,
+        fmin=0,
+        fmax=16,
+        n_samples=8,
+        n_warmup=8,
+        Nb=2,
+        coarse_grain_config=CoarseGrainConfig(enabled=True, Nc=None, Nh=2),
+        verbose=False,
+        outdir=None,
+        init_from_vi=True,
+        only_vi=False,
+        vi_steps=8,
+        vi_lr=5e-3,
+        vi_progress_bar=False,
+        vi_posterior_draws=8,
+        vi_psd_max_draws=8,
+        compute_lnz=False,
+    )
+    pipeline = make_pipeline(ts_run, config)
+    result = pipeline.run()
+
+    lnz_result = estimate_pipeline_lnz(
+        idata=result.idata,
+        data=pipeline.data,
+        model_kwargs=pipeline.full_model_kwargs,
+        outdir=None,
+        extra_kwargs={"lnz_kwargs": {"show_progress": False}},
+        verbose=False,
+    )
+
+    assert factor_calls == [0, 1]
+    assert lnz_result.is_valid
+    assert len(lnz_result.factor_results) == 2
+    assert lnz_result.lnz == pytest.approx(30.0)
+    assert lnz_result.lnz_err == pytest.approx(np.sqrt(0.3**2 + 0.4**2))
 
 
 def _check_stats_are_finite(idata, outdir) -> None:
@@ -276,6 +422,18 @@ def _run_multivar_mcmc(outdir):
         vi_progress_bar=False,
         vi_posterior_draws=100,
         vi_psd_max_draws=100,
+        compute_lnz=True,
+        extra_kwargs={
+            "lnz_kwargs": {
+                "morph_type": "pair",
+                "n_resamples": 64,
+                "n_estimations": 1,
+                "kde_bw": "silverman",
+                "max_iter": 200,
+                "tol": 1e-2,
+                "verbose": True,
+            }
+        },
     )
     idata = run_mcmc(
         data=ts_run,

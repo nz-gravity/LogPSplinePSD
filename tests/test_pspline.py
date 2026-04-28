@@ -5,13 +5,13 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-import scipy
 from scipy.interpolate import BSpline
 
 from log_psplines.datatypes import MultivarFFT, Periodogram, Timeseries
+from log_psplines.datatypes.multivar import EmpiricalPSD
 from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.pipeline.models import log_likelihood
-from log_psplines.plotting import plot_pdgrm
+from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 from log_psplines.psplines import LogPSplines
 from log_psplines.psplines.initialisation import init_weights
 
@@ -22,6 +22,35 @@ def mock_pdgrm() -> Periodogram:
     return ARData(order=4, duration=1.0, fs=256, seed=42).periodogram
 
 
+def _plot_univariate_spline(
+    pdgrm: Periodogram,
+    spline_model: LogPSplines,
+):
+    freq = np.asarray(pdgrm.freqs, dtype=np.float64)
+    model = np.exp(np.asarray(spline_model(), dtype=np.float64))
+    empirical = EmpiricalPSD(
+        freq=freq,
+        psd=np.asarray(pdgrm.power, dtype=np.complex128)[:, None, None],
+        coherence=np.zeros((freq.size, 1, 1), dtype=np.float64),
+        channels=np.asarray(["1"]),
+    )
+    spec = PSDMatrixPlotSpec(
+        freq=freq,
+        ci_dict={
+            "psd": {(0, 0): (model, model, model)},
+            "coh": {},
+            "re": {},
+            "im": {},
+            "mag": {},
+        },
+        empirical_psd=empirical,
+        save=False,
+        close=False,
+        show_knots=False,
+    )
+    return plot_psd_matrix(spec)
+
+
 def test_spline_init(mock_pdgrm: Periodogram, outdir):
     out = os.path.join(outdir, "out_spline_init")
     os.makedirs(out, exist_ok=True)
@@ -29,7 +58,6 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     # init splines
     t0 = time.time()
     ln_pdgrm = jnp.log(mock_pdgrm.power)
-    zero_param = jnp.zeros(ln_pdgrm.shape[0])
     spline_model = LogPSplines.from_periodogram(
         mock_pdgrm,
         n_knots=10,
@@ -41,7 +69,7 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     Nh = 1  # model == ones
 
     # compute LnL at init and optimized weights
-    lnl_args = (ln_pdgrm, spline_model.basis, zero_param, Nh)
+    lnl_args = (ln_pdgrm, spline_model.basis, Nh)
     lnl_initial = log_likelihood(zero_weights, *lnl_args)
     lnl_final = log_likelihood(optim_weights, *lnl_args)
     runtime = float(time.time()) - t0
@@ -51,7 +79,7 @@ def test_spline_init(mock_pdgrm: Periodogram, outdir):
     )
 
     # plotting for verification
-    fig, ax = plot_pdgrm(mock_pdgrm, spline_model)
+    fig, axes = _plot_univariate_spline(mock_pdgrm, spline_model)
     fig.savefig(f"{out}/test_spline_init.png")
     spline_model.plot_basis(out)
 
@@ -77,7 +105,8 @@ def test_spline_basis(mock_pdgrm: Periodogram, outdir):
         knot_kwargs=dict(frac_log=1.0),
     )
 
-    fig, ax = plot_pdgrm(mock_pdgrm, spline_model)
+    fig, axes = _plot_univariate_spline(mock_pdgrm, spline_model)
+    ax = axes[0, 0]
     ax2 = ax.twinx()
     for b in spline_model.basis.T:
         ax2.plot(mock_pdgrm.freqs, b, alpha=0.5, lw=0.5, marker=".")
@@ -102,7 +131,6 @@ def test_closed_form_weight_initialiser_improves_likelihood(mock_pdgrm):
     lnl_args = (
         jnp.log(mock_pdgrm.power),
         spline_model.basis,
-        spline_model.log_parametric_model,
         1,
     )
 

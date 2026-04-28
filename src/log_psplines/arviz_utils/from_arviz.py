@@ -108,9 +108,9 @@ def _compute_coherence_from_spectral_density(
     """Compute coherence from spectral matrices with shape ``(..., p, p, F)``."""
     diag = np.real(np.diagonal(posterior_psd, axis1=2, axis2=3))  # (..., F, p)
     diag = np.moveaxis(diag, -1, -2)  # (..., p, F)
-    denom = np.sqrt(diag[..., :, None, :] * diag[..., None, :, :])
+    denom = diag[..., :, None, :] * diag[..., None, :, :]
     denom = np.where(denom > 0.0, denom, np.nan)
-    coherence = np.abs(posterior_psd) / denom
+    coherence = np.abs(posterior_psd) ** 2 / denom
     coherence = np.nan_to_num(coherence, nan=0.0, posinf=0.0, neginf=0.0)
     p = posterior_psd.shape[2]
     for channel in range(p):
@@ -185,11 +185,7 @@ def _compute_univar_psd_dataset(
         np.asarray(posterior["weights"].values)
     )
     basis = np.asarray(model.basis, dtype=np.float64)
-    log_parametric = np.asarray(model.log_parametric_model, dtype=np.float64)
-    log_psd = (
-        np.einsum("fk,cdk->cdf", basis, weights)
-        + log_parametric[None, None, :]
-    )
+    log_psd = np.einsum("fk,cdk->cdf", basis, weights)
     scaling_factor = float(
         (getattr(idata, "attrs", {}) or {}).get("scaling_factor", 1.0) or 1.0
     )
@@ -461,8 +457,11 @@ def get_weights(
 def get_periodogram(idata: xr.DataTree) -> Periodogram:
     """Extract the observed periodogram."""
     observed_data = _require_dataset(idata, "observed_data")
+    values = np.array(observed_data["periodogram"].values)
+    if values.ndim != 1:
+        raise KeyError("Observed periodogram is multivariate, not univariate.")
     return Periodogram(
-        power=np.array(observed_data["periodogram"].values),
+        power=values,
         freqs=np.array(observed_data["periodogram"].coords["freq"].values),
     )
 
@@ -714,10 +713,7 @@ def get_posterior_ci(idata: xr.DataTree, n_max=500):
 
     weights = get_weights(idata, thin=max(1, total_n // n_max))
     model = np.exp(
-        np.array(
-            [spline_model(w, use_parametric_model=True) for w in weights],
-            dtype=np.float64,
-        )
+        np.array([spline_model(w) for w in weights], dtype=np.float64)
     )
     # get 1,2,3 sigma quantiles
     ci_3 = np.percentile(model, [16, 84], axis=0)

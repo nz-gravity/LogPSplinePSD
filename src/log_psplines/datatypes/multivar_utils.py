@@ -236,7 +236,7 @@ def _get_coherence(
 ) -> Float[np.ndarray, ...]:
     """Compute coherence matrices from PSD estimates.
 
-    Cxy = |Pxy| / sqrt(Pxx * Pyy), diagonal set to 1.0, clipped to [0, 1].
+    Cxy = |Pxy|^2 / (Pxx * Pyy), diagonal set to 1.0, clipped to [0, 1].
 
     """
     psd = np.asarray(psd)
@@ -250,9 +250,13 @@ def _get_coherence(
     for i in range(p):
         coh[:, i, i] = 1.0
         for j in range(i + 1, p):
-            denom = np.sqrt(np.abs(psd[:, i, i]) * np.abs(psd[:, j, j]))
+            denom = np.abs(psd[:, i, i]) * np.abs(psd[:, j, j])
             with np.errstate(divide="ignore", invalid="ignore"):
-                coh_ij = np.where(denom > 0, np.abs(psd[:, i, j]) / denom, 0.0)
+                coh_ij = np.where(
+                    denom > 0,
+                    np.abs(psd[:, i, j]) ** 2 / denom,
+                    0.0,
+                )
             coh[:, i, j] = np.clip(coh_ij.real, a_min=0.0, a_max=1.0)
             coh[:, j, i] = coh[:, i, j]
     return coh

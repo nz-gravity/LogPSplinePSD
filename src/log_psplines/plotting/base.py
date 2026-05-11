@@ -110,24 +110,11 @@ def extract_plotting_data(
     """
     from ..arviz_utils import (
         get_multivar_prior_psd_quantiles,
-        get_periodogram,
         get_psd_dataset,
-        get_spline_model,
         get_weights,
     )
 
     data: dict[str, Any] = {}
-
-    # Extract core data
-    try:
-        data["periodogram"] = get_periodogram(idata)
-    except (KeyError, ValueError):
-        data["periodogram"] = None
-
-    try:
-        data["spline_model"] = get_spline_model(idata)
-    except KeyError:
-        data["spline_model"] = None
 
     try:
         if isinstance(weights_key, int):

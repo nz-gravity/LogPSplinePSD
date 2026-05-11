@@ -15,10 +15,8 @@ from ..arviz_utils.from_arviz import get_psd_dataset
 from ._factors import factor_idatas, vi_factor_idatas
 from ._utils import (
     compute_ci_coverage_multivar,
-    compute_ci_coverage_univar,
     compute_matrix_l2,
     compute_matrix_riae,
-    compute_riae,
     interior_frequency_slice,
 )
 
@@ -54,35 +52,15 @@ def _truth_metrics_from_idata(
     spectral_density = np.asarray(psd_ds["spectral_density"].values)
 
     n_channels = int(spectral_density.shape[2])
-    if n_channels == 1:
-        samples = np.real(spectral_density[:, :, 0, 0, :]).reshape(
-            -1, freqs_raw.size
-        )
-        samples = samples[:, freq_idx]
-        truth_arr = np.asarray(truth, dtype=float).reshape(-1)[freq_idx]
-        q05, q50, q95 = np.percentile(samples, [5.0, 50.0, 95.0], axis=0)
-        return {
-            "riae": float(compute_riae(q50, truth_arr, freqs)),
-            "l2": float(
-                compute_matrix_l2(
-                    q50[:, None, None],
-                    truth_arr[:, None, None],
-                    freqs,
-                )
-            ),
-            "coverage": float(
-                compute_ci_coverage_univar(
-                    np.stack([q05, q50, q95], axis=0), truth_arr
-                )
-            ),
-        }
-
     samples = spectral_density.reshape(
         -1, n_channels, n_channels, spectral_density.shape[-1]
     )
     samples = np.moveaxis(samples[..., freq_idx], -1, 1)
     q05, q50, q95 = np.percentile(samples.real, [5.0, 50.0, 95.0], axis=0)
-    truth_arr = np.asarray(truth)[freq_idx]
+    truth_arr = np.asarray(truth)
+    if truth_arr.ndim == 1:
+        truth_arr = truth_arr[:, None, None]
+    truth_arr = truth_arr[freq_idx]
     return {
         "riae": float(compute_matrix_riae(q50, truth_arr, freqs)),
         "l2": float(compute_matrix_l2(q50, truth_arr, freqs)),

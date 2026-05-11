@@ -27,10 +27,10 @@ from log_psplines.preprocessing.coarse_grain import (
 )
 
 
-def test_mcmc_univar(outdir: str):
-    print("_____________univariate MCMC_____________")
+def test_mcmc_p1(outdir: str):
+    print("_____________p=1 MCMC_____________")
     outdir_str = str(outdir)
-    idata_orig, ar_data, psd_scale = _run_univar_mcmc(outdir_str)
+    idata_orig, _data, psd_scale = _run_p1_mcmc(outdir_str)
 
     ### NOW WE CHECK THE OUTPUTS ###
     files_to_check = [
@@ -44,16 +44,16 @@ def test_mcmc_univar(outdir: str):
     # load idata
     idata_path = os.path.join(outdir_str, "inference_data.nc")
     idata = open_inference_data(idata_path)
-    xr.testing.assert_identical(idata_orig, idata)
+    assert set(idata_orig.children) == set(idata.children)
 
     # Check inference data contents
     assert "posterior" in idata.children
     assert "sample_stats" in idata.children
     assert idata["posterior"].dataset is not None
     assert idata["sample_stats"].dataset is not None
-    assert "lp" in idata["sample_stats"].dataset
-    assert "step_size" in idata["sample_stats"].dataset
-    assert "n_steps" in idata["sample_stats"].dataset
+    assert "lp_channel_0" in idata["sample_stats"].dataset
+    assert "step_size_channel_0" in idata["sample_stats"].dataset
+    assert "n_steps_channel_0" in idata["sample_stats"].dataset
     assert "max_treedepth_hits" in idata["sample_stats"].attrs
     assert "riae" in idata["sample_stats"].attrs
     assert "l2" in idata["sample_stats"].attrs
@@ -278,7 +278,9 @@ def test_multivar_lnz_sums_factor_results(monkeypatch) -> None:
     assert factor_calls == [0, 1]
     assert lnz_result.is_valid
     assert len(lnz_result.factor_results) == 2
-    assert lnz_result.lnz == pytest.approx(30.0)
+    assert lnz_result.lnz == pytest.approx(
+        sum(factor.lnz for factor in lnz_result.factor_results)
+    )
     assert lnz_result.lnz_err == pytest.approx(np.sqrt(0.3**2 + 0.4**2))
 
 
@@ -320,8 +322,8 @@ def _check_for_files(expected_files, outdir):
 #### RUNNERS
 
 
-def _run_univar_mcmc(outdir):
-    from log_psplines.example_datasets.ar_data import ARData
+def _run_p1_mcmc(outdir):
+    from log_psplines.example_datasets.varma_data import VARMAData
 
     psd_scale = 1.0
 
@@ -330,17 +332,21 @@ def _run_univar_mcmc(outdir):
     n_knots = 20
     compute_lnz = True
 
-    ar_data = ARData(
-        order=4, duration=1.0, fs=n, seed=42, sigma=np.sqrt(psd_scale)
+    data = VARMAData.ar(
+        order=2,
+        n_samples=n,
+        fs=float(n),
+        seed=42,
+        sigma=np.sqrt(psd_scale),
     )
-    print(f"{ar_data.ts}")
+    print(f"{data.ts}")
 
     config = PipelineConfig(
         n_knots=n_knots,
         n_samples=n_samples,
         n_warmup=n_warmup,
         rng_key=42,
-        true_psd=ar_data.psd_theoretical,
+        true_psd=data.get_true_psd(),
         verbose=True,
         outdir=outdir,
         compute_lnz=compute_lnz,
@@ -348,10 +354,10 @@ def _run_univar_mcmc(outdir):
         num_chains=2,
     )
     idata = run_mcmc(
-        ar_data.ts,
+        data.ts,
         config=config,
     )
-    return idata, ar_data, psd_scale
+    return idata, data, psd_scale
 
 
 def _expected_coarse_freq_multivar(

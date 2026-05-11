@@ -7,8 +7,8 @@ import pytest
 import xarray as xr
 
 from log_psplines import make_pipeline
-from log_psplines.datatypes import Periodogram
-from log_psplines.datatypes.multivar import MultivarFFT, MultivariateTimeseries
+from log_psplines.arviz_utils import get_psd_dataset
+from log_psplines.datatypes import MultivarFFT, MultivariateTimeseries
 from log_psplines.pipeline.config import PipelineConfig
 from log_psplines.pipeline.pipeline import (
     InferencePipeline,
@@ -26,12 +26,11 @@ from log_psplines.pipeline.stages import (
 
 
 @pytest.fixture(scope="module")
-def univar_data() -> Periodogram:
-    """Small periodogram (N≈32) for fast tests."""
-    from log_psplines.example_datasets.ar_data import ARData
+def p1_data() -> MultivariateTimeseries:
+    """Small one-channel AR series for fast p=1 tests."""
+    from log_psplines.example_datasets.varma_data import VARMAData
 
-    ar = ARData(order=2, duration=1.0, fs=64, seed=7)
-    return ar.ts.standardise_for_psd().to_periodogram()
+    return VARMAData.ar(order=2, n_samples=64, fs=64.0, seed=7).ts
 
 
 @pytest.fixture(scope="module")
@@ -40,8 +39,7 @@ def multivar_data() -> MultivarFFT:
     from log_psplines.example_datasets.varma_data import VARMAData
 
     varma = VARMAData(n_samples=64, fs=16.0, seed=7)
-    mv_ts = MultivariateTimeseries(y=varma.data, t=varma.time)
-    return mv_ts.standardise_for_psd().to_wishart_stats(Nb=1)
+    return varma.ts.standardise_for_psd().to_wishart_stats(Nb=1)
 
 
 def _fast_config(**extra) -> PipelineConfig:
@@ -86,12 +84,16 @@ def test_vi_init_values_dataset_uses_variable_specific_dims():
 # ---------------------------------------------------------------------------
 
 
-def test_make_pipeline_univar_returns_inference_pipeline(univar_data):
-    pipeline = make_pipeline(univar_data, _fast_config())
+def test_make_pipeline_p1_returns_inference_pipeline(p1_data):
+    pipeline = make_pipeline(p1_data, _fast_config())
     assert isinstance(pipeline, InferencePipeline)
     assert (
         pipeline.coarse_model_kwargs is None
     )  # auto_coarse_vi=False by default
+    assert isinstance(pipeline.data, MultivarFFT)
+    assert pipeline.data.p == 1
+    assert isinstance(pipeline.vi_stage, FactorizedMultivarVIStage)
+    assert isinstance(pipeline.nuts_stage, FactorizedMultivarNUTSStage)
 
 
 def test_make_pipeline_multivar_returns_inference_pipeline(multivar_data):
@@ -102,7 +104,7 @@ def test_make_pipeline_multivar_returns_inference_pipeline(multivar_data):
     assert isinstance(pipeline.nuts_stage, FactorizedMultivarNUTSStage)
 
 
-def test_make_pipeline_vi_stage_uses_config(univar_data):
+def test_make_pipeline_vi_stage_uses_config(p1_data):
     config = PipelineConfig(
         n_knots=4,
         n_samples=5,
@@ -114,13 +116,13 @@ def test_make_pipeline_vi_stage_uses_config(univar_data):
         verbose=False,
         eta=0.5,
     )
-    pipeline = make_pipeline(univar_data, config)
+    pipeline = make_pipeline(p1_data, config)
     assert pipeline.vi_stage.steps == 77
     assert pipeline.vi_stage.lr == pytest.approx(3e-3)
     assert pipeline.vi_stage.eta == pytest.approx(0.5)
 
 
-def test_make_pipeline_nuts_stage_uses_config(univar_data):
+def test_make_pipeline_nuts_stage_uses_config(p1_data):
     config = PipelineConfig(
         n_knots=4,
         vi_steps=20,
@@ -132,7 +134,7 @@ def test_make_pipeline_nuts_stage_uses_config(univar_data):
         verbose=False,
         eta=0.25,
     )
-    pipeline = make_pipeline(univar_data, config)
+    pipeline = make_pipeline(p1_data, config)
     assert pipeline.nuts_stage.n_samples == 13
     assert pipeline.nuts_stage.n_warmup == 7
     assert pipeline.nuts_stage.target_accept_prob == pytest.approx(0.9)
@@ -140,13 +142,13 @@ def test_make_pipeline_nuts_stage_uses_config(univar_data):
 
 
 # ---------------------------------------------------------------------------
-# only_vi mode (univar)
+# only_vi mode (p=1)
 # ---------------------------------------------------------------------------
 
 
-def test_pipeline_univar_only_vi(univar_data):
+def test_pipeline_p1_only_vi(p1_data):
     config = _fast_config(only_vi=True)
-    result = make_pipeline(univar_data, config).run()
+    result = make_pipeline(p1_data, config).run()
 
     assert isinstance(result, PipelineResult)
     assert result.vi_coarse is None
@@ -156,6 +158,7 @@ def test_pipeline_univar_only_vi(univar_data):
     assert result.vi.guide_name is not None
     assert isinstance(result.idata, xr.DataTree)
     assert "posterior" in result.idata.children
+    assert "weights_delta_0" in result.vi.init_values
 
 
 # ---------------------------------------------------------------------------
@@ -186,23 +189,23 @@ def test_pipeline_multivar_only_vi(multivar_data):
 # ---------------------------------------------------------------------------
 
 
-def test_pipeline_no_coarse_vi(univar_data):
+def test_pipeline_no_coarse_vi(p1_data):
     """With auto_coarse_vi=False (default), vi_coarse should be None."""
     config = _fast_config(auto_coarse_vi=False, only_vi=True)
-    result = make_pipeline(univar_data, config).run()
+    result = make_pipeline(p1_data, config).run()
 
     assert result.vi_coarse is None
     assert result.vi is not None
 
 
 # ---------------------------------------------------------------------------
-# Full univar NUTS run
+# Full p=1 NUTS run
 # ---------------------------------------------------------------------------
 
 
-def test_pipeline_univar_nuts(univar_data):
+def test_pipeline_p1_nuts(p1_data):
     config = _fast_config()
-    result = make_pipeline(univar_data, config).run()
+    result = make_pipeline(p1_data, config).run()
 
     assert isinstance(result, PipelineResult)
     assert result.vi is not None
@@ -210,9 +213,17 @@ def test_pipeline_univar_nuts(univar_data):
     posterior = result.idata.children.get("posterior")
     assert posterior is not None
     ds = posterior.dataset
-    assert "weights" in ds
+    assert "weights_delta_0" in ds
     # Correct number of NUTS draws
-    assert ds["weights"].sizes["draw"] == config.n_samples
+    assert ds["weights_delta_0"].sizes["draw"] == config.n_samples
+    stats = result.idata["sample_stats"].dataset
+    assert "acceptance_rate_channel_0" in stats
+    psd_ds = get_psd_dataset(result.idata, source="posterior")
+    spectral_density = psd_ds["spectral_density"].values
+    assert spectral_density.shape[:4] == (1, config.n_samples, 1, 1)
+    median = np.median(np.real(spectral_density[:, :, 0, 0, :]), axis=(0, 1))
+    assert np.all(np.isfinite(median))
+    assert np.all(median > 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -244,9 +255,9 @@ def test_pipeline_multivar_nuts(multivar_data):
 # ---------------------------------------------------------------------------
 
 
-def test_pipeline_result_save(tmp_path, univar_data):
+def test_pipeline_result_save(tmp_path, p1_data):
     config = _fast_config(only_vi=True)
-    result = make_pipeline(univar_data, config).run()
+    result = make_pipeline(p1_data, config).run()
     result.save(str(tmp_path))
 
     assert (tmp_path / "inference_data.nc").exists()

@@ -1,10 +1,9 @@
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Optional, Sequence, Tuple
 
 import numpy as np
-from scipy.signal import csd
+from scipy.signal import csd, welch, windows
 from scipy.signal import detrend as signal_detrend
-from scipy.signal import welch, windows
 
 from ..logger import logger
 from .multivar_utils import (
@@ -49,16 +48,14 @@ class MultivarFFT:
     N: int
     p: int
     Nb: int = 1
-    scaling_factor: Optional[float] = 1.0  # Track the PSD scaling factor
-    channel_stds: Optional[np.ndarray] = (
-        None  # Per-channel standard deviations
-    )
+    scaling_factor: float | None = 1.0  # Track the PSD scaling factor
+    channel_stds: np.ndarray | None = None  # Per-channel standard deviations
     fs: float = field(default=1.0, repr=False)
     # Duration (seconds) of each time-domain block used to form the FFT/Wishart
     # statistic. This matches the "T" factor in the Whittle likelihood.
     duration: float = field(default=1.0, repr=False)
-    raw_psd: Optional[np.ndarray] = None
-    raw_freq: Optional[np.ndarray] = None
+    raw_psd: np.ndarray | None = None
+    raw_freq: np.ndarray | None = None
     # Coarse-grain multiplicity Nh. For equal-sized bins this is constant
     # across the retained frequency grid. Defaults to 1 (no coarse graining).
     Nh: int = 1
@@ -139,11 +136,11 @@ class MultivarFFT:
         cls,
         x: np.ndarray,
         fs: float = 1.0,
-        fmin: Optional[float] = None,
-        fmax: Optional[float] = None,
-        scaling_factor: Optional[float] = 1.0,
-        channel_stds: Optional[np.ndarray] = None,
-        window: Optional[str | tuple] = None,
+        fmin: float | None = None,
+        fmax: float | None = None,
+        scaling_factor: float | None = 1.0,
+        channel_stds: np.ndarray | None = None,
+        window: str | tuple | None = None,
     ) -> "MultivarFFT":
         """Compute FFT and Wishart replicates with a single (full-length) block."""
         return cls.compute_wishart(
@@ -163,13 +160,13 @@ class MultivarFFT:
         x: np.ndarray,
         fs: float,
         Nb: int,
-        fmin: Optional[float] = None,
-        fmax: Optional[float] = None,
-        scaling_factor: Optional[float] = 1.0,
-        channel_stds: Optional[np.ndarray] = None,
-        window: Optional[str | tuple] = None,
+        fmin: float | None = None,
+        fmax: float | None = None,
+        scaling_factor: float | None = 1.0,
+        channel_stds: np.ndarray | None = None,
+        window: str | tuple | None = None,
         detrend: str | bool = "constant",
-        wishart_floor_fraction: Optional[float] = None,
+        wishart_floor_fraction: float | None = None,
     ) -> "MultivarFFT":
         """
         Compute block-averaged (Wishart) FFT statistics for multivariate series.
@@ -462,20 +459,27 @@ class MultivarFFT:
 @dataclass
 class MultivariateTimeseries:
     y: np.ndarray  # numpy array (n, p) for numerical stability
-    t: Optional[np.ndarray] = None  # numpy array
-    std: Optional[np.ndarray] = None  # numpy array, per-channel std
-    scaling_factor: Optional[float] = (
-        1.0  # numpy array for per-channel scaling
-    )
-    original_stds: Optional[np.ndarray] = (
+    t: np.ndarray | None = None  # numpy array
+    std: np.ndarray | None = None  # numpy array, per-channel std
+    scaling_factor: float | None = 1.0  # numpy array for per-channel scaling
+    original_stds: np.ndarray | None = (
         None  # numpy array for original per-channel stds
     )
 
     def __post_init__(self):
+        self.y = np.asarray(self.y, dtype=np.float64)
+        if self.y.ndim == 1:
+            self.y = self.y[:, np.newaxis]
+        if self.y.ndim != 2:
+            raise ValueError("y must have shape (n,) or (n, p).")
         if self.t is None:
             self.t = np.arange(self.y.shape[0])
+        else:
+            self.t = np.asarray(self.t, dtype=np.float64)
         if self.std is None:
             self.std = np.std(self.y, axis=0)
+        else:
+            self.std = np.asarray(self.std, dtype=np.float64)
         if self.y.shape[0] != self.t.shape[0]:
             raise ValueError("y and t must have the same length")
         if np.isnan(self.y).any() or np.isnan(self.t).any():
@@ -515,8 +519,8 @@ class MultivariateTimeseries:
 
     def to_cross_spectral_density(
         self,
-        fmin: Optional[float] = None,
-        fmax: Optional[float] = None,
+        fmin: float | None = None,
+        fmax: float | None = None,
     ) -> "MultivarFFT":
         return MultivarFFT.compute_fft(
             self.y,
@@ -530,11 +534,11 @@ class MultivariateTimeseries:
     def to_wishart_stats(
         self,
         Nb: int,
-        fmin: Optional[float] = None,
-        fmax: Optional[float] = None,
-        window: Optional[str | tuple] = None,
+        fmin: float | None = None,
+        fmax: float | None = None,
+        window: str | tuple | None = None,
         detrend: str | bool = "constant",
-        wishart_floor_fraction: Optional[float] = None,
+        wishart_floor_fraction: float | None = None,
     ) -> "MultivarFFT":
         n = self.y.shape[0]
         if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):
@@ -567,7 +571,7 @@ class MultivariateTimeseries:
         return wishart_fft
 
     @property
-    def amplitude_range(self) -> Tuple[float, float]:
+    def amplitude_range(self) -> tuple[float, float]:
         min_amp = float(np.min(self.y))
         max_amp = float(np.max(self.y))
         return (float(f"{min_amp:.3g}"), float(f"{max_amp:.3g}"))
@@ -588,7 +592,7 @@ class EmpiricalPSD:
     freq: np.ndarray  # (N,)
     psd: np.ndarray  # (N, p, p) complex CSD matrix
     coherence: np.ndarray  # (N, p, p) real-valued coherence matrix
-    channels: Optional[np.ndarray] = None
+    channels: np.ndarray | None = None
 
     def __repr__(self):
         return f"EmpiricalPSD(N={self.freq.shape[0]}, p={self.psd.shape[1]})"
@@ -617,7 +621,7 @@ class EmpiricalPSD:
 
         # --- auto spectra ---
         psds: list[np.ndarray] = []
-        f_ref: Optional[np.ndarray] = None
+        f_ref: np.ndarray | None = None
         for i in range(p):
             f, Pxx = welch(
                 data[:, i],

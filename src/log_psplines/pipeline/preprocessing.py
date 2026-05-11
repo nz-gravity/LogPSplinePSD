@@ -12,7 +12,6 @@ import numpy as np
 
 from .._jaxtypes import Complex, Float
 from .._typecheck import runtime_typecheck
-from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
 from ..datatypes.multivar_utils import _interp_frequency_indexed_array
 from ..logger import logger
@@ -30,7 +29,7 @@ from ..preprocessing.data_prep import (
 )
 from .config import PipelineConfig
 
-FrequencyData = Periodogram | MultivarFFT
+FrequencyData = MultivarFFT
 
 
 def preprocess_to_freq_domain(data, config: PipelineConfig) -> FrequencyData:
@@ -48,8 +47,6 @@ def preprocess_to_freq_domain(data, config: PipelineConfig) -> FrequencyData:
 
 
 def _frequency_count(data: FrequencyData) -> int:
-    if isinstance(data, Periodogram):
-        return int(len(data.freqs))
     return int(len(data.freq))
 
 
@@ -104,7 +101,7 @@ def align_true_psd_to_freq(
         _, psd = _unpack_true_psd(true_psd)
         return None if psd is None else np.asarray(psd)
 
-    freq_tgt = data.freqs if isinstance(data, Periodogram) else data.freq
+    freq_tgt = data.freq
     freq_src, psd = _unpack_true_psd(true_psd)
     if psd is None:
         return None

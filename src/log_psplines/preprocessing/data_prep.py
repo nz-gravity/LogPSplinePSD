@@ -4,19 +4,16 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from ..datatypes import Periodogram
 from ..datatypes.multivar import (
     EmpiricalPSD,
     MultivarFFT,
     MultivariateTimeseries,
 )
-from ..datatypes.univar import Timeseries
 from ..logger import logger
 from ..pipeline.config import PipelineConfig
 from .coarse_grain import (
     CoarseGrainConfig,
     apply_coarse_grain_multivar_fft,
-    apply_coarse_graining_univar,
     compute_binning_structure,
 )
 
@@ -81,14 +78,14 @@ def _build_frequency_exclusion_mask(
 
 
 def _apply_frequency_exclusion(
-    data: Periodogram | MultivarFFT,
+    data: MultivarFFT,
     bands: Sequence[tuple[float, float]],
-) -> Periodogram | MultivarFFT:
+) -> MultivarFFT:
     """Return frequency-domain data with excluded bands removed."""
     if not bands:
         return data
 
-    freq = data.freqs if isinstance(data, Periodogram) else data.freq
+    freq = data.freq
     mask = _build_frequency_exclusion_mask(np.asarray(freq), bands)
     n_excluded = int((~mask).sum())
     if n_excluded == 0:
@@ -124,11 +121,11 @@ def _filter_empirical_psd(
 
 
 def _coarse_grain_processed_data(
-    processed_data: Periodogram | MultivarFFT | None,
+    processed_data: MultivarFFT | None,
     cg_config: CoarseGrainConfig,
     scaled_true_psd: np.ndarray | None,
 ) -> tuple[
-    Periodogram | MultivarFFT | None,
+    MultivarFFT | None,
     np.ndarray | None,
 ]:
     """Apply coarse graining to the already-processed data if configured."""
@@ -143,100 +140,39 @@ def _coarse_grain_processed_data(
             f"(kept {pct:.1f}%, decimated {100.0 - pct:.1f}%)."
         )
 
-    if isinstance(processed_data, Periodogram):
-        spec = compute_binning_structure(
-            processed_data.freqs,
-            Nc=cg_config.Nc,
-            Nh=cg_config.Nh,
-        )
-
-        n_spec = int(spec.Nc * spec.Nh)
-        freqs = np.asarray(processed_data.freqs, dtype=np.float64)
-        power = np.asarray(processed_data.power)
-        if freqs.shape[0] > n_spec:
-            freqs = freqs[:n_spec]
-            power = power[:n_spec]
-        elif freqs.shape[0] != n_spec:
-            raise ValueError(
-                f"Periodogram frequency grid ({freqs.shape[0]}) is smaller than "
-                f"coarse-grain spec ({n_spec} = Nc={spec.Nc} × Nh={spec.Nh})."
-            )
-
-        power_coarse = apply_coarse_graining_univar(power, spec, freqs)
-
-        processed_data = Periodogram(
-            spec.f_coarse,
-            power_coarse,
-            scaling_factor=processed_data.scaling_factor,
-            Nh=int(spec.Nh),
-        )
-        _log_cg_stats("periodogram", spec)
-
-        if scaled_true_psd is not None:
-            try:
-                true_psd = np.asarray(scaled_true_psd)
-                if true_psd.shape[0] > n_spec:
-                    true_psd = true_psd[:n_spec]
-                elif true_psd.shape[0] != n_spec:
-                    raise ValueError(
-                        "true_psd length is smaller than the coarse-grain spec."
-                    )
-                true_coarse = apply_coarse_graining_univar(
-                    true_psd, spec, freqs
-                )
-                scaled_true_psd = true_coarse
-            except Exception:
-                logger.warning(
-                    "Could not coarse-grain true_psd; leaving unchanged."
-                )
-
-        return processed_data, scaled_true_psd
-
-    if isinstance(processed_data, MultivarFFT):
-        spec = compute_binning_structure(
-            processed_data.freq,
-            Nc=cg_config.Nc,
-            Nh=cg_config.Nh,
-        )
-        processed_data = apply_coarse_grain_multivar_fft(processed_data, spec)
-        _log_cg_stats("multivariate FFT", spec)
-        return processed_data, scaled_true_psd
-
+    spec = compute_binning_structure(
+        processed_data.freq,
+        Nc=cg_config.Nc,
+        Nh=cg_config.Nh,
+    )
+    processed_data = apply_coarse_grain_multivar_fft(processed_data, spec)
+    _log_cg_stats("multivariate FFT", spec)
     return processed_data, scaled_true_psd
 
 
 def _prepare_processed_data(
-    data: Timeseries | MultivariateTimeseries,
+    data: MultivariateTimeseries,
     config: PipelineConfig,
 ) -> tuple[
-    Periodogram | MultivarFFT,
+    MultivarFFT,
     MultivariateTimeseries | None,
     SamplerName,
 ]:
-    raw_multivar_ts: MultivariateTimeseries | None = None
-
+    if not isinstance(data, MultivariateTimeseries):
+        data = MultivariateTimeseries(
+            y=np.asarray(data.y), t=np.asarray(data.t)
+        )
     standardized_ts = data.standardise_for_psd()
-
-    # Infer sampler type from input data type
-    if isinstance(data, Timeseries):
-        # Univariate: use NUTS
-        sampler: SamplerName = "nuts"
-        processed = standardized_ts.to_periodogram(
-            fmin=config.fmin,
-            fmax=config.fmax,
-        )
-    else:
-        # Multivariate: prefer multivar_blocked_nuts, fall back to nuts
-        sampler = "multivar_blocked_nuts"
-        raw_multivar_ts = data
-        processed = standardized_ts.to_wishart_stats(
-            Nb=config.Nb,
-            fmin=config.fmin,
-            fmax=config.fmax,
-            window=config.wishart_window,
-            detrend=config.wishart_detrend,
-            wishart_floor_fraction=config.wishart_floor_fraction,
-        )
+    sampler: SamplerName = "multivar_blocked_nuts"
+    raw_multivar_ts: MultivariateTimeseries | None = data
+    processed = standardized_ts.to_wishart_stats(
+        Nb=config.Nb,
+        fmin=config.fmin,
+        fmax=config.fmax,
+        window=config.wishart_window,
+        detrend=config.wishart_detrend,
+        wishart_floor_fraction=config.wishart_floor_fraction,
+    )
 
     if config.verbose:
         logger.info(
@@ -251,7 +187,7 @@ def _prepare_processed_data(
 
 def _build_welch_overlay(
     raw_multivar_ts: MultivariateTimeseries | None,
-    processed_data: Periodogram | MultivarFFT | None,
+    processed_data: MultivarFFT | None,
     config: PipelineConfig,
 ) -> tuple[
     list[EmpiricalPSD] | None,

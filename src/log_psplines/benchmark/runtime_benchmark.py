@@ -8,7 +8,7 @@ import jax
 import numpy as np
 from tqdm.auto import tqdm
 
-from log_psplines.example_datasets.ar_data import ARData
+from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.pipeline.config import PipelineConfig
 
@@ -19,9 +19,9 @@ from .plotting import plot_data_size_results, plot_knots_results
 DEVICE = jax.devices()[0].platform
 logger.info(f"Running on: {DEVICE}")
 
-AR_DEFAULTS = dict(
+P1_DEFAULTS = dict(
     order=4,
-    duration=2.0,
+    n_samples=256,
     fs=128.0,
     sigma=1.0,
     seed=42,
@@ -67,20 +67,20 @@ class RuntimeBenchmark:
                 f"min_n ({min_n}) must be strictly less than max_n ({max_n})."
             )
         _ns = np.geomspace(min_n, max_n, num=num_points, dtype=int)
-        durations = _ns / AR_DEFAULTS["fs"]
         runtimes = []
         ns = []
         ess = []
 
         for duration in tqdm(
-            durations, desc=f"Varying data sizes [{sampler}, {DEVICE}]"
+            _ns / P1_DEFAULTS["fs"],
+            desc=f"Varying data sizes [{sampler}, {DEVICE}]",
         ):
-            ar_data = ARData(
-                order=int(AR_DEFAULTS["order"]),
-                duration=float(duration),
-                fs=float(AR_DEFAULTS["fs"]),
-                sigma=float(AR_DEFAULTS["sigma"]),
-                seed=int(AR_DEFAULTS["seed"]),
+            data = VARMAData.ar(
+                order=int(P1_DEFAULTS["order"]),
+                n_samples=int(round(float(duration) * P1_DEFAULTS["fs"])),
+                fs=float(P1_DEFAULTS["fs"]),
+                sigma=float(P1_DEFAULTS["sigma"]),
+                seed=int(P1_DEFAULTS["seed"]),
             )
 
             runtimes_i = []
@@ -95,12 +95,12 @@ class RuntimeBenchmark:
                     verbose=self.verbose,
                 )
                 t0 = time.perf_counter()
-                idata = run_mcmc(data=ar_data.ts, config=config)
+                idata = run_mcmc(data=data.ts, config=config)
                 runtimes_i.append(time.perf_counter() - t0)
                 ess_i.append(_compute_ess(idata))
 
             runtimes.append(runtimes_i)
-            ns.append(len(ar_data.ts.t))
+            ns.append(len(data.ts.t))
             ess.append(np.concatenate(ess_i))
 
         data_file = f"{self.outdir}/data_size_runtimes_{sampler}_{DEVICE}.json"
@@ -108,7 +108,7 @@ class RuntimeBenchmark:
             json.dump(
                 {
                     "ns": ns,
-                    "durations": durations.tolist(),
+                    "durations": (_ns / P1_DEFAULTS["fs"]).tolist(),
                     "runtimes": np.asarray(runtimes).tolist(),
                     "ess": np.asarray(ess).tolist(),
                     "sampler": sampler,
@@ -127,14 +127,14 @@ class RuntimeBenchmark:
         reps: int = 3,
     ) -> None:
         """Analyze runtime vs number of knots."""
-        ar_data = ARData(
-            order=int(AR_DEFAULTS["order"]),
-            duration=float(AR_DEFAULTS["duration"]),
-            fs=float(AR_DEFAULTS["fs"]),
-            sigma=float(AR_DEFAULTS["sigma"]),
-            seed=int(AR_DEFAULTS["seed"]),
+        data = VARMAData.ar(
+            order=int(P1_DEFAULTS["order"]),
+            n_samples=int(P1_DEFAULTS["n_samples"]),
+            fs=float(P1_DEFAULTS["fs"]),
+            sigma=float(P1_DEFAULTS["sigma"]),
+            seed=int(P1_DEFAULTS["seed"]),
         )
-        ts_data = ar_data.ts
+        ts_data = data.ts
 
         ks = np.linspace(min_knots, max_knots, num=num_points, dtype=int)
         runtimes = []

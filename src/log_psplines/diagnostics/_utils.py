@@ -112,23 +112,6 @@ def compute_riae_errorbars(
     }
 
 
-def compute_ci_coverage_univar(
-    psd_samples: np.ndarray, true_psd: np.ndarray
-) -> float:
-    """Compute 90% credible interval coverage for univariate PSD."""
-    arr = np.asarray(psd_samples)
-    if arr.ndim == 2 and arr.shape[0] == 3:
-        posterior_lower = arr[0]
-        posterior_upper = arr[-1]
-    else:
-        posterior_lower = np.percentile(arr, 5.0, axis=0)
-        posterior_upper = np.percentile(arr, 95.0, axis=0)
-    coverage = np.mean(
-        (true_psd >= posterior_lower) & (true_psd <= posterior_upper)
-    )
-    return float(coverage)
-
-
 def _extract_ci_bounds(
     arr: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:

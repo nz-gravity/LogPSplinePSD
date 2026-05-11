@@ -12,8 +12,6 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 
-from ..psplines import build_spline
-
 
 def _sample_pspline_block(
     delta_name: str,
@@ -75,73 +73,9 @@ def _sample_pspline_block(
     }
 
 
-def _univar_log_likelihood(
-    weights: jnp.ndarray,
-    log_pdgrm: jnp.ndarray,
-    basis_matrix: jnp.ndarray,
-    Nh: int,
-) -> jnp.ndarray:
-    """Univariate Whittle log-likelihood for spline coefficients."""
-    ln_model = build_spline(basis_matrix, weights)
-    nh = jnp.asarray(Nh, dtype=ln_model.dtype)
-    sum_log_det = nh * jnp.sum(ln_model)
-    quad = jnp.sum(jnp.exp(log_pdgrm - ln_model))
-    return -0.5 * (sum_log_det + quad)
-
-
-def log_likelihood(
-    weights: jnp.ndarray,
-    log_pdgrm: jnp.ndarray,
-    basis_matrix: jnp.ndarray,
-    Nh: int,
-) -> jnp.ndarray:
-    """Public helper for univariate Whittle log-likelihood."""
-    return _univar_log_likelihood(
-        weights,
-        log_pdgrm,
-        basis_matrix,
-        Nh,
-    )
-
-
 __all__ = [
-    "bayesian_model",
-    "log_likelihood",
     "_blocked_channel_model",
 ]
-
-
-def bayesian_model(
-    log_pdgrm: jnp.ndarray,
-    lnspline_basis: jnp.ndarray,
-    penalty_matrix: jnp.ndarray,
-    Nh: int,
-    alpha_phi,
-    beta_phi,
-    alpha_delta,
-    beta_delta,
-    eta: float = 1.0,
-) -> None:
-    """NumPyro model for univariate PSD estimation."""
-    block = _sample_pspline_block(
-        delta_name="delta",
-        phi_name="phi",
-        weights_name="weights",
-        penalty_matrix=penalty_matrix,
-        alpha_phi=alpha_phi,
-        beta_phi=beta_phi,
-        alpha_delta=alpha_delta,
-        beta_delta=beta_delta,
-        factor_name="ln_prior",
-    )
-
-    lnl = _univar_log_likelihood(
-        block["weights"],
-        log_pdgrm,
-        lnspline_basis,
-        Nh,
-    )
-    numpyro.factor("ln_likelihood", eta * lnl)
 
 
 def _blocked_channel_model(

@@ -582,10 +582,12 @@ class InferencePipeline:
             return idata
 
         try:
+            lnz_model_kwargs = dict(self.full_model_kwargs)
+            lnz_model_kwargs["eta"] = float(self.nuts_stage.eta)
             result = estimate_pipeline_lnz(
                 idata=idata,
                 data=self.data,
-                model_kwargs=self.full_model_kwargs,
+                model_kwargs=lnz_model_kwargs,
                 outdir=self.config.outdir,
                 extra_kwargs=self.config.extra_kwargs,
                 verbose=self.verbose,

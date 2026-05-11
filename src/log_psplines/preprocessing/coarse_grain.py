@@ -19,7 +19,6 @@ __all__ = [
     "CoarseGrainConfig",
     "CoarseGrainSpec",
     "compute_binning_structure",
-    "apply_coarse_graining_univar",
     "apply_coarse_grain_multivar_fft",
 ]
 
@@ -256,47 +255,6 @@ def compute_binning_structure(
         J_mid=J_mid,
         Nc=Nc,
     )
-
-
-@runtime_typecheck
-def apply_coarse_graining_univar(
-    power: Float[np.ndarray, nl] | Int[np.ndarray, nl],
-    spec: CoarseGrainSpec,
-    freqs: Float[np.ndarray, nl] | None = None,
-) -> Float[np.ndarray, nc]:
-    """Apply coarse graining to a univariate array defined on the retained grid.
-
-    Parameters
-    ----------
-    power : ndarray, shape (Nl,)
-        Values defined on the retained frequency grid.
-    spec : CoarseGrainSpec
-        Binning specification from compute_binning_structure.
-    freqs : ndarray, optional
-        Optional retained-grid frequency array for a consistency check.
-
-    Returns
-    -------
-    power_coarse : ndarray, shape (Nc,)
-        Coarse-binned sums.
-    """
-    power = np.asarray(power)
-    if power.ndim != 1:
-        raise ValueError("power must be 1-D")
-
-    Nl = int(power.size)
-    if Nl != int(spec.Nc * spec.Nh):
-        raise ValueError("power length must match retained grid size")
-
-    if freqs is not None:
-        freqs = np.asarray(freqs, dtype=np.float64)
-        if freqs.ndim != 1 or freqs.size != Nl:
-            raise ValueError("freqs must match retained grid size")
-
-    out: Float[np.ndarray, nc] = _sum_bins_equal(
-        power, Nh=int(spec.Nh)
-    ).astype(np.float64, copy=False)
-    return out
 
 
 @runtime_typecheck

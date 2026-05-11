@@ -1,28 +1,14 @@
-import os
-
-import matplotlib.pyplot as plt
 import numpy as np
-import pytest
 
-from log_psplines.example_datasets.ar_data import ARData
 from log_psplines.example_datasets.varma_data import VARMAData
 
 
-def test_ar(outdir):
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True)
-    for i, ax in enumerate(axes.flat):
-        ar_data = ARData(
-            order=i + 1, duration=8.0, fs=1024.0, sigma=1e-21, seed=42
-        )
-        ax = ar_data.plot(ax=ax)
-        ax.set_title(f"AR({i + 1}) Process")
-        ax.grid(True)
-        # turn off axes spines
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-
-    plt.tight_layout()
-    plt.savefig(f"{outdir}/ar_processes.png", bbox_inches="tight", dpi=300)
+def test_varma_ar_p1(outdir):
+    data = VARMAData.ar(order=2, n_samples=512, fs=64.0, sigma=1.0, seed=42)
+    data.plot(fname=f"{outdir}/varma_ar_p1.png")
+    assert data.p == 1
+    assert data.ts.y.shape == (512, 1)
+    assert data.get_true_psd().shape == (256, 1, 1)
 
 
 def test_varma_data(outdir):

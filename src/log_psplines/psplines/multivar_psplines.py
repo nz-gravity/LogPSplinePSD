@@ -8,7 +8,7 @@ from typing import (
 import jax.numpy as jnp
 import numpy as np
 
-from ..datatypes import MultivarFFT, Periodogram
+from ..datatypes import MultivarFFT
 from ..datatypes.multivar_utils import U_to_Y, psd_to_cholesky_components
 from .initialisation import init_weights
 from .knots_locator import init_knots, multivar_psd_knot_scores
@@ -112,13 +112,10 @@ def _build_component_knots(
     # Clean NaN/inf but preserve sign so gradient-based placement sees
     # genuine shape transitions, not artificial kinks at zero crossings.
     score_array = np.nan_to_num(score_array, nan=0.0, posinf=0.0, neginf=0.0)
-    knot_periodogram = Periodogram(
-        freqs=np.asarray(freq, dtype=np.float64),
-        power=score_array,
-    )
     knots = init_knots(
         n_knots=n_knots,
-        periodogram=knot_periodogram,
+        freqs=np.asarray(freq, dtype=np.float64),
+        power=score_array,
         guide_power=(
             None
             if guide_score is None

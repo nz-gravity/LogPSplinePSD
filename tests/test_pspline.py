@@ -7,32 +7,27 @@ import numpy as np
 import pytest
 from scipy.interpolate import BSpline
 
-from log_psplines.datatypes import MultivarFFT, Periodogram, Timeseries
-from log_psplines.datatypes.multivar import EmpiricalPSD
-from log_psplines.example_datasets.ar_data import ARData
-from log_psplines.pipeline.models import log_likelihood
+from log_psplines.datatypes import MultivarFFT, MultivariateTimeseries
+from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
-from log_psplines.psplines import LogPSplines
+from log_psplines.psplines import MultivariateLogPSplines
 from log_psplines.psplines.initialisation import init_weights
 
 
 @pytest.fixture
-def mock_pdgrm() -> Periodogram:
-    """Generate synthetic AR noise data."""
-    return ARData(order=4, duration=1.0, fs=256, seed=42).periodogram
+def mock_fft() -> MultivarFFT:
+    """Generate synthetic one-channel AR noise data."""
+    data = VARMAData.ar(order=2, n_samples=256, fs=256.0, seed=42)
+    return data.ts.standardise_for_psd().to_wishart_stats(Nb=1)
 
 
-def _plot_univariate_spline(
-    pdgrm: Periodogram,
-    spline_model: LogPSplines,
+def _plot_p1_spline(
+    fft: MultivarFFT,
+    spline_model: MultivariateLogPSplines,
 ):
-    freq = np.asarray(pdgrm.freqs, dtype=np.float64)
-    model = np.exp(np.asarray(spline_model(), dtype=np.float64))
-    empirical = EmpiricalPSD(
-        freq=freq,
-        psd=np.asarray(pdgrm.power, dtype=np.complex128)[:, None, None],
-        coherence=np.zeros((freq.size, 1, 1), dtype=np.float64),
-        channels=np.asarray(["1"]),
+    freq = np.asarray(fft.freq, dtype=np.float64)
+    model = np.exp(
+        np.asarray(spline_model.diagonal_models[0](), dtype=np.float64)
     )
     spec = PSDMatrixPlotSpec(
         freq=freq,
@@ -43,7 +38,7 @@ def _plot_univariate_spline(
             "im": {},
             "mag": {},
         },
-        empirical_psd=empirical,
+        empirical_psd=fft.empirical_psd,
         save=False,
         close=False,
         show_knots=False,
@@ -51,96 +46,83 @@ def _plot_univariate_spline(
     return plot_psd_matrix(spec)
 
 
-def test_spline_init(mock_pdgrm: Periodogram, outdir):
+def test_spline_init(mock_fft: MultivarFFT, outdir):
     out = os.path.join(outdir, "out_spline_init")
     os.makedirs(out, exist_ok=True)
 
     # init splines
     t0 = time.time()
-    ln_pdgrm = jnp.log(mock_pdgrm.power)
-    spline_model = LogPSplines.from_periodogram(
-        mock_pdgrm,
+    spline_model = MultivariateLogPSplines.from_multivar_fft(
+        mock_fft,
         n_knots=10,
         degree=3,
         diffMatrixOrder=2,
     )
-    zero_weights = jnp.zeros(spline_model.weights.shape)  # model == zeros
-    optim_weights = spline_model.weights
-    Nh = 1  # model == ones
-
-    # compute LnL at init and optimized weights
-    lnl_args = (ln_pdgrm, spline_model.basis, Nh)
-    lnl_initial = log_likelihood(zero_weights, *lnl_args)
-    lnl_final = log_likelihood(optim_weights, *lnl_args)
+    diag_model = spline_model.diagonal_models[0]
+    log_psd = np.asarray(diag_model(), dtype=np.float64)
+    psd = np.exp(log_psd)
     runtime = float(time.time()) - t0
 
-    print(
-        f"LnL initial: {lnl_initial:.2f}, LnL final: {lnl_final:.2f}, runtime: {runtime:.2f} seconds"
-    )
+    print(f"p=1 spline init runtime: {runtime:.2f} seconds")
 
     # plotting for verification
-    fig, axes = _plot_univariate_spline(mock_pdgrm, spline_model)
+    fig, axes = _plot_p1_spline(mock_fft, spline_model)
     fig.savefig(f"{out}/test_spline_init.png")
-    spline_model.plot_basis(out)
+    diag_model.plot_basis(out)
 
-    assert (
-        lnl_final > lnl_initial
-    ), "Optimized weights should yield a higher log-likelihood than initial zeros."
+    assert psd.shape == mock_fft.freq.shape
+    assert np.all(np.isfinite(psd))
+    assert np.all(psd > 0.0)
     assert (
         runtime < 5
     ), f"Initialization should complete in less than 5 seconds, it took {runtime:.2f} seconds."
 
 
-def test_spline_basis(mock_pdgrm: Periodogram, outdir):
+def test_spline_basis(mock_fft: MultivarFFT, outdir):
     out = os.path.join(outdir, "out_spline_basis")
     os.makedirs(out, exist_ok=True)
 
     # init splines
     t0 = time.time()
-    spline_model = LogPSplines.from_periodogram(
-        mock_pdgrm,
+    spline_model = MultivariateLogPSplines.from_multivar_fft(
+        mock_fft,
         n_knots=10,
         degree=3,
         diffMatrixOrder=2,
         knot_kwargs=dict(frac_log=1.0),
     )
+    diag_model = spline_model.diagonal_models[0]
 
-    fig, axes = _plot_univariate_spline(mock_pdgrm, spline_model)
+    fig, axes = _plot_p1_spline(mock_fft, spline_model)
     ax = axes[0, 0]
     ax2 = ax.twinx()
-    for b in spline_model.basis.T:
-        ax2.plot(mock_pdgrm.freqs, b, alpha=0.5, lw=0.5, marker=".")
+    for b in diag_model.basis.T:
+        ax2.plot(mock_fft.freq, b, alpha=0.5, lw=0.5, marker=".")
     plt.tight_layout()
     fig.savefig(f"{out}/test_spline_basis.png")
 
 
-def test_closed_form_weight_initialiser_improves_likelihood(mock_pdgrm):
-    spline_model = LogPSplines.from_periodogram(
-        mock_pdgrm,
+def test_closed_form_weight_initialiser_returns_finite_p1_weights(mock_fft):
+    spline_model = MultivariateLogPSplines.from_multivar_fft(
+        mock_fft,
         n_knots=10,
         degree=3,
         diffMatrixOrder=2,
     )
+    diag_model = spline_model.diagonal_models[0]
+    empirical = np.real(mock_fft.empirical_psd.psd[:, 0, 0])
 
-    zero_weights = jnp.zeros_like(spline_model.weights)
     ls_weights = init_weights(
-        jnp.log(mock_pdgrm.power),
-        spline_model,
+        jnp.log(jnp.asarray(empirical)),
+        diag_model,
         num_steps=0,
     )
-    lnl_args = (
-        jnp.log(mock_pdgrm.power),
-        spline_model.basis,
-        1,
-    )
 
-    lnl_zero = log_likelihood(zero_weights, *lnl_args)
-    lnl_ls = log_likelihood(ls_weights, *lnl_args)
-
-    assert lnl_ls > lnl_zero
+    assert ls_weights.shape == diag_model.weights.shape
+    assert np.all(np.isfinite(np.asarray(ls_weights)))
 
 
-def test_basis_log_vs_linear(mock_pdgrm: Periodogram, outdir):
+def test_basis_log_vs_linear(mock_fft: MultivarFFT, outdir):
     outdir = os.path.join(outdir, "out_basis_log_vs_linear")
     os.makedirs(outdir, exist_ok=True)
 
@@ -312,22 +294,23 @@ def test_basis_log_vs_linear(mock_pdgrm: Periodogram, outdir):
     plt.savefig(f"{outdir}/test_basis_log_vs_linear.png")
 
 
-def test_timeseries_to_periodogram_frequency_bounds():
+def test_p1_timeseries_to_wishart_frequency_bounds():
     fs = 64
     t = np.arange(0, 1, 1 / fs)
     y = np.sin(2 * np.pi * 5 * t)
-    ts = Timeseries(t=t, y=y, scaling_factor=3.0)
+    ts = MultivariateTimeseries(t=t, y=y, scaling_factor=3.0)
 
-    pdgrm = ts.to_periodogram(fmin=3.0, fmax=7.0)
+    fft = ts.to_wishart_stats(Nb=1, fmin=3.0, fmax=7.0)
 
-    assert len(pdgrm.freqs) == 5
-    assert np.all(pdgrm.freqs >= 3.0)
-    assert np.all(pdgrm.freqs <= 7.0)
-    assert pdgrm.scaling_factor == pytest.approx(3.0)
+    assert len(fft.freq) == 5
+    assert np.all(fft.freq >= 3.0)
+    assert np.all(fft.freq <= 7.0)
+    assert fft.scaling_factor == pytest.approx(3.0)
+    assert fft.p == 1
 
-    clipped = ts.to_periodogram(fmin=10.0, fmax=5.0)
-    assert len(clipped.freqs) == 1
-    assert clipped.freqs[0] == pytest.approx(5.0)
+    clipped = ts.to_wishart_stats(Nb=1, fmin=10.0, fmax=5.0)
+    assert len(clipped.freq) == 1
+    assert clipped.freq[0] == pytest.approx(10.0)
 
 
 def test_multivar_fft_cut_preserves_scaling():

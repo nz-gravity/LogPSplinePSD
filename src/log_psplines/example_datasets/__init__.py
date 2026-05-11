@@ -1,1 +1,3 @@
-from .ar_data import ARData
+from .varma_data import VARMAData
+
+__all__ = ["VARMAData"]

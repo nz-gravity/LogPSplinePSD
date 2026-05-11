@@ -1,2 +1,3 @@
 from .multivar import MultivarFFT, MultivariateTimeseries
-from .univar import Periodogram, Timeseries
+
+__all__ = ["MultivarFFT", "MultivariateTimeseries"]

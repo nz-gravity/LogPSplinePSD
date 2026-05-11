@@ -17,10 +17,8 @@ import xarray as xr
 
 from ..arviz_utils._datatree import save_inference_data as _save_inference_data
 from ..arviz_utils.to_arviz import (
-    _pack_spline_model,
     _pack_spline_model_multivar,
 )
-from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
 from ..diagnostics import build_nuts_summary_table, build_vi_summary_table
 from ..diagnostics.plot_nuts import plot_energy
@@ -389,7 +387,7 @@ class InferencePipeline:
         model_fn: Callable,
         full_model_kwargs: dict,
         coarse_model_kwargs: dict | None,
-        data: Periodogram | MultivarFFT,
+        data: MultivarFFT,
         spline_model,
         config,
         vi_stage: VIStage,
@@ -420,36 +418,21 @@ class InferencePipeline:
         self.vi_coarse_only = vi_coarse_only
 
     def _observed_data_dataset(self) -> xr.Dataset:
-        if isinstance(self.data, Periodogram):
-            freq = np.asarray(self.data.freqs, dtype=float)
-            values = np.asarray(self.data.power, dtype=float) * float(
-                self.data.scaling_factor
-            )
-            coords = {"freq": freq}
-            dims = ("freq",)
+        freq = np.asarray(self.data.freq, dtype=float)
+        channel_coords = np.arange(int(self.data.p))
+        coords = {
+            "freq": freq,
+            "channels": channel_coords,
+            "channels_aux": channel_coords,
+        }
+        dims = ("freq", "channels", "channels_aux")
+        if self.data.raw_psd is not None:
+            values = np.asarray(self.data.raw_psd, dtype=np.complex128)
         else:
-            freq = np.asarray(self.data.freq, dtype=float)
-            if self.data.raw_psd is not None:
-                values = np.asarray(self.data.raw_psd, dtype=np.complex128)
-                channel_coords = np.arange(int(self.data.p))
-                coords = {
-                    "freq": freq,
-                    "channels": channel_coords,
-                    "channels_aux": channel_coords,
-                }
-                dims = ("freq", "channels", "channels_aux")
-            else:
-                values = np.zeros(
-                    (freq.size, int(self.data.p), int(self.data.p)),
-                    dtype=np.complex128,
-                )
-                channel_coords = np.arange(int(self.data.p))
-                coords = {
-                    "freq": freq,
-                    "channels": channel_coords,
-                    "channels_aux": channel_coords,
-                }
-                dims = ("freq", "channels", "channels_aux")
+            values = np.zeros(
+                (freq.size, int(self.data.p), int(self.data.p)),
+                dtype=np.complex128,
+            )
 
         return xr.Dataset(
             {
@@ -472,24 +455,17 @@ class InferencePipeline:
         vi: StageResult | None,
     ) -> xr.DataTree:
         """Attach model/data groups needed by diagnostics and plotting."""
-        if isinstance(self.data, Periodogram):
-            spline_ds = _pack_spline_model(self.spline_model)
-            attrs = {
-                "data_type": "univariate",
-                "scaling_factor": float(self.data.scaling_factor),
-            }
-        else:
-            spline_ds = _pack_spline_model_multivar(self.spline_model)
-            attrs = {
-                "data_type": "multivariate",
-                "scaling_factor": float(self.data.scaling_factor or 1.0),
-                "channel_stds": (
-                    None
-                    if self.data.channel_stds is None
-                    else np.asarray(self.data.channel_stds)
-                ),
-                "sampler": "factorized_multivar_nuts",
-            }
+        spline_ds = _pack_spline_model_multivar(self.spline_model)
+        attrs = {
+            "data_type": "multivariate",
+            "scaling_factor": float(self.data.scaling_factor or 1.0),
+            "channel_stds": (
+                None
+                if self.data.channel_stds is None
+                else np.asarray(self.data.channel_stds)
+            ),
+            "sampler": "factorized_multivar_nuts",
+        }
 
         attrs.update(
             {
@@ -513,11 +489,10 @@ class InferencePipeline:
             attrs["max_tree_depth_by_channel"] = list(
                 self.config.max_tree_depth_by_channel
             )
-        if isinstance(self.data, MultivarFFT):
-            for channel_index in range(int(self.data.p)):
-                attrs[f"sampling_eta_channel_{channel_index}"] = float(
-                    self.nuts_stage.eta
-                )
+        for channel_index in range(int(self.data.p)):
+            attrs[f"sampling_eta_channel_{channel_index}"] = float(
+                self.nuts_stage.eta
+            )
         idata.attrs.update(attrs)
         idata["observed_data"] = xr.DataTree(
             dataset=self._observed_data_dataset()
@@ -555,25 +530,24 @@ class InferencePipeline:
                     },
                 )
             idata["vi_sample_stats"] = xr.DataTree(dataset=vi_stats)
-            if isinstance(self.data, MultivarFFT):
-                idata["vi_log_likelihood"] = xr.DataTree(
-                    dataset=xr.Dataset(
-                        {
-                            f"log_likelihood_block_{j}": xr.DataArray(
-                                np.zeros((1, 1, int(self.data.N))),
-                                dims=("chain", "draw", "freq"),
-                                coords={
-                                    "chain": [0],
-                                    "draw": [0],
-                                    "freq": np.asarray(
-                                        self.data.freq, dtype=float
-                                    ),
-                                },
-                            )
-                            for j in range(int(self.data.p))
-                        }
-                    )
+            idata["vi_log_likelihood"] = xr.DataTree(
+                dataset=xr.Dataset(
+                    {
+                        f"log_likelihood_block_{j}": xr.DataArray(
+                            np.zeros((1, 1, int(self.data.N))),
+                            dims=("chain", "draw", "freq"),
+                            coords={
+                                "chain": [0],
+                                "draw": [0],
+                                "freq": np.asarray(
+                                    self.data.freq, dtype=float
+                                ),
+                            },
+                        )
+                        for j in range(int(self.data.p))
+                    }
                 )
+            )
         return idata
 
     def _attach_lnz_metadata(self, idata: xr.DataTree) -> xr.DataTree:

@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.fft import rfft
 
+from ..datatypes import MultivariateTimeseries
 from ..logger import logger
 
 
@@ -85,6 +86,52 @@ class VARMAData:
             channel_stds=None,
             scaling_factor=1.0,
         )
+
+    @classmethod
+    def ar(
+        cls,
+        *,
+        order: int,
+        n_samples: int,
+        fs: float,
+        sigma: float = 1.0,
+        seed: int | None = None,
+        ar_coefs: np.ndarray | list[float] | tuple[float, ...] | None = None,
+    ) -> "VARMAData":
+        """Construct a one-channel AR process as a VARMA special case."""
+        default_ar = {
+            1: [0.9],
+            2: [1.45, -0.9025],
+            3: [0.9, -0.8, 0.7],
+            4: [0.9, -0.8, 0.7, -0.6],
+            5: [1, -2.2137, 2.9403, -2.1697, 0.9606],
+        }
+        if ar_coefs is None:
+            if order not in default_ar:
+                raise ValueError(
+                    f"No default AR coefficients for order={order}."
+                )
+            ar_coefs = default_ar[order]
+        ar_coefs = np.asarray(ar_coefs, dtype=float)
+        if ar_coefs.shape != (order,):
+            raise ValueError(
+                f"Expected {order} AR coefficients, got {ar_coefs.shape}."
+            )
+        return cls(
+            n_samples=n_samples,
+            sigma=np.asarray([[float(sigma) ** 2]], dtype=float),
+            var_coeffs=ar_coefs[:, None, None],
+            vma_coeffs=np.ones((1, 1, 1), dtype=float),
+            seed=seed,
+            fs=fs,
+        )
+
+    @property
+    def ts(self) -> MultivariateTimeseries:
+        """Return the simulated data as a canonical multivariate time series."""
+        if self.data is None:
+            raise ValueError("No simulated data available.")
+        return MultivariateTimeseries(y=self.data, t=self.time)
 
     def resimulate(self, seed: int | None = None) -> np.ndarray:
         """Simulate or re-simulate the VARMA process.
@@ -268,7 +315,8 @@ class VARMAData:
         if axs is None:
             fig, axs = plt.subplots(p, p, figsize=(4 * p, 4 * p), sharex=True)
         else:
-            fig = axs[0, 0].figure
+            fig = np.asarray(axs).reshape(p, p)[0, 0].figure
+        axs = np.asarray(axs).reshape(p, p)
         data_kwgs = dict(alpha=0.3, lw=2, zorder=-10, color="k")
         true_kwgs = dict(lw=1, zorder=10, color="k")
         for i in range(p):
@@ -648,8 +696,8 @@ def _empirical_stationarity_check(
     )
     max_var_ratio = float(np.max(var_ratio))
 
-    cov_first = np.cov(first_half, rowvar=False)
-    cov_second = np.cov(second_half, rowvar=False)
+    cov_first = np.atleast_2d(np.cov(first_half, rowvar=False))
+    cov_second = np.atleast_2d(np.cov(second_half, rowvar=False))
     cov_ref = 0.5 * (cov_first + cov_second)
     cov_rel_drift = float(
         np.linalg.norm(cov_first - cov_second, ord="fro")

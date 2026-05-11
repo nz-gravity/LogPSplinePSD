@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 
-from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
 from ..logger import logger
 from ..pipeline.config import PipelineConfig
@@ -13,7 +11,7 @@ from .data_prep import _normalize_excluded_frequency_bands
 
 
 def _run_preprocessing_checks(
-    processed_data: Optional[Union[Periodogram, MultivarFFT]],
+    processed_data: MultivarFFT | None,
     config: PipelineConfig,
 ) -> None:
     """Run eigenvalue separation warnings (lightweight, no plotting)."""
@@ -83,7 +81,7 @@ def _run_preprocessing_checks(
 
 
 def _save_preprocessing_plot(
-    processed_data: Optional[Union[Periodogram, MultivarFFT]],
+    processed_data: MultivarFFT | None,
     config: PipelineConfig,
     spline_model: object | None = None,
 ) -> None:

@@ -17,10 +17,9 @@ import numpy as np
 import xarray as xr
 from numpyro.infer.util import log_density
 
-from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
 from ..logger import logger
-from .models import _blocked_channel_model, bayesian_model
+from .models import _blocked_channel_model
 from .stages import _channel_model_kwargs
 
 _NONCONVERGENCE_MESSAGE = "Convergence not reached within"
@@ -203,7 +202,7 @@ def _default_lnz_kwargs(
     *,
     n_draws: int,
     posterior_dim: int,
-    data: Periodogram | MultivarFFT,
+    data: MultivarFFT,
     outdir: str | None,
     extra_kwargs: dict[str, Any] | None,
     verbose: bool,
@@ -473,7 +472,7 @@ def _evaluate_lnz_task(
     post_samples: np.ndarray,
     log_post: np.ndarray,
     log_post_fn: Callable[[np.ndarray], float],
-    data: Periodogram | MultivarFFT,
+    data: MultivarFFT,
     outdir: str | None,
     extra_kwargs: dict[str, Any] | None,
     verbose: bool,
@@ -521,7 +520,7 @@ def _evaluate_lnz_task(
 def estimate_pipeline_lnz(
     *,
     idata: xr.DataTree,
-    data: Periodogram | MultivarFFT,
+    data: MultivarFFT,
     model_kwargs: dict[str, Any],
     outdir: str | None,
     extra_kwargs: dict[str, Any] | None = None,
@@ -531,27 +530,6 @@ def estimate_pipeline_lnz(
     posterior = idata["posterior"].dataset
     if posterior is None:
         raise ValueError("idata.posterior is required for lnZ computation.")
-
-    if isinstance(data, Periodogram):
-        post_samples, log_post, log_post_fn = _build_log_posterior(
-            posterior,
-            model_fn=bayesian_model,
-            model_kwargs=model_kwargs,
-            param_names=_posterior_param_names(posterior),
-        )
-        post_samples, log_post, log_post_fn, log_det_L = _whiten_samples(
-            post_samples, log_post, log_post_fn
-        )
-        return _evaluate_lnz_task(
-            post_samples=post_samples,
-            log_post=log_post,
-            log_post_fn=log_post_fn,
-            data=data,
-            outdir=outdir,
-            extra_kwargs=extra_kwargs,
-            verbose=verbose,
-            lnz_correction=log_det_L,
-        )
 
     n_channels = int(model_kwargs["n_channels"])
     factor_results: list[MorphZEvidenceResult] = []
@@ -589,36 +567,6 @@ def _posterior_coords(posterior: xr.Dataset) -> dict[str, np.ndarray]:
         "chain": np.asarray(posterior.coords["chain"].values),
         "draw": np.asarray(posterior.coords["draw"].values),
     }
-
-
-def _pointwise_univar_log_likelihood(
-    posterior: xr.Dataset,
-    data: Periodogram,
-    model_kwargs: dict[str, Any],
-) -> xr.Dataset:
-    """Return pointwise univariate Whittle log-likelihood draws by frequency."""
-    weights = np.asarray(posterior["weights"].values, dtype=np.float64)
-    basis = np.asarray(model_kwargs["lnspline_basis"], dtype=np.float64)
-    log_pdgrm = np.asarray(model_kwargs["log_pdgrm"], dtype=np.float64)
-    nh = float(model_kwargs["Nh"])
-    freq = np.asarray(data.freqs, dtype=np.float64)
-
-    log_psd = np.einsum("fk,cdk->cdf", basis, weights)
-    pointwise = -0.5 * (
-        nh * log_psd + np.exp(log_pdgrm[None, None, :] - log_psd)
-    )
-
-    coords = _posterior_coords(posterior)
-    coords["freq"] = freq
-    return xr.Dataset(
-        {
-            "log_likelihood": xr.DataArray(
-                pointwise,
-                dims=("chain", "draw", "freq"),
-                coords=coords,
-            )
-        }
-    )
 
 
 def _channel_theta_array(
@@ -752,7 +700,7 @@ def _pointwise_multivar_log_likelihood(
 def compute_pointwise_lnl(
     *,
     idata: xr.DataTree,
-    data: Periodogram | MultivarFFT,
+    data: MultivarFFT,
     model_kwargs: dict[str, Any],
 ) -> xr.Dataset:
     """Compute pointwise log-likelihood contributions for PSIS-LOO.
@@ -767,8 +715,6 @@ def compute_pointwise_lnl(
             "idata.posterior is required to compute pointwise log-likelihood."
         )
 
-    if isinstance(data, Periodogram):
-        return _pointwise_univar_log_likelihood(posterior, data, model_kwargs)
     return _pointwise_multivar_log_likelihood(posterior, data, model_kwargs)
 
 

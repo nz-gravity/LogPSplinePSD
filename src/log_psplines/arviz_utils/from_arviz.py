@@ -8,8 +8,8 @@ from typing import Literal
 import numpy as np
 import xarray as xr
 
-from ..datatypes import Periodogram
-from ..psplines import LogPSplines, MultivariateLogPSplines
+from ..psplines import MultivariateLogPSplines
+from ..psplines.psplines import LogPSplines
 from ._datatree import require_dataset as _require_dataset
 from .to_arviz import (
     _compute_prior_predictive_multivar,
@@ -175,36 +175,6 @@ def _build_psd_dataset(
     )
 
 
-def _compute_univar_psd_dataset(
-    idata: xr.DataTree, source: ResolvedSampleSource
-) -> xr.Dataset:
-    """Reconstruct univariate PSD draws as a 1x1 spectral matrix dataset."""
-    posterior = get_sample_dataset(idata, source=source)
-    model = get_spline_model(idata)
-    weights = _normalize_chain_draw_array(
-        np.asarray(posterior["weights"].values)
-    )
-    basis = np.asarray(model.basis, dtype=np.float64)
-    log_psd = np.einsum("fk,cdk->cdf", basis, weights)
-    scaling_factor = float(
-        (getattr(idata, "attrs", {}) or {}).get("scaling_factor", 1.0) or 1.0
-    )
-    psd = np.exp(log_psd) * scaling_factor
-    spectral_density = psd[:, :, None, None, :].astype(np.complex128)
-    freq = np.asarray(
-        _require_dataset(idata, "observed_data")["periodogram"]
-        .coords["freq"]
-        .values,
-        dtype=float,
-    )
-    return _build_psd_dataset(
-        spectral_density=spectral_density,
-        freq=freq,
-        chain_count=int(spectral_density.shape[0]),
-        draw_count=int(spectral_density.shape[1]),
-    )
-
-
 def _compute_multivar_psd_dataset(
     idata: xr.DataTree, source: ResolvedSampleSource
 ) -> xr.Dataset:
@@ -252,11 +222,7 @@ def _get_psd_dataset_from_source(
     source: ResolvedSampleSource,
 ) -> xr.Dataset:
     """Build standardized PSD/CSD draws from a resolved sample source."""
-    attrs = getattr(idata, "attrs", {}) or {}
-    is_multivar = str(attrs.get("data_type", "")).lower().startswith("multi")
-    if is_multivar:
-        return _compute_multivar_psd_dataset(idata, source)
-    return _compute_univar_psd_dataset(idata, source)
+    return _compute_multivar_psd_dataset(idata, source)
 
 
 def get_psd_dataset(
@@ -424,12 +390,6 @@ def get_multivar_ci_summary(
     return result
 
 
-def get_spline_model(idata: xr.DataTree) -> LogPSplines:
-    """Extract the stored univariate spline model."""
-    dataset = _require_dataset(idata, "spline_model")
-    return LogPSplines.from_storage_dataset(dataset)
-
-
 def get_weights(
     idata: xr.DataTree,
     thin: int = 1,
@@ -449,21 +409,23 @@ def get_weights(
     jnp.ndarray
         Weight samples, shape (n_samples_thinned, n_weights)
     """
-    weight_samples = _require_dataset(idata, "posterior")["weights"].values
+    posterior = _require_dataset(idata, "posterior")
+    if "weights" in posterior:
+        weight_name = "weights"
+    else:
+        weight_name = next(
+            (
+                str(name)
+                for name in posterior.data_vars
+                if str(name).startswith("weights_delta_")
+            ),
+            None,
+        )
+    if weight_name is None:
+        raise KeyError("No posterior spline weight variable found.")
+    weight_samples = posterior[weight_name].values
     weight_samples = weight_samples.reshape(-1, weight_samples.shape[-1])
     return weight_samples[::thin]
-
-
-def get_periodogram(idata: xr.DataTree) -> Periodogram:
-    """Extract the observed periodogram."""
-    observed_data = _require_dataset(idata, "observed_data")
-    values = np.array(observed_data["periodogram"].values)
-    if values.ndim != 1:
-        raise KeyError("Observed periodogram is multivariate, not univariate.")
-    return Periodogram(
-        power=values,
-        freqs=np.array(observed_data["periodogram"].coords["freq"].values),
-    )
 
 
 def get_multivar_spline_model(
@@ -705,18 +667,3 @@ def get_multivar_prior_psd_quantiles(
         "psd": np.asarray(spectral_density_q, dtype=np.complex128),
         "coherence": None,
     }
-
-
-def get_posterior_ci(idata: xr.DataTree, n_max=500):
-    spline_model = get_spline_model(idata)
-    total_n = _require_dataset(idata, "posterior").sizes["draw"]
-
-    weights = get_weights(idata, thin=max(1, total_n // n_max))
-    model = np.exp(
-        np.array([spline_model(w) for w in weights], dtype=np.float64)
-    )
-    # get 1,2,3 sigma quantiles
-    ci_3 = np.percentile(model, [16, 84], axis=0)
-    ci_2 = np.percentile(model, [2.5, 97.5], axis=0)
-    ci_1 = np.percentile(model, [0.15, 99.85], axis=0)
-    return np.array([ci_1, ci_2, ci_3])

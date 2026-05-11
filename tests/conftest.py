@@ -2,10 +2,8 @@ import os
 import shutil
 from pathlib import Path
 
-import numpy as np
 import pytest
 
-from log_psplines.datatypes import MultivariateTimeseries, Timeseries
 from log_psplines.logger import set_level
 
 HERE = Path(__file__).parent

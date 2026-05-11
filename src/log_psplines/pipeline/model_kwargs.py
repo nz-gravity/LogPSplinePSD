@@ -1,7 +1,6 @@
 """Build model_kwargs dicts for VIStage / NUTSStage.
 
-This is the only place in the codebase that branches on the data type
-(Periodogram vs MultivarFFT) for inference purposes.
+This module builds the multivariate model kwargs used by all inference paths.
 """
 
 from __future__ import annotations
@@ -10,9 +9,8 @@ from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
 
-from ..datatypes import Periodogram
 from ..datatypes.multivar import MultivarFFT
-from ..psplines import LogPSplines, MultivariateLogPSplines
+from ..psplines import MultivariateLogPSplines
 from .models import _blocked_channel_model
 
 if TYPE_CHECKING:
@@ -77,30 +75,6 @@ def _joint_multivar_model(
             enbw=enbw,
             eta=eta,
         )
-
-
-def _build_univar_kwargs(
-    data: Periodogram,
-    config: PipelineConfig,
-) -> tuple[dict, LogPSplines]:
-    spline = LogPSplines.from_periodogram(
-        data,
-        n_knots=config.n_knots,
-        degree=config.degree,
-        diffMatrixOrder=config.diffMatrixOrder,
-        knot_kwargs=config.knot_kwargs or {},
-    )
-    kwargs = {
-        "log_pdgrm": jnp.log(jnp.asarray(data.power, dtype=jnp.float32)),
-        "lnspline_basis": jnp.asarray(spline.basis, dtype=jnp.float32),
-        "penalty_matrix": jnp.asarray(spline.penalty_matrix),
-        "Nh": int(data.Nh),
-        "alpha_phi": float(config.alpha_phi),
-        "beta_phi": float(config.beta_phi),
-        "alpha_delta": float(config.alpha_delta),
-        "beta_delta": float(config.beta_delta),
-    }
-    return kwargs, spline
 
 
 def _build_multivar_kwargs(
@@ -183,19 +157,17 @@ def _build_multivar_kwargs(
 
 
 def build_model_kwargs_and_spline(
-    data: Periodogram | MultivarFFT,
+    data: MultivarFFT,
     config: PipelineConfig,
     coarse: bool = False,
-) -> tuple[dict, LogPSplines | MultivariateLogPSplines]:
+) -> tuple[dict, MultivariateLogPSplines]:
     """Return model kwargs and the spline model used to build them."""
     del coarse
-    if isinstance(data, Periodogram):
-        return _build_univar_kwargs(data, config)
     return _build_multivar_kwargs(data, config)
 
 
 def build_model_kwargs(
-    data: Periodogram | MultivarFFT,
+    data: MultivarFFT,
     config: PipelineConfig,
     coarse: bool = False,
 ) -> dict:
@@ -204,8 +176,7 @@ def build_model_kwargs(
     Parameters
     ----------
     data:
-        Pre-processed frequency-domain data.  ``Periodogram`` triggers the
-        univariate path; ``MultivarFFT`` triggers the multivariate path.
+        Pre-processed multivariate frequency-domain data.
     config:
         Pipeline configuration.
     coarse:

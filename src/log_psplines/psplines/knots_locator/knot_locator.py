@@ -3,7 +3,6 @@ import warnings
 import numpy as np
 from scipy.signal import medfilt, savgol_filter
 
-from ...datatypes import Periodogram
 from ...datatypes.multivar_utils import psd_to_cholesky_components
 from .lvk_knot_allocator import LvkKnotAllocator
 
@@ -62,46 +61,6 @@ def _enforce_exact_knot_count(
 
 def init_knots(
     n_knots: int,
-    periodogram: Periodogram,
-    guide_power: np.ndarray | None = None,
-    method: str = "density",
-    knots: np.ndarray | None = None,
-    **kwargs,
-) -> np.ndarray:
-    """
-    Select knots using various placement strategies.
-
-    Parameters
-    ----------
-    n_knots : int
-        Total number of knots to select
-    periodogram : Periodogram
-        Periodogram object with freqs and power
-    method : str, default="density"
-        Knot placement method:
-        - "uniform": Uniformly spaced knots
-        - "log": Logarithmically spaced knots
-        - "density": Quantile-based placement using periodogram (Patricio's method)
-        - "lvk": LVK-specific method
-
-    Returns
-    -------
-    np.ndarray
-        Array of knot locations normalized to [0, 1]
-    """
-    return _init_knots_from_arrays(
-        n_knots=n_knots,
-        freqs=np.asarray(periodogram.freqs),
-        power=np.asarray(periodogram.power),
-        guide_power=guide_power,
-        method=method,
-        knots=knots,
-        **kwargs,
-    )
-
-
-def _init_knots_from_arrays(
-    n_knots: int,
     freqs: np.ndarray,
     power: np.ndarray,
     guide_power: np.ndarray | None = None,
@@ -142,10 +101,10 @@ def _init_knots_from_arrays(
             )
 
         elif method == "density":
-            periodogram = Periodogram(freqs=freqs, power=power)
             knots = _quantile_based_knots(
                 n_knots,
-                periodogram,
+                freqs,
+                power,
                 guide_power=guide_power,
                 guide_strength=float(kwargs.get("guide_strength", 1.0)),
             )
@@ -257,7 +216,8 @@ def denoise_score(
 
 def _quantile_based_knots(
     n_knots: int,
-    periodogram: Periodogram,
+    freqs: np.ndarray,
+    power: np.ndarray,
     *,
     guide_power: np.ndarray | None = None,
     guide_strength: float = 1.0,
@@ -272,8 +232,8 @@ def _quantile_based_knots(
     score. All processing is in linear frequency — the space where the
     B-spline basis is evaluated.
     """
-    power = np.asarray(periodogram.power, dtype=np.float64)
-    freqs = np.asarray(periodogram.freqs, dtype=np.float64)
+    power = np.asarray(power, dtype=np.float64)
+    freqs = np.asarray(freqs, dtype=np.float64)
 
     n = power.size
     if n < 3:

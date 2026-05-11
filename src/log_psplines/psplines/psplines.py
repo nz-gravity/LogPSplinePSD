@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from jax import numpy as jnp
 
-from ..datatypes import Periodogram
-from .initialisation import init_basis_and_penalty, init_knots, init_weights
+from .initialisation import init_basis_and_penalty, init_weights
 from .plot_basis import plot_basis, plot_penalty
 
 
@@ -74,8 +73,6 @@ class LogPSplines:
 
     Methods
     -------
-    from_periodogram(periodogram, n_knots, degree, ...)
-        Class method to construct model from periodogram data
     __call__(weights)
         Evaluate the log power spectrum given spline weights
     plot_basis(outdir)
@@ -83,15 +80,15 @@ class LogPSplines:
 
     Examples
     --------
-    Create a log P-spline model from gravitational wave periodogram data:
+    Construct a log P-spline component from precomputed basis data:
 
-    >>> from mypackage import Periodogram
-    >>> # Assume 'pdgrm' is a Periodogram object from GW strain data
-    >>> model = LogPSplines.from_periodogram(
-    ...     pdgrm,
-    ...     n_knots=15,
+    >>> model = LogPSplines(
     ...     degree=3,
-    ...     diffMatrixOrder=2
+    ...     diffMatrixOrder=2,
+    ...     n=basis.shape[0],
+    ...     knots=knots,
+    ...     basis=basis,
+    ...     penalty_matrix=penalty_matrix,
     ... )
     >>> print(f"Model has {model.n_basis} basis functions")
 
@@ -155,7 +152,6 @@ class LogPSplines:
     See Also
     --------
     run_mcmc : MCMC sampling with LogPSplines models
-    Periodogram : Input data structure for spectral analysis
     init_knots : Knot placement algorithms
     init_basis_and_penalty : Basis and penalty matrix construction
     """
@@ -474,81 +470,6 @@ class LogPSplines:
                 init_weights=model.weights,
                 num_steps=int(init_num_steps),
             )
-        return model
-
-    @classmethod
-    def from_periodogram(
-        cls,
-        periodogram: Periodogram,
-        n_knots: int,
-        degree: int,
-        diffMatrixOrder: int = 3,
-        knot_kwargs: dict | None = None,
-    ):
-        """
-        Construct LogPSplines model from periodogram data.
-
-        This factory method handles the complete setup of a log P-spline model,
-        including knot placement, basis construction, penalty matrix setup, and
-        initial weight estimation.
-
-        Parameters
-        ----------
-        periodogram : Periodogram
-            Input periodogram containing frequency grid and power measurements
-        n_knots : int
-            Number of interior knots to place. More knots provide greater
-            flexibility but may lead to overfitting without sufficient penalty
-        degree : int
-            Polynomial degree of B-spline basis (0-5)
-        diffMatrixOrder : int, default=2
-            Order of difference penalty matrix for smoothness control
-        knot_kwargs : dict, default={}
-            Additional arguments passed to knot placement algorithm.
-            May include placement strategy, boundary conditions, etc.
-
-        Returns
-        -------
-        LogPSplines
-            Fully initialized model ready for MCMC sampling
-
-        Examples
-        --------
-        Basic model construction:
-
-        >>> model = LogPSplines.from_periodogram(pdgrm, n_knots=10, degree=3)
-
-        High-resolution model for detailed spectral features:
-
-        >>> model = LogPSplines.from_periodogram(
-        ...     pdgrm,
-        ...     n_knots=25,
-        ...     degree=3,
-        ...     diffMatrixOrder=2,
-        ...     knot_kwargs={'placement': 'adaptive'}
-        ... )
-        """
-        if knot_kwargs is None:
-            knot_kwargs = {}
-        knots = init_knots(
-            n_knots,
-            periodogram,
-            **knot_kwargs,
-        )
-        # compute degree based on the number of knots
-        # Evaluate basis at actual normalized frequencies to preserve geometry
-        fmin, fmax = float(periodogram.freqs[0]), float(periodogram.freqs[-1])
-        denom = (fmax - fmin) if fmax > fmin else 1.0
-        grid = (np.asarray(periodogram.freqs) - fmin) / denom
-        model = cls.from_knots(
-            knots=knots,
-            degree=degree,
-            diffMatrixOrder=diffMatrixOrder,
-            n=periodogram.n,
-            grid_points=grid,
-            log_target=jnp.log(periodogram.power),
-            init_num_steps=5000,
-        )
         return model
 
     @property

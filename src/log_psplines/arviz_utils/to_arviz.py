@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """Helpers for ArviZ-compatible DataTree packing and PSD reconstruction."""
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
@@ -16,33 +16,8 @@ if TYPE_CHECKING:
     SamplerConfig = Any
 
 
-def _pack_spline_model(spline_model) -> Dataset:
-    """Pack univariate spline model parameters into an xarray Dataset."""
-    data: Dict[str, Any] = {
-        "degree": spline_model.degree,
-        "diffMatrixOrder": spline_model.diffMatrixOrder,
-        "n": spline_model.n,
-    }
-    payload, coords = spline_model.to_storage_payload(
-        include_linear_operators=False
-    )
-    data.update(payload)
-
-    return Dataset(
-        {
-            key: (
-                DataArray(value[1], dims=value[0])
-                if isinstance(value, tuple)
-                else DataArray(value)
-            )
-            for key, value in data.items()
-        },
-        coords=coords,
-    )
-
-
 def _pack_model_component(
-    model, prefix: str, data: Dict[str, Any], coords: Dict[str, Any]
+    model, prefix: str, data: dict[str, Any], coords: dict[str, Any]
 ) -> None:
     """Pack a single multivariate component into storage dictionaries."""
     payload, component_coords = model.to_storage_payload(
@@ -62,7 +37,7 @@ def _pack_spline_model_multivar(spline_model) -> Dataset:
         "n_theta": spline_model.n_theta,
     }
 
-    coords: Dict[str, np.ndarray] = {}
+    coords: dict[str, np.ndarray] = {}
 
     for i, diag_model in enumerate(spline_model.diagonal_models):
         _pack_model_component(diag_model, f"diag_{i}", data, coords)
@@ -124,8 +99,8 @@ def _flatten_posterior_draws(array: jnp.ndarray | np.ndarray) -> jnp.ndarray:
 
 
 def _subset_weight_samples_for_psd(
-    samples: Dict[str, jnp.ndarray], n_keep: int
-) -> Dict[str, jnp.ndarray]:
+    samples: dict[str, jnp.ndarray], n_keep: int
+) -> dict[str, jnp.ndarray]:
     """Return flattened weight samples capped to the draws needed for PSD summaries."""
     weight_keys = [key for key in samples if str(key).startswith("weights_")]
     if not weight_keys:
@@ -138,7 +113,7 @@ def _subset_weight_samples_for_psd(
         n_total = int(first_weights.shape[0])
     keep_idx = _select_evenly_spaced_indices(n_total, int(n_keep))
 
-    subset: Dict[str, jnp.ndarray] = {}
+    subset: dict[str, jnp.ndarray] = {}
     for key in weight_keys:
         flat = _flatten_posterior_draws(samples[key])
         if keep_idx is not None:
@@ -148,8 +123,8 @@ def _subset_weight_samples_for_psd(
 
 
 def _flatten_and_cap_posterior_array(
-    array: Optional[jnp.ndarray], n_keep: int
-) -> Optional[jnp.ndarray]:
+    array: jnp.ndarray | None, n_keep: int
+) -> jnp.ndarray | None:
     """Flatten chain/draw axes and cap the sample axis when requested."""
     if array is None:
         return None
@@ -163,12 +138,12 @@ def _flatten_and_cap_posterior_array(
 
 
 def _compute_posterior_predictive_multivar(
-    samples: Dict[str, jnp.ndarray],
-    sample_stats: Dict[str, jnp.ndarray],
+    samples: dict[str, jnp.ndarray],
+    sample_stats: dict[str, jnp.ndarray],
     spline_model,
     fft_data: MultivarFFT,
-    config: Optional["SamplerConfig"] = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    config: SamplerConfig | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
     """Compute PSD percentiles (and optional coherence percentiles) from samples."""
     # Keep concise logging
     logger.debug("_compute_posterior_predictive_multivar: entry")
@@ -230,13 +205,13 @@ def _compute_posterior_predictive_multivar(
 
 
 def _compute_prior_predictive_multivar(
-    spline_model: "MultivariateLogPSplines",
+    spline_model: MultivariateLogPSplines,
     fft_data: MultivarFFT,
-    config: "SamplerConfig",
+    config: SamplerConfig,
     n_prior_draws: int = 500,
     seed: int = 42,
     log_delta_sq_clip: float = 20.0,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Draw PSD matrices from the shrinkage prior and return quantiles.
 
     This mirrors the posterior predictive computation but samples weights
@@ -377,7 +352,7 @@ def _compute_prior_predictive_multivar(
 
 
 def _reconstruct_log_delta_sq(
-    samples: Dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT
+    samples: dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT
 ) -> jnp.ndarray:
     """Reconstruct log_delta_sq from individual diagonal component samples."""
     all_bases, _ = spline_model.get_all_bases_and_penalties()
@@ -404,7 +379,7 @@ def _reconstruct_log_delta_sq(
 
 
 def _reconstruct_theta_params(
-    samples: Dict[str, jnp.ndarray],
+    samples: dict[str, jnp.ndarray],
     spline_model,
     fft_data: MultivarFFT,
     param_type: str,

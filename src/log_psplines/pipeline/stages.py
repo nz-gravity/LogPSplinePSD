@@ -27,6 +27,7 @@ class StageResult:
     guide_name: str | None
     runtime: float
     losses_per_block: list[jnp.ndarray] | None = None
+    samples: dict[str, jnp.ndarray] | None = None
 
 
 @dataclass
@@ -71,6 +72,7 @@ class VIStage:
             khat=None,
             guide_name=result.guide_name,
             runtime=runtime,
+            samples=result.samples,
         )
 
 
@@ -97,6 +99,7 @@ class FactorizedMultivarVIStage(VIStage):
 
         t0 = time.time()
         merged_means: dict[str, jnp.ndarray] = {}
+        merged_samples: dict[str, jnp.ndarray] = {}
         losses_per_block: list[jnp.ndarray] = []
         guide_names: list[str] = []
 
@@ -118,6 +121,8 @@ class FactorizedMultivarVIStage(VIStage):
                 init_values=channel_init,
             )
             merged_means.update(result.means)
+            if result.samples is not None:
+                merged_samples.update(result.samples)
             losses_per_block.append(jnp.asarray(result.losses))
             guide_names.append(result.guide_name)
 
@@ -149,6 +154,7 @@ class FactorizedMultivarVIStage(VIStage):
             guide_name=guide_name,
             runtime=runtime,
             losses_per_block=losses_per_block,
+            samples=merged_samples or None,
         )
 
 

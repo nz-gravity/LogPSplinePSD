@@ -126,7 +126,7 @@ def _blocked_channel_model(
     )
     # log_delta_sq[h] = B_h @ w  →  log(δ²_{jh}), shape (n_coarse_bins,)
     log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
-    log_delta_sq_safe = jnp.clip(log_delta_sq, a_min=-80.0, a_max=80.0)
+    log_delta_sq_safe = jnp.clip(log_delta_sq, min=-80.0, max=80.0)
 
     n_freq = u_re_channel.shape[0]
     # channel_index == j means there are j preceding channels (l = 0, …, j-1)

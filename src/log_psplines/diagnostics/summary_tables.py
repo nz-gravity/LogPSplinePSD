@@ -39,13 +39,16 @@ def _resolve_truth(
 
 
 def _truth_metrics_from_idata(
-    idata: xr.DataTree, true_psd: Any = None
+    idata: xr.DataTree,
+    true_psd: Any = None,
+    *,
+    psd_source: str = "best",
 ) -> dict[str, float]:
     truth = _resolve_truth(idata, true_psd)
     if truth is None:
         return {}
 
-    psd_ds = get_psd_dataset(idata, source="best")
+    psd_ds = get_psd_dataset(idata, source=psd_source)
     freqs_raw = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
     freq_idx = interior_frequency_slice(freqs_raw.size)
     freqs = freqs_raw[freq_idx]
@@ -92,9 +95,15 @@ def _truth_metrics_from_mapping(source: Mapping[str, Any]) -> dict[str, float]:
 def _shared_truth_metrics(
     source: xr.DataTree | Mapping[str, Any] | Sequence[Any],
     true_psd: Any = None,
+    *,
+    psd_source: str = "best",
 ) -> dict[str, float]:
     if isinstance(source, xr.DataTree):
-        return _truth_metrics_from_idata(source, true_psd=true_psd)
+        return _truth_metrics_from_idata(
+            source,
+            true_psd=true_psd,
+            psd_source=psd_source,
+        )
     if isinstance(source, Mapping):
         return _truth_metrics_from_mapping(source)
     return {}
@@ -177,7 +186,11 @@ def build_nuts_summary_table(
 
     rows: list[dict[str, Any]] = []
     shared_truth_metrics = (
-        _shared_truth_metrics(idata_or_factors, true_psd=true_psd)
+        _shared_truth_metrics(
+            idata_or_factors,
+            true_psd=true_psd,
+            psd_source="posterior",
+        )
         if isinstance(idata_or_factors, xr.DataTree)
         else {}
     )
@@ -227,7 +240,10 @@ def _extract_pareto_k_from_data(
     source: Any,
 ) -> tuple[np.ndarray, bool]:
     if _is_arviz_loo_source(source):
-        loo_result = azs.loo(source, pointwise=True)
+        try:
+            loo_result = azs.loo(source, pointwise=True)
+        except Exception:
+            return np.array([], dtype=float), False
         pareto_k = np.asarray(loo_result.pareto_k.values, dtype=float).reshape(
             -1
         )
@@ -326,7 +342,9 @@ def build_vi_summary_table(
     rows: list[dict[str, Any]] = []
     split_inputs = _split_vi_inputs(vi_or_factors)
     shared_truth_metrics = _shared_truth_metrics(
-        vi_or_factors, true_psd=true_psd
+        vi_or_factors,
+        true_psd=true_psd,
+        psd_source="vi",
     )
 
     for factor, source in split_inputs.items():

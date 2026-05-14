@@ -390,7 +390,7 @@ def _whiten_samples(
     log_posterior_function: Callable[[np.ndarray], float],
     *,
     regularization: float = 1e-6,
-) -> tuple[np.ndarray, np.ndarray, Callable[[np.ndarray], float], float]:
+) -> tuple[np.ndarray, np.ndarray, Callable[[np.ndarray], float]]:
     """Whiten posterior samples so the sample covariance is the identity.
 
     KDE-based bridge sampling (morphZ) fails when the posterior lives in a
@@ -403,16 +403,19 @@ def _whiten_samples(
     approximately spherical, so an independent-1D KDE is a near-perfect
     proposal and bridge sampling converges quickly.
 
-    morphZ estimates lnZ in z-space, which equals the true lnZ plus
-    log|det L| (the log-Jacobian of the transform).  The caller must subtract
-    log_det_L from the returned lnZ.
+    The z-space density carries the Jacobian: p_z(z) = p_θ(Lz+μ) · |det L|,
+    i.e. log p_z = log p_θ + log_det_L.  We return that as the z-space
+    log-posterior, so morphZ's bridge estimate
+
+        Z_morphZ = ∫ exp(log_post_z(z)) dz = ∫ exp(log_post_θ(θ)) dθ = Z_θ
+
+    is the lnZ in the original parameterization with no further correction.
 
     Returns
     -------
     z_samples          : whitened samples, shape (n, d)
-    log_post_z         : log-posterior in z-space = log_post + log_det_L
+    log_post_z         : log-posterior in z-space = log_post_θ + log_det_L
     log_post_z_fn      : callable log-posterior in z-space
-    log_det_L          : log|det(L)| — subtract from morphZ result to get lnZ
     """
     n, d = post_samples.shape
     mean = np.mean(post_samples, axis=0)
@@ -440,31 +443,7 @@ def _whiten_samples(
     def log_post_z_fn(z: np.ndarray) -> float:
         return log_posterior_function(_L @ z + _mean) + log_det_L
 
-    return z_samples, log_post_z, log_post_z_fn, log_det_L
-
-
-def _correct_lnz_result(
-    result: MorphZEvidenceResult,
-    lnz_correction: float,
-) -> MorphZEvidenceResult:
-    """Subtract lnz_correction from all lnZ fields (whitening Jacobian)."""
-    if lnz_correction == 0.0:
-        return result
-    corrected_estimates = result.estimates.copy()
-    if corrected_estimates.ndim == 2 and corrected_estimates.shape[1] >= 1:
-        corrected_estimates[:, 0] -= lnz_correction
-    return MorphZEvidenceResult(
-        lnz=result.lnz - lnz_correction,
-        lnz_err=result.lnz_err,
-        is_valid=result.is_valid,
-        n_estimations=result.n_estimations,
-        nonconverged_count=result.nonconverged_count,
-        estimates=corrected_estimates,
-        factor_results=tuple(
-            _correct_lnz_result(fr, lnz_correction)
-            for fr in result.factor_results
-        ),
-    )
+    return z_samples, log_post_z, log_post_z_fn
 
 
 def _evaluate_lnz_task(
@@ -477,7 +456,6 @@ def _evaluate_lnz_task(
     extra_kwargs: dict[str, Any] | None,
     verbose: bool,
     factor_index: int | None = None,
-    lnz_correction: float = 0.0,
 ) -> MorphZEvidenceResult:
     """Run one MorphZ estimation task and log a concise summary."""
     n_draws = int(post_samples.shape[0])
@@ -508,7 +486,6 @@ def _evaluate_lnz_task(
         log_posterior_function=log_post_fn,
         **lnz_kwargs,
     )
-    result = _correct_lnz_result(result, lnz_correction)
     if factor_index is not None:
         logger.info(
             f"Factor {factor_index} lnZ valid={result.is_valid} "
@@ -542,7 +519,7 @@ def estimate_pipeline_lnz(
                 posterior, channel_index=channel_index
             ),
         )
-        post_samples, log_post, log_post_fn, log_det_L = _whiten_samples(
+        post_samples, log_post, log_post_fn = _whiten_samples(
             post_samples, log_post, log_post_fn
         )
         factor_results.append(
@@ -555,7 +532,6 @@ def estimate_pipeline_lnz(
                 extra_kwargs=extra_kwargs,
                 verbose=verbose,
                 factor_index=channel_index,
-                lnz_correction=log_det_L,
             )
         )
 

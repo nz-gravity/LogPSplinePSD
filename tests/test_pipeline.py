@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 
@@ -18,6 +19,7 @@ from log_psplines.pipeline.pipeline import (
 from log_psplines.pipeline.stages import (
     FactorizedMultivarNUTSStage,
     FactorizedMultivarVIStage,
+    StageResult,
 )
 
 # ---------------------------------------------------------------------------
@@ -159,6 +161,11 @@ def test_pipeline_p1_only_vi(p1_data):
     assert isinstance(result.idata, xr.DataTree)
     assert "posterior" in result.idata.children
     assert "weights_delta_0" in result.vi.init_values
+    assert result.vi.samples is not None
+    assert (
+        result.idata["posterior"].dataset["weights_delta_0"].sizes["draw"]
+        == config.vi_posterior_draws
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +189,11 @@ def test_pipeline_multivar_only_vi(multivar_data):
     assert "weights_delta_1" in result.vi.init_values
     vi_stats = result.idata["vi_sample_stats"].dataset
     assert "losses_per_block" in vi_stats
+    vi_posterior = result.idata["vi_posterior"].dataset
+    assert (
+        vi_posterior["weights_delta_0"].sizes["draw"]
+        == config.vi_posterior_draws
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -262,3 +274,97 @@ def test_pipeline_result_save(tmp_path, p1_data):
 
     assert (tmp_path / "inference_data.nc").exists()
     assert (tmp_path / "vi_losses.npy").exists()
+
+
+def test_pipeline_multivar_vi_save_records_truth_metrics(
+    tmp_path,
+    multivar_data,
+):
+    config = _fast_config(only_vi=True)
+    result = make_pipeline(multivar_data, config).run()
+    freq = np.asarray(
+        result.idata["observed_data"].dataset["periodogram"].coords["freq"],
+        dtype=float,
+    )
+    p = int(multivar_data.p)
+    true_psd = np.tile(np.eye(p, dtype=np.complex128), (freq.size, 1, 1))
+
+    result.save(str(tmp_path), true_psd=true_psd)
+
+    vi_summary = pd.read_csv(tmp_path / "diagnostics" / "vi_summary.csv")
+    for col in ("riae", "l2", "coverage"):
+        values = pd.to_numeric(vi_summary[col], errors="coerce").to_numpy()
+        assert np.all(np.isfinite(values))
+    vi_stats = result.idata["vi_sample_stats"].attrs
+    assert np.isfinite(float(vi_stats["riae"]))
+    assert np.isfinite(float(vi_stats["l2"]))
+    assert np.isfinite(float(vi_stats["coverage"]))
+
+
+def test_posterior_predictive_save_overlays_vi_when_available(
+    tmp_path,
+    monkeypatch,
+):
+    captured = {}
+
+    def _fake_plot_psd_matrix(spec):
+        captured["spec"] = spec
+
+    monkeypatch.setattr(
+        "log_psplines.pipeline.pipeline.plot_psd_matrix",
+        _fake_plot_psd_matrix,
+    )
+    vi = StageResult(
+        init_values={"weights_delta_0": np.zeros(2)},
+        losses=np.asarray([1.0]),
+        khat=None,
+        guide_name="diag",
+        runtime=0.0,
+        samples={"weights_delta_0": np.zeros((3, 2))},
+    )
+    result = PipelineResult(
+        vi_coarse=None,
+        vi=vi,
+        idata=xr.DataTree(children={"sample_stats": xr.DataTree()}),
+    )
+
+    result._save_posterior_predictive(str(tmp_path))
+
+    spec = captured["spec"]
+    assert spec.overlay_vi is True
+    assert spec.label == "NUTS 90% CI"
+    assert spec.vi_label == "VI 90% CI"
+
+
+def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
+    tmp_path,
+    monkeypatch,
+):
+    captured = {}
+
+    def _fake_plot_psd_matrix(spec):
+        captured["spec"] = spec
+
+    monkeypatch.setattr(
+        "log_psplines.pipeline.pipeline.plot_psd_matrix",
+        _fake_plot_psd_matrix,
+    )
+    vi = StageResult(
+        init_values={"weights_delta_0": np.zeros(2)},
+        losses=np.asarray([1.0]),
+        khat=None,
+        guide_name="diag",
+        runtime=0.0,
+        samples={"weights_delta_0": np.zeros((3, 2))},
+    )
+    result = PipelineResult(
+        vi_coarse=None,
+        vi=vi,
+        idata=xr.DataTree(),
+    )
+
+    result._save_posterior_predictive(str(tmp_path))
+
+    spec = captured["spec"]
+    assert spec.overlay_vi is False
+    assert spec.label is None

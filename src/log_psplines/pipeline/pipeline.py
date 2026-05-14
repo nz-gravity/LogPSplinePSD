@@ -33,11 +33,54 @@ from .stages import NUTSStage, StageResult, VIStage
 
 
 def _vi_result_to_idata(result: StageResult) -> xr.DataTree:
-    """Wrap VI posterior means into a minimal xr.DataTree."""
-    if not result.init_values:
+    """Wrap VI posterior draws into a minimal xr.DataTree."""
+    has_samples = result.samples is not None
+    values = result.samples if has_samples else result.init_values
+    if not values:
         return xr.DataTree()
-    ds = _init_values_to_dataset(result.init_values)
+    ds = _posterior_values_to_dataset(values, values_are_draws=has_samples)
     return xr.DataTree(children={"posterior": xr.DataTree(dataset=ds)})
+
+
+def _posterior_values_to_dataset(
+    values: dict[str, jnp.ndarray],
+    *,
+    values_are_draws: bool,
+) -> xr.Dataset:
+    """Pack posterior-like values using ``chain``/``draw`` leading dims."""
+    data_vars = {}
+    draw_count: int | None = None
+    for name, value in values.items():
+        array = np.asarray(value)
+        if values_are_draws:
+            if array.ndim == 0:
+                raise ValueError(
+                    f"Posterior samples for '{name}' must include a draw axis."
+                )
+            array = array[None, ...]
+        else:
+            array = array[None, None, ...]
+        if draw_count is None:
+            draw_count = int(array.shape[1])
+        elif int(array.shape[1]) != draw_count:
+            raise ValueError(
+                f"Posterior value '{name}' has {array.shape[1]} draws; "
+                f"expected {draw_count}."
+            )
+
+        tail_dims = tuple(
+            f"{name}_dim_{axis}" for axis in range(array.ndim - 2)
+        )
+        data_vars[name] = xr.DataArray(
+            array,
+            dims=("chain", "draw", *tail_dims),
+        )
+
+    n_draws = int(draw_count or 0)
+    return xr.Dataset(
+        data_vars,
+        coords={"chain": [0], "draw": np.arange(n_draws)},
+    )
 
 
 def _init_values_to_dataset(values: dict[str, jnp.ndarray]) -> xr.Dataset:
@@ -109,6 +152,9 @@ class PipelineResult:
         true_psd: np.ndarray | None = None,
     ) -> None:
         outfile = Path(outdir) / "posterior_predictive.png"
+        overlay_vi = (
+            self.vi is not None and "sample_stats" in self.idata.children
+        )
         try:
             plot_psd_matrix(
                 PSDMatrixPlotSpec(
@@ -118,6 +164,9 @@ class PipelineResult:
                     filename="posterior_predictive.png",
                     save=True,
                     close=True,
+                    overlay_vi=overlay_vi,
+                    label="NUTS 90% CI" if overlay_vi else None,
+                    vi_label="VI 90% CI",
                 )
             )
             return
@@ -178,32 +227,23 @@ class PipelineResult:
 
         vi_summary: pd.DataFrame | None = None
         if self.vi is not None:
-            if (
-                isinstance(self.idata.attrs.get("data_type"), str)
-                and self.idata.attrs["data_type"] == "multivariate"
-            ):
+            try:
+                vi_summary = build_vi_summary_table(
+                    self.idata,
+                    true_psd=true_psd,
+                )
+                vi_summary.to_csv(
+                    diagnostics_dir / "vi_summary.csv", index=False
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"Could not save vi_summary.csv: {exc}",
+                    exc_info=True,
+                )
                 vi_summary = self._fallback_vi_summary()
                 vi_summary.to_csv(
                     diagnostics_dir / "vi_summary.csv", index=False
                 )
-            else:
-                try:
-                    vi_summary = build_vi_summary_table(
-                        self.idata,
-                        true_psd=true_psd,
-                    )
-                    vi_summary.to_csv(
-                        diagnostics_dir / "vi_summary.csv", index=False
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        f"Could not save vi_summary.csv: {exc}",
-                        exc_info=True,
-                    )
-                    vi_summary = self._fallback_vi_summary()
-                    vi_summary.to_csv(
-                        diagnostics_dir / "vi_summary.csv", index=False
-                    )
 
             vi_stats = self.idata["vi_sample_stats"]
             for col in ("pareto_k_max", "riae", "l2", "coverage"):
@@ -445,9 +485,14 @@ class InferencePipeline:
         )
 
     def _vi_posterior_dataset(self, vi: StageResult) -> xr.Dataset:
-        if not vi.init_values:
+        has_samples = vi.samples is not None
+        values = vi.samples if has_samples else vi.init_values
+        if not values:
             return xr.Dataset()
-        return _init_values_to_dataset(vi.init_values)
+        return _posterior_values_to_dataset(
+            values,
+            values_are_draws=has_samples,
+        )
 
     def _attach_pipeline_metadata(
         self,

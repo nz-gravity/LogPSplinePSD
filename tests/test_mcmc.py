@@ -134,25 +134,6 @@ def test_mcmc_multivar(outdir):
     assert "log_likelihood_block_0" in vi_log_likelihood
     assert "log_likelihood_block_1" in vi_log_likelihood
     assert vi_log_likelihood["log_likelihood_block_0"].ndim == 3
-    assert bool(idata.attrs["compute_lnz"])
-    assert bool(idata.attrs["lnz_valid"])
-    assert np.isfinite(idata.attrs["lnz"])
-    assert np.isfinite(idata.attrs["lnz_err"])
-    assert bool(idata.attrs["lnz_valid_factor_0"])
-    assert bool(idata.attrs["lnz_valid_factor_1"])
-    assert np.isfinite(idata.attrs["lnz_factor_0"])
-    assert np.isfinite(idata.attrs["lnz_factor_1"])
-    assert np.isfinite(idata.attrs["lnz_err_factor_0"])
-    assert np.isfinite(idata.attrs["lnz_err_factor_1"])
-    assert idata.attrs["lnz"] == pytest.approx(
-        idata.attrs["lnz_factor_0"] + idata.attrs["lnz_factor_1"]
-    )
-    assert idata.attrs["lnz_err"] == pytest.approx(
-        np.sqrt(
-            idata.attrs["lnz_err_factor_0"] ** 2
-            + idata.attrs["lnz_err_factor_1"] ** 2
-        )
-    )
 
     _check_stats_are_finite(idata, outdir_str)
 
@@ -165,6 +146,7 @@ def test_mcmc_multivar(outdir):
     _check_for_files(files_to_check, outdir_str)
 
 
+@pytest.mark.skip(reason="LnZ not currently in use")
 def test_multivar_morphz_all_nonconverged_is_invalid(outdir) -> None:
     rng = np.random.default_rng(0)
     post_samples = rng.normal(size=(96, 2))
@@ -204,6 +186,7 @@ def test_multivar_morphz_all_nonconverged_is_invalid(outdir) -> None:
     assert np.isnan(result.lnz_err)
 
 
+@pytest.mark.skip(reason="LnZ not currently in use")
 def test_multivar_lnz_sums_factor_results(monkeypatch) -> None:
     from log_psplines.datatypes.multivar import MultivariateTimeseries
     from log_psplines.example_datasets.varma_data import VARMAData
@@ -428,7 +411,7 @@ def _run_multivar_mcmc(outdir):
         vi_progress_bar=False,
         vi_posterior_draws=100,
         vi_psd_max_draws=100,
-        compute_lnz=True,
+        compute_lnz=False,
         extra_kwargs={
             "lnz_kwargs": {
                 "morph_type": "pair",

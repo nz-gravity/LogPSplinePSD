@@ -91,12 +91,13 @@ We also use the eigendecomposition of :math:`\bar{Y}_h`:
 PSD terminology
 ---------------
 
-``log_psplines.spectrum_utils`` centralises the conversion between Wishart
-statistics and PSD matrices. The current conventions are:
+``log_psplines.datatypes.multivar_utils`` centralises the conversion between
+Wishart statistics and PSD matrices. The current conventions are:
 
 - **Normalisation** – PSD matrices are **one-sided** and expressed per Hz. The
-  helper :func:`Y_to_S` simply divides the summed Wishart
-  matrices by :math:`N_b N_h`, i.e., :math:`S(f) = Y(f) / (N_b N_h)`.
+  helper :func:`log_psplines.datatypes.multivar_utils.Y_to_S` converts summed
+  Wishart matrices into PSD matrices using the stored block count, coarse-bin
+  multiplier, duration, and scaling factor.
 - **Degrees of freedom** – ``N_b`` is the block count and ``N_h`` is the
   (constant) coarse-bin size multiplier.
 - **Scaling factor** – The optional ``scaling_factor`` tracks variance
@@ -115,15 +116,16 @@ Data flow
 The multivariate pipeline follows a fixed sequence of transformations:
 
 1. **Timeseries** – raw or standardised time-domain data.
-2. **MultivarFFT** – ``to_wishart_stats`` produces frequency grids, FFT means, and
-   the eigenvector replicates ``U(f)`` on the positive-frequency grid.
-   The analysis band is controlled by ``model.fmin``/``model.fmax``.
+2. **MultivarFFT** – ``to_wishart_stats`` produces frequency grids and
+   eigenvector-weighted Wishart factors ``U(f)`` on the positive-frequency
+   grid. The analysis band is controlled by ``PipelineConfig.fmin`` and
+   ``PipelineConfig.fmax``.
 3. **CoarseGrain** – optional **linear, full-band** binning combines nearby
    frequencies by summing :math:`\bar Y_h = \sum_{f\in J_h} Y(f)` and assigns each
    bin the member count :math:`N_h` for log-determinant scaling. Coarse-grain
    config controls only binning parameters (``Nc``/``Nh``).
-4. **Sampler** – NumPyro samplers consume the (possibly coarse) Wishart stats
-   and spline models.
+4. **Inference stages** – VI and NUTS stages consume the (possibly coarse)
+   Wishart stats and spline models.
 5. **ArviZ conversion** – ``wishart_u_to_psd`` populates
    ``observed_data['periodogram']`` using the canonical normalisation.
 6. **Plotting** – visualisers consume the precomputed posterior quantiles and

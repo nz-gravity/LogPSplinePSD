@@ -1,22 +1,15 @@
 format: jb-book
 root: intro.rst
 chapters:
-  - file: api.rst
-
-  - file: conventions.rst
-    title: User Guide
+  - file: quickstart.ipynb
+  - file: configuration.rst
+  - file: data_preprocessing.rst
+  - file: outputs.rst
+  - file: technical_notes.rst
     sections:
-      - file: development.md
-
-  - file: coarse_grain.rst
-    title: Technical Documentation
-    sections:
-      - file: coarse_grain_mwe.ipynb
-      - file: animations.rst
+      - file: conventions.rst
+      - file: coarse_grain.rst
       - file: multivar_blocked_nuts.rst
-
-  - file: studies/lvk/lvk_demo.ipynb
-    title: Examples and Studies
-    sections:
-      - file: studies/lisa/lisa_demo.ipynb
-      - file: studies/runtime/runtime.rst
+      - file: design_shrinkage.md
+  - file: api.rst
+  - file: development.md

@@ -2,8 +2,8 @@ Multivariate Factorised Likelihood: Math to Code
 ================================================
 
 This page documents the *implemented* multivariate likelihood and
-parameterisation used by
-:class:`log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler`.
+parameterisation used by the pipeline-owned factorised multivariate NUTS stage,
+:class:`log_psplines.pipeline.stages.FactorizedMultivarNUTSStage`.
 
 
 Overview
@@ -27,11 +27,11 @@ Code pointers
 The links below point to the current repository layout:
 
 - `Wishart FFT construction (MultivarFFT.compute_wishart) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L159-L299>`_
-- `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L55-L239>`_
-- `Shared P-spline prior block (sample_pspline_block) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/pspline_block.py#L59-L137>`_
-- `Coarse graining (apply_coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/preprocessing/coarse_grain.py#L288-L343>`_
-- `PSD reconstruction (reconstruct_psd_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py#L531-L580>`_
-- `Wishart and PSD helpers (U_to_Y, Y_to_S, Y_to_U) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar_utils.py#L141-L224>`_
+- `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py>`_
+- `Shared P-spline prior block (_sample_pspline_block) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py>`_
+- `Coarse graining (apply_coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/preprocessing/coarse_grain.py>`_
+- `PSD reconstruction (reconstruct_psd_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py>`_
+- `Wishart and PSD helpers (U_to_Y, Y_to_S, Y_to_U) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar_utils.py>`_
 - `ArviZ export for multivariate samples <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/arviz_utils/to_arviz.py>`_
 
 Notation and sufficient statistics
@@ -144,9 +144,9 @@ The implemented blocked sampler samples distinct weight vectors for every
 Relevant code:
 
 - diagonal P-spline block construction:
-  `delta block in _blocked_channel_model <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L122-L139>`_
+  `delta block in _blocked_channel_model <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py>`_
 - off-diagonal real and imaginary blocks:
-  `theta blocks in _blocked_channel_model <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L145-L188>`_
+  `theta blocks in _blocked_channel_model <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py>`_
 
 The Einstein-summation calls in the implementation are just compact matrix
 algebra:
@@ -187,7 +187,7 @@ Key mappings:
 - ``u_re`` and ``u_im`` store the rows of :math:`U(f_k)`.
 
 This is implemented in ``_blocked_channel_model`` inside
-:mod:`log_psplines.samplers.multivar.multivar_blocked_nuts`; the custom
+:mod:`log_psplines.pipeline.models`; the custom
 log-likelihood contribution is added via
 ``numpyro.factor("likelihood_channel_*", log_likelihood)``.
 
@@ -216,9 +216,9 @@ the log-determinant scaling changes.
 Blocked versus unified multivariate NUTS
 ----------------------------------------
 
-The repository currently contains one multivariate NUTS implementation:
+The repository currently contains one multivariate NUTS stage:
 
-- :class:`log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler`
+- :class:`log_psplines.pipeline.stages.FactorizedMultivarNUTSStage`
 
 It fits each Cholesky row as an independent NUTS problem. There is no separate
 all-parameters-joint multivariate NUTS sampler in ``src/log_psplines`` at
@@ -282,7 +282,7 @@ log-density for :math:`\eta` is
 That final ``+ eta`` term is the Jacobian from the transformation
 :math:`\phi = e^\eta`.
 
-In code, :func:`log_psplines.samplers.pspline_block.sample_pspline_block`
+In code, :func:`log_psplines.pipeline.models._sample_pspline_block`
 implements this by:
 
 - sampling ``log_phi`` from a simple reference distribution,
@@ -309,9 +309,9 @@ In this codebase:
 
 - the exact transformed-Gamma prior on ``log_phi`` is implemented by
   ``numpyro.sample`` plus a correcting ``numpyro.factor`` in
-  ``sample_pspline_block``,
+  ``_sample_pspline_block``,
 - the P-spline Gaussian penalty on the weights is also imposed through
-  ``numpyro.factor`` in ``sample_pspline_block``,
+  ``numpyro.factor`` in ``_sample_pspline_block``,
 - the blocked Whittle/Wishart likelihood is imposed through
   ``numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)`` in
   ``_blocked_channel_model``.

@@ -22,24 +22,31 @@ class MultivarFFT:
     Discrete FFTs for multivariate time series.
     Stores Wishart replicates for multivariate spectral estimation.
 
-    Attributes:
-        u_re: Real part of eigenvector-weighted periodogram replicates
-              (N, p, p)
-        u_im: Imag part of eigenvector-weighted periodogram replicates
-              (N, p, p)
-        Nb: Degrees of freedom (number of averaged blocks)
-        freq: Frequency grid (N,)
-        N: Number of frequencies
-        p: Number of channels
+    Attributes
+    ----------
+    u_re
+        Real part of eigenvector-weighted periodogram replicates, shape
+        ``(N, p, p)``.
+    u_im
+        Imaginary part of eigenvector-weighted periodogram replicates, shape
+        ``(N, p, p)``.
+    Nb
+        Degrees of freedom, equal to the number of averaged blocks.
+    freq
+        Frequency grid, shape ``(N,)``.
+    N
+        Number of frequencies.
+    p
+        Number of channels.
 
     Notes
     -----
-    - The multivariate Wishart matrix is
-        Y(f_k) = sum_b X_b(f_k) X_b(f_k)^H,
-      which is encoded via U such that Y(f_k) = U(f_k) U(f_k)^H.
-      The U factors (u_re/u_im) are the sufficient statistics used by the
-      Wishart likelihood. When coarse-graining, we form Y_bar by summing Y(f)
-      across bins and then re-factorize to get coarse U.
+    The multivariate Wishart matrix is
+    ``Y(f_k) = sum_b X_b(f_k) X_b(f_k)^H``. It is encoded through ``U`` such
+    that ``Y(f_k) = U(f_k) U(f_k)^H``. The ``U`` factors are the sufficient
+    statistics used by the Wishart likelihood. When coarse-graining, the code
+    forms ``Y_bar`` by summing ``Y(f)`` across bins and then re-factorizes to
+    get coarse ``U``.
     """
 
     u_re: np.ndarray

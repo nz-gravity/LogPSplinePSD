@@ -25,21 +25,6 @@ def require_dataset(idata: xr.DataTree, group: str) -> xr.Dataset:
     return dataset
 
 
-def select_draw_slice(idata: xr.DataTree, draw_slice: slice) -> xr.DataTree:
-    """Return a shallow copy of the tree with the given draw slice applied."""
-    out = xr.DataTree()
-    out.attrs.update(dict(idata.attrs))
-    for name, group in idata.children.items():
-        dataset = group.dataset
-        if dataset is None:
-            out[name] = group
-            continue
-        if "draw" in dataset.dims:
-            dataset = dataset.sel(draw=draw_slice)
-        out[name] = xr.DataTree(dataset=dataset)
-    return out
-
-
 def save_inference_data(
     idata: xr.DataTree, path: str | Path, *, engine: str = "h5netcdf"
 ) -> None:

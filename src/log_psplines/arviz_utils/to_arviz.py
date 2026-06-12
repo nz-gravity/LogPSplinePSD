@@ -10,10 +10,10 @@ from xarray import DataArray, Dataset
 
 from log_psplines.datatypes import MultivarFFT
 
-from ..logger import logger
-
 if TYPE_CHECKING:
-    SamplerConfig = Any
+    from ..psplines import MultivariateLogPSplines
+
+SamplerConfig = Any
 
 
 def _pack_model_component(
@@ -96,112 +96,6 @@ def _flatten_posterior_draws(array: jnp.ndarray | np.ndarray) -> jnp.ndarray:
     if arr.ndim == 2:
         return arr
     return arr.reshape((-1,) + tuple(arr.shape[2:]))
-
-
-def _subset_weight_samples_for_psd(
-    samples: dict[str, jnp.ndarray], n_keep: int
-) -> dict[str, jnp.ndarray]:
-    """Return flattened weight samples capped to the draws needed for PSD summaries."""
-    weight_keys = [key for key in samples if str(key).startswith("weights_")]
-    if not weight_keys:
-        return {}
-
-    first_weights = jnp.asarray(samples[weight_keys[0]])
-    if first_weights.ndim >= 3:
-        n_total = int(first_weights.shape[0]) * int(first_weights.shape[1])
-    else:
-        n_total = int(first_weights.shape[0])
-    keep_idx = _select_evenly_spaced_indices(n_total, int(n_keep))
-
-    subset: dict[str, jnp.ndarray] = {}
-    for key in weight_keys:
-        flat = _flatten_posterior_draws(samples[key])
-        if keep_idx is not None:
-            flat = flat[keep_idx]
-        subset[str(key)] = flat
-    return subset
-
-
-def _flatten_and_cap_posterior_array(
-    array: jnp.ndarray | None, n_keep: int
-) -> jnp.ndarray | None:
-    """Flatten chain/draw axes and cap the sample axis when requested."""
-    if array is None:
-        return None
-    flat = _flatten_posterior_draws(array)
-    if flat.ndim == 0:
-        return flat
-    keep_idx = _select_evenly_spaced_indices(int(flat.shape[0]), int(n_keep))
-    if keep_idx is not None:
-        flat = flat[keep_idx]
-    return flat
-
-
-def _compute_posterior_predictive_multivar(
-    samples: dict[str, jnp.ndarray],
-    sample_stats: dict[str, jnp.ndarray],
-    spline_model,
-    fft_data: MultivarFFT,
-    config: SamplerConfig | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
-    """Compute PSD percentiles (and optional coherence percentiles) from samples."""
-    # Keep concise logging
-    logger.debug("_compute_posterior_predictive_multivar: entry")
-
-    # Fast-diagnostics controls from config
-    n_draw_cap = 50
-    compute_coh = fft_data.p > 1
-    if config is not None:
-        try:
-            value = getattr(config, "posterior_psd_max_draws", None)
-            if value is not None:
-                value_int = int(value)
-                if value_int > 0:
-                    n_draw_cap = value_int
-        except Exception:
-            pass
-        try:
-            value = getattr(config, "compute_coherence_quantiles", None)
-            if value is not None:
-                compute_coh = bool(value)
-        except Exception:
-            pass
-
-    log_delta_sq = _flatten_and_cap_posterior_array(
-        sample_stats.get("log_delta_sq"), n_draw_cap
-    )
-    theta_re = _flatten_and_cap_posterior_array(
-        sample_stats.get("theta_re"), n_draw_cap
-    )
-    theta_im = _flatten_and_cap_posterior_array(
-        sample_stats.get("theta_im"), n_draw_cap
-    )
-
-    if log_delta_sq is None or theta_re is None or theta_im is None:
-        samples_for_psd = _subset_weight_samples_for_psd(samples, n_draw_cap)
-        if log_delta_sq is None:
-            log_delta_sq = _reconstruct_log_delta_sq(
-                samples_for_psd, spline_model, fft_data
-            )
-        if theta_re is None:
-            theta_re = _reconstruct_theta_params(
-                samples_for_psd, spline_model, fft_data, "re"
-            )
-        if theta_im is None:
-            theta_im = _reconstruct_theta_params(
-                samples_for_psd, spline_model, fft_data, "im"
-            )
-
-    percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float64)
-    psd_real_q, psd_imag_q, coh_q = spline_model.compute_psd_quantiles(
-        log_delta_sq,
-        theta_re,
-        theta_im,
-        percentiles=percentiles,
-        n_samples_max=n_draw_cap,
-        compute_coherence=compute_coh,
-    )
-    return percentiles, psd_real_q, psd_imag_q, coh_q
 
 
 def _compute_prior_predictive_multivar(

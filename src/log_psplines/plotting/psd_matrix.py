@@ -292,58 +292,6 @@ def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
         return None
 
 
-def _pack_ci_dict(
-    psd_samples,
-    show_coherence: bool,
-    show_csd_magnitude: bool = False,
-):
-    """Compute 5/50/95% bands for diag PSDs and requested cross terms."""
-    ci_dict: dict[
-        str, dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]]
-    ] = {"psd": {}, "coh": {}, "re": {}, "im": {}, "mag": {}}
-    _, _, p, _ = psd_samples.shape
-    for i in range(p):
-        for j in range(p):
-            if i == j:
-                q05 = np.percentile(psd_samples[:, :, i, i].real, 5, axis=0)
-                q50 = np.percentile(psd_samples[:, :, i, i].real, 50, axis=0)
-                q95 = np.percentile(psd_samples[:, :, i, i].real, 95, axis=0)
-                ci_dict["psd"][(i, i)] = (q05, q50, q95)
-            elif show_coherence and i > j:
-                coh = np.abs(psd_samples[:, :, i, j]) ** 2 / (
-                    np.abs(psd_samples[:, :, i, i])
-                    * np.abs(psd_samples[:, :, j, j])
-                )
-                q05 = np.percentile(coh, 5, axis=0)
-                q50 = np.percentile(coh, 50, axis=0)
-                q95 = np.percentile(coh, 95, axis=0)
-                ci_dict["coh"][(i, j)] = (q05, q50, q95)
-            elif show_csd_magnitude and i > j:
-                mag = np.abs(psd_samples[:, :, i, j])
-                q05 = np.percentile(mag, 5, axis=0)
-                q50 = np.percentile(mag, 50, axis=0)
-                q95 = np.percentile(mag, 95, axis=0)
-                ci_dict["mag"][(i, j)] = (q05, q50, q95)
-            elif not show_coherence and not show_csd_magnitude:
-                re_q05 = np.percentile(psd_samples[:, :, i, j].real, 5, axis=0)
-                re_q50 = np.percentile(
-                    psd_samples[:, :, i, j].real, 50, axis=0
-                )
-                re_q95 = np.percentile(
-                    psd_samples[:, :, i, j].real, 95, axis=0
-                )
-                im_q05 = np.percentile(psd_samples[:, :, i, j].imag, 5, axis=0)
-                im_q50 = np.percentile(
-                    psd_samples[:, :, i, j].imag, 50, axis=0
-                )
-                im_q95 = np.percentile(
-                    psd_samples[:, :, i, j].imag, 95, axis=0
-                )
-                ci_dict["re"][(i, j)] = (re_q05, re_q50, re_q95)
-                ci_dict["im"][(i, j)] = (im_q05, im_q50, im_q95)
-    return ci_dict
-
-
 def _panel_text_label(
     i: int,
     j: int,

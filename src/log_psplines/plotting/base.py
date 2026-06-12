@@ -9,8 +9,6 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..logger import logger
-
 # Color constants used across plotting modules
 COLORS = {
     "data": "#d3d3d3",  # lightgray
@@ -228,76 +226,6 @@ def _compute_uniform_ci(samples: np.ndarray, alpha: float = 0.1):
     return lower_bound, median, upper_bound
 
 
-def compute_coherence_ci(
-    psd_samples: np.ndarray,
-) -> dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]]:
-    """
-    Compute coherence confidence intervals from multivariate PSD samples.
-
-    Args:
-        psd_samples: Shape (n_samples, N, p, p)
-
-    Returns:
-        Dictionary mapping (i,j) channel pairs to (q05, q50, q95) tuples
-    """
-    ci_dict = {}
-    n_samples, N, p, _ = psd_samples.shape
-
-    for i in range(p):
-        for j in range(p):
-            if i > j:  # Only compute for upper triangle
-                coh = np.abs(psd_samples[:, :, i, j]) ** 2 / (
-                    np.abs(psd_samples[:, :, i, i])
-                    * np.abs(psd_samples[:, :, j, j])
-                )
-                q05 = np.percentile(coh, 5, axis=0)
-                q50 = np.percentile(coh, 50, axis=0)
-                q95 = np.percentile(coh, 95, axis=0)
-                ci_dict[(i, j)] = (q05, q50, q95)
-
-    return ci_dict
-
-
-def compute_cross_spectra_ci(psd_samples: np.ndarray) -> tuple[dict, dict]:
-    """
-    Compute real and imaginary parts of cross-spectra.
-
-    Args:
-        psd_samples: Shape (n_samples, N, p, p)
-
-    Returns:
-        Tuple of (real_ci_dict, imag_ci_dict)
-    """
-    real_dict = {}
-    imag_dict = {}
-    n_samples, N, p, _ = psd_samples.shape
-
-    for i in range(p):
-        for j in range(p):
-            if i != j:
-                # Real part
-                re_q05 = np.percentile(psd_samples[:, :, i, j].real, 5, axis=0)
-                re_q50 = np.percentile(
-                    psd_samples[:, :, i, j].real, 50, axis=0
-                )
-                re_q95 = np.percentile(
-                    psd_samples[:, :, i, j].real, 95, axis=0
-                )
-                real_dict[(i, j)] = (re_q05, re_q50, re_q95)
-
-                # Imaginary part
-                im_q05 = np.percentile(psd_samples[:, :, i, j].imag, 5, axis=0)
-                im_q50 = np.percentile(
-                    psd_samples[:, :, i, j].imag, 50, axis=0
-                )
-                im_q95 = np.percentile(
-                    psd_samples[:, :, i, j].imag, 95, axis=0
-                )
-                imag_dict[(i, j)] = (im_q05, im_q50, im_q95)
-
-    return real_dict, imag_dict
-
-
 def setup_plot_style(config: PlotConfig | None = None) -> PlotConfig:
     """Setup consistent matplotlib styling for plots."""
     if config is None:
@@ -320,25 +248,3 @@ def setup_plot_style(config: PlotConfig | None = None) -> PlotConfig:
     )
 
     return config
-
-
-def validate_plotting_data(data: dict[str, Any], required_keys: list) -> bool:
-    """Validate that required data is available for plotting."""
-    missing_keys = [
-        key for key in required_keys if key not in data or data[key] is None
-    ]
-    if missing_keys:
-        logger.warning(f"Missing required data for plotting: {missing_keys}")
-        return False
-    return True
-
-
-def subsample_weights(
-    weights: np.ndarray, max_samples: int = 500
-) -> np.ndarray:
-    """Subsample weights array if it's too large for efficient computation."""
-    if weights.shape[0] > max_samples:
-        rng = np.random.default_rng()
-        idx = rng.choice(weights.shape[0], size=max_samples, replace=False)
-        return weights[idx]
-    return weights

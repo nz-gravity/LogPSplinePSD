@@ -157,27 +157,6 @@ def Y_to_U(
 
 
 @runtime_typecheck
-def sum_wishart_outer_products(
-    u_stack: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
-) -> Complex[np.ndarray, ...]:
-    """Sum Wishart contributions across a stack of ``U`` matrices.
-
-    Equivalent to summing the outer products of the rows of each U matrix:
-    out[i, j] = sum_{r} sum_{k} u_stack[r, i, k] * conj(u_stack[r, j, k])
-
-    Eg:
-    [[U1], [U2], [U3]] -> U1^H @ U1 + U2^H @ U2 + U3^H @ U3
-
-    """
-
-    u_stack = np.asarray(u_stack, dtype=np.complex128)
-    if u_stack.ndim != 3:
-        raise ValueError("u_stack must have shape (n_rep, p, p)")
-
-    return np.einsum("rik,rjk->ij", u_stack, np.conj(u_stack))
-
-
-@runtime_typecheck
 def Y_to_S(
     Y: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
     Nb: int,
@@ -328,7 +307,6 @@ def psd_to_cholesky_components(
 __all__ = [
     "interp_matrix",
     "psd_to_cholesky_components",
-    "sum_wishart_outer_products",
     "u_re_im_to_U",
     "U_to_Y",
     "Y_to_U",

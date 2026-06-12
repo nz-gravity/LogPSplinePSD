@@ -8,7 +8,10 @@ import pytest
 import xarray as xr
 
 from log_psplines import make_pipeline
-from log_psplines.arviz_utils import get_psd_dataset
+from log_psplines.arviz_utils import (
+    get_multivar_vi_psd_quantiles,
+    get_psd_dataset,
+)
 from log_psplines.datatypes import MultivarFFT, MultivariateTimeseries
 from log_psplines.pipeline.config import PipelineConfig
 from log_psplines.pipeline.pipeline import (
@@ -21,6 +24,7 @@ from log_psplines.pipeline.stages import (
     FactorizedMultivarVIStage,
     StageResult,
 )
+from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -46,7 +50,7 @@ def multivar_data() -> MultivarFFT:
 
 def _fast_config(**extra) -> PipelineConfig:
     """Return a PipelineConfig tuned for speed in CI."""
-    return PipelineConfig(
+    defaults = dict(
         n_knots=4,
         n_samples=5,
         n_warmup=5,
@@ -54,8 +58,9 @@ def _fast_config(**extra) -> PipelineConfig:
         vi_steps=20,
         vi_posterior_draws=5,
         verbose=False,
-        **extra,
     )
+    defaults.update(extra)
+    return PipelineConfig(**defaults)
 
 
 def test_vi_init_values_dataset_uses_variable_specific_dims():
@@ -194,6 +199,52 @@ def test_pipeline_multivar_only_vi(multivar_data):
         vi_posterior["weights_delta_0"].sizes["draw"]
         == config.vi_posterior_draws
     )
+
+
+def test_pipeline_multivar_vi_reconstructs_and_plots_coherence(multivar_data):
+    """Small E2E VI path through ArviZ PSD quantiles and coherence plotting."""
+    import matplotlib.pyplot as plt
+
+    config = _fast_config(only_vi=True, vi_posterior_draws=8)
+    result = make_pipeline(multivar_data, config).run()
+
+    quantiles = get_multivar_vi_psd_quantiles(result.idata, n_keep=4)
+    freq = np.asarray(quantiles["freq"], dtype=float)
+    psd = np.asarray(quantiles["spectral_density"], dtype=np.complex128)
+    coherence = np.asarray(quantiles["coherence"], dtype=float)
+
+    assert psd.shape[:2] == (3, freq.size)
+    assert psd.shape[2:] == (multivar_data.p, multivar_data.p)
+    assert coherence.shape == psd.shape
+    assert np.all(np.isfinite(psd.real))
+    assert np.all(np.isfinite(psd.imag))
+    assert np.all(np.isfinite(coherence))
+    assert np.all((coherence >= 0.0) & (coherence <= 1.0))
+
+    median_idx = int(
+        np.argmin(np.abs(np.asarray(quantiles["percentile"]) - 50.0))
+    )
+    median_psd = psd[median_idx]
+    assert np.allclose(
+        median_psd,
+        np.swapaxes(median_psd.conj(), 1, 2),
+        rtol=1e-6,
+        atol=1e-8,
+    )
+
+    fig, axes = plot_psd_matrix(
+        PSDMatrixPlotSpec(
+            idata=result.idata,
+            save=False,
+            close=False,
+            show_coherence=True,
+            show_knots=True,
+            channel_labels=["x", "y"],
+        )
+    )
+    assert axes.shape == (multivar_data.p, multivar_data.p)
+    fig.canvas.draw()
+    plt.close(fig)
 
 
 # ---------------------------------------------------------------------------

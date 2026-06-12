@@ -31,6 +31,7 @@ jobs:
       contents: write
     env:
       RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      RELEASE_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
       FORCE_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.force_release && 'true' || 'false' }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
 
@@ -38,7 +39,22 @@ jobs:
       - uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
-          ref: ${{ env.RELEASE_SHA }}
+          ref: ${{ env.RELEASE_BRANCH }}
+
+      - name: Verify checked-out release commit
+        id: verify_commit
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          echo "CI-passed SHA: $RELEASE_SHA"
+          echo "Checked-out SHA: $CHECKED_OUT_SHA"
+
+          if [ "$CHECKED_OUT_SHA" != "$RELEASE_SHA" ]; then
+            echo "Branch $RELEASE_BRANCH moved after CI passed; skipping release."
+            echo "matches=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "matches=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/setup-python@v5
         with:
@@ -48,34 +64,36 @@ jobs:
         id: check_commit
         if: ${{ github.event_name == 'workflow_run' && env.FORCE_RELEASE != 'true' }}
         run: |
-          COMMIT_SHA="${{ env.RELEASE_SHA }}"
-          COMMIT_MSG=$(git log --format=%s -n 1 "$COMMIT_SHA")
-          echo "Commit message: $COMMIT_MSG"
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          RANGE=${LAST_TAG:+$LAST_TAG..}HEAD
+          echo "Scanning commits in range: $RANGE"
+          git log --format=%s "$RANGE"
 
-          if echo "$COMMIT_MSG" | grep -qE "^(feat|fix|perf)(\(.+\))?!?:"; then
-            echo "✅ Semantic commit detected"
+          if git log --format=%s "$RANGE" | grep -qE "^(feat|fix|perf)(\(.+\))?!?:"; then
+            echo "✅ Semantic commit detected since last tag"
             echo "should_release=true" >> $GITHUB_OUTPUT
           else
-            echo "ℹ️ Non-semantic commit detected - skipping release"
+            echo "ℹ️ No semantic commits since last tag - skipping release"
             echo "should_release=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Install build tooling
-        if: ${{ steps.check_commit.outputs.should_release != 'false' }}
+        if: ${{ steps.verify_commit.outputs.matches != 'false' && steps.check_commit.outputs.should_release != 'false' }}
         run: |
           python -m pip install --upgrade pip build
 
       - name: Preflight build (validate packaging)
-        if: ${{ steps.check_commit.outputs.should_release != 'false' }}
+        if: ${{ steps.verify_commit.outputs.matches != 'false' && steps.check_commit.outputs.should_release != 'false' }}
         run: |
           rm -rf dist-preflight
           python -m build --sdist --wheel --outdir dist-preflight/
 
       - name: Semantic Version Release
         id: release
-        if: ${{ steps.check_commit.outputs.should_release != 'false' }}
+        if: ${{ steps.verify_commit.outputs.matches != 'false' && steps.check_commit.outputs.should_release != 'false' }}
         uses: python-semantic-release/python-semantic-release@v9.12.0
         with:
+          root_options: ${{ env.DRY_RUN == 'true' && '-v --noop' || '-v' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           git_committer_name: "github-actions"
           git_committer_email: "actions@users.noreply.github.com"

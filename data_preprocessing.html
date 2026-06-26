@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Prior on φ: Implementation vs. Theory &#8212; LogPSplinePSD</title>
+    <title>Data and Preprocessing &#8212; LogPSplinePSD</title>
   
   
   
@@ -53,7 +53,7 @@
     <script>let toggleHintShow = 'Click to show';</script>
     <script>let toggleHintHide = 'Click to hide';</script>
     <script>let toggleOpenOnPrint = 'true';</script>
-    <script src="_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="_static/togglebutton.js?v=b8b12719"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script src="_static/design-tabs.js?v=f930bc37"></script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
@@ -62,11 +62,11 @@
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
     <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'phi_prior_approx';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'data_preprocessing';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="LVK Demo" href="studies/lvk/lvk_demo.html" />
-    <link rel="prev" title="Multivariate implementation notes" href="multivar_implementation_notes.html" />
+    <link rel="next" title="Outputs and Diagnostics" href="outputs.html" />
+    <link rel="prev" title="Configuration" href="configuration.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -163,23 +163,19 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="conventions.html">User Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="development.html">Development Guide</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="coarse_grain_mwe.html">Coarse-grain MWE (2-channel)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Blocked NUTS: Math ↔ Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Prior on φ: Implementation vs. Theory</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="studies/lvk/lvk_demo.html">Examples and Studies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
-<li class="toctree-l2"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
-</ul>
-</details></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
 </ul>
 
     </div>
@@ -256,7 +252,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fphi_prior_approx.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fdata_preprocessing.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -286,7 +282,7 @@
       
       
       
-      <li><a href="_sources/phi_prior_approx.rst" target="_blank"
+      <li><a href="_sources/data_preprocessing.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -362,7 +358,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Prior on φ: Implementation vs. Theory</h1>
+    <h1>Data and Preprocessing</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -372,10 +368,11 @@
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-hierarchical-p-spline-prior">Background: hierarchical P-spline prior</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-code-actually-samples">What the code actually samples</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-this-change-exists">Why this change exists</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-look-in-the-code">Where to look in the code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#accepted-inputs">Accepted Inputs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a></li>
 </ul>
             </nav>
         </div>
@@ -387,86 +384,89 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="prior-on-implementation-vs-theory">
-<h1>Prior on φ: Implementation vs. Theory<a class="headerlink" href="#prior-on-implementation-vs-theory" title="Link to this heading">#</a></h1>
-<p>This page explains a deliberate difference between the draft math in
-<code class="docutils literal notranslate"><span class="pre">overleaf</span></code> and the sampler implementation.</p>
-<section id="background-hierarchical-p-spline-prior">
-<h2>Background: hierarchical P-spline prior<a class="headerlink" href="#background-hierarchical-p-spline-prior" title="Link to this heading">#</a></h2>
-<p>The draft writes the spline-weight prior as (exact LaTeX from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</p>
-<div class="math notranslate nohighlight">
-\[\bold{w}_j | \phi_j \sim \mathcal{N}(\bold{0}, (\phi_j \bold{P}_j)^{-1})\]</div>
-<p>with hyperpriors (again copied verbatim):</p>
-<div class="math notranslate nohighlight">
-\[\begin{split}\phi_j | \delta_j \sim \text{Gamma}(\alpha_\phi, \delta_j \beta_\phi)
-\\
-\delta_j \sim \text{Gamma}(\alpha_\delta, \beta_\delta)\end{split}\]</div>
-<p>In the implementation (NumPyro), we interpret these Gamma distributions using
-the <em>rate</em> parameterisation.</p>
-</section>
-<section id="what-the-code-actually-samples">
-<h2>What the code actually samples<a class="headerlink" href="#what-the-code-actually-samples" title="Link to this heading">#</a></h2>
-<p>The sampler utility <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>
-keeps the same <em>intended</em> hierarchical structure but changes the sampling
-parameterisation for <span class="math notranslate nohighlight">\(\phi\)</span>:</p>
-<ul class="simple">
-<li><p>it samples <span class="math notranslate nohighlight">\(\delta \sim \mathrm{Gamma}(\alpha_\delta, \beta_\delta)\)</span> as
-written;</p></li>
-<li><p>it does <strong>not</strong> sample <span class="math notranslate nohighlight">\(\phi\mid\delta\)</span> from a Gamma directly;</p></li>
-<li><p>instead it samples <span class="math notranslate nohighlight">\(\log \phi\)</span> from a Normal distribution chosen to
-<em>moment-match</em> the Gamma.</p></li>
-</ul>
-<p>Concretely, for</p>
-<div class="math notranslate nohighlight">
-\[\phi\mid\delta \sim \mathrm{Gamma}(\alpha_\phi, \mathrm{rate}=\beta_\phi\,\delta),\]</div>
-<p>the mean and variance are</p>
-<div class="math notranslate nohighlight">
-\[\mathbb{E}[\phi\mid\delta] = \frac{\alpha_\phi}{\beta_\phi\,\delta},
-\qquad
-\mathrm{Var}[\phi\mid\delta] = \frac{\alpha_\phi}{(\beta_\phi\,\delta)^2}.\]</div>
-<p>The code constructs a log-normal approximation</p>
-<div class="math notranslate nohighlight">
-\[\log \phi\mid\delta \sim \mathcal{N}(\mu, \sigma^2)\]</div>
-<p>with</p>
-<div class="math notranslate nohighlight">
-\[\sigma^2 = \log\Big(1 + \frac{1}{\alpha_\phi}\Big),
-\qquad
-\mu = \log\Big(\frac{\alpha_\phi}{\beta_\phi\,\delta}\Big) - \frac{\sigma^2}{2}.\]</div>
-<p>This exactly matches the formulas in
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>.</p>
-</section>
-<section id="why-this-change-exists">
-<h2>Why this change exists<a class="headerlink" href="#why-this-change-exists" title="Link to this heading">#</a></h2>
-<p>Sampling <span class="math notranslate nohighlight">\(\phi\)</span> directly under the Gamma prior frequently produces a
-“funnel” geometry once <span class="math notranslate nohighlight">\(\phi\)</span> interacts with the Gaussian spline weights.
-That geometry can make NUTS initialization and adaptation brittle.</p>
-<p>Sampling <span class="math notranslate nohighlight">\(\log\phi\)</span> under a moment-matched Normal has two practical
-benefits:</p>
-<ul class="simple">
-<li><p>it reduces extreme curvature in the posterior geometry,</p></li>
-<li><p>it tends to improve VI-based initialization and NUTS warmup stability.</p></li>
-</ul>
-<p>Importantly, this is <strong>not</strong> the same distribution as the Gamma prior. The two
-match the first two moments of <span class="math notranslate nohighlight">\(\phi\mid\delta\)</span>, but tails differ.</p>
-</section>
-<section id="where-to-look-in-the-code">
-<h2>Where to look in the code<a class="headerlink" href="#where-to-look-in-the-code" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><dl class="simple">
-<dt>Implementation: <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.samplers.utils.sample_pspline_block()</span></code>.</dt><dd><p>Source: <a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/utils.py#L46-L103">src/log_psplines/samplers/utils.py#sample_pspline_block</a></p>
+  <section id="data-and-preprocessing">
+<h1>Data and Preprocessing<a class="headerlink" href="#data-and-preprocessing" title="Link to this heading">#</a></h1>
+<section id="accepted-inputs">
+<h2>Accepted Inputs<a class="headerlink" href="#accepted-inputs" title="Link to this heading">#</a></h2>
+<p>The high-level pipeline accepts either time-domain data or precomputed
+frequency-domain statistics.</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">MultivariateTimeseries</span></code></dt><dd><p>Time-domain samples with shape <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">p)</span></code>. A one-dimensional input is
+promoted to <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">1)</span></code>. The sampling frequency is inferred from <code class="docutils literal notranslate"><span class="pre">t</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">MultivarFFT</span></code></dt><dd><p>Frequency-domain Wishart sufficient statistics. Use this when you need
+explicit control over FFT construction before calling the pipeline.</p>
 </dd>
 </dl>
-</li>
-<li><p>Usage:</p>
-<ul>
-<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.univar.nuts</span></code></p></li>
-<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts</span></code></p></li>
-</ul>
-</li>
-</ul>
-<p>If you want the docs to reflect the implementation, you can interpret the
-written Gamma prior for <span class="math notranslate nohighlight">\(\phi\mid\delta\)</span> as an <em>idealised target</em>, and the
-code as using a numerically friendlier, moment-matched approximation.</p>
+</section>
+<section id="time-domain-container">
+<h2>Time-Domain Container<a class="headerlink" href="#time-domain-container" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.datatypes</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultivariateTimeseries</span>
+
+<span class="n">fs</span> <span class="o">=</span> <span class="mf">64.0</span>
+<span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">512</span><span class="p">)</span> <span class="o">/</span> <span class="n">fs</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="mf">4.0</span> <span class="o">*</span> <span class="n">t</span><span class="p">),</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="mf">8.0</span> <span class="o">*</span> <span class="n">t</span><span class="p">),</span>
+<span class="p">])</span>
+
+<span class="n">ts</span> <span class="o">=</span> <span class="n">MultivariateTimeseries</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For PSD estimation, standardising at the boundary is often helpful:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">ts_std</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">standardise_for_psd</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The original channel standard deviations are carried through so exported PSDs
+can be rescaled back to physical units.</p>
+</section>
+<section id="wishart-statistics">
+<h2>Wishart Statistics<a class="headerlink" href="#wishart-statistics" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">MultivariateTimeseries.to_wishart_stats</span></code> and
+<code class="docutils literal notranslate"><span class="pre">MultivarFFT.compute_wishart</span></code> split the data into <code class="docutils literal notranslate"><span class="pre">Nb</span></code> contiguous blocks,
+apply optional detrending and tapering, compute one-sided FFTs, drop DC, and
+store a factor <code class="docutils literal notranslate"><span class="pre">U</span></code> such that</p>
+<div class="math notranslate nohighlight">
+\[Y(f_k) = U(f_k) U(f_k)^H.\]</div>
+<p>The pipeline uses <code class="docutils literal notranslate"><span class="pre">Y(f_k)</span></code> as the multivariate Whittle/Wishart sufficient
+statistic.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">fft</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">standardise_for_psd</span><span class="p">()</span><span class="o">.</span><span class="n">to_wishart_stats</span><span class="p">(</span>
+    <span class="n">Nb</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="n">fmin</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">fmax</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span>
+    <span class="n">window</span><span class="o">=</span><span class="s2">&quot;hann&quot;</span><span class="p">,</span>
+    <span class="n">detrend</span><span class="o">=</span><span class="s2">&quot;constant&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="frequency-selection">
+<h2>Frequency Selection<a class="headerlink" href="#frequency-selection" title="Link to this heading">#</a></h2>
+<p>Frequency selection is applied in this order:</p>
+<ol class="arabic simple">
+<li><p>Convert time-domain data to the positive <code class="docutils literal notranslate"><span class="pre">rfft</span></code> grid.</p></li>
+<li><p>Drop the DC bin.</p></li>
+<li><p>Apply <code class="docutils literal notranslate"><span class="pre">fmin</span></code> and <code class="docutils literal notranslate"><span class="pre">fmax</span></code> if provided.</p></li>
+<li><p>Remove any <code class="docutils literal notranslate"><span class="pre">exclude_freq_bands</span></code>.</p></li>
+<li><p>Optionally coarse grain the retained grid.</p></li>
+</ol>
+</section>
+<section id="coarse-graining">
+<h2>Coarse Graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
+<p>Coarse graining sums neighbouring Wishart matrices into equal-size consecutive
+frequency bins. It is useful when the frequency grid is much denser than the
+spectral structure being estimated.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.pipeline.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.preprocessing.coarse_grain</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoarseGrainConfig</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">PipelineConfig</span><span class="p">(</span>
+    <span class="n">coarse_grain_config</span><span class="o">=</span><span class="n">CoarseGrainConfig</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">Nc</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">Nh</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="coarse_grain.html"><span class="doc">Coarse-Graining</span></a> for the mathematical details and implementation
+constraints.</p>
 </section>
 </section>
 
@@ -501,20 +501,20 @@ code as using a numerically friendlier, moment-matched approximation.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="multivar_implementation_notes.html"
+       href="configuration.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Multivariate implementation notes</p>
+        <p class="prev-next-title">Configuration</p>
       </div>
     </a>
     <a class="right-next"
-       href="studies/lvk/lvk_demo.html"
+       href="outputs.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">LVK Demo</p>
+        <p class="prev-next-title">Outputs and Diagnostics</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -536,10 +536,11 @@ code as using a numerically friendlier, moment-matched approximation.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-hierarchical-p-spline-prior">Background: hierarchical P-spline prior</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-code-actually-samples">What the code actually samples</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-this-change-exists">Why this change exists</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-look-in-the-code">Where to look in the code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#accepted-inputs">Accepted Inputs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a></li>
 </ul>
   </nav></div>
 

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Coarse-Graining &#8212; LogPSplinePSD</title>
+    <title>Soft Shrinkage Toward a Design PSD &#8212; LogPSplinePSD</title>
   
   
   
@@ -60,13 +60,11 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'coarse_grain';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'design_shrinkage';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Multivariate Factorised Likelihood: Math to Code" href="multivar_blocked_nuts.html" />
-    <link rel="prev" title="Conventions" href="conventions.html" />
+    <link rel="next" title="API Reference" href="api.html" />
+    <link rel="prev" title="Multivariate Factorised Likelihood: Math to Code" href="multivar_blocked_nuts.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -169,9 +167,9 @@
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Coarse-Graining</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Soft Shrinkage Toward a Design PSD</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
@@ -252,7 +250,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fcoarse_grain.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fdesign_shrinkage.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -282,7 +280,7 @@
       
       
       
-      <li><a href="_sources/coarse_grain.rst" target="_blank"
+      <li><a href="_sources/design_shrinkage.md" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -292,7 +290,7 @@
 <span class="btn__icon-container">
   <i class="fas fa-file"></i>
   </span>
-<span class="btn__text-container">.rst</span>
+<span class="btn__text-container">.md</span>
 </a>
 </li>
       
@@ -358,7 +356,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Coarse-Graining</h1>
+    <h1>Soft Shrinkage Toward a Design PSD</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -368,9 +366,13 @@
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-bins">Frequency bins</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#aggregating-fft-data">Aggregating FFT data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#likelihood-scaling">Likelihood scaling</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#parameters">Parameters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#backward-compatibility">Backward Compatibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage">Usage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-to-use">When to Use</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#empirical-results">Empirical Results</a></li>
 </ul>
             </nav>
         </div>
@@ -382,77 +384,130 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="coarse-graining">
-<h1>Coarse-Graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h1>
-<p>The multivariate PSD pipeline optionally groups nearby Fourier frequencies into
-coarse bins so that each bin contributes a single aggregated Wishart statistic.
-This documents the design of that discretization and shows how the implementation
-realizes the theoretical approximations stated in the repository.</p>
-<section id="frequency-bins">
-<h2>Frequency bins<a class="headerlink" href="#frequency-bins" title="Link to this heading">#</a></h2>
-<p>The retained fine-frequency grid <span class="math notranslate nohighlight">\(\{f_1,\dots,f_{N_\ell}\}\subset[f_{\min},f_{\max}]\)</span>
-is coarse-grained by dividing it into consecutive, disjoint subsets
-<span class="math notranslate nohighlight">\(J_h\)</span>. Each <span class="math notranslate nohighlight">\(J_h\)</span> contains <span class="math notranslate nohighlight">\(N_h\)</span> Fourier frequencies, and
-<span class="math notranslate nohighlight">\(\bar f_h\)</span> denotes the midpoint Fourier frequency of <span class="math notranslate nohighlight">\(J_h\)</span>. For
-even <span class="math notranslate nohighlight">\(N_h\)</span>, the implementation uses the lower-middle member of the
-discrete Fourier grid.</p>
-<p>The band limits <span class="math notranslate nohighlight">\([f_{\min}, f_{\max}]\)</span> are chosen upstream via
-<code class="docutils literal notranslate"><span class="pre">model.fmin</span></code>/<code class="docutils literal notranslate"><span class="pre">model.fmax</span></code>. Coarse-grain configuration controls only binning
-(<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p>
-<p>The binning logic is implemented by
-<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.compute_binning_structure" title="log_psplines.preprocessing.coarse_grain.compute_binning_structure"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.compute_binning_structure()</span></code></a>, which
-returns <a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code></a>. Only
-linear, full-band binning is supported. Exactly one construction mode must be
-chosen:</p>
+  <section class="tex2jax_ignore mathjax_ignore" id="soft-shrinkage-toward-a-design-psd">
+<h1>Soft Shrinkage Toward a Design PSD<a class="headerlink" href="#soft-shrinkage-toward-a-design-psd" title="Link to this heading">#</a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>By default the multivariate P-spline model shrinks all spline weights toward <strong>zero</strong>, which corresponds to a flat log-PSD prior. When a physics-based reference (design) PSD is available — for example the LISA instrument noise model — you can instead shrink the posterior toward that design. This typically reduces bias and tightens credible intervals in the low-SNR regime where the data alone are weakly informative.</p>
+</section>
+<section id="method">
+<h2>Method<a class="headerlink" href="#method" title="Link to this heading">#</a></h2>
+<p>The model parameterises each Cholesky component (diagonal log-variance <code class="docutils literal notranslate"><span class="pre">delta_j</span></code> and off-diagonal coupling <code class="docutils literal notranslate"><span class="pre">theta_{j,l}</span></code>) as a P-spline:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">component</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="o">=</span> <span class="n">B</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="o">@</span> <span class="n">w</span>
+</pre></div>
+</div>
+<p>The standard smoothness penalty is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>log p(w | phi) ∝ (k/2) log(phi) - (phi/2) w^T P w
+</pre></div>
+</div>
+<p>where <code class="docutils literal notranslate"><span class="pre">P</span></code> is the second-difference penalty matrix and <code class="docutils literal notranslate"><span class="pre">k</span> <span class="pre">=</span> <span class="pre">rank(P)</span></code>.</p>
+<p>With design shrinkage the penalty is shifted so that deviations from the <strong>design weight</strong> <code class="docutils literal notranslate"><span class="pre">w_design</span></code> are penalised instead of deviations from zero:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>residual = w - w_design
+log p(w | phi) ∝ (k/2) log(phi) - (phi/2) residual^T P residual
+</pre></div>
+</div>
+<p>An optional isotropic level-shrinkage term (scale <code class="docutils literal notranslate"><span class="pre">tau</span></code>) can be added to penalise the overall level of the residual:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>log p(w | phi, tau) ∝ (k/2) log(phi) - (phi/2) residual^T P residual
+                     - (1 / 2 tau^2) sum(residual^2)
+</pre></div>
+</div>
+<p>The design weights <code class="docutils literal notranslate"><span class="pre">w_design</span></code> are obtained by fitting P-spline coefficients to the Cholesky decomposition of the supplied design PSD matrix. Specifically, given the design matrix <code class="docutils literal notranslate"><span class="pre">S</span></code> at model frequencies:</p>
+<ol class="arabic simple">
+<li><p>Compute the Cholesky factor: <code class="docutils literal notranslate"><span class="pre">S</span> <span class="pre">=</span> <span class="pre">L</span> <span class="pre">L^H</span></code></p></li>
+<li><p>Extract diagonal targets: <code class="docutils literal notranslate"><span class="pre">log_delta_sq_j</span> <span class="pre">=</span> <span class="pre">2</span> <span class="pre">log</span> <span class="pre">|L[f,</span> <span class="pre">j,</span> <span class="pre">j]|</span></code></p></li>
+<li><p>Form the unit lower-triangular factor: <code class="docutils literal notranslate"><span class="pre">T_inv</span> <span class="pre">=</span> <span class="pre">L</span> <span class="pre">/</span> <span class="pre">diag(L)</span></code>, then <code class="docutils literal notranslate"><span class="pre">T</span> <span class="pre">=</span> <span class="pre">T_inv^{-1}</span></code></p></li>
+<li><p>Extract off-diagonal targets: <code class="docutils literal notranslate"><span class="pre">theta_{j,l}</span> <span class="pre">=</span> <span class="pre">-T[f,</span> <span class="pre">j,</span> <span class="pre">l]</span></code> for <code class="docutils literal notranslate"><span class="pre">j</span> <span class="pre">&gt;</span> <span class="pre">l</span></code></p></li>
+<li><p>Fit spline weights to each target curve via gradient descent (<code class="docutils literal notranslate"><span class="pre">init_weights</span></code>)</p></li>
+</ol>
+</section>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_psd</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">np.ndarray</span></code> or <code class="docutils literal notranslate"><span class="pre">(freqs,</span> <span class="pre">psd)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Reference PSD at model frequencies (shape <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">p,</span> <span class="pre">p)</span></code>, complex Hermitian), or a <code class="docutils literal notranslate"><span class="pre">(freqs_hz,</span> <span class="pre">psd_array)</span></code> tuple which is interpolated to the model grid. Units must match the <strong>original</strong> (pre-standardisation) data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tau</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Scale of the isotropic level-shrinkage term. Larger values → weaker shrinkage. <code class="docutils literal notranslate"><span class="pre">None</span></code> disables the L2 term entirely.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="backward-compatibility">
+<h2>Backward Compatibility<a class="headerlink" href="#backward-compatibility" title="Link to this heading">#</a></h2>
+<p>Both parameters default to <code class="docutils literal notranslate"><span class="pre">None</span></code>. When <code class="docutils literal notranslate"><span class="pre">design_psd=None</span></code> the behaviour is <strong>identical</strong> to the standard model: <code class="docutils literal notranslate"><span class="pre">residual</span> <span class="pre">=</span> <span class="pre">w</span></code>, tau term absent. No existing call site needs to change.</p>
+</section>
+<section id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_mcmc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># true_psd: (N, p, p) complex array at FFT frequencies, original units</span>
+<span class="c1"># freqs_hz: (N,) frequency array matching true_psd rows</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">run_mcmc</span><span class="p">(</span>
+    <span class="n">timeseries</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+    <span class="n">sampler</span><span class="o">=</span><span class="s2">&quot;multivar_blocked_nuts&quot;</span><span class="p">,</span>
+    <span class="n">n_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">n_samples</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">n_warmup</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">design_psd</span><span class="o">=</span><span class="p">(</span><span class="n">freqs_hz</span><span class="p">,</span> <span class="n">true_psd</span><span class="p">),</span>   <span class="c1"># (freqs, psd) tuple → auto-interpolated</span>
+    <span class="n">tau</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>                            <span class="c1"># level-shrinkage scale; None = off</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="when-to-use">
+<h2>When to Use<a class="headerlink" href="#when-to-use" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">Nh</span></code>: fixed membership with equal-size bins that divide the retained
-frequency count exactly.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Nc</span></code>: fixed bin count. If the retained count is not divisible by <code class="docutils literal notranslate"><span class="pre">Nc</span></code>,
-trailing frequencies are trimmed so bins are equal sized.</p></li>
-</ul>
-<p>The spec stores</p>
-<ul class="simple">
-<li><p>midpoint frequencies,</p></li>
-<li><p>start and midpoint indices for each contiguous bin,</p></li>
-<li><p>the constant member count <span class="math notranslate nohighlight">\(N_h\)</span>, and</p></li>
-<li><p>the number of coarse bins <span class="math notranslate nohighlight">\(N_c\)</span>.</p></li>
+<li><p><strong>Known instrument noise floor</strong> (e.g. LISA, ground-based detectors): supply the analytical noise PSD as <code class="docutils literal notranslate"><span class="pre">design_psd</span></code>.</p></li>
+<li><p><strong>Low SNR / short data segments</strong>: the design PSD acts as an informative prior, preventing the spline from fitting noise fluctuations.</p></li>
+<li><p><strong>Sensitivity analysis</strong>: run with <code class="docutils literal notranslate"><span class="pre">design_psd</span></code> set to different reference models and compare posteriors.</p></li>
 </ul>
 </section>
-<section id="aggregating-fft-data">
-<h2>Aggregating FFT data<a class="headerlink" href="#aggregating-fft-data" title="Link to this heading">#</a></h2>
-<p><a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code></a>
-takes the <a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT" title="log_psplines.datatypes.multivar.MultivarFFT"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code></a> and
-<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code></a> and builds the
-coarse representation used during sampling. The frequencies are
-grouped by bin across the <strong>entire</strong> retained band. Within each <span class="math notranslate nohighlight">\(J_h\)</span>, the
-individual Wishart matrices
-<span class="math notranslate nohighlight">\(\mathbf{Y}(f)=\mathbf{U}(f)\mathbf{U}(f)^H\)</span> are summed to form
-<span class="math notranslate nohighlight">\(\bar{\mathbf{Y}}_h = \sum_{f\in J_h}\mathbf{Y}(f)\)</span>, and the sum is
-re-factorized to obtain a single <span class="math notranslate nohighlight">\(\bar{\mathbf{U}}_h\)</span> per bin. The helper
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar_utils.Y_to_U()</span></code> performs the eigensystem
-factorisation used by this step.</p>
-<p>The returned <a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT" title="log_psplines.datatypes.multivar.MultivarFFT"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code></a> has
-<code class="docutils literal notranslate"><span class="pre">len(spec.f_coarse)</span></code> frequencies and stores the constant bin size on
-<code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>.</p>
-</section>
-<section id="likelihood-scaling">
-<h2>Likelihood scaling<a class="headerlink" href="#likelihood-scaling" title="Link to this heading">#</a></h2>
-<p>The scalar <span class="math notranslate nohighlight">\(N_h\)</span> scales <strong>only</strong> the log-determinant term so that each bin behaves like
-a Wishart observation with <span class="math notranslate nohighlight">\(N_b N_h\)</span> degrees of freedom:</p>
-<div class="math notranslate nohighlight">
-\[\log \mathcal{L}
-\;\propto\;
-- \sum_{h=1}^{N_c} N_b N_h \log \left|\mathbf{S}(\bar f_h)\right|
-- \sum_{h=1}^{N_c} \frac{1}{T}\,\mathrm{tr}\!\left[\mathbf{S}(\bar f_h)^{-1}\,\bar{\mathbf{Y}}_h\right].\]</div>
-<p>When coarse graining is enabled, the pipeline model reads <code class="docutils literal notranslate"><span class="pre">Nh</span></code> from
-<code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>. The NumPyro model
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.pipeline.models._blocked_channel_model()</span></code> multiplies the
-summed <code class="docutils literal notranslate"><span class="pre">log_delta_sq</span></code> term by <code class="docutils literal notranslate"><span class="pre">Nh</span></code>, ensuring the total log-det term matches
-the aggregated <span class="math notranslate nohighlight">\(N_b N_h\)</span> degrees of freedom. The trace term uses the
-summed statistic <span class="math notranslate nohighlight">\(\bar{\mathbf{Y}}_h\)</span> directly, so no additional
-<span class="math notranslate nohighlight">\(N_h\)</span> factor appears there.</p>
-<p>No log-binning, hybrid schemes, or “preserve low frequencies” modes are
-implemented.</p>
+<section id="empirical-results">
+<h2>Empirical Results<a class="headerlink" href="#empirical-results" title="Link to this heading">#</a></h2>
+<p>On a 3-channel VAR(2) simulation (n = 512, 5 knots):</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Metric</p></th>
+<th class="head"><p>No design</p></th>
+<th class="head"><p>With design</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>RIAE</p></td>
+<td><p>0.270</p></td>
+<td><p>0.214</p></td>
+</tr>
+<tr class="row-odd"><td><p>CI coverage</p></td>
+<td><p>0.458</p></td>
+<td><p>0.589</p></td>
+</tr>
+<tr class="row-even"><td><p>Diag CI width</p></td>
+<td><p>0.248</p></td>
+<td><p>0.147</p></td>
+</tr>
+<tr class="row-odd"><td><p>Off-diag CI width</p></td>
+<td><p>0.168</p></td>
+<td><p>0.123</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Supplying the true PSD as the design reduced estimation error by ~20% and improved coverage from 46% to 59% compared to the uninformative (zero-centred) prior.</p>
 </section>
 </section>
 
@@ -487,20 +542,20 @@ implemented.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="conventions.html"
+       href="multivar_blocked_nuts.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Conventions</p>
+        <p class="prev-next-title">Multivariate Factorised Likelihood: Math to Code</p>
       </div>
     </a>
     <a class="right-next"
-       href="multivar_blocked_nuts.html"
+       href="api.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Multivariate Factorised Likelihood: Math to Code</p>
+        <p class="prev-next-title">API Reference</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -522,9 +577,13 @@ implemented.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-bins">Frequency bins</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#aggregating-fft-data">Aggregating FFT data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#likelihood-scaling">Likelihood scaling</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#parameters">Parameters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#backward-compatibility">Backward Compatibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage">Usage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-to-use">When to Use</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#empirical-results">Empirical Results</a></li>
 </ul>
   </nav></div>
 

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Multivariate implementation notes &#8212; LogPSplinePSD</title>
+    <title>Outputs and Diagnostics &#8212; LogPSplinePSD</title>
   
   
   
@@ -53,20 +53,18 @@
     <script>let toggleHintShow = 'Click to show';</script>
     <script>let toggleHintHide = 'Click to hide';</script>
     <script>let toggleOpenOnPrint = 'true';</script>
-    <script src="_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="_static/togglebutton.js?v=b8b12719"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script src="_static/design-tabs.js?v=f930bc37"></script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'multivar_implementation_notes';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'outputs';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Prior on φ: Implementation vs. Theory" href="phi_prior_approx.html" />
-    <link rel="prev" title="Multivariate Blocked NUTS: Math ↔ Code" href="multivar_blocked_nuts.html" />
+    <link rel="next" title="Technical Notes" href="technical_notes.html" />
+    <link rel="prev" title="Data and Preprocessing" href="data_preprocessing.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -163,23 +161,19 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Outputs and Diagnostics</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="conventions.html">User Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="development.html">Development Guide</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="coarse_grain_mwe.html">Coarse-grain MWE (2-channel)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Blocked NUTS: Math ↔ Code</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Multivariate implementation notes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="studies/lvk/lvk_demo.html">Examples and Studies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
-<li class="toctree-l2"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
-</ul>
-</details></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
 </ul>
 
     </div>
@@ -256,7 +250,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivar_implementation_notes.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Foutputs.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -286,7 +280,7 @@
       
       
       
-      <li><a href="_sources/multivar_implementation_notes.rst" target="_blank"
+      <li><a href="_sources/outputs.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -362,7 +356,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Multivariate implementation notes</h1>
+    <h1>Outputs and Diagnostics</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -372,11 +366,11 @@
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-scalar-nh">Coarse graining: scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#observed-data-wishart-based">Observed data (Wishart-based)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#return-value">Return Value</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#saved-files">Saved Files</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-results">Loading Results</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#extracting-psd-summaries">Extracting PSD Summaries</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-checklist">Diagnostics Checklist</a></li>
 </ul>
             </nav>
         </div>
@@ -388,93 +382,82 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="multivariate-implementation-notes">
-<h1>Multivariate implementation notes<a class="headerlink" href="#multivariate-implementation-notes" title="Link to this heading">#</a></h1>
-<p>This page collects implementation-level notes that are easy to forget when
-reading the multivariate derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>.</p>
-<section id="fft-psd-normalisation">
-<h2>FFT / PSD normalisation<a class="headerlink" href="#fft-psd-normalisation" title="Link to this heading">#</a></h2>
-<p>The derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> defines a DFT with an explicit
-<span class="math notranslate nohighlight">\(\Delta_t\)</span> factor and writes the Whittle likelihood with a <span class="math notranslate nohighlight">\(1/T\)</span>
-scaling.</p>
-<p>For convenient cross-referencing, here is the exact LaTeX for the frequency
-resolution and DFT definition from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>:</p>
-<div class="math notranslate nohighlight">
-\[\Delta_f = \frac{1}{n \Delta_t} = \frac{1}{T}\, .\]</div>
-<div class="math notranslate nohighlight">
-\[\d(f_k) = \Delta_t\sum_{t=1}^{n} \Z_t\exp \left(-2\pi i \frac{k}{n} t \right)\, .\]</div>
-<p>The implementation uses a one-sided Welch-style normalisation inside
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT.compute_wishart()</span></code>.
-Source: <a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L165-L298">src/log_psplines/datatypes/multivar.py#MultivarFFT.compute_wishart</a></p>
-<p>Practical consequences:</p>
-<ul class="simple">
-<li><p>the DC bin is dropped (numerical stability on log axes and to avoid leakage
-dominating the first bin);</p></li>
-<li><p>the rFFT produces the positive-frequency grid; the normalisation ensures that
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils.Y_to_S()</span></code> produces spectra in
-one-sided “per Hz” units;</p></li>
-<li><p>the Whittle observation-duration factor <span class="math notranslate nohighlight">\(T\)</span> is tracked explicitly as
-<code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code> (seconds per time-domain block) and enters the
-multivariate likelihood via an explicit <span class="math notranslate nohighlight">\(1/T\)</span> in the quadratic term.
-PSD conversions therefore divide by <code class="docutils literal notranslate"><span class="pre">duration</span></code> to preserve the same PSD
-convention across diagnostics/plotting.</p></li>
-</ul>
+  <section id="outputs-and-diagnostics">
+<h1>Outputs and Diagnostics<a class="headerlink" href="#outputs-and-diagnostics" title="Link to this heading">#</a></h1>
+<section id="return-value">
+<h2>Return Value<a class="headerlink" href="#return-value" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">run_mcmc</span></code> returns an <code class="docutils literal notranslate"><span class="pre">xarray.DataTree</span></code>. Important groups include:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">posterior</span></code></dt><dd><p>NUTS posterior samples for spline weights and model parameters.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">sample_stats</span></code></dt><dd><p>Per-channel sampler diagnostics such as acceptance rate, step size, tree
+depth, and log probability.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">observed_data</span></code></dt><dd><p>Frequency grid and empirical PSD-like data derived from the Wishart
+statistics.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">vi_posterior</span></code> and <code class="docutils literal notranslate"><span class="pre">vi_sample_stats</span></code></dt><dd><p>VI draws, losses, and warm-start diagnostics when VI is enabled.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">prior_predictive</span></code> and <code class="docutils literal notranslate"><span class="pre">posterior_predictive</span></code></dt><dd><p>Reconstructed spectral quantities used by plotting and diagnostics when
+available.</p>
+</dd>
+</dl>
 </section>
-<section id="coarse-graining-scalar-nh">
-<h2>Coarse graining: scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code><a class="headerlink" href="#coarse-graining-scalar-nh" title="Link to this heading">#</a></h2>
-<p>When coarse graining multivariate data, the coarse-bin membership is carried as
-the scalar <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>. This scalar is used directly to scale the
-log-determinant term in the NumPyro likelihood, so each bin has effective DOF
-<span class="math notranslate nohighlight">\(N_b N_h\)</span>. There is no separate per-bin weighting vector.
-Frequency-band selection is handled upstream via <code class="docutils literal notranslate"><span class="pre">model.fmin</span></code>/<code class="docutils literal notranslate"><span class="pre">model.fmax</span></code>
-rather than via coarse-grain config fields.</p>
-<p>See:</p>
-<ul class="simple">
-<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_base.MultivarBaseSampler</span></code></p></li>
-<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.multivar.apply_coarse_grain_multivar_fft()</span></code>
-(<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138">source</a>)</p></li>
-</ul>
+<section id="saved-files">
+<h2>Saved Files<a class="headerlink" href="#saved-files" title="Link to this heading">#</a></h2>
+<p>When <code class="docutils literal notranslate"><span class="pre">PipelineConfig(outdir=...)</span></code> is set, the pipeline writes:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">inference_data.nc</span></code></dt><dd><p>NetCDF serialisation of the returned <code class="docutils literal notranslate"><span class="pre">DataTree</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">posterior_predictive.png</span></code></dt><dd><p>PSD matrix summary plot.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">diagnostics/vi_summary.csv</span></code></dt><dd><p>VI convergence and loss summary.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">diagnostics/nuts_summary.csv</span></code></dt><dd><p>NUTS diagnostics and, when a truth PSD is supplied, error metrics.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">diagnostics/vi_loss.png</span></code></dt><dd><p>VI loss trace.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">diagnostics/traces.png</span></code> and <code class="docutils literal notranslate"><span class="pre">diagnostics/energy.png</span></code></dt><dd><p>Standard MCMC trace and energy diagnostics.</p>
+</dd>
+</dl>
+<p>Some files are conditional. For example, preprocessing eigenvalue plots are
+written for multivariate frequency-domain inputs when an output directory is
+available.</p>
 </section>
-<section id="blocked-vs-unified-multivariate-nuts">
-<h2>Blocked vs unified multivariate NUTS<a class="headerlink" href="#blocked-vs-unified-multivariate-nuts" title="Link to this heading">#</a></h2>
-<p>The repository currently contains a single multivariate NUTS implementation:</p>
-<ul class="simple">
-<li><p>Blocked sampler:
-<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler</span></code></p>
-<ul>
-<li><p>fits each Cholesky row as an independent NUTS problem,</p></li>
-<li><p>samples distinct spline-weight blocks for each off-diagonal
-<span class="math notranslate nohighlight">\(\theta_{jl}(f)\)</span> within a row.</p></li>
-</ul>
-</li>
-</ul>
-<p>If you are looking for a “unified” (all-parameters-joint) multivariate NUTS
-sampler, it is not currently implemented in <code class="docutils literal notranslate"><span class="pre">src/log_psplines/</span></code>. The blocked
-sampler is the reference implementation for the multivariate model described in
-the technical notes.</p>
+<section id="loading-results">
+<h2>Loading Results<a class="headerlink" href="#loading-results" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.arviz_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">open_inference_data</span>
+
+<span class="n">idata</span> <span class="o">=</span> <span class="n">open_inference_data</span><span class="p">(</span><span class="s2">&quot;runs/example/inference_data.nc&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
 </section>
-<section id="diagnostics-coarse-bin-likelihood-equivalence">
-<h2>Diagnostics: coarse-bin likelihood equivalence<a class="headerlink" href="#diagnostics-coarse-bin-likelihood-equivalence" title="Link to this heading">#</a></h2>
-<p>The helper <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.diagnostics.coarse_grain_checks.coarse_bin_likelihood_equivalence_check()</span></code>
-(<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/diagnostics/coarse_grain_checks.py#L383-L460">source</a>)
-tests the key coarse-graining invariant:</p>
-<ul class="simple">
-<li><p>sum of fine-grid log-likelihood contributions within a bin should match the
-coarse-bin log-likelihood (up to bin-constant offsets),</p></li>
-<li><p>there should be no “extra” factor of <span class="math notranslate nohighlight">\(N_h\)</span> introduced in the quadratic
-term.</p></li>
-</ul>
-<p>This is useful when changing coarse-grain logic or the frequency weighting
-convention.</p>
+<section id="extracting-psd-summaries">
+<h2>Extracting PSD Summaries<a class="headerlink" href="#extracting-psd-summaries" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.arviz_utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">get_multivar_posterior_psd_quantiles</span><span class="p">,</span>
+    <span class="n">get_psd_dataset</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">psd_draws</span> <span class="o">=</span> <span class="n">get_psd_dataset</span><span class="p">(</span><span class="n">idata</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;posterior&quot;</span><span class="p">)</span>
+<span class="n">q</span> <span class="o">=</span> <span class="n">get_multivar_posterior_psd_quantiles</span><span class="p">(</span><span class="n">idata</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">get_psd_dataset</span></code> returns posterior draws when available. Quantile helpers
+return compact arrays suitable for plotting and reporting.</p>
 </section>
-<section id="observed-data-wishart-based">
-<h2>Observed data (Wishart-based)<a class="headerlink" href="#observed-data-wishart-based" title="Link to this heading">#</a></h2>
-<p>The multivariate pipeline now treats Wishart statistics as the sole observed
-data for inference and diagnostics. ArviZ exports store only the complex
-periodogram (<code class="docutils literal notranslate"><span class="pre">observed_data.periodogram</span></code>) derived from <code class="docutils literal notranslate"><span class="pre">u_re/u_im</span></code> or
-<code class="docutils literal notranslate"><span class="pre">raw_psd</span></code>; mean FFT components (<code class="docutils literal notranslate"><span class="pre">fft_re/fft_im</span></code>) are no longer retained.
-This keeps diagnostics aligned with the likelihood, which is written in terms
-of <span class="math notranslate nohighlight">\(Y(f)=U(f)U(f)^\ast\)</span> and its coarse-grained sum <span class="math notranslate nohighlight">\(\bar{Y}_h\)</span>.</p>
+<section id="diagnostics-checklist">
+<h2>Diagnostics Checklist<a class="headerlink" href="#diagnostics-checklist" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Check that posterior PSD diagonals are positive.</p></li>
+<li><p>For multivariate runs, check Hermitian symmetry and positive definiteness of
+reconstructed spectral matrices.</p></li>
+<li><p>Check coherence lies in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">1]</span></code>.</p></li>
+<li><p>Inspect NUTS divergences, tree-depth hits, and effective sample size.</p></li>
+<li><p>Compare VI and NUTS posterior summaries when using VI warm starts.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">true_psd</span></code> was supplied, review RIAE, L2, and coverage metrics in the
+saved summaries.</p></li>
+</ul>
 </section>
 </section>
 
@@ -509,20 +492,20 @@ of <span class="math notranslate nohighlight">\(Y(f)=U(f)U(f)^\ast\)</span> and 
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="multivar_blocked_nuts.html"
+       href="data_preprocessing.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Multivariate Blocked NUTS: Math ↔ Code</p>
+        <p class="prev-next-title">Data and Preprocessing</p>
       </div>
     </a>
     <a class="right-next"
-       href="phi_prior_approx.html"
+       href="technical_notes.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Prior on φ: Implementation vs. Theory</p>
+        <p class="prev-next-title">Technical Notes</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -544,11 +527,11 @@ of <span class="math notranslate nohighlight">\(Y(f)=U(f)U(f)^\ast\)</span> and 
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-psd-normalisation">FFT / PSD normalisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-scalar-nh">Coarse graining: scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-vs-unified-multivariate-nuts">Blocked vs unified multivariate NUTS</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-coarse-bin-likelihood-equivalence">Diagnostics: coarse-bin likelihood equivalence</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#observed-data-wishart-based">Observed data (Wishart-based)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#return-value">Return Value</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#saved-files">Saved Files</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-results">Loading Results</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#extracting-psd-summaries">Extracting PSD Summaries</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-checklist">Diagnostics Checklist</a></li>
 </ul>
   </nav></div>
 

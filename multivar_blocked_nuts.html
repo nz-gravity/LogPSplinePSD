@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Multivariate Blocked NUTS: Math ↔ Code &#8212; LogPSplinePSD</title>
+    <title>Multivariate Factorised Likelihood: Math to Code &#8212; LogPSplinePSD</title>
   
   
   
@@ -53,7 +53,7 @@
     <script>let toggleHintShow = 'Click to show';</script>
     <script>let toggleHintHide = 'Click to hide';</script>
     <script>let toggleOpenOnPrint = 'true';</script>
-    <script src="_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="_static/togglebutton.js?v=b8b12719"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script src="_static/design-tabs.js?v=f930bc37"></script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
@@ -65,8 +65,8 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'multivar_blocked_nuts';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Multivariate implementation notes" href="multivar_implementation_notes.html" />
-    <link rel="prev" title="Coarse-grain MWE (2-channel)" href="coarse_grain_mwe.html" />
+    <link rel="next" title="Soft Shrinkage Toward a Design PSD" href="design_shrinkage.html" />
+    <link rel="prev" title="Coarse-Graining" href="coarse_grain.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -163,23 +163,19 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Multivariate Factorised Likelihood: Math to Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="conventions.html">User Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="development.html">Development Guide</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="coarse_grain_mwe.html">Coarse-grain MWE (2-channel)</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Multivariate Blocked NUTS: Math ↔ Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="studies/lvk/lvk_demo.html">Examples and Studies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
-<li class="toctree-l2"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
-</ul>
-</details></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
 </ul>
 
     </div>
@@ -362,7 +358,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Multivariate Blocked NUTS: Math ↔ Code</h1>
+    <h1>Multivariate Factorised Likelihood: Math to Code</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -373,22 +369,18 @@
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-pointers-clickable">Code pointers (clickable)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-wishart-statistics">Data → Wishart statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-pointers">Code pointers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notation-and-sufficient-statistics">Notation and sufficient statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-to-wishart-statistics">Data to Wishart statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-and-psd-normalisation">FFT and PSD normalisation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cholesky-parameterisation">Cholesky parameterisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-per-row-likelihood-from-overleaf">Exact per-row likelihood (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-compatibility">Coarse-graining compatibility</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-coarse-grained-likelihood-form-from-overleaf">Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#symbol-code-mapping">Symbol ↔ code mapping</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction">PSD reconstruction</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes-on-scaling-conventions">Notes on scaling conventions</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-cholesky-factorisation-from-overleaf">Exact Cholesky factorisation (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blockwise-morphz-evidence">Blockwise MorphZ evidence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-versus-unified-multivariate-nuts">Blocked versus unified multivariate NUTS</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction-and-downstream-outputs">PSD reconstruction and downstream outputs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prior-on-phi-implementation-versus-theory">Prior on <span class="math notranslate nohighlight">\(\phi\)</span>: implementation versus theory</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-we-do-not-need-an-explicit-likelihood-object">Why we do not need an explicit likelihood object</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#symbol-to-code-mapping">Symbol to code mapping</a></li>
 </ul>
             </nav>
         </div>
@@ -400,75 +392,104 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="multivariate-blocked-nuts-math-code">
-<h1>Multivariate Blocked NUTS: Math ↔ Code<a class="headerlink" href="#multivariate-blocked-nuts-math-code" title="Link to this heading">#</a></h1>
+  <section id="multivariate-factorised-likelihood-math-to-code">
+<h1>Multivariate Factorised Likelihood: Math to Code<a class="headerlink" href="#multivariate-factorised-likelihood-math-to-code" title="Link to this heading">#</a></h1>
 <p>This page documents the <em>implemented</em> multivariate likelihood and
-parameterisation used by the blocked sampler
-<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts.MultivarBlockedNUTSSampler</span></code>.</p>
-<p>It is intended as a durable bridge between the draft derivation in our paper
-and the code under <code class="docutils literal notranslate"><span class="pre">src/log_psplines/</span></code>.</p>
+parameterisation used by the pipeline-owned factorised multivariate NUTS stage,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.pipeline.stages.FactorizedMultivarNUTSStage</span></code>.</p>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
 <p>The multivariate pipeline is:</p>
 <ol class="arabic simple">
 <li><p>Build frequency-domain sufficient statistics from a multichannel time series
-using block-averaged FFTs.
-Frequency truncation is controlled by <code class="docutils literal notranslate"><span class="pre">model.fmin</span></code>/<code class="docutils literal notranslate"><span class="pre">model.fmax</span></code>.</p></li>
-<li><p>(Optional) coarse-grain the frequency axis by summing Wishart statistics
-across bins (coarse config controls <code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code> only).</p></li>
+using block-averaged FFTs.</p></li>
+<li><p>Optionally coarse-grain the retained frequency axis by summing Wishart
+statistics within equal-sized bins.</p></li>
 <li><p>Fit a Cholesky-parameterised spectral density matrix with P-splines,
-sampling each Cholesky row as an <em>independent</em> NumPyro/NUTS problem.</p></li>
+sampling each Cholesky row as an independent NumPyro/NUTS problem.</p></li>
 </ol>
-<p>The implementation is designed around the Whittle/Wishart sufficient statistic
+<p>The implementation is organised around the Whittle/Wishart sufficient statistic
 at each retained Fourier frequency.</p>
 </section>
-<section id="code-pointers-clickable">
-<h2>Code pointers (clickable)<a class="headerlink" href="#code-pointers-clickable" title="Link to this heading">#</a></h2>
-<p>The links below point to the current <cite>main</cite> branch on GitHub (line numbers may
-drift over time):</p>
+<section id="code-pointers">
+<h2>Code pointers<a class="headerlink" href="#code-pointers" title="Link to this heading">#</a></h2>
+<p>The links below point to the current repository layout:</p>
 <ul class="simple">
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L165-L298">Wishart FFT construction (MultivarFFT.compute_wishart)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/samplers/multivar/multivar_blocked_nuts.py#L104-L260">Blocked NumPyro likelihood (_blocked_channel_model)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/coarse_grain/multivar.py#L16-L138">Coarse graining (apply_coarse_grain_multivar_fft)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py#L387-L438">PSD reconstruction (reconstruct_psd_matrix)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L157-L183">Wishart→PSD conversion (Y_to_S)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/spectrum_utils.py#L137-L145">U→Y conversion (U_to_Y)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L159-L299">Wishart FFT construction (MultivarFFT.compute_wishart)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py">Blocked NumPyro likelihood (_blocked_channel_model)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py">Shared P-spline prior block (_sample_pspline_block)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/preprocessing/coarse_grain.py">Coarse graining (apply_coarse_grain_multivar_fft)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py">PSD reconstruction (reconstruct_psd_matrix)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar_utils.py">Wishart and PSD helpers (U_to_Y, Y_to_S, Y_to_U)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/arviz_utils/to_arviz.py">ArviZ export for multivariate samples</a></p></li>
 </ul>
-<div class="math notranslate nohighlight">
-\[\Y(f_k)=\sum_{i=1}^{N_b} \underbrace{\d^{(i)}(f_k)\d^{(i)}(f_k)^*}_{\I^{(i)}(f_k)}\]</div>
-<p>with degrees of freedom <span class="math notranslate nohighlight">\(N_b\)</span> equal to the number of non-overlapping
-blocks (called <code class="docutils literal notranslate"><span class="pre">Nb</span></code> in code).</p>
 </section>
-<section id="data-wishart-statistics">
-<h2>Data → Wishart statistics<a class="headerlink" href="#data-wishart-statistics" title="Link to this heading">#</a></h2>
-<p>The sufficient statistics are computed by
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT.compute_wishart()</span></code>.</p>
-<p>Given time-domain data <code class="docutils literal notranslate"><span class="pre">x</span></code> with shape <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">p)</span></code>, the code:</p>
-<ul>
-<li><p>splits <code class="docutils literal notranslate"><span class="pre">x</span></code> into <code class="docutils literal notranslate"><span class="pre">Nb</span></code> contiguous non-overlapping blocks,</p></li>
-<li><p>detrends each block (constant detrend),</p></li>
-<li><p>applies a taper/window (default: Hann),</p></li>
-<li><p>uses <code class="docutils literal notranslate"><span class="pre">np.fft.rfft</span></code> to work on the positive-frequency grid,</p></li>
-<li><p>applies a one-sided PSD normalisation factor (Nyquist bin handled specially),</p></li>
-<li><p>forms the per-frequency matrix</p>
+<section id="notation-and-sufficient-statistics">
+<h2>Notation and sufficient statistics<a class="headerlink" href="#notation-and-sufficient-statistics" title="Link to this heading">#</a></h2>
+<p>The multivariate Whittle approximation is implemented in terms of the
+frequency-domain Wishart statistic</p>
 <div class="math notranslate nohighlight">
-\[Y(f_k) = \sum_{b=1}^{N_b} D_b(f_k)\, D_b(f_k)^H,\]</div>
-<p>where <span class="math notranslate nohighlight">\(D_b(f_k)\)</span> is the tapered/normalised FFT vector for block <span class="math notranslate nohighlight">\(b\)</span>.</p>
-</li>
-</ul>
-<p>The code then eigendecomposes <span class="math notranslate nohighlight">\(Y(f_k)\)</span> and stores</p>
+\[Y(f_k) = \sum_{b=1}^{N_b} d_b(f_k) d_b(f_k)^H,\]</div>
+<p>with degrees of freedom <span class="math notranslate nohighlight">\(N_b\)</span> equal to the number of non-overlapping
+time-domain blocks.</p>
+<p>The code stores a factorisation</p>
 <div class="math notranslate nohighlight">
 \[Y(f_k) = U(f_k) U(f_k)^H,\]</div>
-<p>where the columns of <span class="math notranslate nohighlight">\(U(f_k)\)</span> are <span class="math notranslate nohighlight">\(u_\ell^{(k)} = \sqrt{\lambda_\ell^{(k)}}\, v_\ell^{(k)}\)</span>.</p>
-<p>Those eigenvector-weighted components <span class="math notranslate nohighlight">\(U(f_k)\)</span> are the arrays
-<code class="docutils literal notranslate"><span class="pre">u_re</span></code>/<code class="docutils literal notranslate"><span class="pre">u_im</span></code> exposed on <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code>.</p>
+<p>where the columns of <span class="math notranslate nohighlight">\(U(f_k)\)</span> are the eigenvector-weighted components
+<span class="math notranslate nohighlight">\(\sqrt{\lambda_\ell^{(k)}} v_\ell^{(k)}\)</span>. These are exposed as
+<code class="docutils literal notranslate"><span class="pre">u_re</span></code> and <code class="docutils literal notranslate"><span class="pre">u_im</span></code> on
+<a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT" title="log_psplines.datatypes.multivar.MultivarFFT"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code></a>.</p>
+</section>
+<section id="data-to-wishart-statistics">
+<h2>Data to Wishart statistics<a class="headerlink" href="#data-to-wishart-statistics" title="Link to this heading">#</a></h2>
+<p>The sufficient statistics are computed by
+<a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT.compute_wishart" title="log_psplines.datatypes.multivar.MultivarFFT.compute_wishart"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT.compute_wishart()</span></code></a>.
+Given time-domain data <code class="docutils literal notranslate"><span class="pre">x</span></code> with shape <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">p)</span></code>, the code:</p>
+<ul class="simple">
+<li><p>splits <code class="docutils literal notranslate"><span class="pre">x</span></code> into <code class="docutils literal notranslate"><span class="pre">Nb</span></code> contiguous non-overlapping blocks,</p></li>
+<li><p>detrends each block by removing its mean,</p></li>
+<li><p>applies an optional taper/window,</p></li>
+<li><p>uses <code class="docutils literal notranslate"><span class="pre">np.fft.rfft</span></code> on each block,</p></li>
+<li><p>drops the DC bin,</p></li>
+<li><p>applies a one-sided PSD normalisation,</p></li>
+<li><p>rescales by <code class="docutils literal notranslate"><span class="pre">sqrt(duration)</span></code> so the likelihood keeps an explicit
+<span class="math notranslate nohighlight">\(1/T\)</span> factor,</p></li>
+<li><p>forms <code class="docutils literal notranslate"><span class="pre">Y(f_k)</span></code> and stores a factor <code class="docutils literal notranslate"><span class="pre">U(f_k)</span></code> such that
+<code class="docutils literal notranslate"><span class="pre">Y(f_k)</span> <span class="pre">=</span> <span class="pre">U(f_k)</span> <span class="pre">U(f_k)^H</span></code>.</p></li>
+</ul>
+<p>A subtle but important implementation detail is the window scaling. The code
+computes the normalized equivalent noise bandwidth <code class="docutils literal notranslate"><span class="pre">enbw</span></code> and later divides
+the full log-likelihood by <code class="docutils literal notranslate"><span class="pre">enbw</span></code>. This is a calibration correction for
+non-rectangular windows; rectangular windows give <code class="docutils literal notranslate"><span class="pre">enbw</span> <span class="pre">=</span> <span class="pre">1</span></code>.</p>
+</section>
+<section id="fft-and-psd-normalisation">
+<h2>FFT and PSD normalisation<a class="headerlink" href="#fft-and-psd-normalisation" title="Link to this heading">#</a></h2>
+<p>The derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> defines a DFT with an explicit
+<span class="math notranslate nohighlight">\(\Delta_t\)</span> factor and writes the Whittle likelihood with a <span class="math notranslate nohighlight">\(1/T\)</span>
+scaling:</p>
+<div class="math notranslate nohighlight">
+\[\Delta_f = \frac{1}{n\Delta_t} = \frac{1}{T}\]</div>
+<div class="math notranslate nohighlight">
+\[d(f_k) = \Delta_t \sum_{t=1}^{n} Z_t \exp\left(-2\pi i \frac{k}{n} t\right).\]</div>
+<p>The implementation uses a one-sided Welch-style normalisation inside
+<a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT.compute_wishart" title="log_psplines.datatypes.multivar.MultivarFFT.compute_wishart"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wishart()</span></code></a>, but keeps
+the observation-duration factor explicit in the likelihood.</p>
+<p>Practical consequences:</p>
+<ul class="simple">
+<li><p>the DC bin is dropped for numerical stability,</p></li>
+<li><p>the retained grid is the positive-frequency <code class="docutils literal notranslate"><span class="pre">rfft</span></code> grid,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code> stores the per-block duration in seconds,</p></li>
+<li><p>PSD conversions divide by <code class="docutils literal notranslate"><span class="pre">duration</span></code> so exported spectra remain in the same
+one-sided per-Hz convention across plotting and diagnostics,</p></li>
+<li><p>tapered windows widen the posterior through the <code class="docutils literal notranslate"><span class="pre">enbw</span></code> correction.</p></li>
+</ul>
 </section>
 <section id="cholesky-parameterisation">
 <h2>Cholesky parameterisation<a class="headerlink" href="#cholesky-parameterisation" title="Link to this heading">#</a></h2>
-<p>The blocked sampler follows the Rosen/Orihara-style inverse parameterisation:</p>
+<p>The blocked sampler uses the inverse parameterisation</p>
 <div class="math notranslate nohighlight">
-\[S(f_k)^{-1} = T(f_k)^H\, D(f_k)^{-1}\, T(f_k),\]</div>
-<p>where</p>
+\[S(f_k)^{-1} = T(f_k)^H D(f_k)^{-1} T(f_k),\]</div>
+<p>where:</p>
 <ul class="simple">
 <li><p><span class="math notranslate nohighlight">\(D(f_k)\)</span> is diagonal with entries <span class="math notranslate nohighlight">\(\delta_j(f_k)^2\)</span>,</p></li>
 <li><p><span class="math notranslate nohighlight">\(T(f_k)\)</span> is unit lower-triangular with strictly-lower entries
@@ -476,147 +497,173 @@ blocks (called <code class="docutils literal notranslate"><span class="pre">Nb</
 </ul>
 <p>In code, the diagonal field is represented as</p>
 <div class="math notranslate nohighlight">
-\[\log \delta_j(f_k)^2 = \sum_m B_m(f_k)\, w^{(\delta)}_{j,m}\]</div>
-<p>and each off-diagonal coefficient has its own real/imag spline field</p>
+\[\log \delta_j(f_k)^2 = \sum_m B_m(f_k) w^{(\delta)}_{j,m},\]</div>
+<p>and each off-diagonal coefficient has its own real and imaginary spline field</p>
 <div class="math notranslate nohighlight">
-\[\Re\,\theta_{jl}(f_k) = \sum_m B_m(f_k)\, w^{(\Re)}_{jl,m},
+\[\Re\,\theta_{jl}(f_k) = \sum_m B_m(f_k) w^{(\Re)}_{jl,m},
 \qquad
-\Im\,\theta_{jl}(f_k) = \sum_m B_m(f_k)\, w^{(\Im)}_{jl,m}.\]</div>
-<p>The blocked sampler actually samples distinct weight vectors per
-<span class="math notranslate nohighlight">\(\theta_{jl}\)</span> (within a fixed row <span class="math notranslate nohighlight">\(j\)</span>).</p>
+\Im\,\theta_{jl}(f_k) = \sum_m B_m(f_k) w^{(\Im)}_{jl,m}.\]</div>
+<p>The implemented blocked sampler samples distinct weight vectors for every
+<span class="math notranslate nohighlight">\(\theta_{jl}\)</span> within row <span class="math notranslate nohighlight">\(j\)</span>.</p>
+<p>Relevant code:</p>
+<ul class="simple">
+<li><p>diagonal P-spline block construction:
+<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py">delta block in _blocked_channel_model</a></p></li>
+<li><p>off-diagonal real and imaginary blocks:
+<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py">theta blocks in _blocked_channel_model</a></p></li>
+</ul>
+<p>The Einstein-summation calls in the implementation are just compact matrix
+algebra:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">jnp.einsum(&quot;nk,k-&gt;n&quot;,</span> <span class="pre">basis_delta,</span> <span class="pre">weights)</span></code> evaluates a spline basis on
+the frequency grid,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jnp.einsum(&quot;fl,flr-&gt;fr&quot;,</span> <span class="pre">theta_re,</span> <span class="pre">u_re_prev)</span></code> and its companions compute
+the lower-triangular row regressions used to form the residuals.</p></li>
+</ul>
 </section>
 <section id="per-row-factorisation-of-the-likelihood">
 <h2>Per-row factorisation of the likelihood<a class="headerlink" href="#per-row-factorisation-of-the-likelihood" title="Link to this heading">#</a></h2>
-<p>With the parameterisation above, the complex-Wishart/Whittle log-likelihood can
-be written as a sum of row-wise terms (one term per Cholesky row).</p>
-<p>Let <span class="math notranslate nohighlight">\(u_j(f_k)\)</span> denote the <span class="math notranslate nohighlight">\(j\)</span>-th row of <span class="math notranslate nohighlight">\(U(f_k)\)</span>, i.e. the
-vector of replicate components for channel <span class="math notranslate nohighlight">\(j\)</span> at frequency <span class="math notranslate nohighlight">\(f_k\)</span>.</p>
-<p>Define the row residual</p>
+<p>With the parameterisation above, the complex-Wishart log-likelihood separates
+into one term per Cholesky row. Let <span class="math notranslate nohighlight">\(u_j(f_k)\)</span> denote the <span class="math notranslate nohighlight">\(j\)</span>-th
+row of <span class="math notranslate nohighlight">\(U(f_k)\)</span>, i.e. the replicate vector for channel <span class="math notranslate nohighlight">\(j\)</span> at
+frequency <span class="math notranslate nohighlight">\(f_k\)</span>. Define the row residual</p>
 <div class="math notranslate nohighlight">
-\[r_j(f_k) = u_j(f_k) - \sum_{l&lt;j} \theta_{jl}(f_k)\, u_l(f_k).\]</div>
-<section id="exact-per-row-likelihood-from-overleaf">
-<h3>Exact per-row likelihood (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-per-row-likelihood-from-overleaf" title="Link to this heading">#</a></h3>
-<p>The derivation expresses each factor as (verbatim LaTeX):</p>
-<div class="math notranslate nohighlight">
-\[\begin{split}\mathcal{L}_j(\u_j,\u_{&lt;j}|\btheta_j,\bdelta_j) \propto \nonumber \\
-\prod_{k=1}^{N} \delta_{jk}^{-2N_b} \exp \left(\frac{-\sum_{N_b=1}^p\left|u_{jN_b}^{(k)}-\sum_{l=1}^{j-1}\theta_{jl}^{(k)}u_{lN_b}^{(k)} \right|^2}{T\delta_{jk}^2} \right)\end{split}\]</div>
-<p>The blocked model implements (up to constants)</p>
+\[r_j(f_k) = u_j(f_k) - \sum_{l&lt;j} \theta_{jl}(f_k) u_l(f_k).\]</div>
+<p>Up to constants, the blocked model implements</p>
 <div class="math notranslate nohighlight">
 \[\log \mathcal{L}_j
-\;\propto\;
--N_b\,N_h\,\sum_k \log\big(\delta_j(f_k)^2\big)
-\; - \sum_k \frac{\|r_j(f_k)\|_2^2}{T\,\delta_j(f_k)^2}.\]</div>
-<p>Key points:</p>
+\propto
+-N_b N_h \sum_k \log\big(\delta_j(f_k)^2\big)
+- \sum_k \frac{\|r_j(f_k)\|_2^2}{T\,\delta_j(f_k)^2},\]</div>
+<p>and then divides the full block contribution by <code class="docutils literal notranslate"><span class="pre">enbw</span></code>.</p>
+<p>Key mappings:</p>
 <ul class="simple">
-<li><p><span class="math notranslate nohighlight">\(N_b\)</span> is the number of averaged blocks (<code class="docutils literal notranslate"><span class="pre">fft_data.Nb</span></code>).</p></li>
-<li><p><span class="math notranslate nohighlight">\(T\)</span> is the per-block observation duration (<code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code>).</p></li>
-<li><p><span class="math notranslate nohighlight">\(N_h\)</span> is the constant coarse-bin size (<code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>). It scales the
-log-determinant term when coarse graining is enabled.</p></li>
-<li><p>The quadratic term uses the <em>summed sufficient statistics</em> directly, so it
-does not introduce an additional <span class="math notranslate nohighlight">\(N_h\)</span> factor.</p></li>
+<li><p><span class="math notranslate nohighlight">\(N_b\)</span> is <code class="docutils literal notranslate"><span class="pre">fft_data.Nb</span></code>, the number of averaged blocks,</p></li>
+<li><p><span class="math notranslate nohighlight">\(T\)</span> is <code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code>, the duration of each block,</p></li>
+<li><p><span class="math notranslate nohighlight">\(N_h\)</span> is <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>, the constant coarse-bin size,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">u_re</span></code> and <code class="docutils literal notranslate"><span class="pre">u_im</span></code> store the rows of <span class="math notranslate nohighlight">\(U(f_k)\)</span>.</p></li>
 </ul>
-<p>This is implemented in the internal NumPyro model
-<code class="docutils literal notranslate"><span class="pre">_blocked_channel_model</span></code> inside
-<code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.samplers.multivar.multivar_blocked_nuts</span></code>.</p>
+<p>This is implemented in <code class="docutils literal notranslate"><span class="pre">_blocked_channel_model</span></code> inside
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.pipeline.models</span></code>; the custom
+log-likelihood contribution is added via
+<code class="docutils literal notranslate"><span class="pre">numpyro.factor(&quot;likelihood_channel_*&quot;,</span> <span class="pre">log_likelihood)</span></code>.</p>
 </section>
-</section>
-<section id="coarse-graining-compatibility">
-<h2>Coarse-graining compatibility<a class="headerlink" href="#coarse-graining-compatibility" title="Link to this heading">#</a></h2>
-<p>Coarse graining for multivariate FFT/Wishart statistics is performed by
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.multivar.apply_coarse_grain_multivar_fft()</span></code>.</p>
-<p>Within each coarse bin <span class="math notranslate nohighlight">\(J_h\)</span>, it sums</p>
+<section id="coarse-graining">
+<h2>Coarse graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
+<p>Coarse graining is performed by
+<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code></a>.
+Within each coarse bin <span class="math notranslate nohighlight">\(J_h\)</span>, the code sums Wishart matrices</p>
 <div class="math notranslate nohighlight">
-\[\bar Y_h = \sum_{f\in J_h} Y(f)\]</div>
-<p>and recomputes <span class="math notranslate nohighlight">\(\bar U_h\)</span> so that <span class="math notranslate nohighlight">\(\bar Y_h = \bar U_h\bar U_h^H\)</span>.</p>
-<p>The returned scalar <code class="docutils literal notranslate"><span class="pre">Nh</span></code> equals the bin member count for equal bins and is
-stored as <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>. With this choice, each bin behaves like a Wishart
-statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(N_b Nh\)</span>.</p>
-<section id="exact-coarse-grained-likelihood-form-from-overleaf">
-<h3>Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-coarse-grained-likelihood-form-from-overleaf" title="Link to this heading">#</a></h3>
-<p>The coarse-grained approximation is written as (verbatim LaTeX):</p>
-<div class="math notranslate nohighlight">
-\[\prod_{h=1}^{Nc} \left|\S(\bar{f}_h)\right|^{-N_b*Nh} \exp\left(- \tr\left[ \S(\bar{f}_h)^{-1} \bar{\Y}_h\right]\right)\]</div>
+\[\bar Y_h = \sum_{f \in J_h} Y(f)\]</div>
+<p>and recomputes <span class="math notranslate nohighlight">\(\bar U_h\)</span> so that
+<span class="math notranslate nohighlight">\(\bar Y_h = \bar U_h \bar U_h^H\)</span>.</p>
+<p>The coarse-bin multiplicity is stored as the scalar <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>. For the
+equal-sized bins currently implemented, each coarse bin behaves like a Wishart
+statistic with effective degrees of freedom <span class="math notranslate nohighlight">\(N_b N_h\)</span>.</p>
+<p>A point that is easy to get wrong: the quadratic term uses the already summed
+sufficient statistics, so there is no extra <code class="docutils literal notranslate"><span class="pre">Nh</span></code> factor inserted there. Only
+the log-determinant scaling changes.</p>
 </section>
-</section>
-<section id="symbol-code-mapping">
-<h2>Symbol ↔ code mapping<a class="headerlink" href="#symbol-code-mapping" title="Link to this heading">#</a></h2>
-<p>The table below lists the most important objects and where they appear.</p>
+<section id="blocked-versus-unified-multivariate-nuts">
+<h2>Blocked versus unified multivariate NUTS<a class="headerlink" href="#blocked-versus-unified-multivariate-nuts" title="Link to this heading">#</a></h2>
+<p>The repository currently contains one multivariate NUTS stage:</p>
 <ul class="simple">
-<li><p><span class="math notranslate nohighlight">\(p\)</span> (number of channels) → <code class="docutils literal notranslate"><span class="pre">fft_data.p</span></code> / <code class="docutils literal notranslate"><span class="pre">self.p</span></code></p></li>
-<li><p><span class="math notranslate nohighlight">\(f_k\)</span> (frequency grid) → <code class="docutils literal notranslate"><span class="pre">fft_data.freq</span></code> / <code class="docutils literal notranslate"><span class="pre">self.freq</span></code></p></li>
-<li><p><span class="math notranslate nohighlight">\(N_b\)</span> (block count / Wishart DOF) → <code class="docutils literal notranslate"><span class="pre">fft_data.Nb</span></code> / <code class="docutils literal notranslate"><span class="pre">self.Nb</span></code></p></li>
-<li><p><span class="math notranslate nohighlight">\(U(f_k)\)</span> (eigen replicates) → <code class="docutils literal notranslate"><span class="pre">fft_data.u_re</span></code> + i <code class="docutils literal notranslate"><span class="pre">fft_data.u_im</span></code></p></li>
-<li><p><span class="math notranslate nohighlight">\(\log \delta_j(f_k)^2\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">log_delta_sq_{j}</span></code></p></li>
-<li><p><span class="math notranslate nohighlight">\(\theta_{jl}(f_k)\)</span> → deterministic nodes <code class="docutils literal notranslate"><span class="pre">theta_re_{j}</span></code>, <code class="docutils literal notranslate"><span class="pre">theta_im_{j}</span></code></p></li>
-<li><p>coarse-bin member counts <span class="math notranslate nohighlight">\(Nh\)</span> → <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code> / <code class="docutils literal notranslate"><span class="pre">self.Nh</span></code></p></li>
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.pipeline.stages.FactorizedMultivarNUTSStage</span></code></p></li>
 </ul>
+<p>It fits each Cholesky row as an independent NUTS problem. There is no separate
+all-parameters-joint multivariate NUTS sampler in <code class="docutils literal notranslate"><span class="pre">src/log_psplines</span></code> at
+present.</p>
 </section>
-<section id="psd-reconstruction">
-<h2>PSD reconstruction<a class="headerlink" href="#psd-reconstruction" title="Link to this heading">#</a></h2>
+<section id="psd-reconstruction-and-downstream-outputs">
+<h2>PSD reconstruction and downstream outputs<a class="headerlink" href="#psd-reconstruction-and-downstream-outputs" title="Link to this heading">#</a></h2>
 <p>Posterior samples of <code class="docutils literal notranslate"><span class="pre">log_delta_sq</span></code> and <code class="docutils literal notranslate"><span class="pre">theta_re</span></code>/<code class="docutils literal notranslate"><span class="pre">theta_im</span></code> are
-converted into a spectral density matrix by
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">log_psplines.psplines.multivar_psplines.MultivariateLogPSplines.reconstruct_psd_matrix()</span></code>.</p>
-<p>For each frequency, it builds <span class="math notranslate nohighlight">\(T(f_k)\)</span> with strictly-lower entries
-<span class="math notranslate nohighlight">\(-\theta_{jl}(f_k)\)</span>, constructs <span class="math notranslate nohighlight">\(D(f_k)=\mathrm{diag}(\delta_j(f_k)^2)\)</span>,
-and returns</p>
+converted into spectral density matrices by
+<a class="reference internal" href="api.html#log_psplines.psplines.multivar_psplines.MultivariateLogPSplines.reconstruct_psd_matrix" title="log_psplines.psplines.multivar_psplines.MultivariateLogPSplines.reconstruct_psd_matrix"><code class="xref py py-meth docutils literal notranslate"><span class="pre">log_psplines.psplines.multivar_psplines.MultivariateLogPSplines.reconstruct_psd_matrix()</span></code></a>.
+For each frequency the code builds <span class="math notranslate nohighlight">\(T(f_k)\)</span> and
+<span class="math notranslate nohighlight">\(D(f_k) = \mathrm{diag}(\delta_j(f_k)^2)\)</span>, then returns</p>
 <div class="math notranslate nohighlight">
-\[S(f_k) = T(f_k)^{-1}\, D(f_k)\, T(f_k)^{-H}.\]</div>
+\[S(f_k) = T(f_k)^{-1} D(f_k) T(f_k)^{-H}.\]</div>
+<p>ArviZ exports are aligned with the Wishart-based likelihood: the multivariate
+observed data are stored as periodogram-like spectral matrices derived from the
+Wishart factors, rather than as retained mean FFT components.</p>
 </section>
-<section id="notes-on-scaling-conventions">
-<h2>Notes on scaling conventions<a class="headerlink" href="#notes-on-scaling-conventions" title="Link to this heading">#</a></h2>
-<p>The derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> writes the Whittle likelihood with an explicit
-observation-time factor <span class="math notranslate nohighlight">\(T\)</span>. The exact LaTeX from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> is:</p>
+<section id="prior-on-phi-implementation-versus-theory">
+<h2>Prior on <span class="math notranslate nohighlight">\(\phi\)</span>: implementation versus theory<a class="headerlink" href="#prior-on-phi-implementation-versus-theory" title="Link to this heading">#</a></h2>
+<p>The draft math writes the hierarchical P-spline prior as</p>
 <div class="math notranslate nohighlight">
-\[\mathcal{L}(\d|\S) \propto  \prod_{k=1}^{N} \det(\S(f_k))^{-1} \times
-\exp\left(-\frac{1}{T}\d(f_k)^* \S(f_k)^{-1} \d(f_k)\right),\]</div>
-<p>The implementation keeps the <span class="math notranslate nohighlight">\(1/T\)</span> factor explicit in the NumPyro
-likelihood. Concretely:</p>
+\[w_j \mid \phi_j \sim \mathcal{N}(0, (\phi_j P_j)^{-1})\]</div>
+<p>with hyperpriors</p>
+<div class="math notranslate nohighlight">
+\[\phi_j \mid \delta_j \sim \mathrm{Gamma}(\alpha_\phi, \delta_j \beta_\phi),
+\qquad
+\delta_j \sim \mathrm{Gamma}(\alpha_\delta, \beta_\delta).\]</div>
+<p>In the implementation, <code class="docutils literal notranslate"><span class="pre">delta</span></code> is sampled directly from that Gamma prior
+using the NumPyro rate parameterisation. For <span class="math notranslate nohighlight">\(\phi \mid \delta\)</span>, the
+sampled variable is
+<span class="math notranslate nohighlight">\(\eta = \log \phi\)</span>, but the prior is still the <em>exact</em> Gamma prior on
+<span class="math notranslate nohighlight">\(\phi\)</span>, expressed on the log scale through a change of variables.</p>
+<p>For</p>
+<div class="math notranslate nohighlight">
+\[\phi \mid \delta \sim \mathrm{Gamma}(\alpha_\phi, \mathrm{rate}=\beta_\phi \delta),\]</div>
+<p>write <span class="math notranslate nohighlight">\(\eta = \log \phi\)</span>, so <span class="math notranslate nohighlight">\(\phi = e^\eta\)</span>. Then the induced
+log-density for <span class="math notranslate nohighlight">\(\eta\)</span> is</p>
+<div class="math notranslate nohighlight">
+\[\log p(\eta \mid \delta)
+=
+\log p_\Gamma(e^\eta \mid \delta) + \eta.\]</div>
+<p>That final <code class="docutils literal notranslate"><span class="pre">+</span> <span class="pre">eta</span></code> term is the Jacobian from the transformation
+<span class="math notranslate nohighlight">\(\phi = e^\eta\)</span>.</p>
+<p>In code, <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.pipeline.models._sample_pspline_block()</span></code>
+implements this by:</p>
 <ul class="simple">
-<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wishart()</span></code> records
-the per-block observation duration <code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code> (seconds), and scales
-the stored frequency-domain components so the quadratic term can be written as
-<span class="math notranslate nohighlight">\((1/T)\,d(f_k)^* S(f_k)^{-1} d(f_k)\)</span>.</p></li>
-<li><p>PSD conversions divide by <code class="docutils literal notranslate"><span class="pre">duration</span></code> via
-<code class="xref py py-func docutils literal notranslate"><span class="pre">)()</span></code>, so
-the resulting PSD matrices remain in the same one-sided “per Hz” convention
-used elsewhere in the codebase.</p></li>
+<li><p>sampling <code class="docutils literal notranslate"><span class="pre">log_phi</span></code> from a simple reference distribution,</p></li>
+<li><p>setting <code class="docutils literal notranslate"><span class="pre">phi</span> <span class="pre">=</span> <span class="pre">exp(log_phi)</span></code>,</p></li>
+<li><p>evaluating the exact Gamma log-density at <code class="docutils literal notranslate"><span class="pre">phi</span></code>,</p></li>
+<li><p>adding the Jacobian term <code class="docutils literal notranslate"><span class="pre">+</span> <span class="pre">log_phi</span></code>,</p></li>
+<li><p>correcting the reference density with <code class="docutils literal notranslate"><span class="pre">numpyro.factor</span></code>.</p></li>
 </ul>
-<p>This is algebraically equivalent to absorbing <span class="math notranslate nohighlight">\(T\)</span> into a deterministic
-rescaling of the Fourier coefficients; we keep it explicit to match the paper
-notation and to make the dependence on observation time unambiguous.</p>
+<p>This means the sampler keeps the geometry benefits of working on the log scale
+without changing the prior itself.</p>
 </section>
-<section id="exact-cholesky-factorisation-from-overleaf">
-<h2>Exact Cholesky factorisation (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)<a class="headerlink" href="#exact-cholesky-factorisation-from-overleaf" title="Link to this heading">#</a></h2>
-<p>The derivation in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code> uses the following exact Cholesky
-parameterisation:</p>
-<div class="math notranslate nohighlight">
-\[\mathbf{S}(f_k)^{-1} = \mathbf{T}_k^* \, \mathbf{D}_k^{-1} \, \mathbf{T}_k,\]</div>
-<p>with</p>
-<div class="math notranslate nohighlight">
-\[\begin{split}\bold{T}_k = \begin{pmatrix}
-1 &amp; 0 &amp; 0 &amp; \cdots &amp; 0 \\
--\theta_{21}^{(k)} &amp; 1 &amp; 0 &amp; \cdots &amp; 0 \\
--\theta_{31}^{(k)} &amp; -\theta_{32}^{(k)} &amp; 1 &amp; \ddots &amp; \vdots \\
-\vdots &amp; \vdots &amp; \ddots &amp; \ddots &amp; 0 \\
--\theta_{p1}^{(k)} &amp; -\theta_{p2}^{(k)}&amp; \cdots &amp; -\theta_{p,p-1}^{(k)} &amp; 1
-\end{pmatrix}.\end{split}\]</div>
-<p>The blocked sampler’s internal likelihood corresponds to the per-row likelihood
-factors <span class="math notranslate nohighlight">\(\mathcal{L}_j\)</span> (see Eq. (likelihoodj) in <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>),
-modulo the implementation’s FFT/PSD normalisation conventions.</p>
+<section id="why-we-do-not-need-an-explicit-likelihood-object">
+<h2>Why we do not need an explicit likelihood object<a class="headerlink" href="#why-we-do-not-need-an-explicit-likelihood-object" title="Link to this heading">#</a></h2>
+<p>NumPyro models do not require a separate <code class="docutils literal notranslate"><span class="pre">Likelihood(...)</span></code> object. Instead,
+the model defines the joint log density by accumulating contributions from:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">numpyro.sample(name,</span> <span class="pre">distribution)</span></code> for variables with a named
+probability distribution,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">numpyro.factor(name,</span> <span class="pre">log_term)</span></code> for custom log-density terms that are
+easier to write directly than as a built-in distribution.</p></li>
+</ul>
+<p>In this codebase:</p>
+<ul class="simple">
+<li><p>the exact transformed-Gamma prior on <code class="docutils literal notranslate"><span class="pre">log_phi</span></code> is implemented by
+<code class="docutils literal notranslate"><span class="pre">numpyro.sample</span></code> plus a correcting <code class="docutils literal notranslate"><span class="pre">numpyro.factor</span></code> in
+<code class="docutils literal notranslate"><span class="pre">_sample_pspline_block</span></code>,</p></li>
+<li><p>the P-spline Gaussian penalty on the weights is also imposed through
+<code class="docutils literal notranslate"><span class="pre">numpyro.factor</span></code> in <code class="docutils literal notranslate"><span class="pre">_sample_pspline_block</span></code>,</p></li>
+<li><p>the blocked Whittle/Wishart likelihood is imposed through
+<code class="docutils literal notranslate"><span class="pre">numpyro.factor(f&quot;likelihood_channel_{channel_label}&quot;,</span> <span class="pre">log_likelihood)</span></code> in
+<code class="docutils literal notranslate"><span class="pre">_blocked_channel_model</span></code>.</p></li>
+</ul>
+<p>So the likelihood is still there mathematically. It is just expressed directly
+as a log-density contribution, rather than wrapped in a separate explicit
+likelihood class. NumPyro then combines all <code class="docutils literal notranslate"><span class="pre">sample</span></code> and <code class="docutils literal notranslate"><span class="pre">factor</span></code> terms
+into the full posterior that NUTS sees.</p>
 </section>
-<section id="blockwise-morphz-evidence">
-<h2>Blockwise MorphZ evidence<a class="headerlink" href="#blockwise-morphz-evidence" title="Link to this heading">#</a></h2>
-<p>When <code class="docutils literal notranslate"><span class="pre">compute_lnz=True</span></code> for the blocked multivariate sampler, evidence is
-computed per row of the Cholesky factor using MorphZ on that row’s posterior
-draws and then combined:</p>
-<div class="math notranslate nohighlight">
-\[\log Z = \sum_{j=1}^{p} \log Z_j.\]</div>
-<p>The reported uncertainty is combined in quadrature:</p>
-<div class="math notranslate nohighlight">
-\[\sigma_{\log Z} = \sqrt{\sum_{j=1}^{p}\sigma_j^2}.\]</div>
-<p>Each row’s log posterior is evaluated post hoc from the sampled row parameters
-(<span class="math notranslate nohighlight">\(\delta_j\)</span>, <span class="math notranslate nohighlight">\(\theta_{j,&lt;j}\)</span>), so no extra per-draw <code class="docutils literal notranslate"><span class="pre">lp</span></code> arrays
-are stored in <code class="docutils literal notranslate"><span class="pre">sample_stats</span></code> for this calculation.</p>
+<section id="symbol-to-code-mapping">
+<h2>Symbol to code mapping<a class="headerlink" href="#symbol-to-code-mapping" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(p\)</span> number of channels -&gt; <code class="docutils literal notranslate"><span class="pre">fft_data.p</span></code> / <code class="docutils literal notranslate"><span class="pre">self.p</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(f_k\)</span> frequency grid -&gt; <code class="docutils literal notranslate"><span class="pre">fft_data.freq</span></code> / <code class="docutils literal notranslate"><span class="pre">self.freq</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(N_b\)</span> block count -&gt; <code class="docutils literal notranslate"><span class="pre">fft_data.Nb</span></code> / <code class="docutils literal notranslate"><span class="pre">self.Nb</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(N_h\)</span> coarse-bin size -&gt; <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code> / <code class="docutils literal notranslate"><span class="pre">self.Nh</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(T\)</span> block duration -&gt; <code class="docutils literal notranslate"><span class="pre">fft_data.duration</span></code> / <code class="docutils literal notranslate"><span class="pre">self.duration</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(U(f_k)\)</span> Wishart factor -&gt; <code class="docutils literal notranslate"><span class="pre">fft_data.u_re</span> <span class="pre">+</span> <span class="pre">1j</span> <span class="pre">*</span> <span class="pre">fft_data.u_im</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(\log \delta_j(f_k)^2\)</span> -&gt; deterministic nodes <code class="docutils literal notranslate"><span class="pre">log_delta_sq_{j}</span></code></p></li>
+<li><p><span class="math notranslate nohighlight">\(\theta_{jl}(f_k)\)</span> -&gt; deterministic nodes <code class="docutils literal notranslate"><span class="pre">theta_re_{j}</span></code>,
+<code class="docutils literal notranslate"><span class="pre">theta_im_{j}</span></code></p></li>
+</ul>
 </section>
 </section>
 
@@ -651,20 +698,20 @@ are stored in <code class="docutils literal notranslate"><span class="pre">sampl
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="coarse_grain_mwe.html"
+       href="coarse_grain.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Coarse-grain MWE (2-channel)</p>
+        <p class="prev-next-title">Coarse-Graining</p>
       </div>
     </a>
     <a class="right-next"
-       href="multivar_implementation_notes.html"
+       href="design_shrinkage.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Multivariate implementation notes</p>
+        <p class="prev-next-title">Soft Shrinkage Toward a Design PSD</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -687,22 +734,18 @@ are stored in <code class="docutils literal notranslate"><span class="pre">sampl
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-pointers-clickable">Code pointers (clickable)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-wishart-statistics">Data → Wishart statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-pointers">Code pointers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notation-and-sufficient-statistics">Notation and sufficient statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-to-wishart-statistics">Data to Wishart statistics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fft-and-psd-normalisation">FFT and PSD normalisation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cholesky-parameterisation">Cholesky parameterisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-per-row-likelihood-from-overleaf">Exact per-row likelihood (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-compatibility">Coarse-graining compatibility</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-coarse-grained-likelihood-form-from-overleaf">Exact coarse-grained likelihood form (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#symbol-code-mapping">Symbol ↔ code mapping</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction">PSD reconstruction</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notes-on-scaling-conventions">Notes on scaling conventions</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exact-cholesky-factorisation-from-overleaf">Exact Cholesky factorisation (from <code class="docutils literal notranslate"><span class="pre">overleaf</span></code>)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blockwise-morphz-evidence">Blockwise MorphZ evidence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-row-factorisation-of-the-likelihood">Per-row factorisation of the likelihood</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#blocked-versus-unified-multivariate-nuts">Blocked versus unified multivariate NUTS</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-reconstruction-and-downstream-outputs">PSD reconstruction and downstream outputs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prior-on-phi-implementation-versus-theory">Prior on <span class="math notranslate nohighlight">\(\phi\)</span>: implementation versus theory</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-we-do-not-need-an-explicit-likelihood-object">Why we do not need an explicit likelihood object</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#symbol-to-code-mapping">Symbol to code mapping</a></li>
 </ul>
   </nav></div>
 

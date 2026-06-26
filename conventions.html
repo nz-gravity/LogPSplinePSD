@@ -53,7 +53,7 @@
     <script>let toggleHintShow = 'Click to show';</script>
     <script>let toggleHintHide = 'Click to hide';</script>
     <script>let toggleOpenOnPrint = 'true';</script>
-    <script src="_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="_static/togglebutton.js?v=b8b12719"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script src="_static/design-tabs.js?v=f930bc37"></script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
@@ -65,8 +65,8 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'conventions';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Development Guide" href="development.html" />
-    <link rel="prev" title="API Reference" href="api.html" />
+    <link rel="next" title="Coarse-Graining" href="coarse_grain.html" />
+    <link rel="prev" title="Technical Notes" href="technical_notes.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -163,23 +163,19 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
-<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">User Guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="development.html">Development Guide</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="coarse_grain_mwe.html">Coarse-grain MWE (2-channel)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Blocked NUTS: Math ↔ Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="studies/lvk/lvk_demo.html">Examples and Studies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
-<li class="toctree-l2"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
-</ul>
-</details></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
 </ul>
 
     </div>
@@ -488,12 +484,13 @@ u^{(h)}_\nu = \sqrt{\lambda^{(h)}_\nu}\, v^{(h)}_\nu.\]</div>
 </section>
 <section id="psd-terminology">
 <h2>PSD terminology<a class="headerlink" href="#psd-terminology" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">log_psplines.spectrum_utils</span></code> centralises the conversion between Wishart
-statistics and PSD matrices. The current conventions are:</p>
+<p><code class="docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar_utils</span></code> centralises the conversion between
+Wishart statistics and PSD matrices. The current conventions are:</p>
 <ul class="simple">
 <li><p><strong>Normalisation</strong> – PSD matrices are <strong>one-sided</strong> and expressed per Hz. The
-helper <code class="xref py py-func docutils literal notranslate"><span class="pre">Y_to_S()</span></code> simply divides the summed Wishart
-matrices by <span class="math notranslate nohighlight">\(N_b N_h\)</span>, i.e., <span class="math notranslate nohighlight">\(S(f) = Y(f) / (N_b N_h)\)</span>.</p></li>
+helper <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar_utils.Y_to_S()</span></code> converts summed
+Wishart matrices into PSD matrices using the stored block count, coarse-bin
+multiplier, duration, and scaling factor.</p></li>
 <li><p><strong>Degrees of freedom</strong> – <code class="docutils literal notranslate"><span class="pre">N_b</span></code> is the block count and <code class="docutils literal notranslate"><span class="pre">N_h</span></code> is the
 (constant) coarse-bin size multiplier.</p></li>
 <li><p><strong>Scaling factor</strong> – The optional <code class="docutils literal notranslate"><span class="pre">scaling_factor</span></code> tracks variance
@@ -511,23 +508,22 @@ code all consume spectra with the same units and sidedness.</p>
 <p>The multivariate pipeline follows a fixed sequence of transformations:</p>
 <ol class="arabic simple">
 <li><p><strong>Timeseries</strong> – raw or standardised time-domain data.</p></li>
-<li><p><strong>MultivarFFT</strong> – <code class="docutils literal notranslate"><span class="pre">to_wishart_stats</span></code> produces frequency grids, FFT means, and
-the eigenvector replicates <code class="docutils literal notranslate"><span class="pre">U(f)</span></code> on the positive-frequency grid.
-The analysis band is controlled by <code class="docutils literal notranslate"><span class="pre">model.fmin</span></code>/<code class="docutils literal notranslate"><span class="pre">model.fmax</span></code>.</p></li>
+<li><p><strong>MultivarFFT</strong> – <code class="docutils literal notranslate"><span class="pre">to_wishart_stats</span></code> produces frequency grids and
+eigenvector-weighted Wishart factors <code class="docutils literal notranslate"><span class="pre">U(f)</span></code> on the positive-frequency
+grid. The analysis band is controlled by <code class="docutils literal notranslate"><span class="pre">PipelineConfig.fmin</span></code> and
+<code class="docutils literal notranslate"><span class="pre">PipelineConfig.fmax</span></code>.</p></li>
 <li><p><strong>CoarseGrain</strong> – optional <strong>linear, full-band</strong> binning combines nearby
 frequencies by summing <span class="math notranslate nohighlight">\(\bar Y_h = \sum_{f\in J_h} Y(f)\)</span> and assigns each
 bin the member count <span class="math notranslate nohighlight">\(N_h\)</span> for log-determinant scaling. Coarse-grain
 config controls only binning parameters (<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p></li>
-<li><p><strong>Sampler</strong> – NumPyro samplers consume the (possibly coarse) Wishart stats
-and spline models.</p></li>
+<li><p><strong>Inference stages</strong> – VI and NUTS stages consume the (possibly coarse)
+Wishart stats and spline models.</p></li>
 <li><p><strong>ArviZ conversion</strong> – <code class="docutils literal notranslate"><span class="pre">wishart_u_to_psd</span></code> populates
 <code class="docutils literal notranslate"><span class="pre">observed_data['periodogram']</span></code> using the canonical normalisation.</p></li>
 <li><p><strong>Plotting</strong> – visualisers consume the precomputed posterior quantiles and
 empirical PSD without re-deriving spectra.</p></li>
 </ol>
 </section>
-<div class="toctree-wrapper compound">
-</div>
 </section>
 
     <script type="text/x-thebe-config">
@@ -561,20 +557,20 @@ empirical PSD without re-deriving spectra.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="api.html"
+       href="technical_notes.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">API Reference</p>
+        <p class="prev-next-title">Technical Notes</p>
       </div>
     </a>
     <a class="right-next"
-       href="development.html"
+       href="coarse_grain.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Development Guide</p>
+        <p class="prev-next-title">Coarse-Graining</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

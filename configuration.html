@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Coarse-Graining &#8212; LogPSplinePSD</title>
+    <title>Configuration &#8212; LogPSplinePSD</title>
   
   
   
@@ -60,13 +60,11 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'coarse_grain';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'configuration';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Multivariate Factorised Likelihood: Math to Code" href="multivar_blocked_nuts.html" />
-    <link rel="prev" title="Conventions" href="conventions.html" />
+    <link rel="next" title="Data and Preprocessing" href="data_preprocessing.html" />
+    <link rel="prev" title="Quick Start" href="quickstart.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -164,12 +162,12 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Coarse-Graining</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
 <li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
 </ul>
@@ -252,7 +250,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fcoarse_grain.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fconfiguration.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -282,7 +280,7 @@
       
       
       
-      <li><a href="_sources/coarse_grain.rst" target="_blank"
+      <li><a href="_sources/configuration.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -358,7 +356,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Coarse-Graining</h1>
+    <h1>Configuration</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -368,9 +366,12 @@
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-bins">Frequency bins</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#aggregating-fft-data">Aggregating FFT data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#likelihood-scaling">Likelihood scaling</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#minimal-configuration">Minimal Configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spline-options">Spline Options</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vi-and-nuts">VI and NUTS</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-vi-and-coarse-graining">Coarse VI and Coarse Graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output-and-evidence">Output and Evidence</a></li>
 </ul>
             </nav>
         </div>
@@ -382,77 +383,105 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="coarse-graining">
-<h1>Coarse-Graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h1>
-<p>The multivariate PSD pipeline optionally groups nearby Fourier frequencies into
-coarse bins so that each bin contributes a single aggregated Wishart statistic.
-This documents the design of that discretization and shows how the implementation
-realizes the theoretical approximations stated in the repository.</p>
-<section id="frequency-bins">
-<h2>Frequency bins<a class="headerlink" href="#frequency-bins" title="Link to this heading">#</a></h2>
-<p>The retained fine-frequency grid <span class="math notranslate nohighlight">\(\{f_1,\dots,f_{N_\ell}\}\subset[f_{\min},f_{\max}]\)</span>
-is coarse-grained by dividing it into consecutive, disjoint subsets
-<span class="math notranslate nohighlight">\(J_h\)</span>. Each <span class="math notranslate nohighlight">\(J_h\)</span> contains <span class="math notranslate nohighlight">\(N_h\)</span> Fourier frequencies, and
-<span class="math notranslate nohighlight">\(\bar f_h\)</span> denotes the midpoint Fourier frequency of <span class="math notranslate nohighlight">\(J_h\)</span>. For
-even <span class="math notranslate nohighlight">\(N_h\)</span>, the implementation uses the lower-middle member of the
-discrete Fourier grid.</p>
-<p>The band limits <span class="math notranslate nohighlight">\([f_{\min}, f_{\max}]\)</span> are chosen upstream via
-<code class="docutils literal notranslate"><span class="pre">model.fmin</span></code>/<code class="docutils literal notranslate"><span class="pre">model.fmax</span></code>. Coarse-grain configuration controls only binning
-(<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p>
-<p>The binning logic is implemented by
-<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.compute_binning_structure" title="log_psplines.preprocessing.coarse_grain.compute_binning_structure"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.compute_binning_structure()</span></code></a>, which
-returns <a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code></a>. Only
-linear, full-band binning is supported. Exactly one construction mode must be
-chosen:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">Nh</span></code>: fixed membership with equal-size bins that divide the retained
-frequency count exactly.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Nc</span></code>: fixed bin count. If the retained count is not divisible by <code class="docutils literal notranslate"><span class="pre">Nc</span></code>,
-trailing frequencies are trimmed so bins are equal sized.</p></li>
-</ul>
-<p>The spec stores</p>
-<ul class="simple">
-<li><p>midpoint frequencies,</p></li>
-<li><p>start and midpoint indices for each contiguous bin,</p></li>
-<li><p>the constant member count <span class="math notranslate nohighlight">\(N_h\)</span>, and</p></li>
-<li><p>the number of coarse bins <span class="math notranslate nohighlight">\(N_c\)</span>.</p></li>
-</ul>
+  <section id="configuration">
+<h1>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h1>
+<p>Most user-facing behaviour is controlled by
+<a class="reference internal" href="api.html#log_psplines.pipeline.config.PipelineConfig" title="log_psplines.pipeline.config.PipelineConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.pipeline.config.PipelineConfig</span></code></a>. The configuration is a
+flat dataclass so runs can be saved, logged, and reproduced without nested
+state.</p>
+<section id="minimal-configuration">
+<h2>Minimal Configuration<a class="headerlink" href="#minimal-configuration" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.pipeline.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineConfig</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">PipelineConfig</span><span class="p">(</span>
+    <span class="n">n_knots</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">n_warmup</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">n_samples</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">rng_key</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+    <span class="n">outdir</span><span class="o">=</span><span class="s2">&quot;runs/example&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 </section>
-<section id="aggregating-fft-data">
-<h2>Aggregating FFT data<a class="headerlink" href="#aggregating-fft-data" title="Link to this heading">#</a></h2>
-<p><a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code></a>
-takes the <a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT" title="log_psplines.datatypes.multivar.MultivarFFT"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code></a> and
-<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code></a> and builds the
-coarse representation used during sampling. The frequencies are
-grouped by bin across the <strong>entire</strong> retained band. Within each <span class="math notranslate nohighlight">\(J_h\)</span>, the
-individual Wishart matrices
-<span class="math notranslate nohighlight">\(\mathbf{Y}(f)=\mathbf{U}(f)\mathbf{U}(f)^H\)</span> are summed to form
-<span class="math notranslate nohighlight">\(\bar{\mathbf{Y}}_h = \sum_{f\in J_h}\mathbf{Y}(f)\)</span>, and the sum is
-re-factorized to obtain a single <span class="math notranslate nohighlight">\(\bar{\mathbf{U}}_h\)</span> per bin. The helper
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar_utils.Y_to_U()</span></code> performs the eigensystem
-factorisation used by this step.</p>
-<p>The returned <a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT" title="log_psplines.datatypes.multivar.MultivarFFT"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code></a> has
-<code class="docutils literal notranslate"><span class="pre">len(spec.f_coarse)</span></code> frequencies and stores the constant bin size on
-<code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>.</p>
+<section id="spline-options">
+<h2>Spline Options<a class="headerlink" href="#spline-options" title="Link to this heading">#</a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">n_knots</span></code></dt><dd><p>Number of interior spline knots. It may be an integer shared by all
+components or a dictionary for component families.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">degree</span></code></dt><dd><p>B-spline degree. The default is cubic splines.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">diffMatrixOrder</span></code></dt><dd><p>Difference order for the P-spline penalty. The default penalises second
+differences.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">knot_kwargs</span></code></dt><dd><p>Extra keyword arguments passed to knot initialisation. Use this for
+specialised knot placement while keeping the pipeline interface stable.</p>
+</dd>
+</dl>
 </section>
-<section id="likelihood-scaling">
-<h2>Likelihood scaling<a class="headerlink" href="#likelihood-scaling" title="Link to this heading">#</a></h2>
-<p>The scalar <span class="math notranslate nohighlight">\(N_h\)</span> scales <strong>only</strong> the log-determinant term so that each bin behaves like
-a Wishart observation with <span class="math notranslate nohighlight">\(N_b N_h\)</span> degrees of freedom:</p>
-<div class="math notranslate nohighlight">
-\[\log \mathcal{L}
-\;\propto\;
-- \sum_{h=1}^{N_c} N_b N_h \log \left|\mathbf{S}(\bar f_h)\right|
-- \sum_{h=1}^{N_c} \frac{1}{T}\,\mathrm{tr}\!\left[\mathbf{S}(\bar f_h)^{-1}\,\bar{\mathbf{Y}}_h\right].\]</div>
-<p>When coarse graining is enabled, the pipeline model reads <code class="docutils literal notranslate"><span class="pre">Nh</span></code> from
-<code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>. The NumPyro model
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.pipeline.models._blocked_channel_model()</span></code> multiplies the
-summed <code class="docutils literal notranslate"><span class="pre">log_delta_sq</span></code> term by <code class="docutils literal notranslate"><span class="pre">Nh</span></code>, ensuring the total log-det term matches
-the aggregated <span class="math notranslate nohighlight">\(N_b N_h\)</span> degrees of freedom. The trace term uses the
-summed statistic <span class="math notranslate nohighlight">\(\bar{\mathbf{Y}}_h\)</span> directly, so no additional
-<span class="math notranslate nohighlight">\(N_h\)</span> factor appears there.</p>
-<p>No log-binning, hybrid schemes, or “preserve low frequencies” modes are
-implemented.</p>
+<section id="frequency-selection">
+<h2>Frequency Selection<a class="headerlink" href="#frequency-selection" title="Link to this heading">#</a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">fmin</span></code> and <code class="docutils literal notranslate"><span class="pre">fmax</span></code></dt><dd><p>Optional lower and upper frequency limits in Hz. The DC bin is always
+dropped before fitting.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">exclude_freq_bands</span></code></dt><dd><p>Tuple of <code class="docutils literal notranslate"><span class="pre">(low,</span> <span class="pre">high)</span></code> bands to remove after applying <code class="docutils literal notranslate"><span class="pre">fmin</span></code> and
+<code class="docutils literal notranslate"><span class="pre">fmax</span></code>. This is useful for known contaminated bands.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">Nb</span></code></dt><dd><p>Number of non-overlapping time-domain blocks used to build Wishart
+statistics. <code class="docutils literal notranslate"><span class="pre">Nb</span></code> must divide the number of samples.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">wishart_window</span></code> and <code class="docutils literal notranslate"><span class="pre">wishart_detrend</span></code></dt><dd><p>Optional block taper and detrending mode used during FFT preprocessing.
+Non-rectangular windows apply an equivalent-noise-bandwidth correction in
+the likelihood.</p>
+</dd>
+</dl>
+</section>
+<section id="vi-and-nuts">
+<h2>VI and NUTS<a class="headerlink" href="#vi-and-nuts" title="Link to this heading">#</a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">init_from_vi</span></code></dt><dd><p>Run stochastic variational inference before NUTS and use the fitted guide to
+initialise the sampler. Enabled by default.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">only_vi</span></code></dt><dd><p>Stop after the VI stage. This is the fastest way to check data scaling,
+frequency selection, and spline flexibility.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">vi_steps</span></code>, <code class="docutils literal notranslate"><span class="pre">vi_lr</span></code>, <code class="docutils literal notranslate"><span class="pre">vi_guide</span></code></dt><dd><p>Optimisation settings for the VI warm start.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">n_warmup</span></code>, <code class="docutils literal notranslate"><span class="pre">n_samples</span></code>, <code class="docutils literal notranslate"><span class="pre">num_chains</span></code></dt><dd><p>Standard NUTS run length controls.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">target_accept_prob</span></code> and <code class="docutils literal notranslate"><span class="pre">max_tree_depth</span></code></dt><dd><p>NumPyro NUTS tuning controls. Per-channel values can be supplied with
+<code class="docutils literal notranslate"><span class="pre">target_accept_prob_by_channel</span></code> and <code class="docutils literal notranslate"><span class="pre">max_tree_depth_by_channel</span></code>.</p>
+</dd>
+</dl>
+</section>
+<section id="coarse-vi-and-coarse-graining">
+<h2>Coarse VI and Coarse Graining<a class="headerlink" href="#coarse-vi-and-coarse-graining" title="Link to this heading">#</a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">coarse_grain_config</span></code></dt><dd><p>Coarse grain the frequency grid used by the full inference stage.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">coarse_grain_config_vi</span></code></dt><dd><p>Coarse grain only the VI warm-start stage.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">auto_coarse_vi</span></code></dt><dd><p>Let the pipeline choose a coarse VI grid when the full grid is large.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">use_coarse_vi_for_init</span></code></dt><dd><p>Use the coarse VI result as the initial point for full-resolution inference.</p>
+</dd>
+</dl>
+</section>
+<section id="output-and-evidence">
+<h2>Output and Evidence<a class="headerlink" href="#output-and-evidence" title="Link to this heading">#</a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">outdir</span></code></dt><dd><p>If set, the pipeline writes NetCDF inference data, posterior predictive
+plots, and diagnostic tables/figures.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">compute_lnz</span></code></dt><dd><p>Estimate log evidence with MorphZ when possible. Leave as <code class="docutils literal notranslate"><span class="pre">None</span></code> to use
+the pipeline default.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">true_psd</span></code></dt><dd><p>Optional reference PSD used only for diagnostics and error summaries. It can
+be an array aligned to the analysis grid or a <code class="docutils literal notranslate"><span class="pre">(freq,</span> <span class="pre">psd)</span></code> tuple to be
+interpolated.</p>
+</dd>
+</dl>
 </section>
 </section>
 
@@ -487,20 +516,20 @@ implemented.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="conventions.html"
+       href="quickstart.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Conventions</p>
+        <p class="prev-next-title">Quick Start</p>
       </div>
     </a>
     <a class="right-next"
-       href="multivar_blocked_nuts.html"
+       href="data_preprocessing.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Multivariate Factorised Likelihood: Math to Code</p>
+        <p class="prev-next-title">Data and Preprocessing</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -522,9 +551,12 @@ implemented.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-bins">Frequency bins</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#aggregating-fft-data">Aggregating FFT data</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#likelihood-scaling">Likelihood scaling</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#minimal-configuration">Minimal Configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spline-options">Spline Options</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vi-and-nuts">VI and NUTS</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-vi-and-coarse-graining">Coarse VI and Coarse Graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output-and-evidence">Output and Evidence</a></li>
 </ul>
   </nav></div>
 

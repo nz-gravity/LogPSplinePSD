@@ -53,7 +53,7 @@
     <script>let toggleHintShow = 'Click to show';</script>
     <script>let toggleHintHide = 'Click to hide';</script>
     <script>let toggleOpenOnPrint = 'true';</script>
-    <script src="_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="_static/togglebutton.js?v=b8b12719"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script src="_static/design-tabs.js?v=f930bc37"></script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
@@ -65,7 +65,7 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'intro';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="API Reference" href="api.html" />
+    <link rel="next" title="Quick Start" href="quickstart.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -164,23 +164,19 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="conventions.html">User Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="development.html">Development Guide</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="coarse_grain.html">Technical Documentation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="coarse_grain_mwe.html">Coarse-grain MWE (2-channel)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Blocked NUTS: Math ↔ Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_implementation_notes.html">Multivariate implementation notes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="phi_prior_approx.html">Prior on φ: Implementation vs. Theory</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="studies/lvk/lvk_demo.html">Examples and Studies</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="studies/lisa/lisa_demo.html">LISA demo</a></li>
-<li class="toctree-l2"><a class="reference internal" href="studies/runtime/runtime.html">Runtime</a></li>
-</ul>
-</details></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
 </ul>
 
     </div>
@@ -373,13 +369,10 @@
             </div>
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-links">Quick Links</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#methodology">Methodology</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-usage">Basic Usage</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#author">Author</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acknowledgements">Acknowledgements</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-included">What Is Included</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-covered-here">What Is Not Covered Here</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#install">Install</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-start">Where To Start</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
 </ul>
             </nav>
@@ -392,93 +385,69 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <a class="reference external image-reference" href="https://pypi.org/project/LogPSplinePSD/"><img alt="PyPI - Version" src="https://img.shields.io/pypi/v/LogPSplinePSD" />
-</a>
-<img alt="JAX - Accelerated" src="https://img.shields.io/badge/JAX-Accelerated-9cf.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC0AAAAaCAYAAAAjZdWPAAAIx0lEQVR42rWWBVQbWxOAkefur%2B7u3les7u7F3ZIQ3N2tbng8aXFC0uAuKf2hmlJ3AapIgobMv7t0w%2Ba50JzzJdlhlvNldubeq%2FY%2BXrTS1z%2B6sttrKfQOOY4ns13ecFImb47pVvIkukNe4y3Junr1kSZ%2Bb3Na248tx7rKiHlPo6Ryse%2F11NKQuk%2FV3tfL52yHtXm8TGYS1wk4J093wrPQPngRJH9HH1x2fAjMhcIeIaXKQCmd2Gn7IqSvG83BueT0CMkTyESUqm3vRRggTdOBIb1HFDaNl8Gdg91AFGkO7QXe8gJInpoDjEXC9gbhtWH3rjZ%2F9yK6t42Y9zyiC1iLhZA8JQe4eqKXklrJF0MqfPv2bc2wzPZjpnEyMEVlEZCKQzYCJhE8QEtIL1RaXEVFEGmEaTn96VuLDzWflLFbgvqUec3BPVBmeBnNwUiakq1I31UcPaTSR8%2B1LnditsscaB2A48K6D9SoZDD2O6bELvA0JGhl4zIYZzcWtD%2BMfdvdHNsDOHciXwBPN18lj7sy79qQCTNK3nxBZXakqbZFO2jHskA7zBs%2BJhmDmr0RhoadIZjYxKIVHpCZngPMZUKoQKrfEoz1PfZZdKAe2CvP4XnYE8k2LLMdMumwrLaNlomyVqK0UdwN%2BD7AAz73dYBpPg6gPiCN8TXFHCI2s7AWYesJgTabD%2FS5uXDTuwVaAvvghncTdk1DYGkL0daAs%2BsLiutLrn0%2BRMNXpunC7mgkCpshfbw4OhrUvMkYo%2F0c4XtHS1waY4mlG6To8oG1TKjs78xV5fAkSgqcZSL0GoszfxEAW0fUludRNWlIhGsljzVjctr8rJOkCpskKaDYIlgkVoCmF0kp%2FbW%2FU%2F%2B8QNdXPztbAc4kFxIEmNGwKuI9y5gnBMH%2BakiZxlfGaLP48kyj4qPFkeIPh0Q6lt861zZF%2BgBpDcAxT3gEOjGxMDLQRSn9XaDzPWdOstkEN7uez6jmgLOYilR7NkFwLh%2B4G0SQMnMwRp8jaCrwEs8eEmFW2VsNd07HQdP4TgWxNTYcFcKHPhRYFOWLfJJBE5FefTQsWiKRaOw6FBr6ob1RP3EoqdbHsWFDwAYvaVI28DaK8AHs51tU%2BA3Z8CUXvZ1jnSR7SRS2SnwKw4O8B1rCjwrjgt1gSrjXnWhBxjD0Hidm4vfj3e3riUP5PcUCYlZxsYFDK41XnLlUANwVeeILFde%2BGKLhk3zgyZNeQjcSHPMEKSyPPQKfIcKfIqCf8yN95MGZZ1bj98WJ%2BOorQzxsPqcYdX9orw8420jBQNfJVVmTOStEUqFz5dq%2F2tHUY3LbjMh0qYxCwCGxRep8%2FK4ZnldzuUkjJLPDhkzrUFBoHYBjk3odtNMYoJVGx9BG2JTNVehksmRaGUwMbYQITk3Xw9gOxbNoGaA8RWjwuQdsXdGvpdty7Su2%2Fqn0qbzWsXYp0nqVpet0O6zzugva1MZHUdwHk9G8aH7raHua9AIxzzjxDaw4w4cpvEQlM84kwdI0hkpsPpcOtUeaVM8hQT2Qtb4ckUbaYw4fXzGAqSVEd8CGpqamj%2F9Q2pPX7miW0NlHlDE81AxLSI2wyK6xf6vfrcgEwb0PAtPaHM1%2BNXzGXAlMRcUIrMpiE6%2Bxv0cyxSrC6FmjzvkWJE3OxpY%2BzmpsANFBxK6RuIJvXe7bUHNd4zfCwvPPh9unSO%2BbIL2JY53QDqvdbsEi2%2BuwEEHPsfFRdOqjHcjTaCLmWdBewtKzHEwKZynSGgtTaSqx7dwMeBLRhR1LETDhu76vgTFfMLi8zc8F7hoRPpAYjAWCp0Jy5dzfSEfltGU6M9oVCIATnPoGKImDUJNfK0JS37QTc9yY7eDKzIX5wR4wN8RTya4jETAvZDCmFeEPwhNXoOlQt5JnRzqhxLZBpY%2BT5mZD3M4MfLnDW6U%2Fy6jkaDXtysDm8vjxY%2FXYnLebkelXaQtSSge2IhBj9kjMLF41duDUNRiDLHEzfaigsoxRzWG6B0kZ2%2BoRA3dD2lRa44ZrM%2FBW5ANziVApGLaKCYucXOCEdhoew5Y%2Btu65VwJqxUC1j4lav6UwpIJfnRswQUIMawPSr2LGp6WwLDYJ2TwoMNbf6Tdni%2FEuNvAdEvuUZAwFERLVXg7pg9xt1djZgqV7DmuHFGQI9Sje2A9dR%2FFDd0osztIRYnln1hdW1dff%2B1gtNLN1u0ViZy9BBlu%2BzBNUK%2BrIaP9Nla2TG%2BETHwq2kXzmS4XxXmSVan9KMYUprrbgFJqCndyIw9fgdh8dMvzIiW0sngbxoGlniN6LffruTEIGE9khBw5T2FDmWlTYqrnEPa7aF%2FYYcPYiUE48Ul5jhP82tj%2FiESyJilCeLdQRpod6No3xJNNHeZBpOBsiAzm5rg2dBZYSyH9Hob0EOFqqh3vWOuHbFR5eXcORp4OzwTUA4rUzVfJ4q%2FIa1GzCrzjOMxQr5uqLAWUOwgaHOphrgF0r2epYh%2FytdjBmUAurfM6CxruT3Ee%2BDv2%2FHAwK4RUIPskqK%2Fw4%2FR1F1bWfHjbNiXcYl6RwGJcMOMdXZaEVxCutSN1SGLMx3JfzCdlU8THZFFC%2BJJuB2964wSGdmq3I2FEcpWYVfHm4jmXd%2BRn7agFn9oFaWGYhBmJs5v5a0LZUjc3Sr4Ep%2FmFYlX8OdLlFYidM%2B731v7Ly4lfu85l3SSMTAcd5Bg2Sl%2FIHBm3RuacVx%2BrHpFcWjxztavOcOBcTnUhwekkGlsfWEt2%2FkHflB7WqKomGvs9F62l7a%2BRKQQQtRBD9VIlZiLEfRBRfQEmDb32cFQcSjznUP3um%2FkcbV%2BjmNEvqhOQuonjoQh7QF%2BbK811rduN5G6ICLD%2BnmPbi0ur2hrDLKhQYiwRdQrvKjcp%2F%2BL%2BnTz%2Fa4FgvmakvluPMMxbL15Dq5MTYAhOxXM%2FmvEpsoWmtfP9RxnkAIAr%2F5pVxqPxH93msKodRSXIct2l0OU0%2FL4eY506L%2B3GyJ6UMEZfjjCDbysNcWWmFweJP0Jz%2FA0g2gk80pGkYAAAAAElFTkSuQmCC" />
-<section id="logpsplinepsd">
+  <section id="logpsplinepsd">
 <h1>LogPSplinePSD<a class="headerlink" href="#logpsplinepsd" title="Link to this heading">#</a></h1>
-<p>Log-spline representation of the power spectral density (PSD) in the frequency domain, using penalized B-splines with a discrete penalty on spline coefficients to prevent overfitting.</p>
+<p><code class="docutils literal notranslate"><span class="pre">LogPSplinePSD</span></code> estimates power spectral densities (PSDs) with Bayesian
+log-P-splines. It is built around multichannel frequency-domain inference:
+time series are converted into Wishart sufficient statistics, smooth spline
+models are fitted with NumPyro/JAX, and results are returned as ArviZ-compatible
+<code class="docutils literal notranslate"><span class="pre">xarray.DataTree</span></code> objects.</p>
+<p>The package is useful when you need posterior uncertainty on a univariate PSD,
+a multivariate spectral matrix, cross spectra, or coherence. The implementation
+keeps the main spectral invariants explicit: PSD diagonals are positive,
+multivariate spectral matrices are Hermitian positive definite, and coherence
+is derived from the reconstructed matrix.</p>
+<section id="what-is-included">
+<h2>What Is Included<a class="headerlink" href="#what-is-included" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>GitHub Repository</strong>: <a class="github reference external" href="https://github.com/nz-gravity/LogPSplinePSD">nz-gravity/LogPSplinePSD</a></p></li>
-<li><p><strong>Paper</strong>: Aimen et al (<em>in preparation</em>)</p></li>
-</ul>
-<section id="quick-links">
-<h2>Quick Links<a class="headerlink" href="#quick-links" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p><a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> - API Reference for main classes and functions</p></li>
-<li><p><a class="reference internal" href="conventions.html"><span class="doc">Conventions</span></a> - Naming conventions and data flow</p></li>
-<li><p><a class="reference internal" href="development.html"><span class="doc">Development Guide</span></a> - Development guide for contributors</p></li>
-<li><p><a class="reference internal" href="coarse_grain.html"><span class="doc">Coarse-Graining</span></a> - Technical details on coarse-graining</p></li>
-<li><p><a class="reference internal" href="studies/lvk/lvk_demo.html"><span class="doc">LVK Demo</span></a> - LVK gravitational wave detector demo</p></li>
-<li><p><a class="reference internal" href="studies/lisa/lisa_demo.html"><span class="doc">LISA demo</span></a> - LISA space-based detector demo</p></li>
-</ul>
-</section>
-<section id="overview">
-<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
-<p><cite>LogPSplinePSD</cite> implements a Bayesian model for PSD estimation by fitting a log-spline to the periodogram. Main features:</p>
-<ul class="simple">
-<li><p><strong>Log-frequency representation</strong>: Works on the log-scale of frequencies for numerical stability and improved resolution.</p></li>
-<li><p><strong>P-spline prior</strong>: Applies a discrete difference penalty to log B-spline coefficients, enforcing smoothness in the log-PSD domain [<a class="reference internal" href="#eilers1996">Eilers1996</a>].</p></li>
-<li><p><strong>Whittle likelihood</strong>: Employs Whittle’s approximation for fast likelihood evaluation on periodogram ordinates.</p></li>
-<li><p><strong>CPU/GPU sampling</strong>: Uses NumPyro (JAX) to perform efficient Hamiltonian Monte Carlo inference.</p></li>
+<li><p>A high-level pipeline interface via <a class="reference internal" href="api.html#log_psplines.mcmc.run_mcmc" title="log_psplines.mcmc.run_mcmc"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.mcmc.run_mcmc()</span></code></a> and
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.make_pipeline()</span></code>.</p></li>
+<li><p>Data containers for time-domain series and frequency-domain Wishart
+statistics.</p></li>
+<li><p>P-spline models for diagonal PSD terms and complex off-diagonal structure.</p></li>
+<li><p>VI warm starts and factorised multivariate NUTS stages.</p></li>
+<li><p>Optional frequency-domain coarse graining for large frequency grids.</p></li>
+<li><p>ArviZ-style outputs, diagnostic summaries, posterior PSD quantiles, and
+plotting helpers.</p></li>
 </ul>
 </section>
-<section id="methodology">
-<h2>Methodology<a class="headerlink" href="#methodology" title="Link to this heading">#</a></h2>
-<p>The approach follows the P-spline framework for spectral density estimation described by Maturana-Russel &amp; Meyer (2021) [<a class="reference internal" href="#maturanarussel2021">MaturanaRussel2021</a>].</p>
-<ol class="arabic simple">
-<li><p><strong>Basis construction</strong>
-Define order-<span class="math notranslate nohighlight">\(r\)</span> B-spline basis functions <span class="math notranslate nohighlight">\(B_k(\omega)\)</span>, <span class="math notranslate nohighlight">\(k=1,\dots,K+r\)</span>,
-on a grid of interior knots in the log-frequency domain.</p></li>
-<li><p><strong>Penalized prior</strong>
-Apply a discrete <span class="math notranslate nohighlight">\(D`th-order difference penalty to the spline coefficients
-:math:\)</span>{beta_k}`, which induces smoothness in the estimated log-PSD.</p></li>
-<li><p><strong>Knot placement (optional)</strong>
-For spectra with sharp features, knot locations can be set based on quantiles of the raw periodogram values to allocate flexibility where needed.</p></li>
-<li><p><strong>Model and likelihood</strong>
-The log-PSD is modeled as:</p></li>
-</ol>
-<blockquote>
-<div><div class="math notranslate nohighlight">
-\[ \begin{align}\begin{aligned}  \log f(\lambda_\ell) = \sum_k \beta_k \, B_k(\log \lambda_\ell)\\
-Whittle’s approximation for the periodogram :math:`I_n(\lambda_\ell)` yields the log-likelihood:\end{aligned}\end{align} \]</div>
-</div></blockquote>
-<div class="math notranslate nohighlight">
-\[\log L(\beta) \propto -\sum_{\ell=1}^{N_\ell} \left[ \log f(\lambda_\ell) + \frac{I_n(\lambda_\ell)}{f(\lambda_\ell)} \right]\]</div>
-<ol class="arabic simple" start="5">
-<li><p><strong>Inference</strong>
-We use NumPyro’s NUTS sampler to jointly sample the spline coefficients.
-When <code class="docutils literal notranslate"><span class="pre">init_from_vi</span></code> is enabled (default), the stochastic VI warm-start runs before NUTS and
-saves convergence plots and PSD previews to <code class="docutils literal notranslate"><span class="pre">&lt;outdir&gt;/diagnostics</span></code> so you can inspect them
-before launching the expensive sampler.</p></li>
-</ol>
-<p>This fixed-basis P-spline approach avoids reversible-jump MCMC over knot numbers and positions, reducing computational cost while retaining flexibility to capture complex spectral features.</p>
-<p>Finally, one can also provide a ‘parametric model’ of the PSD as a function that can then be ‘corrected’ non-parametrically by the spline model.
-This is useful for cases where a known functional form (e.g., power-law) is expected, but additional flexibility is needed to account for deviations in the data.</p>
+<section id="what-is-not-covered-here">
+<h2>What Is Not Covered Here<a class="headerlink" href="#what-is-not-covered-here" title="Link to this heading">#</a></h2>
+<p>Application-specific gravitational-wave examples are intentionally left out of
+this documentation set for now. The public docs focus on package concepts,
+synthetic examples, configuration, outputs, and API reference. Domain examples
+can be added later as separate case studies.</p>
 </section>
-<section id="installation">
-<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">LogPSplinePSD</span>
+<section id="install">
+<h2>Install<a class="headerlink" href="#install" title="Link to this heading">#</a></h2>
+<p>Use the project virtual environment during development:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;.[dev]&#39;</span>
+</pre></div>
+</div>
+<p>For package use outside the repository:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>LogPSplinePSD
 </pre></div>
 </div>
 </section>
-<section id="basic-usage">
-<h2>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading">#</a></h2>
-<p>See <a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/tree/main/docs/demo.py">demo.py</a></p>
-<img alt="Demo Image" class="align-center" src="https://github.com/nz-gravity/LogPSplinePSD/raw/main/docs/demo.png" />
-</section>
-<section id="author">
-<h2>Author<a class="headerlink" href="#author" title="Link to this heading">#</a></h2>
-<p>NZ Gravity</p>
-</section>
-<section id="acknowledgements">
-<h2>Acknowledgements<a class="headerlink" href="#acknowledgements" title="Link to this heading">#</a></h2>
-<p>Part of the NZ-Gravity and International LISA Consortium efforts on gravitational-wave data analysis.</p>
+<section id="where-to-start">
+<h2>Where To Start<a class="headerlink" href="#where-to-start" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="quickstart.html"><span class="doc">Quick Start</span></a> shows a small synthetic run.</p></li>
+<li><p><a class="reference internal" href="configuration.html"><span class="doc">Configuration</span></a> explains the main knobs in <code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code>.</p></li>
+<li><p><a class="reference internal" href="data_preprocessing.html"><span class="doc">Data and Preprocessing</span></a> describes accepted inputs and FFT preprocessing.</p></li>
+<li><p><a class="reference internal" href="outputs.html"><span class="doc">Outputs and Diagnostics</span></a> explains the returned <code class="docutils literal notranslate"><span class="pre">DataTree</span></code> and saved diagnostics.</p></li>
+<li><p><a class="reference internal" href="technical_notes.html"><span class="doc">Technical Notes</span></a> links the implemented likelihood to the code.</p></li>
+<li><p><a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> lists the most useful public classes and functions.</p></li>
+</ul>
 </section>
 <section id="references">
 <h2>References<a class="headerlink" href="#references" title="Link to this heading">#</a></h2>
-<p id="eilers1996">Eilers, P. H. C., &amp; Marx, B. D. (1996). <em>Flexible smoothing with B-splines and penalties</em>. Statistical Science, 11(2), 89–121. <a class="reference external" href="https://doi.org/10.1214/ss/1038425655">DOI:10.1214/ss/1038425655</a>.</p>
-<p id="maturanarussel2021">Maturana-Russel, J., &amp; Meyer, R. (2021). <em>P-spline spectral density estimation with a discrete penalty</em>. <a class="reference external" href="https://arxiv.org/abs/1905.01832">arXiv:1905.01832</a>.</p>
+<p id="eilers1996">Eilers, P. H. C., &amp; Marx, B. D. (1996). <em>Flexible smoothing with B-splines and
+penalties</em>. Statistical Science, 11(2), 89-121.
+<a class="reference external" href="https://doi.org/10.1214/ss/1038425655">DOI:10.1214/ss/1038425655</a>.</p>
+<p id="maturanarussel2021">Maturana-Russel, J., &amp; Meyer, R. (2021). <em>P-spline spectral density estimation
+with a discrete penalty</em>. <a class="reference external" href="https://arxiv.org/abs/1905.01832">arXiv:1905.01832</a>.</p>
 </section>
 <div class="toctree-wrapper compound">
 </div>
@@ -515,11 +484,11 @@ This is useful for cases where a known functional form (e.g., power-law) is expe
                   
 <div class="prev-next-area">
     <a class="right-next"
-       href="api.html"
+       href="quickstart.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">API Reference</p>
+        <p class="prev-next-title">Quick Start</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -541,13 +510,10 @@ This is useful for cases where a known functional form (e.g., power-law) is expe
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-links">Quick Links</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#methodology">Methodology</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-usage">Basic Usage</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#author">Author</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acknowledgements">Acknowledgements</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-included">What Is Included</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-covered-here">What Is Not Covered Here</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#install">Install</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-start">Where To Start</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
 </ul>
   </nav></div>

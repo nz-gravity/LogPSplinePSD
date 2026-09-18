@@ -42,7 +42,7 @@ Aggregating FFT data
 --------------------
 
 :func:`log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft`
-takes the :class:`log_psplines.datatypes.multivar.MultivarFFT` and
+takes the :class:`log_psplines.data.WishartData` and
 :class:`log_psplines.preprocessing.coarse_grain.CoarseGrainSpec` and builds the
 coarse representation used during sampling. The frequencies are
 grouped by bin across the **entire** retained band. Within each :math:`J_h`, the
@@ -50,10 +50,10 @@ individual Wishart matrices
 :math:`\mathbf{Y}(f)=\mathbf{U}(f)\mathbf{U}(f)^H` are summed to form
 :math:`\bar{\mathbf{Y}}_h = \sum_{f\in J_h}\mathbf{Y}(f)`, and the sum is
 re-factorized to obtain a single :math:`\bar{\mathbf{U}}_h` per bin. The helper
-:func:`log_psplines.datatypes.multivar_utils.Y_to_U` performs the eigensystem
+:func:`log_psplines.data_utils.Y_to_U` performs the eigensystem
 factorisation used by this step.
 
-The returned :class:`log_psplines.datatypes.multivar.MultivarFFT` has
+The returned :class:`log_psplines.data.WishartData` has
 ``len(spec.f_coarse)`` frequencies and stores the constant bin size on
 ``fft_data.Nh``.
 
@@ -72,7 +72,7 @@ a Wishart observation with :math:`N_b N_h` degrees of freedom:
 
 When coarse graining is enabled, the pipeline model reads ``Nh`` from
 ``fft_data.Nh``. The NumPyro model
-:func:`log_psplines.pipeline.models._blocked_channel_model` multiplies the
+:func:`log_psplines.inference.model._blocked_channel_model` multiplies the
 summed ``log_delta_sq`` term by ``Nh``, ensuring the total log-det term matches
 the aggregated :math:`N_b N_h` degrees of freedom. The trace term uses the
 summed statistic :math:`\bar{\mathbf{Y}}_h` directly, so no additional

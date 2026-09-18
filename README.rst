@@ -3,8 +3,8 @@ LogPSplinePSD
 
 ``LogPSplinePSD`` estimates power spectral densities (PSDs) with Bayesian
 log-P-splines. It supports univariate and multivariate time series, fits smooth
-spectral matrices with NumPyro/JAX, and returns ArviZ-compatible
-``xarray.DataTree`` outputs for diagnostics and plotting.
+spectral matrices with NumPyro/JAX, and returns ``PSDResult`` outputs with
+ArviZ-compatible ``xarray.DataTree`` posteriors.
 
 Highlights
 ----------
@@ -37,12 +37,11 @@ Quick Example
 .. code-block:: python
 
    from log_psplines.example_datasets.varma_data import VARMAData
-   from log_psplines.mcmc import run_mcmc
-   from log_psplines.pipeline.config import PipelineConfig
+   from log_psplines import fit, PipelineConfig
 
    data = VARMAData(n_samples=256, fs=64.0, seed=7)
 
-   idata = run_mcmc(
+   result = fit(
        data.ts,
        PipelineConfig(
            n_knots=6,
@@ -52,6 +51,13 @@ Quick Example
            outdir="runs/varma_quickstart",
        ),
    )
+
+Architecture
+------------
+
+See `the architecture and migration guide <docs/architecture.md>`_ for the
+shared scalar/matrix model and the reserved time-dependent extension points.
+Time-varying inference is not implemented.
 
 Documentation
 -------------

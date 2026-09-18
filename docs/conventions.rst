@@ -91,11 +91,11 @@ We also use the eigendecomposition of :math:`\bar{Y}_h`:
 PSD terminology
 ---------------
 
-``log_psplines.datatypes.multivar_utils`` centralises the conversion between
+``log_psplines.data_utils`` centralises the conversion between
 Wishart statistics and PSD matrices. The current conventions are:
 
 - **Normalisation** – PSD matrices are **one-sided** and expressed per Hz. The
-  helper :func:`log_psplines.datatypes.multivar_utils.Y_to_S` converts summed
+  helper :func:`log_psplines.data_utils.Y_to_S` converts summed
   Wishart matrices into PSD matrices using the stored block count, coarse-bin
   multiplier, duration, and scaling factor.
 - **Degrees of freedom** – ``N_b`` is the block count and ``N_h`` is the
@@ -116,7 +116,7 @@ Data flow
 The multivariate pipeline follows a fixed sequence of transformations:
 
 1. **Timeseries** – raw or standardised time-domain data.
-2. **MultivarFFT** – ``to_wishart_stats`` produces frequency grids and
+2. **WishartData** – ``to_wishart_stats`` produces frequency grids and
    eigenvector-weighted Wishart factors ``U(f)`` on the positive-frequency
    grid. The analysis band is controlled by ``PipelineConfig.fmin`` and
    ``PipelineConfig.fmax``.

@@ -26,7 +26,7 @@ Implementation Map
    Pipeline construction, preprocessing, VI, NUTS, saving, and evidence
    estimation.
 
-``log_psplines.datatypes``
+``log_psplines.data``
    Time-domain and frequency-domain containers.
 
 ``log_psplines.psplines``

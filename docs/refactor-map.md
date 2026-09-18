@@ -29,3 +29,47 @@ the implementation, not that inaccurate description.
 Validation: frozen deterministic baseline arrays and fixed-seed small fits,
 existing preprocessing, storage, diagnostics and inference tests, followed by
 the complete suite. Sampling smoke tests are not convergence claims.
+
+## Preserved conventions and separate issues
+
+- The likelihood clips log variances to [-80, 80]. Posterior reconstruction
+  continues to exponentiate un-clipped scalar components. This pre-existing
+  distinction has not been changed.
+- Stored pointwise likelihoods are untempered, as before, even when inference
+  uses eta. This is retained for existing diagnostic consumers.
+- Wishart determinant counts are Nb * Nh. Duration and ENBW scaling, negative
+  lower-triangular theta signs, channel scaling and one-channel behavior are
+  preserved.
+- Existing parametric/analytical PSD guides (including LISA study callers)
+  remain outside basis, scalar models and likelihoods.
+
+## Verification completed
+
+- Baseline suite: 68 passed, 3 existing explicit skips.
+- Final complete suite: 76 passed, 3 existing explicit skips, with
+  `LOG_PSPLINES_SLOW_TESTS=1` (36.47 seconds in the local `.venv`).
+- The skipped tests are the long-running benchmark and two evidence tests
+  already marked `skip` before this refactor.
+- `tests/reference/stationary.npz` was captured from the original implementation
+  in the first regression commit. It covers nonuniform-grid basis and penalty
+  arrays, scalar evaluation, Wishart observations, NumPyro likelihood factors,
+  modified-Cholesky matrices and fixed-seed one/two-channel posterior draws.
+  Comparisons pass with rtol=3e-5, atol=3e-6. The fixture is never overwritten
+  by the final tests.
+- Independent SciPy B-spline/derivative-integral checks, direct complex
+  matrix-inverse checks, JAX likelihood gradient checks, PSD/PD/coherence
+  checks and NetCDF result round trips pass.
+- Existing preprocessing, VI, blocked NUTS, ArviZ and plotting tests pass.
+  These verify stationary behavior, not posterior convergence or TV inference.
+- Compileall, scoped Ruff undefined/unused-name checks, and git diff --check
+  pass. Graphify's code rebuild was run in `.venv`.
+
+Reproduce the full tests:
+
+```sh
+MPLBACKEND=Agg LOG_PSPLINES_SLOW_TESTS=1 .venv/bin/python -m pytest -q
+```
+
+The repository's installed Git hook points into the unrelated starccato_jax
+virtual environment, where pre_commit is missing. Commits bypassed that broken
+hook after running the checks above locally.

@@ -11,5 +11,6 @@ chapters:
       - file: coarse_grain.rst
       - file: multivar_blocked_nuts.rst
       - file: design_shrinkage.md
+  - file: architecture.md
   - file: api.rst
   - file: development.md

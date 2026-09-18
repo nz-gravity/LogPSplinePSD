@@ -12,6 +12,12 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 
+from log_psplines.config import PipelineConfig
+from log_psplines.data.spectral import WishartData
+from log_psplines.inference.components import SpectralComponents
+from log_psplines.likelihoods.wishart import wishart_log_likelihood
+from log_psplines.models.spectrum import build_spline
+
 
 def _sample_pspline_block(
     delta_name: str,
@@ -125,8 +131,7 @@ def _blocked_channel_model(
         tau=tau,
     )
     # log_delta_sq[h] = B_h @ w  →  log(δ²_{jh}), shape (n_coarse_bins,)
-    log_delta_sq = jnp.einsum("nk,k->n", basis_delta, delta_block["weights"])
-    log_delta_sq_safe = jnp.clip(log_delta_sq, min=-80.0, max=80.0)
+    log_delta_sq = build_spline(basis_delta, delta_block["weights"])
 
     n_freq = u_re_channel.shape[0]
     # channel_index == j means there are j preceding channels (l = 0, …, j-1)
@@ -158,9 +163,7 @@ def _blocked_channel_model(
             )
             # Re(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
             theta_re_components.append(
-                jnp.einsum(
-                    "nk,k->n", basis_theta_re, theta_re_block["weights"]
-                )
+                build_spline(basis_theta_re, theta_re_block["weights"])
             )
 
             basis_theta_im = basis_theta_im_by_component[theta_idx]
@@ -180,9 +183,7 @@ def _blocked_channel_model(
             )
             # Im(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
             theta_im_components.append(
-                jnp.einsum(
-                    "nk,k->n", basis_theta_im, theta_im_block["weights"]
-                )
+                build_spline(basis_theta_im, theta_im_block["weights"])
             )
 
         # theta_re/im: shape (n_coarse_bins, n_theta_block=j)
@@ -194,59 +195,160 @@ def _blocked_channel_model(
         theta_re = jnp.zeros((n_freq, 0))
         theta_im = jnp.zeros((n_freq, 0))
 
-    # --- Log-likelihood: Eq. 13 ---
-    # ln L_j = -N_b N_h ∑_h log(δ²_{jh})          [determinant term]
-    #          - ∑_h ∑_ν |u_{jν}^(h) - ∑_{l<j} θ_{jl}^(h) u_{lν}^(h)|²
-    #            / (T_b δ²_{jh})                    [quadratic term]
-    #
-    # The determinant term comes from |S(f̄_h)|^{-N_b N_h} after factoring
-    # through the Cholesky: |T|=1, so |S|^{-1} = |D^{-1}| = ∏_j δ_j^{-2}.
-    # Raising to N_b N_h gives -N_b N_h ∑_h log(δ²_{jh}) = -2 N_b N_h ∑_h log(δ_{jh}).
-
-    delta_eff_sq = jnp.exp(
-        log_delta_sq_safe
-    )  # δ²_{jh}, shape (n_coarse_bins,)
-    nh = jnp.asarray(Nh, dtype=log_delta_sq.dtype)
-    # Determinant term: -N_b N_h ∑_h log(δ²_{jh})
-    sum_log_det = -float(Nb) * nh * jnp.sum(jnp.log(delta_eff_sq))
-
-    if n_theta_block > 0:
-        # Regression mean: ∑_{l<j} θ_{jl}^(h) u_{lν}^(h)  (complex product)
-        # Split into real and imaginary parts using Re(θ u) = Re(θ)Re(u) - Im(θ)Im(u)
-        # and Im(θ u) = Re(θ)Im(u) + Im(θ)Re(u).
-        # u_re_prev/u_im_prev shape: (n_coarse_bins, n_theta_block, n_eigenvectors)
-        contrib_re = jnp.einsum(
-            "fl,flr->fr", theta_re, u_re_prev
-        ) - jnp.einsum("fl,flr->fr", theta_im, u_im_prev)
-        contrib_im = jnp.einsum(
-            "fl,flr->fr", theta_re, u_im_prev
-        ) + jnp.einsum("fl,flr->fr", theta_im, u_re_prev)
-        # Residual: u_{jν}^(h) - ∑_{l<j} θ_{jl}^(h) u_{lν}^(h), split Re/Im
-        u_re_resid = u_re_channel - contrib_re
-        u_im_resid = u_im_channel - contrib_im
-    else:
-        u_re_resid = u_re_channel
-        u_im_resid = u_im_channel
-
-    # |residual|²_{hν} = Re(resid)² + Im(resid)², shape (n_coarse_bins, n_eigenvectors)
-    residual_power = u_re_resid**2 + u_im_resid**2
-    # Sum over eigenvectors ν → ∑_ν |resid_{hν}|², shape (n_coarse_bins,)
-    residual_power_sum = jnp.sum(residual_power, axis=1)
-    duration_scale = jnp.asarray(duration, dtype=log_delta_sq.dtype)
-    # Quadratic term: -∑_h ∑_ν |resid|² / (T_b δ²_{jh})
-    log_likelihood = sum_log_det - jnp.sum(
-        residual_power_sum / (duration_scale * delta_eff_sq)
+    log_likelihood = wishart_log_likelihood(
+        log_delta_sq,
+        theta_re,
+        theta_im,
+        u_re_channel,
+        u_im_channel,
+        u_re_prev,
+        u_im_prev,
+        Nb=Nb,
+        Nh=Nh,
+        duration=duration,
+        enbw=enbw,
+        eta=eta,
     )
-    # enbw corrects for the effective noise bandwidth of the window function
-    log_likelihood = log_likelihood / jnp.asarray(
-        enbw, dtype=log_delta_sq.dtype
-    )
-    # η ∈ (0,1] tempers the likelihood to widen posteriors (see Eq. 14)
-    log_likelihood = log_likelihood * jnp.asarray(
-        eta, dtype=log_delta_sq.dtype
-    )
-
     numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
     numpyro.deterministic(
         f"log_likelihood_block_{channel_label}", log_likelihood
     )
+
+
+def _joint_multivar_model(
+    u_re: jnp.ndarray,
+    u_im: jnp.ndarray,
+    n_channels: int,
+    bases_delta: list,
+    penalties_delta: list,
+    bases_theta_re: list,
+    penalties_theta_re: list,
+    bases_theta_im: list,
+    penalties_theta_im: list,
+    alpha_phi: float,
+    beta_phi: float,
+    alpha_phi_theta: float,
+    beta_phi_theta: float,
+    alpha_delta: float,
+    beta_delta: float,
+    duration: float,
+    Nb: int,
+    Nh: int,
+    enbw: float,
+    eta: float = 1.0,
+    design_weights=None,
+    tau=None,
+) -> None:
+    """Joint NumPyro model that calls _blocked_channel_model for every channel.
+
+    All channels are sampled in a single NumPyro model context, making it
+    compatible with the generic VIStage / NUTSStage interface.  Production
+    code uses factorized NUTS which runs independent
+    per-channel chains.
+    """
+    for j in range(n_channels):
+        _blocked_channel_model(
+            channel_index=j,
+            u_re_channel=u_re[:, j, :],
+            u_im_channel=u_im[:, j, :],
+            u_re_prev=u_re[:, :j, :],
+            u_im_prev=u_im[:, :j, :],
+            basis_delta=bases_delta[j],
+            penalty_delta=penalties_delta[j],
+            basis_theta_re_by_component=tuple(bases_theta_re[j]),
+            penalty_theta_re_by_component=tuple(penalties_theta_re[j]),
+            basis_theta_im_by_component=tuple(bases_theta_im[j]),
+            penalty_theta_im_by_component=tuple(penalties_theta_im[j]),
+            alpha_phi=alpha_phi,
+            beta_phi=beta_phi,
+            alpha_phi_theta=alpha_phi_theta,
+            beta_phi_theta=beta_phi_theta,
+            alpha_delta=alpha_delta,
+            beta_delta=beta_delta,
+            duration=duration,
+            Nb=Nb,
+            Nh=Nh,
+            design_weights=design_weights,
+            tau=tau,
+            enbw=enbw,
+            eta=eta,
+        )
+
+
+def prepare_model(
+    data: WishartData,
+    config: PipelineConfig,
+) -> tuple[dict, SpectralComponents]:
+    spline = SpectralComponents.from_multivar_fft(
+        data,
+        n_knots=config.n_knots,
+        degree=config.degree,
+        diffMatrixOrder=config.diffMatrixOrder,
+        knot_kwargs=config.knot_kwargs or {},
+        analytical_psd=config.analytical_psd,
+    )
+
+    p = data.p
+    u_re = jnp.asarray(data.u_re, dtype=jnp.float32)
+    u_im = jnp.asarray(data.u_im, dtype=jnp.float32)
+
+    bases_delta = []
+    penalties_delta = []
+    for j in range(p):
+        m = spline.diagonal_models[j]
+        bases_delta.append(jnp.asarray(m.basis, dtype=jnp.float32))
+        penalties_delta.append(jnp.asarray(m.penalty_matrix))
+
+    bases_theta_re: list[list] = []
+    penalties_theta_re: list[list] = []
+    bases_theta_im: list[list] = []
+    penalties_theta_im: list[list] = []
+    for j in range(p):
+        br, pr, bi, pi = [], [], [], []
+        for l in range(j):
+            m_re = spline.get_theta_model("re", j, l)
+            m_im = spline.get_theta_model("im", j, l)
+            br.append(jnp.asarray(m_re.basis, dtype=jnp.float32))
+            pr.append(jnp.asarray(m_re.penalty_matrix))
+            bi.append(jnp.asarray(m_im.basis, dtype=jnp.float32))
+            pi.append(jnp.asarray(m_im.penalty_matrix))
+        bases_theta_re.append(br)
+        penalties_theta_re.append(pr)
+        bases_theta_im.append(bi)
+        penalties_theta_im.append(pi)
+
+    alpha_phi_theta = (
+        config.alpha_phi_theta
+        if config.alpha_phi_theta is not None
+        else config.alpha_phi
+    )
+    beta_phi_theta = (
+        config.beta_phi_theta
+        if config.beta_phi_theta is not None
+        else config.beta_phi
+    )
+
+    kwargs = {
+        "u_re": u_re,
+        "u_im": u_im,
+        "n_channels": p,
+        "bases_delta": bases_delta,
+        "penalties_delta": penalties_delta,
+        "bases_theta_re": bases_theta_re,
+        "penalties_theta_re": penalties_theta_re,
+        "bases_theta_im": bases_theta_im,
+        "penalties_theta_im": penalties_theta_im,
+        "alpha_phi": float(config.alpha_phi),
+        "beta_phi": float(config.beta_phi),
+        "alpha_phi_theta": float(alpha_phi_theta),
+        "beta_phi_theta": float(beta_phi_theta),
+        "alpha_delta": float(config.alpha_delta),
+        "beta_delta": float(config.beta_delta),
+        "duration": float(getattr(data, "duration", 1.0) or 1.0),
+        "Nb": int(data.Nb),
+        "Nh": int(data.Nh),
+        "enbw": float(getattr(data, "enbw", 1.0)),
+        "design_weights": None,
+        "tau": None,
+    }
+    return kwargs, spline

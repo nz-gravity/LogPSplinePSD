@@ -107,7 +107,7 @@ omit = [
     "src/log_psplines/logger.py",
     "src/log_psplines/benchmark/*",
     "src/log_psplines/example_datasets/lvk_data.py",
-    "src/log_psplines/psplines/knots_locator/lvk_knot_allocator.py"
+    "src/log_psplines/preprocessing/knots_locator/lvk_knot_allocator.py"
 ]
 
 [tool.coverage.report]
@@ -163,8 +163,8 @@ module = [
     "log_psplines.samplers.base_sampler",
     "log_psplines.samplers.multivar.multivar_base",
     "log_psplines.samplers.multivar.multivar_blocked_nuts",
-    "log_psplines.psplines.initialisation",
-    "log_psplines.psplines.multivar_psplines",
+    "log_psplines.inference.initialisation",
+    "log_psplines.inference.components",
     "log_psplines.arviz_utils.rhat",
     "log_psplines.arviz_utils.from_arviz",
     "log_psplines.arviz_utils.to_arviz",

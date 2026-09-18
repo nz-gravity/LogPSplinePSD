@@ -1,3 +1,3 @@
-from .varma_data import VARMAData
+from log_psplines.example_datasets.varma_data import VARMAData
 
 __all__ = ["VARMAData"]

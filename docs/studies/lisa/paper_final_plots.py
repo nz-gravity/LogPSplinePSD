@@ -34,6 +34,8 @@ timeseries and takes ~1–2 min locally.
 
 from __future__ import annotations
 
+from log_psplines.arviz_utils.reconstruction import compute_psd_quantiles
+from log_psplines.arviz_utils.spline_storage import from_storage_dataset
 import argparse
 import json
 import os
@@ -67,10 +69,8 @@ from log_psplines.diagnostics._utils import (  # noqa: E402
     compute_matrix_riae,
 )
 from log_psplines.plotting.base import setup_plot_style  # noqa: E402
-from log_psplines.psplines import (  # noqa: E402
-    LogPSplines,
-    MultivariateLogPSplines,
-)
+from log_psplines.models.spectrum import LogPSpline  # noqa: E402
+from log_psplines.inference.components import SpectralComponents  # noqa: E402
 
 setup_plot_style()
 
@@ -314,7 +314,7 @@ def _generate_xyz_for_welch(
         duration_days=duration_days,
         block_days=block_days,
     )
-    return ts.y, Nb, Lb, 1.0 / dt
+    return ts.data, Nb, Lb, 1.0 / dt
 
 
 def _generate_xyz_for_overlay(
@@ -333,7 +333,7 @@ def _generate_xyz_for_overlay(
         duration_days=duration_days,
         block_days=duration_days,
     )
-    return ts.y, dt
+    return ts.data, dt
 
 
 def _raw_periodogram_psd(
@@ -437,9 +437,9 @@ def _load_component_model(
     *,
     degree: int,
     diff_matrix_order: int,
-) -> LogPSplines:
+) -> LogPSpline:
     """Rehydrate one stored spline component from ``idata.spline_model``."""
-    return LogPSplines.from_storage_dataset(
+    return from_storage_dataset(
         dataset,
         prefix=prefix,
         degree=degree,
@@ -447,7 +447,7 @@ def _load_component_model(
     )
 
 
-def _load_multivar_spline_model(idata) -> MultivariateLogPSplines:
+def _load_multivar_spline_model(idata) -> SpectralComponents:
     """Reconstruct the multivariate spline model from saved inference data."""
     dataset = getattr(idata, "spline_model", None)
     if dataset is None:
@@ -503,7 +503,7 @@ def _load_multivar_spline_model(idata) -> MultivariateLogPSplines:
                     diff_matrix_order=diff_matrix_order,
                 )
 
-    return MultivariateLogPSplines(
+    return SpectralComponents(
         degree=degree,
         diffMatrixOrder=diff_matrix_order,
         N=N,
@@ -592,7 +592,7 @@ def _recompute_ci_from_all_draws(
         if not max_draws or max_draws <= 0
         else min(int(max_draws), total_draws)
     )
-    psd_real_q, psd_imag_q, coh_q = spline_model.compute_psd_quantiles(
+    psd_real_q, psd_imag_q, coh_q = compute_psd_quantiles(
         jnp.asarray(log_delta_sq),
         jnp.asarray(theta_re),
         jnp.asarray(theta_im),

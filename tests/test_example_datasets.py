@@ -7,7 +7,7 @@ def test_varma_ar_p1(outdir):
     data = VARMAData.ar(order=2, n_samples=512, fs=64.0, sigma=1.0, seed=42)
     data.plot(fname=f"{outdir}/varma_ar_p1.png")
     assert data.p == 1
-    assert data.ts.y.shape == (512, 1)
+    assert data.ts.data.shape == (512, 1)
     assert data.get_true_psd().shape == (256, 1, 1)
 
 

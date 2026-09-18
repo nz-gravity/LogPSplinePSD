@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -13,149 +12,6 @@ import jax.numpy as jnp
 import xarray as xr
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
-
-from .vi import fit_vi
-
-
-@dataclass
-class StageResult:
-    """Output of a VIStage run."""
-
-    init_values: dict[str, jnp.ndarray] | None
-    losses: jnp.ndarray | None
-    khat: float | None
-    guide_name: str | None
-    runtime: float
-    losses_per_block: list[jnp.ndarray] | None = None
-    samples: dict[str, jnp.ndarray] | None = None
-
-
-@dataclass
-class VIStage:
-    """Variational inference stage wrapping :func:`fit_vi`."""
-
-    steps: int = 1500
-    lr: float = 1e-2
-    guide: str = "diag"
-    posterior_draws: int = 256
-    eta: float = 1.0
-
-    def run(
-        self,
-        model_fn: Callable[..., Any],
-        model_kwargs: dict[str, Any],
-        init_values: dict[str, jnp.ndarray] | None = None,
-        *,
-        rng_key: jax.Array,
-        verbose: bool = False,
-    ) -> StageResult:
-        kwargs = dict(model_kwargs)
-        kwargs["eta"] = self.eta
-
-        t0 = time.time()
-        result = fit_vi(
-            model_fn,
-            rng_key=rng_key,
-            vi_steps=self.steps,
-            optimizer_lr=self.lr,
-            model_kwargs=kwargs,
-            guide=self.guide,
-            posterior_draws=self.posterior_draws,
-            progress_bar=verbose,
-            init_values=init_values,
-        )
-        runtime = time.time() - t0
-
-        return StageResult(
-            init_values=result.means,
-            losses=result.losses,
-            khat=None,
-            guide_name=result.guide_name,
-            runtime=runtime,
-            samples=result.samples,
-        )
-
-
-@dataclass
-class FactorizedMultivarVIStage(VIStage):
-    """Run independent VI optimizations per multivariate Cholesky factor."""
-
-    def run(
-        self,
-        model_fn: Callable[..., Any],
-        model_kwargs: dict[str, Any],
-        init_values: dict[str, jnp.ndarray] | None = None,
-        *,
-        rng_key: jax.Array,
-        verbose: bool = False,
-    ) -> StageResult:
-        del model_fn
-        from .models import _blocked_channel_model
-
-        kwargs = dict(model_kwargs)
-        kwargs["eta"] = self.eta
-        n_channels = int(kwargs["n_channels"])
-        keys = jax.random.split(rng_key, n_channels)
-
-        t0 = time.time()
-        merged_means: dict[str, jnp.ndarray] = {}
-        merged_samples: dict[str, jnp.ndarray] = {}
-        losses_per_block: list[jnp.ndarray] = []
-        guide_names: list[str] = []
-
-        for channel_index in range(n_channels):
-            channel_kwargs = _channel_model_kwargs(kwargs, channel_index)
-            channel_init = _init_values_for_channel(
-                init_values,
-                channel_index,
-            )
-            result = fit_vi(
-                _blocked_channel_model,
-                rng_key=keys[channel_index],
-                vi_steps=self.steps,
-                optimizer_lr=self.lr,
-                model_kwargs=channel_kwargs,
-                guide=self.guide,
-                posterior_draws=self.posterior_draws,
-                progress_bar=verbose,
-                init_values=channel_init,
-            )
-            merged_means.update(result.means)
-            if result.samples is not None:
-                merged_samples.update(result.samples)
-            losses_per_block.append(jnp.asarray(result.losses))
-            guide_names.append(result.guide_name)
-
-        runtime = time.time() - t0
-        nonempty_losses = [
-            losses for losses in losses_per_block if int(losses.size) > 0
-        ]
-        if nonempty_losses:
-            n_common = min(int(losses.size) for losses in nonempty_losses)
-            losses = jnp.sum(
-                jnp.stack(
-                    [losses[:n_common] for losses in nonempty_losses],
-                    axis=0,
-                ),
-                axis=0,
-            )
-        else:
-            losses = jnp.asarray([])
-
-        guide_name = (
-            f"factorized:{guide_names[0]}"
-            if len(set(guide_names)) == 1 and guide_names
-            else "factorized"
-        )
-        return StageResult(
-            init_values=merged_means,
-            losses=losses,
-            khat=None,
-            guide_name=guide_name,
-            runtime=runtime,
-            losses_per_block=losses_per_block,
-            samples=merged_samples or None,
-        )
 
 
 @dataclass
@@ -390,7 +246,7 @@ class FactorizedMultivarNUTSStage(NUTSStage):
         verbose: bool = False,
     ) -> xr.DataTree:
         del model_fn
-        from .models import _blocked_channel_model
+        from log_psplines.inference.model import _blocked_channel_model
 
         kwargs = dict(model_kwargs)
         kwargs["eta"] = self.eta
@@ -450,9 +306,6 @@ class FactorizedMultivarNUTSStage(NUTSStage):
 
 
 __all__ = [
-    "StageResult",
-    "VIStage",
-    "FactorizedMultivarVIStage",
     "NUTSStage",
     "FactorizedMultivarNUTSStage",
 ]

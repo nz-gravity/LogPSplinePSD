@@ -67,7 +67,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 from log_psplines.logger import logger, set_level
-from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
+from log_psplines.mcmc import TimeSeries, run_mcmc
 
 set_level("INFO")
 
@@ -418,7 +418,7 @@ def _run_var_single(
             return json.load(handle)
 
     t, data = _simulate_var_process(spec.N, VAR_COEFFS, SIGMA, spec.seed)
-    ts = MultivariateTimeseries(t=t, y=data)
+    ts = TimeSeries(t=t, data=data)
     freq_true_hz = np.fft.rfftfreq(spec.N, d=1.0 / DEFAULT_FS)[1:]
     true_psd = _calculate_true_var_psd_hz(freq_true_hz, VAR_COEFFS, SIGMA)
 
@@ -579,7 +579,7 @@ def compute_analytic_eta_candidates(
 
 def _compute_analytic_candidates_for_spec(spec: RunSpec) -> dict[str, float]:
     """Build basis/penalty matrices and compute analytic η candidates."""
-    from log_psplines.psplines.initialisation import init_basis_and_penalty
+    from log_psplines.inference.initialisation import init_basis_and_penalty
 
     # Determine number of frequency bins after Bartlett + coarse graining.
     block_len = spec.N // spec.Nb
@@ -932,7 +932,7 @@ def run_test6(
             logger.info(f"Null excision: {len(exclude_bands)} bands removed")
 
         logger.info(
-            f"LISA test6 seed={seed}: N_time={ts.y.shape[0]}, Nb={Nb}, "
+            f"LISA test6 seed={seed}: N_time={ts.data.shape[0]}, Nb={Nb}, "
             f"coarse_Nh={LISA_COARSE_NH}, K={LISA_K}, "
             f"null_excision={LISA_NULL_EXCISION}"
         )
@@ -971,7 +971,7 @@ def run_test6(
             "label": f"lisa_seed{seed}",
             "seed": seed,
             "data_source": "lisa",
-            "N": int(ts.y.shape[0]),
+            "N": int(ts.data.shape[0]),
             "Nb": Nb,
             "Nh": LISA_COARSE_NH,
             "NbNh": Nb * LISA_COARSE_NH,

@@ -37,7 +37,7 @@ ensure_lisatools_backends()
 
 import jax  # noqa: E402
 
-from log_psplines.datatypes import MultivariateTimeseries  # noqa: E402
+from log_psplines.data import TimeSeries  # noqa: E402
 from log_psplines.logger import logger, set_level  # noqa: E402
 
 set_level("INFO")
@@ -190,10 +190,10 @@ def main() -> None:
     )
 
     # Transform timeseries: (N, 3) XYZ -> (N, 3) AET
-    y_aet = xyz_to_aet_timeseries(ts_xyz.y)
+    y_aet = xyz_to_aet_timeseries(ts_xyz.data)
     import numpy as np
 
-    ts_aet = MultivariateTimeseries(y=y_aet, t=ts_xyz.t)
+    ts_aet = TimeSeries(data=y_aet, t=ts_xyz.t)
 
     # Transform true PSD: (Nf, 3, 3) XYZ -> (Nf, 3, 3) AET
     S_true_aet = xyz_to_aet_matrix(np.asarray(S_true_xyz))

@@ -9,7 +9,7 @@ from typing import Any
 import xarray as xr
 from arviz_base import from_dict
 
-from ..arviz_utils._datatree import require_dataset as _require_dataset
+from log_psplines.arviz_utils._datatree import require_dataset as _require_dataset
 
 _POSTERIOR_BLOCK_PATTERNS = (
     re.compile(r"^(?:weights_delta|phi|delta)_(\d+)$"),

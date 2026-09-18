@@ -1,35 +1,38 @@
-"""InferencePipeline and PipelineResult."""
+"""InferencePipeline and PSDResult."""
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
-from dataclasses import dataclass
-from pathlib import Path
 
-import arviz_plots as azp
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import xarray as xr
 
-from ..arviz_utils._datatree import save_inference_data as _save_inference_data
-from ..arviz_utils.to_arviz import (
+from log_psplines.arviz_utils.to_arviz import (
     _pack_spline_model_multivar,
 )
-from ..datatypes.multivar import MultivarFFT
-from ..diagnostics import build_nuts_summary_table, build_vi_summary_table
-from ..diagnostics.plot_nuts import plot_energy
-from ..logger import logger
-from ..plotting import (
-    PSDMatrixPlotSpec,
-    plot_psd_matrix,
-    plot_vi_loss,
+from log_psplines.config import PipelineConfig
+from log_psplines.data.spectral import WishartData
+from log_psplines.inference.evidence import (
+    compute_pointwise_lnl,
+    estimate_pipeline_lnz,
 )
-from .evidence import compute_pointwise_lnl, estimate_pipeline_lnz
-from .stages import NUTSStage, StageResult, VIStage
+from log_psplines.inference.model import _joint_multivar_model, prepare_model
+from log_psplines.inference.nuts import FactorizedMultivarNUTSStage, NUTSStage
+from log_psplines.inference.vi import (
+    FactorizedMultivarVIStage,
+    StageResult,
+    VIStage,
+)
+from log_psplines.preprocessing.checks import _save_preprocessing_plot
+from log_psplines.preprocessing.spectral import (
+    coarse_vi_freq_domain,
+    preprocess_to_freq_domain,
+)
+from log_psplines.results import PSDResult, _losses_per_block_array
+
+from .logger import logger
 
 
 def _vi_result_to_idata(result: StageResult) -> xr.DataTree:
@@ -101,320 +104,6 @@ def _init_values_to_dataset(values: dict[str, jnp.ndarray]) -> xr.Dataset:
     )
 
 
-def _losses_per_block_array(
-    losses_per_block: list[jnp.ndarray] | None,
-) -> np.ndarray:
-    if not losses_per_block:
-        return np.asarray([], dtype=float)
-
-    arrays = [
-        np.asarray(losses, dtype=float).reshape(-1)
-        for losses in losses_per_block
-    ]
-    max_len = max((arr.size for arr in arrays), default=0)
-    if max_len == 0:
-        return np.asarray([], dtype=float)
-
-    padded = np.full((len(arrays), max_len), np.nan, dtype=float)
-    for idx, arr in enumerate(arrays):
-        padded[idx, : arr.size] = arr
-    return padded
-
-
-@dataclass
-class PipelineResult:
-    """Outputs from InferencePipeline.run()."""
-
-    vi_coarse: StageResult | None
-    vi: StageResult | None
-    idata: xr.DataTree
-
-    @staticmethod
-    def _save_placeholder_plot(path: Path, title: str, message: str) -> None:
-        fig, ax = plt.subplots(figsize=(6, 3))
-        ax.axis("off")
-        ax.set_title(title)
-        ax.text(
-            0.5,
-            0.5,
-            message,
-            ha="center",
-            va="center",
-            wrap=True,
-        )
-        fig.savefig(path, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-
-    def _save_posterior_predictive(
-        self,
-        outdir: str,
-        *,
-        true_psd: np.ndarray | None = None,
-    ) -> None:
-        outfile = Path(outdir) / "posterior_predictive.png"
-        overlay_vi = (
-            self.vi is not None and "sample_stats" in self.idata.children
-        )
-        try:
-            plot_psd_matrix(
-                PSDMatrixPlotSpec(
-                    idata=self.idata,
-                    true_psd=true_psd,
-                    outdir=str(outdir),
-                    filename="posterior_predictive.png",
-                    save=True,
-                    close=True,
-                    overlay_vi=overlay_vi,
-                    label="NUTS 90% CI" if overlay_vi else None,
-                    vi_label="VI 90% CI",
-                )
-            )
-            return
-        except Exception as exc:
-            logger.debug(f"Posterior PSD plot unavailable: {exc}")
-
-        try:
-            trace_plot = azp.plot_trace_dist(
-                self.idata,
-                compact=True,
-                backend="matplotlib",
-            )
-            trace_plot.savefig(
-                outfile,
-                dpi=150,
-                bbox_inches="tight",
-            )
-            plt.close("all")
-        except Exception as exc:
-            logger.warning(
-                f"Could not save posterior_predictive.png: {exc}",
-                exc_info=True,
-            )
-
-    @staticmethod
-    def _median_numeric(series: pd.Series) -> float:
-        vals = pd.to_numeric(series, errors="coerce").to_numpy(dtype=float)
-        vals = vals[np.isfinite(vals)]
-        return float(np.median(vals)) if vals.size else float("nan")
-
-    def _fallback_vi_summary(self) -> pd.DataFrame:
-        losses = (
-            np.asarray(self.vi.losses, dtype=float)
-            if self.vi is not None and self.vi.losses is not None
-            else np.asarray([], dtype=float)
-        )
-        return pd.DataFrame(
-            [
-                {
-                    "factor": "0",
-                    "final_elbo": float(losses[-1]) if losses.size else np.nan,
-                    "pareto_k_max": np.nan,
-                    "riae": np.nan,
-                    "l2": np.nan,
-                    "coverage": np.nan,
-                }
-            ]
-        )
-
-    def _save_diagnostics(
-        self,
-        outdir: str,
-        *,
-        true_psd: np.ndarray | None = None,
-    ) -> None:
-        diagnostics_dir = Path(outdir) / "diagnostics"
-        diagnostics_dir.mkdir(parents=True, exist_ok=True)
-
-        vi_summary: pd.DataFrame | None = None
-        if self.vi is not None:
-            try:
-                vi_summary = build_vi_summary_table(
-                    self.idata,
-                    true_psd=true_psd,
-                )
-                vi_summary.to_csv(
-                    diagnostics_dir / "vi_summary.csv", index=False
-                )
-            except Exception as exc:
-                logger.warning(
-                    f"Could not save vi_summary.csv: {exc}",
-                    exc_info=True,
-                )
-                vi_summary = self._fallback_vi_summary()
-                vi_summary.to_csv(
-                    diagnostics_dir / "vi_summary.csv", index=False
-                )
-
-            vi_stats = self.idata["vi_sample_stats"]
-            for col in ("pareto_k_max", "riae", "l2", "coverage"):
-                if col in vi_summary.columns and not vi_summary.empty:
-                    vi_stats.attrs[col] = self._median_numeric(vi_summary[col])
-
-            if self.vi.losses is not None:
-                try:
-                    losses_input = {
-                        "losses": np.asarray(self.vi.losses, dtype=float)
-                    }
-                    if self.vi.losses_per_block is not None:
-                        losses_input["losses_per_block"] = (
-                            self.vi.losses_per_block
-                        )
-                    plot_vi_loss(
-                        losses_input,
-                        guide_name=self.vi.guide_name,
-                        outfile=str(diagnostics_dir / "vi_loss.png"),
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        f"Could not save vi_loss.png: {exc}",
-                        exc_info=True,
-                    )
-                    self._save_placeholder_plot(
-                        diagnostics_dir / "vi_loss.png",
-                        "VI Loss",
-                        "VI loss curve unavailable for this run.",
-                    )
-
-        nuts_summary: pd.DataFrame | None = None
-        try:
-            nuts_summary = build_nuts_summary_table(
-                self.idata,
-                true_psd=true_psd,
-            )
-        except Exception as exc:
-            logger.debug(
-                f"NUTS summary with truth metrics failed, "
-                f"retrying without truth: {exc}"
-            )
-            try:
-                nuts_summary = build_nuts_summary_table(self.idata)
-            except Exception as err:
-                logger.warning(
-                    f"Could not save nuts_summary.csv: {err}",
-                    exc_info=True,
-                )
-
-        if nuts_summary is not None:
-            nuts_summary.to_csv(
-                diagnostics_dir / "nuts_summary.csv",
-                index=False,
-            )
-            sample_stats = self.idata.children.get("sample_stats")
-            if sample_stats is not None:
-                for col in (
-                    "divergences",
-                    "max_treedepth_hits",
-                    "rhat_max",
-                    "riae",
-                    "l2",
-                    "coverage",
-                    "step_size",
-                ):
-                    if col in nuts_summary.columns and not nuts_summary.empty:
-                        sample_stats.attrs[col] = self._median_numeric(
-                            nuts_summary[col]
-                        )
-
-        if "sample_stats" in self.idata.children:
-            try:
-                azp.plot_trace_dist(
-                    self.idata,
-                    compact=True,
-                    backend="matplotlib",
-                ).savefig(
-                    diagnostics_dir / "traces.png",
-                    dpi=150,
-                    bbox_inches="tight",
-                )
-                plt.close("all")
-            except Exception as exc:
-                logger.warning(
-                    f"Could not save traces.png: {exc}",
-                    exc_info=True,
-                )
-
-            try:
-                plot_energy(self.idata).savefig(
-                    diagnostics_dir / "energy.png",
-                    dpi=150,
-                    bbox_inches="tight",
-                )
-                plt.close("all")
-            except Exception as exc:
-                logger.warning(
-                    f"Could not save energy.png: {exc}",
-                    exc_info=True,
-                )
-
-        row: dict[str, float] = {}
-        if vi_summary is not None and not vi_summary.empty:
-            for col in (
-                "pareto_k_max",
-                "riae",
-                "l2",
-                "coverage",
-                "final_elbo",
-            ):
-                if col in vi_summary.columns:
-                    row[f"vi_{col}"] = self._median_numeric(vi_summary[col])
-
-        if nuts_summary is not None and not nuts_summary.empty:
-            for col in (
-                "divergences",
-                "max_treedepth_hits",
-                "rhat_max",
-                "riae",
-                "l2",
-                "coverage",
-                "step_size",
-                "ess_bulk_min",
-                "ess_tail_min",
-            ):
-                if col in nuts_summary.columns:
-                    row[f"nuts_{col}"] = self._median_numeric(
-                        nuts_summary[col]
-                    )
-
-        if row:
-            pd.DataFrame([row]).to_csv(
-                diagnostics_dir / "diagnostics.csv",
-                index=False,
-            )
-
-    def save(
-        self,
-        outdir: str,
-        *,
-        true_psd: np.ndarray | None = None,
-    ) -> None:
-        os.makedirs(outdir, exist_ok=True)
-        self._save_posterior_predictive(outdir, true_psd=true_psd)
-        self._save_diagnostics(outdir, true_psd=true_psd)
-        _save_inference_data(
-            self.idata,
-            os.path.join(outdir, "inference_data.nc"),
-            engine="h5netcdf",
-        )
-        if self.vi is not None and self.vi.losses is not None:
-            np.save(
-                os.path.join(outdir, "vi_losses.npy"),
-                np.asarray(self.vi.losses),
-            )
-            losses_per_block = _losses_per_block_array(
-                self.vi.losses_per_block
-            )
-            if losses_per_block.size:
-                np.save(
-                    os.path.join(outdir, "vi_losses_per_block.npy"),
-                    losses_per_block,
-                )
-        if self.vi_coarse is not None and self.vi_coarse.losses is not None:
-            np.save(
-                os.path.join(outdir, "vi_coarse_losses.npy"),
-                np.asarray(self.vi_coarse.losses),
-            )
-
-
 class InferencePipeline:
     """Sequential vi_coarse → vi → nuts inference pipeline.
 
@@ -427,7 +116,7 @@ class InferencePipeline:
         model_fn: Callable,
         full_model_kwargs: dict,
         coarse_model_kwargs: dict | None,
-        data: MultivarFFT,
+        data: WishartData,
         spline_model,
         config,
         vi_stage: VIStage,
@@ -667,8 +356,8 @@ class InferencePipeline:
         idata["log_likelihood"] = xr.DataTree(dataset=log_likelihood)
         return idata
 
-    def run(self) -> PipelineResult:
-        """Execute the pipeline and return a PipelineResult."""
+    def run(self) -> PSDResult:
+        """Execute the pipeline and return a PSDResult."""
         rng = (
             jax.random.PRNGKey(self.rng_key)
             if isinstance(self.rng_key, int)
@@ -697,7 +386,7 @@ class InferencePipeline:
                 )
             idata = _vi_result_to_idata(vi_coarse)
             idata = self._attach_pipeline_metadata(idata, vi_coarse)
-            return PipelineResult(vi_coarse=vi_coarse, vi=None, idata=idata)
+            return PSDResult(vi_coarse=vi_coarse, vi=None, idata=idata)
 
         rng, key = jax.random.split(rng)
         vi = self.vi_stage.run(
@@ -712,7 +401,7 @@ class InferencePipeline:
         if self.only_vi:
             idata = _vi_result_to_idata(vi)
             idata = self._attach_pipeline_metadata(idata, vi)
-            return PipelineResult(vi_coarse=vi_coarse, vi=vi, idata=idata)
+            return PSDResult(vi_coarse=vi_coarse, vi=vi, idata=idata)
 
         logger.info(f"Spline model: {self.spline_model}")
 
@@ -727,4 +416,104 @@ class InferencePipeline:
         idata = self._attach_pipeline_metadata(idata, vi)
         idata = self._attach_pointwise_log_likelihood(idata)
         idata = self._attach_lnz_metadata(idata)
-        return PipelineResult(vi_coarse=vi_coarse, vi=vi, idata=idata)
+        return PSDResult(vi_coarse=vi_coarse, vi=vi, idata=idata)
+
+
+def make_pipeline(
+    data,
+    config: PipelineConfig | None = None,
+) -> InferencePipeline:
+    """Build an InferencePipeline from data and config.
+
+    Parameters
+    ----------
+    data:
+        Time-domain ``TimeSeries`` (including ``y.shape == (n,)``)
+        or pre-processed ``WishartData``.
+    config:
+        Pipeline configuration.  Defaults to :class:`PipelineConfig` with all
+        default values.
+
+    Returns
+    -------
+    InferencePipeline
+        Ready-to-run pipeline.  Call ``.run()`` to execute it.
+    """
+    if config is None:
+        config = PipelineConfig()
+
+    if not isinstance(data, WishartData):
+        data = preprocess_to_freq_domain(data, config)
+
+    model_fn = _joint_multivar_model
+
+    full_kwargs, spline_model = prepare_model(
+        data,
+        config,
+    )
+    if isinstance(data, WishartData) and config.outdir is not None:
+        _save_preprocessing_plot(data, config, spline_model=spline_model)
+
+    coarse_data = (
+        coarse_vi_freq_domain(data, config)
+        if config.init_from_vi and config.use_coarse_vi_for_init
+        else None
+    )
+    coarse_kwargs = (
+        prepare_model(coarse_data, config)[0]
+        if coarse_data is not None
+        else None
+    )
+
+    eta = float(config.eta)
+    vi_stage = FactorizedMultivarVIStage(
+        steps=config.vi_steps,
+        lr=config.vi_lr,
+        guide=config.vi_guide or "diag",
+        posterior_draws=config.vi_posterior_draws,
+        eta=eta,
+    )
+    nuts_stage = FactorizedMultivarNUTSStage(
+        n_samples=config.n_samples,
+        n_warmup=config.n_warmup,
+        target_accept_prob=config.target_accept_prob,
+        max_tree_depth=config.max_tree_depth,
+        dense_mass=config.dense_mass,
+        num_chains=config.num_chains,
+        eta=eta,
+        target_accept_prob_by_channel=config.target_accept_prob_by_channel,
+        max_tree_depth_by_channel=config.max_tree_depth_by_channel,
+    )
+
+    return InferencePipeline(
+        model_fn=model_fn,
+        full_model_kwargs=full_kwargs,
+        coarse_model_kwargs=coarse_kwargs,
+        data=data,
+        spline_model=spline_model,
+        config=config,
+        vi_stage=vi_stage,
+        nuts_stage=nuts_stage,
+        rng_key=config.rng_key,
+        verbose=config.verbose,
+        vi_progress_bar=config.vi_progress_bar,
+        only_vi=config.only_vi,
+        init_from_vi=config.init_from_vi,
+        vi_coarse_only=config.vi_coarse_only,
+    )
+
+
+def fit(data, config=None) -> PSDResult:
+    """Fit stationary one- or multi-channel data with VI and blocked NUTS."""
+    pipeline = make_pipeline(data, config)
+    result = pipeline.run()
+    if pipeline.config.outdir is not None:
+        from log_psplines.preprocessing.spectral import align_true_psd_to_freq
+
+        result.save(
+            pipeline.config.outdir,
+            true_psd=align_true_psd_to_freq(
+                pipeline.config.true_psd, pipeline.data
+            ),
+        )
+    return result

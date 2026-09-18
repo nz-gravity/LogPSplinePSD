@@ -77,3 +77,30 @@ def plot_penalty(
     plt.colorbar(ax.collections[0], ax=ax)
     fig = cast(Figure, ax.figure)
     return fig, ax
+
+
+def plot_spline_basis(model, outdir: str | None = None):
+    """
+    Visualize B-spline basis functions and penalty matrix structure.
+
+    Creates a three-panel plot showing:
+    1. Individual B-spline basis functions
+    2. Basis function overview
+    3. Penalty matrix structure (sparsity pattern)
+
+    Parameters
+    ----------
+    outdir : str, optional
+        Directory to save the plot. If None, displays interactively
+
+    Examples
+    --------
+    >>> plot_spline_basis(model,)  # Display plot
+    >>> plot_spline_basis(model,outdir="./diagnostics")  # Save to file
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    plot_basis(np.asarray(model.basis), axes=axes[:2])
+    plot_penalty(np.asarray(model.penalty_matrix), ax=axes[2])
+    plt.tight_layout()
+    if outdir is not None:
+        fig.savefig(f"{outdir}/basis_plot.png", bbox_inches="tight")

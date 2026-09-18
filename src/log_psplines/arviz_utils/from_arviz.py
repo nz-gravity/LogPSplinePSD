@@ -2,16 +2,18 @@ from __future__ import annotations
 
 """Extract data and derived summaries from canonical ``xarray.DataTree`` objects."""
 
+from log_psplines.arviz_utils.reconstruction import reconstruct_psd_matrix
+from log_psplines.arviz_utils.spline_storage import from_storage_dataset
 from types import SimpleNamespace
 from typing import Literal
 
 import numpy as np
 import xarray as xr
 
-from ..psplines import MultivariateLogPSplines
-from ..psplines.psplines import LogPSplines
-from ._datatree import require_dataset as _require_dataset
-from .to_arviz import (
+from log_psplines.inference.components import SpectralComponents
+from log_psplines.models.spectrum import LogPSpline
+from log_psplines.arviz_utils._datatree import require_dataset as _require_dataset
+from log_psplines.arviz_utils.to_arviz import (
     _compute_prior_predictive_multivar,
     _flatten_posterior_draws,
     _reconstruct_log_delta_sq,
@@ -194,7 +196,7 @@ def _compute_multivar_psd_dataset(
         spline_model,
         n_keep=None,
     )
-    spectral_density = spline_model.reconstruct_psd_matrix(
+    spectral_density = reconstruct_psd_matrix(
         params["log_delta_sq"],
         params["theta_re"],
         params["theta_im"],
@@ -430,7 +432,7 @@ def get_weights(
 
 def get_multivar_spline_model(
     idata: xr.DataTree,
-) -> MultivariateLogPSplines:
+) -> SpectralComponents:
     """Rehydrate a multivariate spline model from ``idata['spline_model']``."""
     dataset = _require_dataset(idata, "spline_model")
 
@@ -440,7 +442,7 @@ def get_multivar_spline_model(
     n_channels = int(np.asarray(dataset["p"]).item())
 
     diagonal_models = [
-        LogPSplines.from_storage_dataset(
+        from_storage_dataset(
             dataset,
             prefix=f"diag_{j}",
             degree=degree,
@@ -454,14 +456,14 @@ def get_multivar_spline_model(
     offdiag_im_models = {}
     for j in range(1, n_channels):
         for l in range(j):
-            offdiag_re_models[(j, l)] = LogPSplines.from_storage_dataset(
+            offdiag_re_models[(j, l)] = from_storage_dataset(
                 dataset,
                 prefix=f"theta_re_{j}_{l}",
                 degree=degree,
                 diffMatrixOrder=diff_matrix_order,
                 n=n_freq,
             )
-            offdiag_im_models[(j, l)] = LogPSplines.from_storage_dataset(
+            offdiag_im_models[(j, l)] = from_storage_dataset(
                 dataset,
                 prefix=f"theta_im_{j}_{l}",
                 degree=degree,
@@ -469,7 +471,7 @@ def get_multivar_spline_model(
                 n=n_freq,
             )
 
-    return MultivariateLogPSplines(
+    return SpectralComponents(
         degree=degree,
         diffMatrixOrder=diff_matrix_order,
         N=n_freq,
@@ -491,7 +493,7 @@ def _get_multivar_frequency_grid(idata: xr.DataTree) -> np.ndarray:
 
 def _get_multivar_reconstruction_inputs_from_dataset(
     posterior: xr.Dataset,
-    spline_model: MultivariateLogPSplines,
+    spline_model: SpectralComponents,
     *,
     n_keep: int | None,
 ) -> dict[str, np.ndarray]:

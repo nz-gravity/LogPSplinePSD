@@ -5,10 +5,10 @@ from math import isqrt
 
 import numpy as np
 
-from .._jaxtypes import Complex, Float, Int
-from .._typecheck import runtime_typecheck
-from ..datatypes.multivar import MultivarFFT
-from ..datatypes.multivar_utils import (
+from log_psplines._jaxtypes import Complex, Float, Int
+from log_psplines._typecheck import runtime_typecheck
+from log_psplines.data.spectral import WishartData
+from log_psplines.data.spectral_utils import (
     U_to_Y,
     Y_to_S,
     Y_to_U,
@@ -259,9 +259,9 @@ def compute_binning_structure(
 
 @runtime_typecheck
 def apply_coarse_grain_multivar_fft(
-    fft: MultivarFFT, spec: CoarseGrainSpec
-) -> MultivarFFT:
-    """Coarse-grain a MultivarFFT using equal-sized bins.
+    fft: WishartData, spec: CoarseGrainSpec
+) -> WishartData:
+    """Coarse-grain a WishartData using equal-sized bins.
 
     Notes
     -----
@@ -303,7 +303,7 @@ def apply_coarse_grain_multivar_fft(
 
     f_coarse = np.asarray(spec.f_coarse, dtype=np.float64)
 
-    fft_coarse = MultivarFFT(
+    fft_coarse = WishartData(
         u_re=u_bins.real.astype(np.float64),
         u_im=u_bins.imag.astype(np.float64),
         freq=f_coarse,

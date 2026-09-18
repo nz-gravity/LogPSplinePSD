@@ -106,7 +106,7 @@ def extract_plotting_data(
     Returns:
         Dictionary containing extracted data
     """
-    from ..arviz_utils import (
+    from log_psplines.arviz_utils import (
         get_multivar_prior_psd_quantiles,
         get_psd_dataset,
         get_weights,

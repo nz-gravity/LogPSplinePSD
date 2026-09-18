@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .._jaxtypes import Complex, Float
-from .._typecheck import runtime_typecheck
+from log_psplines._jaxtypes import Complex, Float
+from log_psplines._typecheck import runtime_typecheck
 
 
 def _as_positive_int(name: str, value: int) -> int:

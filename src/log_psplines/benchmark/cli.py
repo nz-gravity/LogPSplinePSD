@@ -1,6 +1,6 @@
 import click
 
-from .runtime_benchmark import RuntimeBenchmark
+from log_psplines.benchmark.runtime_benchmark import RuntimeBenchmark
 
 
 @click.command(

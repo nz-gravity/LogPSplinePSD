@@ -10,10 +10,10 @@ from tqdm.auto import tqdm
 
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.mcmc import run_mcmc
-from log_psplines.pipeline.config import PipelineConfig
+from log_psplines.config import PipelineConfig
 
 from ..logger import logger
-from .plotting import plot_data_size_results, plot_knots_results
+from log_psplines.benchmark.plotting import plot_data_size_results, plot_knots_results
 
 # Get device information
 DEVICE = jax.devices()[0].platform

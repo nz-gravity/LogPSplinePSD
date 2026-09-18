@@ -1,13 +1,19 @@
+from log_psplines.arviz_utils.reconstruction import reconstruct_psd_matrix, compute_psd_quantiles
+from log_psplines.preprocessing.periodogram import compute_wishart, empirical_spectrum
+from log_psplines.plotting.basis import plot_spline_basis
+from log_psplines.arviz_utils.spline_storage import to_storage_payload
+from log_psplines.arviz_utils.spline_storage import from_storage_dataset
+from log_psplines.inference.initialisation import build_component
 import numpy as np
 import pytest
 import xarray as xr
 
-from log_psplines.datatypes.multivar import (
+from log_psplines.data import (
     EmpiricalPSD,
-    MultivarFFT,
-    MultivariateTimeseries,
+    WishartData,
+    TimeSeries,
 )
-from log_psplines.datatypes.multivar_utils import (
+from log_psplines.data.spectral_utils import (
     U_to_Y,
     Y_to_S,
     Y_to_U,
@@ -17,13 +23,13 @@ from log_psplines.datatypes.multivar_utils import (
     u_re_im_to_U,
     wishart_u_to_psd,
 )
-from log_psplines.psplines import MultivariateLogPSplines
-from log_psplines.psplines.multivar_psplines import MultivarComponentKey
-from log_psplines.psplines.psplines import LogPSplines, build_spline
+from log_psplines.inference.components import SpectralComponents
+from log_psplines.inference.components import MultivarComponentKey
+from log_psplines.models.spectrum import LogPSpline, build_spline
 
 
-def _simple_log_pspline(n: int = 6) -> LogPSplines:
-    return LogPSplines.from_knots(
+def _simple_log_pspline(n: int = 6) -> LogPSpline:
+    return build_component(
         knots=np.asarray([0.0, 0.4, 0.7, 1.0]),
         degree=2,
         diffMatrixOrder=1,
@@ -32,9 +38,9 @@ def _simple_log_pspline(n: int = 6) -> LogPSplines:
     )
 
 
-def _simple_multivar_model() -> MultivariateLogPSplines:
+def _simple_multivar_model() -> SpectralComponents:
     diag = [_simple_log_pspline(), _simple_log_pspline()]
-    return MultivariateLogPSplines(
+    return SpectralComponents(
         degree=2,
         diffMatrixOrder=1,
         N=6,
@@ -45,13 +51,13 @@ def _simple_multivar_model() -> MultivariateLogPSplines:
     )
 
 
-def _simple_fft() -> MultivarFFT:
+def _simple_fft() -> WishartData:
     u_re = np.zeros((4, 2, 2))
     u_im = np.zeros_like(u_re)
     for idx in range(4):
         u_re[idx] = np.asarray([[1.0 + idx, 0.0], [0.2, 1.5 + idx]])
     raw_psd = U_to_Y(u_re + 1j * u_im)
-    return MultivarFFT(
+    return WishartData(
         u_re=u_re,
         u_im=u_im,
         freq=np.linspace(0.1, 0.4, 4),
@@ -67,7 +73,7 @@ def _simple_fft() -> MultivarFFT:
 
 def test_log_pspline_storage_round_trip_and_validation(tmp_path) -> None:
     model = _simple_log_pspline()
-    payload, coords = model.to_storage_payload(
+    payload, coords = to_storage_payload(model,
         prefix="diag_0", include_linear_operators=True
     )
     ds = xr.Dataset(
@@ -83,7 +89,7 @@ def test_log_pspline_storage_round_trip_and_validation(tmp_path) -> None:
         coords=coords,
     )
 
-    loaded = LogPSplines.from_storage_dataset(ds, prefix="diag_0")
+    loaded = from_storage_dataset(ds, prefix="diag_0")
     np.testing.assert_allclose(loaded.knots, model.knots)
     np.testing.assert_allclose(loaded.grid_points, model.grid_points)
     np.testing.assert_allclose(
@@ -98,13 +104,13 @@ def test_log_pspline_storage_round_trip_and_validation(tmp_path) -> None:
         values, build_spline(model.basis, np.ones(model.n_basis))
     )
 
-    model.plot_basis(outdir=str(tmp_path))
+    plot_spline_basis(model,outdir=str(tmp_path))
     assert (tmp_path / "basis_plot.png").exists()
 
     with pytest.raises(KeyError, match="Missing required spline key"):
-        LogPSplines.from_storage_dataset({})
+        from_storage_dataset({})
     with pytest.raises(ValueError, match="weights length"):
-        LogPSplines(
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
@@ -112,7 +118,7 @@ def test_log_pspline_storage_round_trip_and_validation(tmp_path) -> None:
             weights=np.ones(99),
         )
     with pytest.raises(ValueError, match="log_target"):
-        LogPSplines.from_knots(
+        build_component(
             knots=np.asarray([0.0, 1.0]),
             degree=1,
             diffMatrixOrder=1,
@@ -123,7 +129,7 @@ def test_log_pspline_storage_round_trip_and_validation(tmp_path) -> None:
 
 def test_multivar_fft_timeseries_and_conversion_helpers() -> None:
     fft = _simple_fft()
-    assert repr(fft) == "MultivarFFT(N=4, p=2)"
+    assert repr(fft) == "WishartData(N=4, p=2)"
     np.testing.assert_allclose(fft.Y, U_to_Y(fft.U))
 
     masked = fft.apply_mask(np.asarray([True, False, True, False]))
@@ -138,7 +144,7 @@ def test_multivar_fft_timeseries_and_conversion_helpers() -> None:
     assert empirical.psd.shape == (4, 2, 2)
     assert np.all((empirical.coherence >= 0.0) & (empirical.coherence <= 1.0))
 
-    ts = MultivariateTimeseries(np.arange(8.0), t=np.arange(8.0) / 4.0)
+    ts = TimeSeries(np.arange(8.0), t=np.arange(8.0) / 4.0)
     assert ts.p == 1
     assert ts.fs == pytest.approx(4.0)
     std = ts.standardise_for_psd()
@@ -156,7 +162,7 @@ def test_multivar_fft_timeseries_and_conversion_helpers() -> None:
     with pytest.raises(ValueError, match="Invalid frequency bounds"):
         fft.cut(0.4, 0.1)
     with pytest.raises(ValueError, match="duration"):
-        MultivarFFT(
+        WishartData(
             u_re=np.zeros((1, 1, 1)),
             u_im=np.zeros((1, 1, 1)),
             freq=np.asarray([0.1]),
@@ -165,11 +171,11 @@ def test_multivar_fft_timeseries_and_conversion_helpers() -> None:
             duration=0.0,
         )
     with pytest.raises(ValueError, match="same length"):
-        MultivariateTimeseries(np.ones((4, 2)), t=np.arange(3.0))
+        TimeSeries(np.ones((4, 2)), t=np.arange(3.0))
     with pytest.raises(ValueError, match="NaN"):
-        MultivariateTimeseries(np.asarray([1.0, np.nan]))
+        TimeSeries(np.asarray([1.0, np.nan]))
     with pytest.raises(ValueError, match="divisible"):
-        MultivariateTimeseries(np.ones((7, 2))).to_wishart_stats(Nb=3)
+        TimeSeries(np.ones((7, 2))).to_wishart_stats(Nb=3)
 
 
 def test_multivar_fft_validation_and_wishart_edge_cases() -> None:
@@ -181,41 +187,41 @@ def test_multivar_fft_validation_and_wishart_edge_cases() -> None:
         p=2,
     )
     with pytest.raises(ValueError, match="u_re"):
-        MultivarFFT(**{**base, "u_re": np.zeros((1, 2, 2))})
+        WishartData(**{**base, "u_re": np.zeros((1, 2, 2))})
     with pytest.raises(ValueError, match="u_im"):
-        MultivarFFT(**{**base, "u_im": np.zeros((1, 2, 2))})
+        WishartData(**{**base, "u_im": np.zeros((1, 2, 2))})
     with pytest.raises(ValueError, match="freq"):
-        MultivarFFT(**{**base, "freq": np.asarray([0.1])})
+        WishartData(**{**base, "freq": np.asarray([0.1])})
     with pytest.raises(ValueError, match="raw_psd"):
-        MultivarFFT(**{**base, "raw_psd": np.zeros((1, 2, 2))})
+        WishartData(**{**base, "raw_psd": np.zeros((1, 2, 2))})
     with pytest.raises(ValueError, match="raw_freq"):
-        MultivarFFT(**{**base, "raw_freq": np.asarray([0.1])})
+        WishartData(**{**base, "raw_freq": np.asarray([0.1])})
     with pytest.raises(TypeError, match="Nb"):
-        MultivarFFT(**{**base, "Nb": True})
+        WishartData(**{**base, "Nb": True})
     with pytest.raises(ValueError, match="Nb"):
-        MultivarFFT(**{**base, "Nb": 0})
+        WishartData(**{**base, "Nb": 0})
     with pytest.raises(TypeError, match="Nh"):
-        MultivarFFT(**{**base, "Nh": 1.5})
+        WishartData(**{**base, "Nh": 1.5})
     with pytest.raises(ValueError, match="Nh"):
-        MultivarFFT(**{**base, "Nh": 0})
+        WishartData(**{**base, "Nh": 0})
     with pytest.raises(ValueError, match="enbw"):
-        MultivarFFT(**{**base, "enbw": np.nan})
+        WishartData(**{**base, "enbw": np.nan})
     with pytest.raises(ValueError, match="channel_stds"):
-        MultivarFFT(**{**base, "channel_stds": np.ones(3)})
+        WishartData(**{**base, "channel_stds": np.ones(3)})
 
     data = np.arange(12.0).reshape(6, 2)
     with pytest.raises(TypeError, match="Nb"):
-        MultivarFFT.compute_wishart(data, fs=1.0, Nb=True)
+        compute_wishart(data, fs=1.0, Nb=True)
     with pytest.raises(ValueError, match="positive"):
-        MultivarFFT.compute_wishart(data, fs=1.0, Nb=0)
+        compute_wishart(data, fs=1.0, Nb=0)
     with pytest.raises(ValueError, match="divisible"):
-        MultivarFFT.compute_wishart(data, fs=1.0, Nb=4)
+        compute_wishart(data, fs=1.0, Nb=4)
     with pytest.raises(ValueError, match="Block length"):
-        MultivarFFT.compute_wishart(np.ones((3, 3)), fs=1.0, Nb=1)
+        compute_wishart(np.ones((3, 3)), fs=1.0, Nb=1)
     with pytest.raises(ValueError, match="detrend"):
-        MultivarFFT.compute_wishart(data, fs=1.0, Nb=1, detrend="bad")
+        compute_wishart(data, fs=1.0, Nb=1, detrend="bad")
 
-    floored = MultivarFFT.compute_wishart(
+    floored = compute_wishart(
         np.column_stack([np.arange(16.0), np.arange(16.0)]),
         fs=4.0,
         Nb=1,
@@ -228,11 +234,11 @@ def test_multivar_fft_validation_and_wishart_edge_cases() -> None:
     long = np.column_stack(
         [np.sin(np.arange(600.0)), np.cos(np.arange(600.0))]
     )
-    emp = EmpiricalPSD.from_timeseries_data(long, fs=10.0)
+    emp = empirical_spectrum(long, fs=10.0)
     assert emp.freq.size > 0
     assert emp.psd.shape[1:] == (2, 2)
 
-    ts = MultivariateTimeseries(np.arange(8.0), t=np.arange(8.0))
+    ts = TimeSeries(np.arange(8.0), t=np.arange(8.0))
     standardized = ts.standardise()
     assert standardized.std.shape == (1,)
     csd = standardized.to_cross_spectral_density(fmin=0.1, fmax=0.4)
@@ -286,7 +292,7 @@ def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> 
     assert model.total_components == 4
     assert model.theta_index(1, 0) == 0
     assert model.theta_pair_from_index(0) == (1, 0)
-    assert len(model.iter_component_specs()) == 4
+    assert len(model.expected_component_order) == 4
     assert model.n_knots == 4
     assert model.n_basis == model.diagonal_models[0].n_basis
 
@@ -311,11 +317,11 @@ def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> 
     log_delta_sq = np.zeros((n_draws, model.N, model.p))
     theta_re = np.zeros((n_draws, model.N, model.n_theta))
     theta_im = np.zeros_like(theta_re)
-    psd = model.reconstruct_psd_matrix(log_delta_sq, theta_re, theta_im)
+    psd = reconstruct_psd_matrix(log_delta_sq, theta_re, theta_im)
     assert psd.shape == (n_draws, model.N, model.p, model.p)
     np.testing.assert_allclose(psd, np.swapaxes(psd.conj(), -1, -2))
 
-    real_q, imag_q, coh_q = model.compute_psd_quantiles(
+    real_q, imag_q, coh_q = compute_psd_quantiles(
         log_delta_sq,
         theta_re,
         theta_im,
@@ -346,7 +352,7 @@ def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> 
 
     incomplete = [_simple_log_pspline(), _simple_log_pspline()]
     with pytest.raises(ValueError, match="incomplete"):
-        MultivariateLogPSplines(
+        SpectralComponents(
             degree=2,
             diffMatrixOrder=1,
             N=6,
@@ -357,61 +363,61 @@ def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> 
 
 def test_log_pspline_validation_branches() -> None:
     with pytest.raises(ValueError, match="Degree"):
-        LogPSplines(
+        build_component(
             degree=1, diffMatrixOrder=2, n=4, knots=np.asarray([0.0, 1.0])
         )
     with pytest.raises(ValueError, match="between 0 and 5"):
-        LogPSplines(
+        build_component(
             degree=6, diffMatrixOrder=1, n=4, knots=np.asarray([0.0, 1.0])
         )
-    with pytest.raises(ValueError, match="diffMatrixOrder"):
-        LogPSplines(
+    with pytest.raises(ValueError, match="penalty_order"):
+        build_component(
             degree=5, diffMatrixOrder=5, n=4, knots=np.asarray([0.0, 1.0])
         )
     with pytest.raises(ValueError, match="Number of knots"):
-        LogPSplines(
+        build_component(
             degree=3, diffMatrixOrder=1, n=4, knots=np.asarray([0.0, 1.0])
         )
     with pytest.raises(ValueError, match="knots must be 1-D"):
-        LogPSplines(
+        build_component(
             degree=1, diffMatrixOrder=1, n=4, knots=np.asarray([[0.0, 1.0]])
         )
     with pytest.raises(ValueError, match="non-empty"):
-        LogPSplines(degree=0, diffMatrixOrder=0, n=4, knots=np.asarray([]))
+        build_component(degree=0, diffMatrixOrder=0, n=4, knots=np.asarray([]))
     with pytest.raises(ValueError, match="finite"):
-        LogPSplines(
+        build_component(
             degree=1, diffMatrixOrder=1, n=4, knots=np.asarray([0.0, np.nan])
         )
     with pytest.raises(ValueError, match="sorted"):
-        LogPSplines(
+        build_component(
             degree=1, diffMatrixOrder=1, n=4, knots=np.asarray([1.0, 0.0])
         )
-    with pytest.raises(ValueError, match="grid_points must be"):
-        LogPSplines(
+    with pytest.raises(ValueError, match="grid must be"):
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
             knots=np.asarray([0.0, 1.0]),
             grid_points=np.ones((2, 2)),
         )
-    with pytest.raises(ValueError, match="grid_points length"):
-        LogPSplines(
+    with pytest.raises(ValueError, match="grid length"):
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
             knots=np.asarray([0.0, 1.0]),
             grid_points=np.ones(3),
         )
-    with pytest.raises(ValueError, match="grid_points must be finite"):
-        LogPSplines(
+    with pytest.raises(ValueError, match="grid must be finite"):
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
             knots=np.asarray([0.0, 1.0]),
             grid_points=np.asarray([0.0, 0.5, np.nan, 1.0]),
         )
-    with pytest.raises(ValueError, match="grid_points must be sorted"):
-        LogPSplines(
+    with pytest.raises(ValueError, match="grid must be sorted"):
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
@@ -419,7 +425,7 @@ def test_log_pspline_validation_branches() -> None:
             grid_points=np.asarray([0.0, 0.5, 0.4, 1.0]),
         )
     with pytest.raises(ValueError, match="basis must be 2-D"):
-        LogPSplines(
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
@@ -428,7 +434,7 @@ def test_log_pspline_validation_branches() -> None:
             penalty_matrix=np.eye(2),
         )
     with pytest.raises(ValueError, match="basis first dimension"):
-        LogPSplines(
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
@@ -436,8 +442,8 @@ def test_log_pspline_validation_branches() -> None:
             basis=np.ones((3, 2)),
             penalty_matrix=np.eye(2),
         )
-    with pytest.raises(ValueError, match="penalty_matrix must be 2-D"):
-        LogPSplines(
+    with pytest.raises(ValueError, match="penalty must be 2-D"):
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
@@ -445,8 +451,8 @@ def test_log_pspline_validation_branches() -> None:
             basis=np.ones((4, 2)),
             penalty_matrix=np.ones(2),
         )
-    with pytest.raises(ValueError, match="penalty_matrix must be square"):
-        LogPSplines(
+    with pytest.raises(ValueError, match="penalty must be square"):
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
@@ -454,8 +460,8 @@ def test_log_pspline_validation_branches() -> None:
             basis=np.ones((4, 2)),
             penalty_matrix=np.ones((2, 3)),
         )
-    with pytest.raises(ValueError, match="penalty_matrix dimension"):
-        LogPSplines(
+    with pytest.raises(ValueError, match="penalty dimension"):
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
@@ -464,7 +470,7 @@ def test_log_pspline_validation_branches() -> None:
             penalty_matrix=np.eye(3),
         )
     with pytest.raises(ValueError, match="weights must be 1-D"):
-        LogPSplines(
+        build_component(
             degree=1,
             diffMatrixOrder=1,
             n=4,
@@ -484,7 +490,7 @@ def test_multivar_factory_with_analytical_guides_and_validation() -> None:
             [[2.0 + 0.1 * idx, 0.1 + 0.02j], [0.1 - 0.02j, 1.5 + 0.1 * idx]]
         )
 
-    model = MultivariateLogPSplines.from_multivar_fft(
+    model = SpectralComponents.from_multivar_fft(
         fft,
         n_knots={"delta": 3, "theta_re": 4, "theta_im": 5},
         degree=1,
@@ -497,7 +503,7 @@ def test_multivar_factory_with_analytical_guides_and_validation() -> None:
     assert isinstance(model.n_knots, list)
 
     with pytest.raises(ValueError, match="analytical_psd"):
-        MultivariateLogPSplines.from_multivar_fft(
+        SpectralComponents.from_multivar_fft(
             fft,
             n_knots=3,
             degree=1,
@@ -505,7 +511,7 @@ def test_multivar_factory_with_analytical_guides_and_validation() -> None:
             analytical_psd=np.ones((fft.N, fft.p, fft.p + 1)),
         )
     with pytest.raises(ValueError, match="Unsupported"):
-        MultivariateLogPSplines.from_multivar_fft(
+        SpectralComponents.from_multivar_fft(
             fft,
             n_knots=3,
             degree=1,
@@ -513,14 +519,14 @@ def test_multivar_factory_with_analytical_guides_and_validation() -> None:
             knot_kwargs={"method": "bad"},
         )
 
-    one_channel = MultivarFFT(
+    one_channel = WishartData(
         u_re=np.ones((3, 1, 1)),
         u_im=np.zeros((3, 1, 1)),
         freq=np.asarray([0.1, 0.2, 0.3]),
         N=3,
         p=1,
     )
-    model_p1 = MultivariateLogPSplines.from_multivar_fft(
+    model_p1 = SpectralComponents.from_multivar_fft(
         one_channel,
         n_knots=3,
         degree=1,

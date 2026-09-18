@@ -40,7 +40,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 from log_psplines.logger import logger, set_level
-from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
+from log_psplines.mcmc import TimeSeries, run_mcmc
 
 set_level("INFO")
 
@@ -457,7 +457,7 @@ def run_single(
     vi_steps = QUICK_VI_STEPS if quick else DEFAULT_VI_STEPS
 
     t, data = _simulate_var_process(spec.N, VAR_COEFFS, SIGMA, spec.seed)
-    ts = MultivariateTimeseries(t=t, y=data)
+    ts = TimeSeries(t=t, data=data)
     freq_true_hz = np.fft.rfftfreq(spec.N, d=1.0 / DEFAULT_FS)[1:]
     true_psd = _calculate_true_var_psd_hz(freq_true_hz, VAR_COEFFS, SIGMA)
 

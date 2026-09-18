@@ -18,7 +18,7 @@ from paper_final_plots import (
     _welch_psd,
 )
 
-from log_psplines.datatypes.multivar_utils import interp_matrix
+from log_psplines.data.spectral_utils import interp_matrix
 from log_psplines.logger import logger
 
 HERE = Path(__file__).resolve().parent

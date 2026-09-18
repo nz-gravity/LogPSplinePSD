@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..datatypes.multivar_utils import psd_to_cholesky_components
+from log_psplines.data.spectral_utils import psd_to_cholesky_components
 
 
 @dataclass(frozen=True)
@@ -223,7 +223,7 @@ def _raw_psd_to_model_components(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Map raw spectral matrices to model-native components.
 
-    Thin wrapper around :func:`~log_psplines.datatypes.multivar_utils.psd_to_cholesky_components`.
+    Thin wrapper around :func:`~log_psplines.data.spectral_utils.psd_to_cholesky_components`.
 
     Returns:
         log_delta_sq: (N, p), where log_delta_sq[:, j] = log(delta_j^2).
@@ -401,7 +401,7 @@ def save_eigenvalue_separation_plot(
                     ax.plot(freq, y, color=color, lw=0.7, alpha=0.45)
 
                 # Overlay the denoised signal the knot allocator uses.
-                from ..psplines.knots_locator import denoise_score
+                from log_psplines.preprocessing.knots_locator import denoise_score
 
                 y_smooth = denoise_score(y, freq)
                 if use_log_x:
@@ -469,7 +469,7 @@ def extract_component_knots(
     spline_model: object,
     freq: np.ndarray,
 ) -> dict[str, np.ndarray]:
-    """Extract per-component knot positions from a MultivariateLogPSplines model.
+    """Extract per-component knot positions from a SpectralComponents model.
 
     Returns a dict whose keys match the subplot labels used by
     :func:`save_eigenvalue_separation_plot` (e.g. ``"LogDelta11"``,
@@ -477,7 +477,7 @@ def extract_component_knots(
     of knot positions in frequency space.
 
     Args:
-        spline_model: A ``MultivariateLogPSplines`` instance.
+        spline_model: A ``SpectralComponents`` instance.
         freq: Frequency array (same grid the model was built on).
 
     Returns:

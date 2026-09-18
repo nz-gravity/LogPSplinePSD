@@ -3,8 +3,8 @@ import warnings
 import numpy as np
 from scipy.signal import medfilt, savgol_filter
 
-from ...datatypes.multivar_utils import psd_to_cholesky_components
-from .lvk_knot_allocator import LvkKnotAllocator
+from log_psplines.data.spectral_utils import psd_to_cholesky_components
+from log_psplines.preprocessing.knots_locator.lvk_knot_allocator import LvkKnotAllocator
 
 _KNOT_TOL = 1e-12
 

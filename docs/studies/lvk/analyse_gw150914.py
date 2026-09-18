@@ -26,7 +26,7 @@ from log_psplines.arviz_utils import (
     get_spline_model,
     get_weights,
 )
-from log_psplines.datatypes import Timeseries
+from log_psplines.data import Timeseries
 from log_psplines.mcmc import run_mcmc
 
 # Configuration constants

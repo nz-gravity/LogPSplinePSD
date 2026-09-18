@@ -12,18 +12,15 @@ from log_psplines.arviz_utils import (
     get_multivar_vi_psd_quantiles,
     get_psd_dataset,
 )
-from log_psplines.datatypes import MultivarFFT, MultivariateTimeseries
-from log_psplines.pipeline.config import PipelineConfig
-from log_psplines.pipeline.pipeline import (
+from log_psplines.data import WishartData, TimeSeries
+from log_psplines.config import PipelineConfig
+from log_psplines.pipeline import (
     InferencePipeline,
-    PipelineResult,
+    PSDResult,
     _init_values_to_dataset,
 )
-from log_psplines.pipeline.stages import (
-    FactorizedMultivarNUTSStage,
-    FactorizedMultivarVIStage,
-    StageResult,
-)
+from log_psplines.inference.nuts import FactorizedMultivarNUTSStage
+from log_psplines.inference.vi import FactorizedMultivarVIStage, StageResult
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 
 # ---------------------------------------------------------------------------
@@ -32,7 +29,7 @@ from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 
 
 @pytest.fixture(scope="module")
-def p1_data() -> MultivariateTimeseries:
+def p1_data() -> TimeSeries:
     """Small one-channel AR series for fast p=1 tests."""
     from log_psplines.example_datasets.varma_data import VARMAData
 
@@ -40,8 +37,8 @@ def p1_data() -> MultivariateTimeseries:
 
 
 @pytest.fixture(scope="module")
-def multivar_data() -> MultivarFFT:
-    """Small 2-channel MultivarFFT (N=32, p=2) for fast tests."""
+def multivar_data() -> WishartData:
+    """Small 2-channel WishartData (N=32, p=2) for fast tests."""
     from log_psplines.example_datasets.varma_data import VARMAData
 
     varma = VARMAData(n_samples=64, fs=16.0, seed=7)
@@ -97,7 +94,7 @@ def test_make_pipeline_p1_returns_inference_pipeline(p1_data):
     assert (
         pipeline.coarse_model_kwargs is None
     )  # auto_coarse_vi=False by default
-    assert isinstance(pipeline.data, MultivarFFT)
+    assert isinstance(pipeline.data, WishartData)
     assert pipeline.data.p == 1
     assert isinstance(pipeline.vi_stage, FactorizedMultivarVIStage)
     assert isinstance(pipeline.nuts_stage, FactorizedMultivarNUTSStage)
@@ -157,7 +154,7 @@ def test_pipeline_p1_only_vi(p1_data):
     config = _fast_config(only_vi=True)
     result = make_pipeline(p1_data, config).run()
 
-    assert isinstance(result, PipelineResult)
+    assert isinstance(result, PSDResult)
     assert result.vi_coarse is None
     assert result.vi is not None
     assert result.vi.losses is not None
@@ -182,7 +179,7 @@ def test_pipeline_multivar_only_vi(multivar_data):
     config = _fast_config(only_vi=True)
     result = make_pipeline(multivar_data, config).run()
 
-    assert isinstance(result, PipelineResult)
+    assert isinstance(result, PSDResult)
     assert result.vi is not None
     assert result.vi.losses.shape[0] > 0
     assert result.vi.losses_per_block is not None
@@ -270,7 +267,7 @@ def test_pipeline_p1_nuts(p1_data):
     config = _fast_config()
     result = make_pipeline(p1_data, config).run()
 
-    assert isinstance(result, PipelineResult)
+    assert isinstance(result, PSDResult)
     assert result.vi is not None
     assert isinstance(result.idata, xr.DataTree)
     posterior = result.idata.children.get("posterior")
@@ -298,7 +295,7 @@ def test_pipeline_multivar_nuts(multivar_data):
     config = _fast_config()
     result = make_pipeline(multivar_data, config).run()
 
-    assert isinstance(result, PipelineResult)
+    assert isinstance(result, PSDResult)
     assert result.vi is not None
     assert isinstance(result.idata, xr.DataTree)
     posterior = result.idata.children.get("posterior")
@@ -314,7 +311,7 @@ def test_pipeline_multivar_nuts(multivar_data):
 
 
 # ---------------------------------------------------------------------------
-# PipelineResult.save()
+# PSDResult.save()
 # ---------------------------------------------------------------------------
 
 
@@ -362,7 +359,7 @@ def test_posterior_predictive_save_overlays_vi_when_available(
         captured["spec"] = spec
 
     monkeypatch.setattr(
-        "log_psplines.pipeline.pipeline.plot_psd_matrix",
+        "log_psplines.results.plot_psd_matrix",
         _fake_plot_psd_matrix,
     )
     vi = StageResult(
@@ -373,7 +370,7 @@ def test_posterior_predictive_save_overlays_vi_when_available(
         runtime=0.0,
         samples={"weights_delta_0": np.zeros((3, 2))},
     )
-    result = PipelineResult(
+    result = PSDResult(
         vi_coarse=None,
         vi=vi,
         idata=xr.DataTree(children={"sample_stats": xr.DataTree()}),
@@ -397,7 +394,7 @@ def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
         captured["spec"] = spec
 
     monkeypatch.setattr(
-        "log_psplines.pipeline.pipeline.plot_psd_matrix",
+        "log_psplines.results.plot_psd_matrix",
         _fake_plot_psd_matrix,
     )
     vi = StageResult(
@@ -408,7 +405,7 @@ def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
         runtime=0.0,
         samples={"weights_delta_0": np.zeros((3, 2))},
     )
-    result = PipelineResult(
+    result = PSDResult(
         vi_coarse=None,
         vi=vi,
         idata=xr.DataTree(),

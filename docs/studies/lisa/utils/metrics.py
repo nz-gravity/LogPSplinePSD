@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from log_psplines.datatypes.multivar_utils import interp_matrix
+from log_psplines.data.spectral_utils import interp_matrix
 from log_psplines.diagnostics import psd_compare
 from log_psplines.logger import logger
 

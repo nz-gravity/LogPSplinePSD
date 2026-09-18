@@ -5,8 +5,10 @@ import pytest
 import xarray as xr
 
 import log_psplines.mcmc as mcmc_module
-import log_psplines.pipeline.vi as vi_module
-from log_psplines.pipeline.config import PipelineConfig
+import log_psplines.pipeline as pipeline_module
+import log_psplines.preprocessing.spectral as preprocessing_module
+import log_psplines.inference.vi as vi_module
+from log_psplines.config import PipelineConfig
 
 
 def _model():
@@ -111,11 +113,13 @@ def test_run_mcmc_wrapper_kwargs_config_save_and_validation(
     def fake_make_pipeline(data, config):
         captured["data"] = data
         captured["config"] = config
-        return DummyPipeline()
+        pipeline = DummyPipeline()
+        pipeline.config = config
+        return pipeline
 
-    monkeypatch.setattr(mcmc_module, "make_pipeline", fake_make_pipeline)
+    monkeypatch.setattr(pipeline_module, "make_pipeline", fake_make_pipeline)
     monkeypatch.setattr(
-        mcmc_module,
+        preprocessing_module,
         "align_true_psd_to_freq",
         lambda true_psd, data: ("aligned", true_psd, data),
     )

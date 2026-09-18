@@ -7,7 +7,7 @@ from typing import Dict, Optional
 import numpy as np
 from scipy.integrate import simpson
 
-from ._utils import (
+from log_psplines.diagnostics._utils import (
     compute_ci_coverage_multivar,
     compute_matrix_l2,
     compute_matrix_riae,

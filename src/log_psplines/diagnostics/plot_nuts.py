@@ -9,7 +9,7 @@ import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import xarray as xr
 
-from ._factors import factor_idatas
+from log_psplines.diagnostics._factors import factor_idatas
 
 
 def _has_per_channel_stats(idata: xr.DataTree) -> bool:

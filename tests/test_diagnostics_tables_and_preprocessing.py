@@ -1,9 +1,10 @@
+from log_psplines.inference.initialisation import build_component
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
-from log_psplines.datatypes.multivar import MultivarFFT
+from log_psplines.data.spectral import WishartData
 from log_psplines.diagnostics import summary_tables as st
 from log_psplines.diagnostics.preprocessing import (
     eig_ratios,
@@ -14,13 +15,13 @@ from log_psplines.diagnostics.preprocessing import (
     save_eigenvalue_separation_plot,
     worst_ratio_frequencies,
 )
-from log_psplines.pipeline.config import PipelineConfig
+from log_psplines.config import PipelineConfig
 from log_psplines.preprocessing.checks import (
     _run_preprocessing_checks,
     _save_preprocessing_plot,
 )
-from log_psplines.psplines import MultivariateLogPSplines
-from log_psplines.psplines.psplines import LogPSplines
+from log_psplines.inference.components import SpectralComponents
+from log_psplines.models.spectrum import LogPSpline
 
 
 def _psd_stack(n: int = 6, p: int = 2) -> np.ndarray:
@@ -32,7 +33,7 @@ def _psd_stack(n: int = 6, p: int = 2) -> np.ndarray:
     return out
 
 
-def _fft_for_checks() -> MultivarFFT:
+def _fft_for_checks() -> WishartData:
     raw_psd = _psd_stack()
     u_re = np.zeros_like(raw_psd.real)
     u_im = np.zeros_like(raw_psd.real)
@@ -40,7 +41,7 @@ def _fft_for_checks() -> MultivarFFT:
         chol = np.linalg.cholesky(matrix)
         u_re[idx] = chol.real
         u_im[idx] = chol.imag
-    return MultivarFFT(
+    return WishartData(
         u_re=u_re,
         u_im=u_im,
         freq=np.linspace(0.1, 0.6, raw_psd.shape[0]),
@@ -55,9 +56,9 @@ def _fft_for_checks() -> MultivarFFT:
     )
 
 
-def _model() -> MultivariateLogPSplines:
-    def component() -> LogPSplines:
-        return LogPSplines.from_knots(
+def _model() -> SpectralComponents:
+    def component() -> LogPSpline:
+        return build_component(
             knots=np.asarray([0.0, 0.5, 1.0]),
             degree=1,
             diffMatrixOrder=1,
@@ -65,7 +66,7 @@ def _model() -> MultivariateLogPSplines:
             grid_points=np.linspace(0.0, 1.0, 6),
         )
 
-    return MultivariateLogPSplines(
+    return SpectralComponents(
         degree=1,
         diffMatrixOrder=1,
         N=6,
@@ -147,7 +148,7 @@ def test_pipeline_preprocessing_check_wrappers(tmp_path) -> None:
 
     _run_preprocessing_checks(fft, config)
     _run_preprocessing_checks(None, config)
-    no_raw = MultivarFFT(
+    no_raw = WishartData(
         u_re=fft.u_re,
         u_im=fft.u_im,
         freq=fft.freq,

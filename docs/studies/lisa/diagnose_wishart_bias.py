@@ -10,6 +10,7 @@ Usage:
 
 from __future__ import annotations
 
+from log_psplines.preprocessing.periodogram import compute_wishart
 import argparse
 import os
 import sys
@@ -35,8 +36,8 @@ ensure_lisatools_backends()
 
 from utils.data import generate_lisa_data
 
-from log_psplines.datatypes.multivar import MultivarFFT
-from log_psplines.datatypes.multivar_utils import interp_matrix
+from log_psplines.data.spectral import WishartData
+from log_psplines.data.spectral_utils import interp_matrix
 from log_psplines.logger import logger, set_level
 
 set_level("INFO")
@@ -101,8 +102,8 @@ def main() -> None:
     logger.info(f"Data: Nb={Nb}, Lb={Lb}, dt={dt}, fs={fs}")
 
     # Compute Wishart (same path as inference)
-    wishart = MultivarFFT.compute_wishart(
-        x=ts.y,
+    wishart = compute_wishart(
+        x=ts.data,
         fs=fs,
         Nb=Nb,
         fmin=FMIN,
@@ -258,8 +259,8 @@ def main() -> None:
     # Also test without window for comparison
     if window is not None:
         print("\n=== Re-running with NO window for comparison ===")
-        wishart_rect = MultivarFFT.compute_wishart(
-            x=ts.y,
+        wishart_rect = compute_wishart(
+            x=ts.data,
             fs=fs,
             Nb=Nb,
             fmin=FMIN,

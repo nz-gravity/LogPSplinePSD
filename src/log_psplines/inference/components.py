@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import (
     Literal,
@@ -8,11 +8,14 @@ from typing import (
 import jax.numpy as jnp
 import numpy as np
 
-from ..datatypes import MultivarFFT
-from ..datatypes.multivar_utils import U_to_Y, psd_to_cholesky_components
-from .initialisation import init_weights
-from .knots_locator import init_knots, multivar_psd_knot_scores
-from .psplines import LogPSplines
+from log_psplines.data import WishartData
+from log_psplines.data.spectral_utils import U_to_Y, psd_to_cholesky_components
+from log_psplines.inference.initialisation import build_component, init_weights
+from log_psplines.models.spectrum import LogPSpline
+from log_psplines.preprocessing.knots_locator import (
+    init_knots,
+    multivar_psd_knot_scores,
+)
 
 _MULTIVAR_ALLOWED_KNOT_METHODS = ("uniform", "log", "density")
 _MULTIVAR_KNOT_FAMILY_KEYS = ("delta", "theta_re", "theta_im")
@@ -58,15 +61,6 @@ class MultivarComponentKey:
             return f"delta_{self.j}"
         assert self.l is not None and self.part is not None
         return f"theta_{self.part}_{self.j}_{self.l}"
-
-
-@dataclass
-class MultivarComponentSpec:
-    """Container for a component's model and optional knot-score metadata."""
-
-    key: MultivarComponentKey
-    model: LogPSplines
-    score: np.ndarray | None = None
 
 
 def _resolve_family_knot_counts(
@@ -134,9 +128,9 @@ def _build_pspline_from_log_target(
     diff_matrix_order: int,
     n_freq: int,
     grid_points: np.ndarray,
-) -> LogPSplines:
-    """Create a LogPSplines model initialized from log-target data."""
-    return LogPSplines.from_knots(
+) -> LogPSpline:
+    """Create a LogPSpline model initialized from log-target data."""
+    return build_component(
         knots=np.asarray(knots, dtype=np.float64),
         degree=degree,
         diffMatrixOrder=diff_matrix_order,
@@ -148,9 +142,9 @@ def _build_pspline_from_log_target(
 
 
 @dataclass
-class MultivariateLogPSplines:
+class SpectralComponents:
     """
-    Multivariate log P-splines using Cholesky parameterization for cross-spectral density matrices.
+    Prepared scalar spline components for stationary matrix inference.
 
     Uses Cholesky decomposition: S(f) = T^(-1) D T^(-H) where:
     - D is diagonal matrix with exp(log_delta_sq) elements (one P-spline per channel)
@@ -164,23 +158,19 @@ class MultivariateLogPSplines:
     degree : int
         Polynomial degree of B-spline basis functions
     diffMatrixOrder : int
-        Order of finite difference penalty matrix
+        Order of the integrated-derivative penalty
     N : int
         Number of frequency bins
     p : int
         Number of channels in multivariate data
-    diagonal_models : List[LogPSplines]
+    diagonal_models : List[LogPSpline]
         P-spline models for diagonal PSD components (one per channel)
-    offdiag_re_models : Dict[Tuple[int, int], LogPSplines], optional
+    offdiag_re_models : Dict[Tuple[int, int], LogPSpline], optional
         P-spline models for real parts of off-diagonal terms keyed by
         ``(j, l)`` with ``j > l``.
-    offdiag_im_models : Dict[Tuple[int, int], LogPSplines], optional
+    offdiag_im_models : Dict[Tuple[int, int], LogPSpline], optional
         P-spline models for imaginary parts of off-diagonal terms keyed by
         ``(j, l)`` with ``j > l``.
-    component_specs : Dict[MultivarComponentKey, MultivarComponentSpec], optional
-        Unified typed registry for all components.
-    component_order : List[MultivarComponentKey], optional
-        Deterministic ordering used to assemble tuples passed to samplers.
     """
 
     degree: int
@@ -189,18 +179,12 @@ class MultivariateLogPSplines:
     p: int
 
     # P-spline components for each Cholesky parameter
-    diagonal_models: list[LogPSplines]  # One per channel
-    offdiag_re_models: dict[tuple[int, int], LogPSplines] = field(
+    diagonal_models: list[LogPSpline]  # One per channel
+    offdiag_re_models: dict[tuple[int, int], LogPSpline] = field(
         default_factory=dict
     )
-    offdiag_im_models: dict[tuple[int, int], LogPSplines] = field(
+    offdiag_im_models: dict[tuple[int, int], LogPSpline] = field(
         default_factory=dict
-    )
-    component_specs: dict[MultivarComponentKey, MultivarComponentSpec] = field(
-        default_factory=dict, repr=False
-    )
-    component_order: list[MultivarComponentKey] = field(
-        default_factory=list, repr=False
     )
     component_scores: dict[MultivarComponentKey, np.ndarray] = field(
         default_factory=dict, repr=False
@@ -217,23 +201,9 @@ class MultivariateLogPSplines:
         if self.n_theta == 0:
             self.offdiag_re_models = {}
             self.offdiag_im_models = {}
-            self._initialise_component_registry()
             return
 
         pairs = self.theta_pairs
-        if self.component_specs:
-            for j, l in pairs:
-                key_re = MultivarComponentKey("theta", j, l=l, part="re")
-                key_im = MultivarComponentKey("theta", j, l=l, part="im")
-                if key_re in self.component_specs:
-                    self.offdiag_re_models[(j, l)] = self.component_specs[
-                        key_re
-                    ].model
-                if key_im in self.component_specs:
-                    self.offdiag_im_models[(j, l)] = self.component_specs[
-                        key_im
-                    ].model
-
         missing_re = [
             pair for pair in pairs if pair not in self.offdiag_re_models
         ]
@@ -247,24 +217,22 @@ class MultivariateLogPSplines:
                 f"missing imag models for pairs={missing_im}."
             )
 
-        self._initialise_component_registry()
-
     @classmethod
     def from_multivar_fft(
         cls,
-        fft_data: MultivarFFT,
+        fft_data: WishartData,
         n_knots: int | Mapping[object, object],
         degree: int = 3,
         diffMatrixOrder: int = 2,
         knot_kwargs: dict[str, object] | None = None,
         analytical_psd: np.ndarray | None = None,
-    ) -> "MultivariateLogPSplines":
+    ) -> "SpectralComponents":
         """
         Factory method to construct multivariate P-spline model from FFT data.
 
         Parameters
         ----------
-        fft_data : MultivarFFT
+        fft_data : WishartData
             Multivariate FFT data with real/imaginary components and design matrices
         n_knots : int or mapping
             Knot-count specification for the Cholesky components. Provide a
@@ -294,7 +262,7 @@ class MultivariateLogPSplines:
 
         Returns
         -------
-        MultivariateLogPSplines
+        SpectralComponents
             Fully initialized multivariate model
         """
         if knot_kwargs is None:
@@ -359,7 +327,7 @@ class MultivariateLogPSplines:
         # density-based knot placement without modifying the empirical score.
         if analytical_psd is not None:
             if isinstance(analytical_psd, tuple):
-                from ..datatypes.multivar_utils import interp_matrix
+                from log_psplines.data.spectral_utils import interp_matrix
 
                 freq_ana, S_ana = analytical_psd
                 analytical_psd = interp_matrix(
@@ -438,8 +406,8 @@ class MultivariateLogPSplines:
             diagonal_models.append(diagonal_model)
 
         # Create off-diagonal models if needed
-        offdiag_re_models: dict[tuple[int, int], LogPSplines] = {}
-        offdiag_im_models: dict[tuple[int, int], LogPSplines] = {}
+        offdiag_re_models: dict[tuple[int, int], LogPSpline] = {}
+        offdiag_im_models: dict[tuple[int, int], LogPSpline] = {}
         theta_pairs = [(j, l) for j in range(1, p) for l in range(j)]
 
         if p > 1:
@@ -579,58 +547,6 @@ class MultivariateLogPSplines:
         order.extend(self.theta_key("im", j, l) for j, l in self.theta_pairs)
         return order
 
-    def _initialise_component_registry(self) -> None:
-        """Create/validate a typed component registry from model fields."""
-        expected_order = self.expected_component_order
-        if not self.component_order:
-            self.component_order = list(expected_order)
-
-        if not self.component_specs:
-            specs: dict[MultivarComponentKey, MultivarComponentSpec] = {}
-            for j, model in enumerate(self.diagonal_models):
-                key = self.delta_key(j)
-                specs[key] = MultivarComponentSpec(
-                    key=key,
-                    model=model,
-                    score=self.component_scores.get(key),
-                )
-            for j, l in self.theta_pairs:
-                key_re = self.theta_key("re", j, l)
-                key_im = self.theta_key("im", j, l)
-                specs[key_re] = MultivarComponentSpec(
-                    key=key_re,
-                    model=self.offdiag_re_models[(j, l)],
-                    score=self.component_scores.get(key_re),
-                )
-                specs[key_im] = MultivarComponentSpec(
-                    key=key_im,
-                    model=self.offdiag_im_models[(j, l)],
-                    score=self.component_scores.get(key_im),
-                )
-            self.component_specs = specs
-        if not self.component_scores:
-            self.component_scores = {
-                key: spec.score
-                for key, spec in self.component_specs.items()
-                if spec.score is not None
-            }
-
-        missing = [k for k in expected_order if k not in self.component_specs]
-        if missing:
-            raise ValueError(
-                "component_specs is missing required keys: "
-                f"{[k.name for k in missing]}"
-            )
-        if len(self.component_order) != len(expected_order):
-            raise ValueError(
-                f"component_order must have {len(expected_order)} entries, "
-                f"got {len(self.component_order)}."
-            )
-        if set(self.component_order) != set(expected_order):
-            raise ValueError(
-                "component_order must contain exactly the expected keys."
-            )
-
     def theta_pair_from_index(self, theta_idx: int) -> tuple[int, int]:
         pairs = self.theta_pairs
         if theta_idx < 0 or theta_idx >= len(pairs):
@@ -639,13 +555,10 @@ class MultivariateLogPSplines:
             )
         return pairs[theta_idx]
 
-    def get_component_spec(
-        self, key: MultivarComponentKey
-    ) -> MultivarComponentSpec:
-        return self.component_specs[key]
-
-    def iter_component_specs(self) -> list[MultivarComponentSpec]:
-        return [self.component_specs[key] for key in self.component_order]
+    def component(self, key: MultivarComponentKey) -> LogPSpline:
+        if key.family == "delta":
+            return self.diagonal_models[key.j]
+        return self.get_theta_model(key.part, key.j, key.l)
 
     def theta_index(self, j: int, l: int) -> int:
         if not (0 <= l < j < self.p):
@@ -654,10 +567,13 @@ class MultivariateLogPSplines:
             )
         return j * (j - 1) // 2 + l
 
-    def get_theta_model(self, part: str, j: int, l: int) -> LogPSplines:
+    def get_theta_model(self, part: str, j: int, l: int) -> LogPSpline:
         """Return the model for theta_{j,l} real/imag part."""
-        key = self.theta_key(part, j, l)
-        return self.component_specs[key].model
+        self.theta_key(part, j, l)
+        models = (
+            self.offdiag_re_models if part == "re" else self.offdiag_im_models
+        )
+        return models[(j, l)]
 
     @property
     def total_components(self) -> int:
@@ -677,8 +593,8 @@ class MultivariateLogPSplines:
         """
         all_bases = []
         all_penalties = []
-        for key in self.component_order:
-            model = self.component_specs[key].model
+        for key in self.expected_component_order:
+            model = self.component(key)
             all_bases.append(model.basis)
             all_penalties.append(model.penalty_matrix)
 
@@ -692,7 +608,7 @@ class MultivariateLogPSplines:
         counts: list[int] = []
 
         for j in range(self.p):
-            diag_model = self.component_specs[self.delta_key(j)].model
+            diag_model = self.diagonal_models[j]
             value = (
                 int(len(diag_model.knots))
                 if quantity == "n_knots"
@@ -754,7 +670,7 @@ class MultivariateLogPSplines:
 
         # Diagonal components: log δ_j(f)² = 2 log L_{jj}(f)
         for j in range(self.p):
-            diag_model = self.component_specs[self.delta_key(j)].model
+            diag_model = self.diagonal_models[j]
             log_delta_sq = 2.0 * np.log(np.abs(L[:, j, j]))  # (N,)
             design_weights[f"delta_{j}"] = init_weights(
                 jnp.asarray(log_delta_sq), diag_model
@@ -798,238 +714,21 @@ class MultivariateLogPSplines:
 
         return design_weights
 
-    def _psd_chunk_iterator(
-        self,
-        log_delta_sq_samples: np.ndarray,
-        theta_re_samples: np.ndarray | None,
-        theta_im_samples: np.ndarray | None,
-        *,
-        n_samps: int,
-        chunk_size: int,
-    ):
-        """Yield reconstructed PSD chunks with shape (n_samps, chunk, n, n)."""
-
-        N = log_delta_sq_samples.shape[1]
-        p = log_delta_sq_samples.shape[2]
-        n_theta = (
-            theta_re_samples.shape[2] if theta_re_samples is not None else 0
-        )
-        tril_row, tril_col = np.tril_indices(p, k=-1)
-        n_lower = len(tril_row)
-
-        for start in range(0, N, chunk_size):
-            end = min(start + chunk_size, N)
-
-            log_chunk = log_delta_sq_samples[:n_samps, start:end, :]
-            theta_re_chunk = (
-                theta_re_samples[:n_samps, start:end, :]
-                if theta_re_samples is not None
-                else None
-            )
-            theta_im_chunk = (
-                theta_im_samples[:n_samps, start:end, :]
-                if theta_im_samples is not None
-                else None
-            )
-
-            chunk_len = end - start
-            psd_chunk = np.empty(
-                (n_samps, chunk_len, p, p),
-                dtype=np.complex128,
-            )
-
-            for s in range(n_samps):
-                for local_f in range(chunk_len):
-                    diag_vals = np.exp(log_chunk[s, local_f]).astype(
-                        np.float64
-                    )
-                    T = np.eye(p, dtype=np.complex128)
-
-                    if n_theta > 0:
-                        assert theta_re_chunk is not None
-                        assert theta_im_chunk is not None
-                        theta_complex = (
-                            theta_re_chunk[s, local_f]
-                            + 1j * theta_im_chunk[s, local_f]
-                        )
-                        n_use = min(theta_complex.shape[0], n_lower)
-                        if n_use:
-                            T[
-                                tril_row[:n_use], tril_col[:n_use]
-                            ] = -theta_complex[:n_use]
-
-                    Tinverse = np.linalg.inv(T)
-                    D = np.diag(diag_vals)
-                    psd_chunk[s, local_f] = (
-                        Tinverse @ D @ Tinverse.conj().T
-                    ).astype(np.complex128)
-
-            yield start, end, psd_chunk
-
-    def reconstruct_psd_matrix(
-        self,
-        log_delta_sq_samples: jnp.ndarray,
-        theta_re_samples: jnp.ndarray,
-        theta_im_samples: jnp.ndarray,
-        n_samples_max: int = 50,
-        chunk_size: int = 2048,
-    ) -> np.ndarray:
-        """
-        Reconstruct PSD matrices from Cholesky components using NumPy.
-
-        The computation streams over frequency chunks (default 2048 bins) so the
-        peak memory stays modest even for very long spectra. Results are returned
-        as a ``complex128`` NumPy array of shape
-        ``(n_samps, N, p, p)``.
-        """
-        log_delta_sq_arr = np.asarray(log_delta_sq_samples)
-        theta_re_arr = np.asarray(theta_re_samples)
-        theta_im_arr = np.asarray(theta_im_samples)
-
-        if log_delta_sq_arr.ndim == 4:
-            log_delta_sq_arr = log_delta_sq_arr[0]
-        if theta_re_arr.ndim == 4:
-            theta_re_arr = theta_re_arr[0]
-        if theta_im_arr.ndim == 4:
-            theta_im_arr = theta_im_arr[0]
-
-        n_samples, N, p = log_delta_sq_arr.shape
-        n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
-        n_samps = min(int(n_samples_max), int(n_samples))
-
-        if chunk_size is None or chunk_size <= 0:
-            chunk_size = N
-
-        log_delta_sq_arr = log_delta_sq_arr[:n_samps]
-        theta_re_arr = theta_re_arr[:n_samps]
-        theta_im_arr = theta_im_arr[:n_samps]
-
-        psd = np.empty((n_samps, N, p, p), dtype=np.complex128)
-
-        for start, end, psd_chunk in self._psd_chunk_iterator(
-            log_delta_sq_arr,
-            theta_re_arr if n_theta > 0 else None,
-            theta_im_arr if n_theta > 0 else None,
-            n_samps=n_samps,
-            chunk_size=chunk_size,
-        ):
-            psd[:, start:end] = psd_chunk
-
-        return psd
-
-    def compute_psd_quantiles(
-        self,
-        log_delta_sq_samples: jnp.ndarray,
-        theta_re_samples: jnp.ndarray,
-        theta_im_samples: jnp.ndarray,
-        *,
-        percentiles: Sequence[float] | None = None,
-        n_samples_max: int = 50,
-        chunk_size: int = 2048,
-        compute_coherence: bool = False,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-        """
-        Compute PSD (and optional coherence) percentiles without storing all draws.
-
-        Returns
-        -------
-        psd_real_percentiles : np.ndarray
-            Percentiles of the real part of the PSD matrix with shape
-            ``(n_percentiles, N, p, p)``.
-        psd_imag_percentiles : np.ndarray
-            Percentiles of the imaginary part of the PSD matrix with matching shape.
-        coherence_percentiles : Optional[np.ndarray]
-            When ``compute_coherence`` is ``True`` and ``p > 1``, contains
-            percentiles of the coherence matrix; otherwise ``None``.
-        """
-
-        if percentiles is None:
-            percentiles = [5.0, 50.0, 95.0]
-
-        log_delta_sq_arr = np.asarray(log_delta_sq_samples)
-        theta_re_arr = np.asarray(theta_re_samples)
-        theta_im_arr = np.asarray(theta_im_samples)
-
-        if log_delta_sq_arr.ndim == 4:
-            log_delta_sq_arr = log_delta_sq_arr[0]
-        if theta_re_arr.ndim == 4:
-            theta_re_arr = theta_re_arr[0]
-        if theta_im_arr.ndim == 4:
-            theta_im_arr = theta_im_arr[0]
-
-        n_samples, N, p = log_delta_sq_arr.shape
-        n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
-        n_samps = min(int(n_samples_max), int(n_samples))
-
-        if chunk_size is None or chunk_size <= 0:
-            chunk_size = N
-
-        log_delta_sq_arr = log_delta_sq_arr[:n_samps]
-        theta_re_arr = theta_re_arr[:n_samps]
-        theta_im_arr = theta_im_arr[:n_samps]
-
-        n_percentiles = len(percentiles)
-        psd_percentiles = np.empty((n_percentiles, N, p, p), dtype=np.float64)
-        psd_imag_percentiles = np.empty_like(psd_percentiles)
-
-        coherence_percentiles = (
-            np.empty(
-                (n_percentiles, N, p, p),
-                dtype=np.float64,
-            )
-            if compute_coherence and p > 1
-            else None
-        )
-
-        for start, end, psd_chunk in self._psd_chunk_iterator(
-            log_delta_sq_arr,
-            theta_re_arr if n_theta > 0 else None,
-            theta_im_arr if n_theta > 0 else None,
-            n_samps=n_samps,
-            chunk_size=chunk_size,
-        ):
-            psd_real = psd_chunk.real
-            psd_imag = psd_chunk.imag
-
-            real_q = np.percentile(psd_real, percentiles, axis=0)
-            imag_q = np.percentile(psd_imag, percentiles, axis=0)
-
-            psd_percentiles[:, start:end] = real_q
-            psd_imag_percentiles[:, start:end] = imag_q
-
-            if coherence_percentiles is not None:
-                diag = np.abs(
-                    np.diagonal(psd_chunk, axis1=2, axis2=3)
-                )  # (samples, chunk, channels)
-                denom = diag[..., :, None] * diag[..., None, :]
-                denom = np.where(denom > 0.0, denom, np.nan)
-                coh_samples = (np.abs(psd_chunk) ** 2) / denom
-                coh_samples = np.nan_to_num(coh_samples, nan=0.0, posinf=0.0)
-                coh_q = np.percentile(coh_samples, percentiles, axis=0)
-
-                # enforce exact ones on diagonal to avoid numerical drift
-                for idx in range(n_percentiles):
-                    for c in range(p):
-                        coh_q[idx, :, c, c] = 1.0
-
-                coherence_percentiles[:, start:end] = coh_q
-
-        return psd_percentiles, psd_imag_percentiles, coherence_percentiles
-
     def __repr__(self):
         knot_counts = {
-            len(spec.model.knots) for spec in self.component_specs.values()
+            len(self.component(key).knots)
+            for key in self.expected_component_order
         }
         if len(knot_counts) == 1:
             knot_label = str(next(iter(knot_counts)))
         else:
             knot_label = f"mixed[{min(knot_counts)}-{max(knot_counts)}]"
         basis_shapes = [
-            tuple(int(v) for v in spec.model.basis.shape)
-            for spec in self.iter_component_specs()
+            tuple(int(v) for v in self.component(key).basis.shape)
+            for key in self.expected_component_order
         ]
         return (
-            f"MultivariateLogPSplines(channels={self.p}, "
+            f"SpectralComponents(channels={self.p}, "
             f"knots={knot_label}, degree={self.degree}, "
             f"penaltyOrder={self.diffMatrixOrder}, N={self.N}, "
             f"basis_shapes={basis_shapes})"

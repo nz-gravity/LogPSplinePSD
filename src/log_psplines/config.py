@@ -5,7 +5,7 @@ from typing import Any, Literal, Union
 
 import numpy as np
 
-from ..preprocessing.coarse_grain import CoarseGrainConfig
+from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
 TruePSDInput = Union[
     None,

@@ -17,10 +17,11 @@ import numpy as np
 import xarray as xr
 from numpyro.infer.util import log_density
 
-from ..datatypes.multivar import MultivarFFT
+from log_psplines.data.spectral import WishartData
+from log_psplines.inference.model import _blocked_channel_model
+from log_psplines.inference.nuts import _channel_model_kwargs
+
 from ..logger import logger
-from .models import _blocked_channel_model
-from .stages import _channel_model_kwargs
 
 _NONCONVERGENCE_MESSAGE = "Convergence not reached within"
 
@@ -202,7 +203,7 @@ def _default_lnz_kwargs(
     *,
     n_draws: int,
     posterior_dim: int,
-    data: MultivarFFT,
+    data: WishartData,
     outdir: str | None,
     extra_kwargs: dict[str, Any] | None,
     verbose: bool,
@@ -451,7 +452,7 @@ def _evaluate_lnz_task(
     post_samples: np.ndarray,
     log_post: np.ndarray,
     log_post_fn: Callable[[np.ndarray], float],
-    data: MultivarFFT,
+    data: WishartData,
     outdir: str | None,
     extra_kwargs: dict[str, Any] | None,
     verbose: bool,
@@ -497,7 +498,7 @@ def _evaluate_lnz_task(
 def estimate_pipeline_lnz(
     *,
     idata: xr.DataTree,
-    data: MultivarFFT,
+    data: WishartData,
     model_kwargs: dict[str, Any],
     outdir: str | None,
     extra_kwargs: dict[str, Any] | None = None,
@@ -575,7 +576,7 @@ def _channel_theta_array(
 
 def _pointwise_multivar_log_likelihood(
     posterior: xr.Dataset,
-    data: MultivarFFT,
+    data: WishartData,
     model_kwargs: dict[str, Any],
 ) -> xr.Dataset:
     """Return blocked multivariate pointwise log-likelihood draws by frequency."""
@@ -676,7 +677,7 @@ def _pointwise_multivar_log_likelihood(
 def compute_pointwise_lnl(
     *,
     idata: xr.DataTree,
-    data: MultivarFFT,
+    data: WishartData,
     model_kwargs: dict[str, Any],
 ) -> xr.Dataset:
     """Compute pointwise log-likelihood contributions for PSIS-LOO.

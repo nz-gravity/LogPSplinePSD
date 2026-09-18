@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.fft import rfft
 
-from ..datatypes import MultivariateTimeseries
+from log_psplines.data import TimeSeries
 from ..logger import logger
 
 
@@ -127,11 +127,11 @@ class VARMAData:
         )
 
     @property
-    def ts(self) -> MultivariateTimeseries:
+    def ts(self) -> TimeSeries:
         """Return the simulated data as a canonical multivariate time series."""
         if self.data is None:
             raise ValueError("No simulated data available.")
-        return MultivariateTimeseries(y=self.data, t=self.time)
+        return TimeSeries(data=self.data, t=self.time)
 
     def resimulate(self, seed: int | None = None) -> np.ndarray:
         """Simulate or re-simulate the VARMA process.

@@ -4,14 +4,14 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from ..datatypes.multivar import (
+from log_psplines.data import (
     EmpiricalPSD,
-    MultivarFFT,
-    MultivariateTimeseries,
+    WishartData,
+    TimeSeries,
 )
 from ..logger import logger
-from ..pipeline.config import PipelineConfig
-from .coarse_grain import (
+from log_psplines.config import PipelineConfig
+from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
     apply_coarse_grain_multivar_fft,
     compute_binning_structure,
@@ -78,9 +78,9 @@ def _build_frequency_exclusion_mask(
 
 
 def _apply_frequency_exclusion(
-    data: MultivarFFT,
+    data: WishartData,
     bands: Sequence[tuple[float, float]],
-) -> MultivarFFT:
+) -> WishartData:
     """Return frequency-domain data with excluded bands removed."""
     if not bands:
         return data
@@ -121,11 +121,11 @@ def _filter_empirical_psd(
 
 
 def _coarse_grain_processed_data(
-    processed_data: MultivarFFT | None,
+    processed_data: WishartData | None,
     cg_config: CoarseGrainConfig,
     scaled_true_psd: np.ndarray | None,
 ) -> tuple[
-    MultivarFFT | None,
+    WishartData | None,
     np.ndarray | None,
 ]:
     """Apply coarse graining to the already-processed data if configured."""
@@ -151,20 +151,20 @@ def _coarse_grain_processed_data(
 
 
 def _prepare_processed_data(
-    data: MultivariateTimeseries,
+    data: TimeSeries,
     config: PipelineConfig,
 ) -> tuple[
-    MultivarFFT,
-    MultivariateTimeseries | None,
+    WishartData,
+    TimeSeries | None,
     SamplerName,
 ]:
-    if not isinstance(data, MultivariateTimeseries):
-        data = MultivariateTimeseries(
-            y=np.asarray(data.y), t=np.asarray(data.t)
+    if not isinstance(data, TimeSeries):
+        data = TimeSeries(
+            data=np.asarray(data.data), t=np.asarray(data.t)
         )
     standardized_ts = data.standardise_for_psd()
     sampler: SamplerName = "multivar_blocked_nuts"
-    raw_multivar_ts: MultivariateTimeseries | None = data
+    raw_multivar_ts: TimeSeries | None = data
     processed = standardized_ts.to_wishart_stats(
         Nb=config.Nb,
         fmin=config.fmin,
@@ -186,8 +186,8 @@ def _prepare_processed_data(
 
 
 def _build_welch_overlay(
-    raw_multivar_ts: MultivariateTimeseries | None,
-    processed_data: MultivarFFT | None,
+    raw_multivar_ts: TimeSeries | None,
+    processed_data: WishartData | None,
     config: PipelineConfig,
 ) -> tuple[
     list[EmpiricalPSD] | None,
@@ -196,7 +196,7 @@ def _build_welch_overlay(
 ]:
     if raw_multivar_ts is None:
         return None, None, None
-    if not isinstance(processed_data, MultivarFFT):
+    if not isinstance(processed_data, WishartData):
         return None, None, None
 
     try:

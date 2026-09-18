@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from log_psplines.psplines.knots_locator.knot_locator import (
+from log_psplines.preprocessing.knots_locator.knot_locator import (
     _adaptive_denoise,
     _dedup_sorted_with_tol,
     _enforce_exact_knot_count,

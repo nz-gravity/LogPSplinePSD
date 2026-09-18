@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from log_psplines.datatypes.multivar import MultivariateTimeseries
+from log_psplines.data.timeseries import TimeSeries
 from log_psplines.diagnostics import plot_nuts
 from log_psplines.diagnostics._factors import (
     _copy_factor_attrs,
@@ -22,7 +22,7 @@ from log_psplines.diagnostics.psd_compare import (
     _handle_multivariate,
     compute_multivar_riae_diagnostics,
 )
-from log_psplines.pipeline.config import PipelineConfig
+from log_psplines.config import PipelineConfig
 from log_psplines.preprocessing.data_prep import (
     _apply_frequency_exclusion,
     _build_welch_overlay,
@@ -214,7 +214,7 @@ def test_psd_compare_helpers_and_multivariate_dataset_path() -> None:
 
 
 def test_welch_overlay_helper_paths() -> None:
-    raw = MultivariateTimeseries(
+    raw = TimeSeries(
         np.column_stack([np.sin(np.arange(64.0)), np.cos(np.arange(64.0))]),
         t=np.arange(64.0) / 16.0,
     )

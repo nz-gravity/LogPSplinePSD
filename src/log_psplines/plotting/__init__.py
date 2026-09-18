@@ -1,12 +1,12 @@
-from .base import (
+from log_psplines.plotting.base import (
     COLORS,
     PlotConfig,
     compute_confidence_intervals,
     extract_plotting_data,
     setup_plot_style,
 )
-from .psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
-from .vi import plot_vi_loss
+from log_psplines.plotting.psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
+from log_psplines.plotting.vi import plot_vi_loss
 
 __all__ = [
     # Base utilities

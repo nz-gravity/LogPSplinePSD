@@ -3,17 +3,17 @@ import os
 import arviz as az
 import numpy as np
 
-from log_psplines.datatypes import Periodogram, Timeseries
-from log_psplines.datatypes.multivar import EmpiricalPSD
+from log_psplines.data import Periodogram, Timeseries
+from log_psplines.data.spectral import EmpiricalPSD
 from log_psplines.example_datasets.lvk_data import LVKData
 from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
-from log_psplines.psplines import LogPSplines
+from log_psplines.models.spectrum import LogPSpline
 
 
 def _plot_univariate_periodogram(
     pdgrm: Periodogram,
-    spline_model: LogPSplines,
+    spline_model: LogPSpline,
 ):
     freq = np.asarray(pdgrm.freqs, dtype=np.float64)
     model = np.exp(np.asarray(spline_model(), dtype=np.float64))
@@ -71,7 +71,7 @@ if os.path.exists(idata_fname):
     print(f"Loading existing inference data from {idata_fname}")
     idata = az.from_netcdf(idata_fname)
 else:
-    spline_model = LogPSplines.from_periodogram(
+    spline_model = LogPSpline.from_periodogram(
         pdgrm,
         n_knots=len(lvk_data.knots_locations),
         degree=3,

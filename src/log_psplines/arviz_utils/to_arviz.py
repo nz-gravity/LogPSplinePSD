@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 """Helpers for ArviZ-compatible DataTree packing and PSD reconstruction."""
+from log_psplines.arviz_utils.reconstruction import compute_psd_quantiles
+from log_psplines.arviz_utils.spline_storage import to_storage_payload
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -8,10 +10,10 @@ import jax.numpy as jnp
 import numpy as np
 from xarray import DataArray, Dataset
 
-from log_psplines.datatypes import MultivarFFT
+from log_psplines.data import WishartData
 
 if TYPE_CHECKING:
-    from ..psplines import MultivariateLogPSplines
+    from log_psplines.inference.components import SpectralComponents
 
 SamplerConfig = Any
 
@@ -20,7 +22,7 @@ def _pack_model_component(
     model, prefix: str, data: dict[str, Any], coords: dict[str, Any]
 ) -> None:
     """Pack a single multivariate component into storage dictionaries."""
-    payload, component_coords = model.to_storage_payload(
+    payload, component_coords = to_storage_payload(model,
         prefix=prefix, include_linear_operators=False
     )
     data.update(payload)
@@ -99,8 +101,8 @@ def _flatten_posterior_draws(array: jnp.ndarray | np.ndarray) -> jnp.ndarray:
 
 
 def _compute_prior_predictive_multivar(
-    spline_model: MultivariateLogPSplines,
-    fft_data: MultivarFFT,
+    spline_model: SpectralComponents,
+    fft_data: WishartData,
     config: SamplerConfig,
     n_prior_draws: int = 500,
     seed: int = 42,
@@ -231,7 +233,7 @@ def _compute_prior_predictive_multivar(
                     theta_idx += 1
 
     percentiles = np.array([5.0, 50.0, 95.0], dtype=np.float64)
-    psd_real_q, psd_imag_q, _ = spline_model.compute_psd_quantiles(
+    psd_real_q, psd_imag_q, _ = compute_psd_quantiles(
         log_delta_sq_all,
         theta_re_all,
         theta_im_all,
@@ -246,7 +248,7 @@ def _compute_prior_predictive_multivar(
 
 
 def _reconstruct_log_delta_sq(
-    samples: dict[str, jnp.ndarray], spline_model, fft_data: MultivarFFT
+    samples: dict[str, jnp.ndarray], spline_model, fft_data: WishartData
 ) -> jnp.ndarray:
     """Reconstruct log_delta_sq from individual diagonal component samples."""
     all_bases, _ = spline_model.get_all_bases_and_penalties()
@@ -275,7 +277,7 @@ def _reconstruct_log_delta_sq(
 def _reconstruct_theta_params(
     samples: dict[str, jnp.ndarray],
     spline_model,
-    fft_data: MultivarFFT,
+    fft_data: WishartData,
     param_type: str,
 ) -> jnp.ndarray:
     """Reconstruct theta parameters from samples."""

@@ -7,8 +7,8 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 import xarray as xr
 
-from log_psplines.datatypes import MultivariateTimeseries
-from log_psplines.datatypes.multivar_utils import interp_matrix
+from log_psplines.data import TimeSeries
+from log_psplines.data.spectral_utils import interp_matrix
 from log_psplines.logger import logger
 from log_psplines.mcmc import run_mcmc
 from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
@@ -94,7 +94,7 @@ def _format_knot_counts(knot_counts: int | Mapping[str, int]) -> str:
 
 
 def run_lisa_mcmc(
-    ts: MultivariateTimeseries,
+    ts: TimeSeries,
     *,
     Nb: int,
     coarse_cfg: CoarseGrainConfig,

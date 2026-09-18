@@ -1,3 +1,4 @@
+from log_psplines.inference.initialisation import build_component
 from types import SimpleNamespace
 
 import numpy as np
@@ -29,12 +30,12 @@ from log_psplines.arviz_utils.to_arviz import (
     _reconstruct_theta_params,
     _select_evenly_spaced_indices,
 )
-from log_psplines.psplines import MultivariateLogPSplines
-from log_psplines.psplines.psplines import LogPSplines
+from log_psplines.inference.components import SpectralComponents
+from log_psplines.models.spectrum import LogPSpline
 
 
-def _simple_log_pspline(n: int = 5) -> LogPSplines:
-    return LogPSplines.from_knots(
+def _simple_log_pspline(n: int = 5) -> LogPSpline:
+    return build_component(
         knots=np.asarray([0.0, 0.5, 1.0]),
         degree=1,
         diffMatrixOrder=1,
@@ -43,8 +44,8 @@ def _simple_log_pspline(n: int = 5) -> LogPSplines:
     )
 
 
-def _simple_multivar_model() -> MultivariateLogPSplines:
-    return MultivariateLogPSplines(
+def _simple_multivar_model() -> SpectralComponents:
+    return SpectralComponents(
         degree=1,
         diffMatrixOrder=1,
         N=5,
@@ -56,12 +57,12 @@ def _simple_multivar_model() -> MultivariateLogPSplines:
 
 
 def _posterior_dataset(
-    model: MultivariateLogPSplines, chains: int = 2, draws: int = 3
+    model: SpectralComponents, chains: int = 2, draws: int = 3
 ) -> xr.Dataset:
     coords = {"chain": np.arange(chains), "draw": np.arange(draws)}
     data = {}
     for key in model.expected_component_order:
-        n_basis = model.get_component_spec(key).model.n_basis
+        n_basis = model.component(key).n_basis
         name = f"weights_{key.name}"
         dim = f"{name}_dim_0"
         coords[dim] = np.arange(n_basis)

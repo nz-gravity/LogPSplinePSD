@@ -1,7 +1,7 @@
 """LISA data generation for simulation study.
 
 Wraps lisa_datagen.generate_lisatools_xyz_noise_timeseries() to produce
-a MultivariateTimeseries trimmed to block-consistent shape.
+a TimeSeries trimmed to block-consistent shape.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ for path in (SRC_ROOT, PROJECT_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from log_psplines.datatypes import MultivariateTimeseries  # noqa: E402
+from log_psplines.data import TimeSeries  # noqa: E402
 from log_psplines.example_datasets.lisa_data import LASER_FREQ  # noqa: E402
 from log_psplines.logger import logger  # noqa: E402
 
@@ -48,12 +48,12 @@ def generate_lisa_data(
     fmin_generate: float = GENERATION_FMIN,
     fmax_generate: float = GENERATION_FMAX,
     absolute_freq_units: bool = False,
-) -> tuple[MultivariateTimeseries, np.ndarray, np.ndarray, int, int, float]:
+) -> tuple[TimeSeries, np.ndarray, np.ndarray, int, int, float]:
     """Generate LISA XYZ noise and return block-trimmed timeseries.
 
     Returns
     -------
-    ts : MultivariateTimeseries
+    ts : TimeSeries
         Block-trimmed XYZ timeseries.
     freq_true : np.ndarray
         True PSD frequencies (full resolution, before coarse graining).
@@ -108,7 +108,7 @@ def generate_lisa_data(
             np.asarray(S_true, dtype=np.complex128) * float(LASER_FREQ) ** 2
         )
     t_full = np.arange(n_used, dtype=np.float64) * dt
-    ts = MultivariateTimeseries(y=y_full, t=t_full)
+    ts = TimeSeries(data=y_full, t=t_full)
 
     logger.info(
         f"Generated LISA data: seed={seed}, {duration_days:.0f} days, "

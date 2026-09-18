@@ -1,3 +1,5 @@
+from log_psplines.preprocessing.periodogram import compute_fft
+from log_psplines.plotting.basis import plot_spline_basis
 import os
 import time
 
@@ -7,23 +9,23 @@ import numpy as np
 import pytest
 from scipy.interpolate import BSpline
 
-from log_psplines.datatypes import MultivarFFT, MultivariateTimeseries
+from log_psplines.data import WishartData, TimeSeries
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
-from log_psplines.psplines import MultivariateLogPSplines
-from log_psplines.psplines.initialisation import init_weights
+from log_psplines.inference.components import SpectralComponents
+from log_psplines.inference.initialisation import init_weights
 
 
 @pytest.fixture
-def mock_fft() -> MultivarFFT:
+def mock_fft() -> WishartData:
     """Generate synthetic one-channel AR noise data."""
     data = VARMAData.ar(order=2, n_samples=256, fs=256.0, seed=42)
     return data.ts.standardise_for_psd().to_wishart_stats(Nb=1)
 
 
 def _plot_p1_spline(
-    fft: MultivarFFT,
-    spline_model: MultivariateLogPSplines,
+    fft: WishartData,
+    spline_model: SpectralComponents,
 ):
     freq = np.asarray(fft.freq, dtype=np.float64)
     model = np.exp(
@@ -46,13 +48,13 @@ def _plot_p1_spline(
     return plot_psd_matrix(spec)
 
 
-def test_spline_init(mock_fft: MultivarFFT, outdir):
+def test_spline_init(mock_fft: WishartData, outdir):
     out = os.path.join(outdir, "out_spline_init")
     os.makedirs(out, exist_ok=True)
 
     # init splines
     t0 = time.time()
-    spline_model = MultivariateLogPSplines.from_multivar_fft(
+    spline_model = SpectralComponents.from_multivar_fft(
         mock_fft,
         n_knots=10,
         degree=3,
@@ -68,7 +70,7 @@ def test_spline_init(mock_fft: MultivarFFT, outdir):
     # plotting for verification
     fig, axes = _plot_p1_spline(mock_fft, spline_model)
     fig.savefig(f"{out}/test_spline_init.png")
-    diag_model.plot_basis(out)
+    plot_spline_basis(diag_model,out)
 
     assert psd.shape == mock_fft.freq.shape
     assert np.all(np.isfinite(psd))
@@ -78,13 +80,13 @@ def test_spline_init(mock_fft: MultivarFFT, outdir):
     ), f"Initialization should complete in less than 5 seconds, it took {runtime:.2f} seconds."
 
 
-def test_spline_basis(mock_fft: MultivarFFT, outdir):
+def test_spline_basis(mock_fft: WishartData, outdir):
     out = os.path.join(outdir, "out_spline_basis")
     os.makedirs(out, exist_ok=True)
 
     # init splines
     t0 = time.time()
-    spline_model = MultivariateLogPSplines.from_multivar_fft(
+    spline_model = SpectralComponents.from_multivar_fft(
         mock_fft,
         n_knots=10,
         degree=3,
@@ -103,7 +105,7 @@ def test_spline_basis(mock_fft: MultivarFFT, outdir):
 
 
 def test_closed_form_weight_initialiser_returns_finite_p1_weights(mock_fft):
-    spline_model = MultivariateLogPSplines.from_multivar_fft(
+    spline_model = SpectralComponents.from_multivar_fft(
         mock_fft,
         n_knots=10,
         degree=3,
@@ -122,7 +124,7 @@ def test_closed_form_weight_initialiser_returns_finite_p1_weights(mock_fft):
     assert np.all(np.isfinite(np.asarray(ls_weights)))
 
 
-def test_basis_log_vs_linear(mock_fft: MultivarFFT, outdir):
+def test_basis_log_vs_linear(mock_fft: WishartData, outdir):
     outdir = os.path.join(outdir, "out_basis_log_vs_linear")
     os.makedirs(outdir, exist_ok=True)
 
@@ -298,7 +300,7 @@ def test_p1_timeseries_to_wishart_frequency_bounds():
     fs = 64
     t = np.arange(0, 1, 1 / fs)
     y = np.sin(2 * np.pi * 5 * t)
-    ts = MultivariateTimeseries(t=t, y=y, scaling_factor=3.0)
+    ts = TimeSeries(t=t, data=y, scaling_factor=3.0)
 
     fft = ts.to_wishart_stats(Nb=1, fmin=3.0, fmax=7.0)
 
@@ -317,7 +319,7 @@ def test_multivar_fft_cut_preserves_scaling():
     rng = np.random.default_rng(0)
     x = rng.normal(size=(32, 3))
     scaling = 5.0
-    fft = MultivarFFT.compute_fft(x, fs=32.0, scaling_factor=scaling)
+    fft = compute_fft(x, fs=32.0, scaling_factor=scaling)
 
     # Skip the first available frequency to ensure truncation happens
     fmin = float(fft.freq[1])

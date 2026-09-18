@@ -547,7 +547,7 @@ def main() -> None:
 
     try:
         make_preprocessing_psd_plot(
-            y_full=ts.y,
+            y_full=ts.data,
             fs=1.0 / dt,
             Lb=Lb,
             freq_true=freq_true,
@@ -693,7 +693,7 @@ def main() -> None:
         try:
             make_psd_plot(
                 idata,
-                y_full=ts.y,
+                y_full=ts.data,
                 fs=1.0 / dt,
                 Lb=Lb,
                 Nb=Nb,

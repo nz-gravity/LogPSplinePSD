@@ -27,7 +27,7 @@ for path in (SRC_ROOT, PROJECT_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from log_psplines.datatypes import MultivariateTimeseries  # noqa: E402
+from log_psplines.data import TimeSeries  # noqa: E402
 from log_psplines.example_datasets.lisa_data import (  # noqa: E402
     plot_psd_coherence,
     spectral_matrix_from_components,
@@ -621,8 +621,8 @@ def main() -> None:
         Syz_emp=Syz_raw,
         Szx_emp=Szx_raw,
     )
-    ts = MultivariateTimeseries(
-        y=np.vstack((x_t[:n_used], y_t[:n_used], z_t[:n_used])).T.astype(
+    ts = TimeSeries(
+        data=np.vstack((x_t[:n_used], y_t[:n_used], z_t[:n_used])).T.astype(
             np.float64
         ),
         t=(np.arange(n_used, dtype=np.float64) * float(delta_t)),

@@ -22,7 +22,7 @@ for path in (SRC_ROOT, PROJECT_ROOT):
 
 import numpy as np
 
-from log_psplines.datatypes import MultivariateTimeseries
+from log_psplines.data import TimeSeries
 from log_psplines.diagnostics.preprocessing import (
     eigenvalue_separation_diagnostics,
     save_eigenvalue_separation_plot,
@@ -74,8 +74,8 @@ n_trim = (n_raw // NB) * NB
 data = data[:n_trim]
 t_trim = t_trim[:n_trim]
 
-ts = MultivariateTimeseries(
-    y=data.astype(np.float64),
+ts = TimeSeries(
+    data=data.astype(np.float64),
     t=t_trim.astype(np.float64),
 )
 std_ts = ts.standardise_for_psd()

@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from log_psplines.datatypes.multivar import MultivarFFT, MultivariateTimeseries
-from log_psplines.pipeline.config import PipelineConfig
-from log_psplines.pipeline.preprocessing import (
+from log_psplines.data import WishartData, TimeSeries
+from log_psplines.config import PipelineConfig
+from log_psplines.preprocessing.spectral import (
     _max_n_knots,
     _unpack_true_psd,
     align_true_psd_to_freq,
@@ -29,14 +29,14 @@ from log_psplines.plotting.vi import (
 )
 
 
-def _fft(n: int = 12) -> MultivarFFT:
+def _fft(n: int = 12) -> WishartData:
     u_re = np.zeros((n, 2, 2))
     u_im = np.zeros_like(u_re)
     for idx in range(n):
         u_re[idx] = np.asarray(
             [[1.0 + 0.01 * idx, 0.0], [0.1, 1.2 + 0.01 * idx]]
         )
-    return MultivarFFT(
+    return WishartData(
         u_re=u_re,
         u_im=u_im,
         freq=np.linspace(0.1, 1.2, n),
@@ -118,7 +118,7 @@ def test_pipeline_preprocessing_alignment_and_coarse_vi() -> None:
     assert auto is not None
     assert auto.N < 60
 
-    ts = MultivariateTimeseries(np.arange(16.0), t=np.arange(16.0))
+    ts = TimeSeries(np.arange(16.0), t=np.arange(16.0))
     processed = preprocess_to_freq_domain(ts, PipelineConfig())
     assert processed.N > 0
 

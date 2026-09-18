@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from log_psplines.datatypes.multivar import EmpiricalPSD
+from log_psplines.data.spectral import EmpiricalPSD
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 
 

@@ -7,10 +7,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.transforms import blended_transform_factory
 
-from ..datatypes.multivar import EmpiricalPSD, _get_coherence
-from ..diagnostics._utils import interior_frequency_slice
+from log_psplines.data.spectral import EmpiricalPSD, _get_coherence
+from log_psplines.diagnostics._utils import interior_frequency_slice
 from ..logger import logger
-from .base import (
+from log_psplines.plotting.base import (
     extract_plotting_data,
     setup_plot_style,
 )

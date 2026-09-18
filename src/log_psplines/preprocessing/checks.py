@@ -4,18 +4,18 @@ from pathlib import Path
 
 import numpy as np
 
-from ..datatypes.multivar import MultivarFFT
+from log_psplines.data.spectral import WishartData
 from ..logger import logger
-from ..pipeline.config import PipelineConfig
-from .data_prep import _normalize_excluded_frequency_bands
+from log_psplines.config import PipelineConfig
+from log_psplines.preprocessing.data_prep import _normalize_excluded_frequency_bands
 
 
 def _run_preprocessing_checks(
-    processed_data: MultivarFFT | None,
+    processed_data: WishartData | None,
     config: PipelineConfig,
 ) -> None:
     """Run eigenvalue separation warnings (lightweight, no plotting)."""
-    if not isinstance(processed_data, MultivarFFT):
+    if not isinstance(processed_data, WishartData):
         return
     if processed_data.raw_psd is None:
         logger.warning(
@@ -24,7 +24,7 @@ def _run_preprocessing_checks(
         return
 
     try:
-        from ..diagnostics.preprocessing import (
+        from log_psplines.diagnostics.preprocessing import (
             eigenvalue_separation_diagnostics,
         )
 
@@ -81,7 +81,7 @@ def _run_preprocessing_checks(
 
 
 def _save_preprocessing_plot(
-    processed_data: MultivarFFT | None,
+    processed_data: WishartData | None,
     config: PipelineConfig,
     spline_model: object | None = None,
 ) -> None:
@@ -93,16 +93,16 @@ def _save_preprocessing_plot(
     Args:
         processed_data: The processed FFT data.
         config: Run configuration.
-        spline_model: A ``MultivariateLogPSplines`` instance.  When provided,
+        spline_model: A ``SpectralComponents`` instance.  When provided,
             knot positions are extracted and drawn on each component panel.
     """
-    if not isinstance(processed_data, MultivarFFT):
+    if not isinstance(processed_data, WishartData):
         return
     if processed_data.raw_psd is None:
         return
 
     try:
-        from ..diagnostics.preprocessing import (
+        from log_psplines.diagnostics.preprocessing import (
             eigenvalue_separation_diagnostics,
             extract_component_knots,
             save_eigenvalue_separation_plot,

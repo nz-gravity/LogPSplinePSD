@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from log_psplines.datatypes.multivar import EmpiricalPSD
+from log_psplines.data.spectral import EmpiricalPSD
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.pipeline.config import PipelineConfig
+from log_psplines.config import PipelineConfig
 from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
     _sum_bins_equal,

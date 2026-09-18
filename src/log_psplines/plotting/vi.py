@@ -8,7 +8,7 @@ from typing import Any, Optional, cast
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .base import setup_plot_style
+from log_psplines.plotting.base import setup_plot_style
 
 # Setup consistent styling for VI plots
 setup_plot_style()

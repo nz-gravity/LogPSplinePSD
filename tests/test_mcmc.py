@@ -15,8 +15,8 @@ from log_psplines.arviz_utils import (
     open_inference_data,
 )
 from log_psplines.mcmc import run_mcmc
-from log_psplines.pipeline.config import PipelineConfig
-from log_psplines.pipeline.evidence import (
+from log_psplines.config import PipelineConfig
+from log_psplines.inference.evidence import (
     MorphZEvidenceResult,
     estimate_pipeline_lnz,
     run_morphz_evidence,
@@ -188,9 +188,9 @@ def test_multivar_morphz_all_nonconverged_is_invalid(outdir) -> None:
 
 @pytest.mark.skip(reason="LnZ not currently in use")
 def test_multivar_lnz_sums_factor_results(monkeypatch) -> None:
-    from log_psplines.datatypes.multivar import MultivariateTimeseries
+    from log_psplines.data.timeseries import TimeSeries
     from log_psplines.example_datasets.varma_data import VARMAData
-    from log_psplines.pipeline.make_pipeline import make_pipeline
+    from log_psplines.pipeline import make_pipeline
 
     factor_calls: list[int] = []
 
@@ -216,13 +216,13 @@ def test_multivar_lnz_sums_factor_results(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(
-        "log_psplines.pipeline.evidence.run_morphz_evidence",
+        "log_psplines.inference.evidence.run_morphz_evidence",
         _fake_run_morphz_evidence,
     )
 
     varma_data = VARMAData(n_samples=2**8, fs=32.0, seed=1)
-    ts_run = MultivariateTimeseries(
-        y=cast(np.ndarray, varma_data.data),
+    ts_run = TimeSeries(
+        data=cast(np.ndarray, varma_data.data),
         t=varma_data.time,
     )
     config = PipelineConfig(
@@ -365,12 +365,12 @@ def _expected_coarse_freq_multivar(
 
 
 def _run_multivar_mcmc(outdir):
-    from log_psplines.datatypes.multivar import MultivariateTimeseries
+    from log_psplines.data.timeseries import TimeSeries
     from log_psplines.example_datasets.varma_data import VARMAData
 
     varma_data = VARMAData(n_samples=2**12, fs=64.0, seed=0)
     ts_data = cast(np.ndarray, varma_data.data)
-    ts_run = MultivariateTimeseries(y=ts_data, t=varma_data.time)
+    ts_run = TimeSeries(data=ts_data, t=varma_data.time)
 
     fmin, fmax = 0, 32
     coarse_cfg = CoarseGrainConfig(

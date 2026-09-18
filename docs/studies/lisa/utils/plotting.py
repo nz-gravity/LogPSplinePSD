@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from log_psplines.preprocessing.periodogram import empirical_spectrum
 import numpy as np
 
-from log_psplines.datatypes.multivar import EmpiricalPSD
-from log_psplines.datatypes.multivar_utils import interp_matrix
+from log_psplines.data.spectral import EmpiricalPSD
+from log_psplines.data.spectral_utils import interp_matrix
 from log_psplines.logger import logger
 from log_psplines.plotting.psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 
@@ -66,7 +67,7 @@ def _blocked_welch(
         seg = data[idx * Lb : (idx + 1) * Lb]
         seg_nperseg = min(nperseg, Lb)
         seg_noverlap = min(noverlap, seg_nperseg - 1)
-        emp = EmpiricalPSD.from_timeseries_data(
+        emp = empirical_spectrum(
             data=seg,
             fs=fs,
             nperseg=seg_nperseg,

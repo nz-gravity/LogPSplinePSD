@@ -1,7 +1,7 @@
 """Pipeline preprocessing helpers.
 
 This module converts input data to the frequency-domain objects consumed by
-``build_model_kwargs``. It contains no sampler logic.
+``inference.model.prepare_model``. It contains no sampler logic.
 """
 
 from __future__ import annotations
@@ -10,26 +10,26 @@ from math import ceil
 
 import numpy as np
 
-from .._jaxtypes import Complex, Float
-from .._typecheck import runtime_typecheck
-from ..datatypes.multivar import MultivarFFT
-from ..datatypes.multivar_utils import _interp_frequency_indexed_array
+from log_psplines._jaxtypes import Complex, Float
+from log_psplines._typecheck import runtime_typecheck
+from log_psplines.data.spectral import WishartData
+from log_psplines.data.spectral_utils import _interp_frequency_indexed_array
 from ..logger import logger
-from ..preprocessing.coarse_grain import (
+from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
     _closest_divisor,
     _smallest_divisor_geq,
 )
-from ..preprocessing.data_prep import (
+from log_psplines.preprocessing.data_prep import (
     _apply_frequency_exclusion,
     _coarse_grain_processed_data,
     _normalize_coarse_grain_config,
     _normalize_excluded_frequency_bands,
     _prepare_processed_data,
 )
-from .config import PipelineConfig
+from log_psplines.config import PipelineConfig
 
-FrequencyData = MultivarFFT
+FrequencyData = WishartData
 
 
 def preprocess_to_freq_domain(data, config: PipelineConfig) -> FrequencyData:

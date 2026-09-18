@@ -21,7 +21,7 @@ from log_psplines.arviz_utils.from_arviz import (
     get_multivar_posterior_psd_quantiles,
 )
 from log_psplines.logger import logger, set_level
-from log_psplines.mcmc import MultivariateTimeseries, run_mcmc
+from log_psplines.mcmc import TimeSeries, run_mcmc
 
 jax.config.update("jax_enable_x64", True)
 
@@ -664,7 +664,7 @@ def simulation_study(
     )
     if not np.all(np.isfinite(data)):
         raise ValueError("Generated VAR samples contain non-finite values.")
-    ts = MultivariateTimeseries(t=t, y=data)
+    ts = TimeSeries(t=t, data=data)
 
     sampler_outdir = outdir if save_sampler_outputs else None
     if save_sampler_outputs:

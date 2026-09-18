@@ -7,8 +7,8 @@ import arviz as az
 import numpy as np
 from scipy.ndimage import uniform_filter1d
 
-from log_psplines.datatypes.multivar import EmpiricalPSD
-from log_psplines.datatypes.multivar_utils import interp_matrix
+from log_psplines.data.spectral import EmpiricalPSD
+from log_psplines.data.spectral_utils import interp_matrix
 from log_psplines.logger import logger
 from log_psplines.plotting import psd_matrix as psd_matrix_mod
 from log_psplines.plotting.psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix

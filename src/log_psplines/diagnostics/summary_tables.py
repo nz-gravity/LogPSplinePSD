@@ -10,10 +10,10 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from ..arviz_utils._datatree import require_dataset as _require_dataset
-from ..arviz_utils.from_arviz import get_psd_dataset
-from ._factors import factor_idatas, vi_factor_idatas
-from ._utils import (
+from log_psplines.arviz_utils._datatree import require_dataset as _require_dataset
+from log_psplines.arviz_utils.from_arviz import get_psd_dataset
+from log_psplines.diagnostics._factors import factor_idatas, vi_factor_idatas
+from log_psplines.diagnostics._utils import (
     compute_ci_coverage_multivar,
     compute_matrix_l2,
     compute_matrix_riae,

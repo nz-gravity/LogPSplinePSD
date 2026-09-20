@@ -39,7 +39,10 @@ dependencies = [
     "plotly",
     "morphz",
     "loguru",
-    "scikit-fda"
+    "scikit-fda",
+    # scikit-fda's generic operator registrations are incompatible with
+    # multimethod 2.x on some supported Python/platform combinations.
+    "multimethod>=1.12,<2"
 ]
 
 [project.optional-dependencies]

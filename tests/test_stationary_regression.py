@@ -64,6 +64,9 @@ def test_stationary_frozen_contract():
     expected = np.load(REFERENCE)
     assert set(actual) == set(expected.files)
     for name, value in actual.items():
+        # This float32 likelihood is sensitive to platform reduction order.
+        rtol = 1e-4 if name == "2_log_likelihood_block_1" else 3e-5
+        atol = 1e-5 if name == "2_log_likelihood_block_1" else 3e-6
         np.testing.assert_allclose(
-            value, expected[name], rtol=3e-5, atol=3e-6, err_msg=name
+            value, expected[name], rtol=rtol, atol=atol, err_msg=name
         )

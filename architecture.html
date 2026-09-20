@@ -1,0 +1,690 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>PSD architecture &#8212; LogPSplinePSD</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
+    <link rel="stylesheet" type="text/css" href="_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="_static/scripts/fontawesome.js?digest=55c26ed414f5f8a31ebb"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb" />
+
+    <script src="_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="_static/togglebutton.js?v=b8b12719"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'architecture';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="api.html" />
+    <link rel="prev" title="Soft Shrinkage Toward a Design PSD" href="design_shrinkage.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="_static/searchtools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <script src="searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="intro.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="_static/logo.png" class="logo__image only-light" alt="LogPSplinePSD - Home"/>
+    <img src="_static/logo.png" class="logo__image only-dark pst-js-only" alt="LogPSplinePSD - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">PSD architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Farchitecture.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="_sources/architecture.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>PSD architecture</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-navigation">Code navigation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-dependence-shared-scalar-models">Time dependence: shared scalar models</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration">Migration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-contracts-after-the-cleanup">Explicit contracts after the cleanup</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="psd-architecture">
+<h1>PSD architecture<a class="headerlink" href="#psd-architecture" title="Link to this heading">#</a></h1>
+<p>The public entry point is <code class="docutils literal notranslate"><span class="pre">fit(data,</span> <span class="pre">config)</span> <span class="pre">-&gt;</span> <span class="pre">PSDResult</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeSeries</span><span class="p">,</span> <span class="n">PipelineConfig</span><span class="p">,</span> <span class="n">fit</span>
+
+<span class="n">series</span> <span class="o">=</span> <span class="n">TimeSeries</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">PipelineConfig</span><span class="p">(</span><span class="n">n_knots</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">vi_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+                                  <span class="n">n_warmup</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">200</span><span class="p">))</span>
+<span class="n">frequency</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">frequency</span>
+<span class="n">spectral_draws</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">spectral_density</span>  <span class="c1"># (chain, draw, F, C, C)</span>
+<span class="n">auto_spectra</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">psd</span>
+<span class="n">coherence</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">coherence</span>
+<span class="n">result</span><span class="o">.</span><span class="n">to_netcdf</span><span class="p">(</span><span class="s2">"inference_data.nc"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>These short example chains illustrate the interface, not convergence.</p>
+<section id="code-navigation">
+<h2>Code navigation<a class="headerlink" href="#code-navigation" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">pipeline.py</span></code> prepares stationary observations and scalar components, then runs
+coarse VI (when requested), full VI and blocked NUTS. <code class="docutils literal notranslate"><span class="pre">make_pipeline</span></code> remains
+available for inspecting the prepared calculation before calling <code class="docutils literal notranslate"><span class="pre">.run()</span></code>.
+It lives in the same file, rather than a separate factory module.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">basis/splines.py</span></code>: <code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code>, B-spline construction and normalized
+integrated-derivative penalties. No data preparation, plotting or NumPyro.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">models/spectrum.py</span></code>: <code class="docutils literal notranslate"><span class="pre">LogPSpline(frequency,</span> <span class="pre">time=None)</span></code> and scalar evaluation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">models/matrix.py</span></code>: <code class="docutils literal notranslate"><span class="pre">SpectralMatrix(C)</span></code>, with modified-Cholesky construction
+<code class="docutils literal notranslate"><span class="pre">S</span> <span class="pre">=</span> <span class="pre">inv(T)</span> <span class="pre">D</span> <span class="pre">inv(T)^H</span></code>, <code class="docutils literal notranslate"><span class="pre">T[j,l]</span> <span class="pre">=</span> <span class="pre">-theta[j,l]</span></code>, <code class="docutils literal notranslate"><span class="pre">D</span> <span class="pre">=</span> <span class="pre">diag(exp(log_variance))</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">likelihoods/</span></code>: pure JAX Whittle and channel-factor Wishart likelihoods.
+The latter sums to the full matrix likelihood and reduces to the former
+for one channel. Both omit data-only constants.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">data/</span></code>: <code class="docutils literal notranslate"><span class="pre">TimeSeries.data</span></code> always has shape <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">C)</span></code>. <code class="docutils literal notranslate"><span class="pre">WishartData</span></code> retains
+replicate counts, duration, window bandwidth and scaling metadata.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">preprocessing/</span></code>: FFT/Wishart and Welch construction, masking, coarse
+graining and knot selection. <code class="docutils literal notranslate"><span class="pre">compute_fft</span></code>, <code class="docutils literal notranslate"><span class="pre">compute_wishart</span></code> and
+<code class="docutils literal notranslate"><span class="pre">empirical_spectrum</span></code> are functions in <code class="docutils literal notranslate"><span class="pre">preprocessing/periodogram.py</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">inference/components.py</span></code>: one collection of scalar models for diagonal,
+real off-diagonal and imaginary off-diagonal components. The duplicate
+component registry has been removed. Observation-driven preparation lives
+in <code class="docutils literal notranslate"><span class="pre">inference.initialisation.prepare_components</span></code>; the collection has no
+constructor that reads data or fits coefficients.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">inference/model.py</span></code>: NumPyro priors, scalar evaluation, likelihood calls
+and preparation of model arguments. <code class="docutils literal notranslate"><span class="pre">vi.py</span></code> and <code class="docutils literal notranslate"><span class="pre">nuts.py</span></code> retain factorized
+VI, warm starts, per-channel tuning and blocked NUTS. Evidence remains an
+optional inference operation in <code class="docutils literal notranslate"><span class="pre">inference/evidence.py</span></code>. The blocked stages
+have no generic base class and accept only the arguments they use.
+Stationary and power fitting share <code class="docutils literal notranslate"><span class="pre">inference.nuts.run_nuts</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">results.py</span></code> and <code class="docutils literal notranslate"><span class="pre">arviz_utils/</span></code>: <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>, storage, posterior reconstruction,
+quantiles and ArviZ interoperability. <code class="docutils literal notranslate"><span class="pre">.idata</span></code> exposes the original DataTree.
+Existing ArviZ variable names and coordinates are preserved. Result properties
+reorder axes to put matrix dimensions last and restore physical units.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">PSDResult.from_netcdf(path)</span></code> reloads posterior/model metadata and reconstructs
+spectral draws. It does not recreate live NumPyro optimizers or stage objects.
+<code class="docutils literal notranslate"><span class="pre">save(outdir)</span></code> writes data first, then summaries and diagnostic plots. Unexpected
+reporting errors propagate. Spectrum plots are named <code class="docutils literal notranslate"><span class="pre">posterior_spectrum.png</span></code>;
+there is no fallback that substitutes a trace plot. <code class="docutils literal notranslate"><span class="pre">to_netcdf(path)</span></code> only stores
+data. Figure creation lives in <code class="docutils literal notranslate"><span class="pre">plotting/results.py</span></code>, diagnostic table writing
+in <code class="docutils literal notranslate"><span class="pre">diagnostics/report.py</span></code>, and result packing in <code class="docutils literal notranslate"><span class="pre">arviz_utils/to_arviz.py</span></code>.</p>
+</section>
+<section id="time-dependence-shared-scalar-models">
+<h2>Time dependence: shared scalar models<a class="headerlink" href="#time-dependence-shared-scalar-models" title="Link to this heading">#</a></h2>
+<p>A stationary scalar component accepts weights <code class="docutils literal notranslate"><span class="pre">(Kf,)</span></code> and returns <code class="docutils literal notranslate"><span class="pre">(F,)</span></code>.
+A time basis accepts weights <code class="docutils literal notranslate"><span class="pre">(Kt,</span> <span class="pre">Kf)</span></code> and evaluates
+<code class="docutils literal notranslate"><span class="pre">Bt</span> <span class="pre">&#64;</span> <span class="pre">weights</span> <span class="pre">&#64;</span> <span class="pre">Bf.T</span></code>, returning <code class="docutils literal notranslate"><span class="pre">(T,</span> <span class="pre">F)</span></code>. This evaluator now uses the optimized
+contraction from <code class="docutils literal notranslate"><span class="pre">wdm_psd</span></code>. There is no separate time-varying class.</p>
+<p><code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code> accepts scalar values with any leading dimensions. Inputs
+<code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C)</span></code> and <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C*(C-1)//2)</span></code> produce <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C,</span> <span class="pre">C)</span></code>. This includes both
+<code class="docutils literal notranslate"><span class="pre">(F,</span> <span class="pre">C,</span> <span class="pre">C)</span></code> and a future <code class="docutils literal notranslate"><span class="pre">(T,</span> <span class="pre">F,</span> <span class="pre">C,</span> <span class="pre">C)</span></code> without changing matrix algebra.
+Posterior sample axes use the same rule. It does not define temporal priors.</p>
+<p><code class="docutils literal notranslate"><span class="pre">fit(PowerSpectrum,</span> <span class="pre">PowerSplineConfig,</span> <span class="pre">model=LogPSpline(...))</span></code> now samples
+scalar time-frequency surfaces with the source WDM tensor prior. It calls
+<code class="docutils literal notranslate"><span class="pre">inference/power.py</span></code> directly. The optional <code class="docutils literal notranslate"><span class="pre">preprocessing/wdm.py</span></code> adapter
+produces powers/counts; inference has no transform dependency.</p>
+<p><code class="docutils literal notranslate"><span class="pre">PSDResult.time</span></code> contains the time grid for these fits. Coefficients and both
+bases are stored for reconstruction and NetCDF round trips. The old standalone
+scalar storage helper still rejects time bases; TV fit storage uses the common
+result’s explicit <code class="docutils literal notranslate"><span class="pre">power_basis</span></code> group instead. Existing stationary plotting
+helpers remain stationary; <code class="docutils literal notranslate"><span class="pre">PSDResult.save()</span></code> renders a surface for TV fits.</p>
+<p>The historical stationary prior and VI/blocked-NUTS path are unchanged.
+Multivariate TV inference, moving-periodogram adapters and TV VI remain future
+work. See <span class="xref myst">the transfer notes</span> for conventions and LS2 checks.</p>
+</section>
+<section id="migration">
+<h2>Migration<a class="headerlink" href="#migration" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">MultivariateTimeseries(y=...)</span></code> becomes <code class="docutils literal notranslate"><span class="pre">TimeSeries(data=...)</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MultivarFFT</span></code> becomes <code class="docutils literal notranslate"><span class="pre">WishartData</span></code>; FFT/statistic construction moves to
+<code class="docutils literal notranslate"><span class="pre">preprocessing.periodogram</span></code> (TimeSeries convenience methods remain).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LogPSplines</span></code> becomes <code class="docutils literal notranslate"><span class="pre">LogPSpline(SplineBasis.from_knots(...))</span></code>.
+Initial weight fitting lives in <code class="docutils literal notranslate"><span class="pre">inference.initialisation</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MultivariateLogPSplines</span></code> is replaced by prepared <code class="docutils literal notranslate"><span class="pre">SpectralComponents</span></code>
+for inference and the independent <code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code> for matrix algebra.</p></li>
+<li><p>Model storage functions live in <code class="docutils literal notranslate"><span class="pre">arviz_utils.spline_storage</span></code>, and basis
+plotting in <code class="docutils literal notranslate"><span class="pre">plotting.basis.plot_spline_basis</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code> is in <code class="docutils literal notranslate"><span class="pre">config.py</span></code>; <code class="docutils literal notranslate"><span class="pre">PipelineResult</span></code> becomes <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>.</p></li>
+<li><p>Old <code class="docutils literal notranslate"><span class="pre">pipeline/</span></code>, <code class="docutils literal notranslate"><span class="pre">psplines/</span></code> and <code class="docutils literal notranslate"><span class="pre">datatypes/</span></code> modules are removed rather
+than retained as aliases. <code class="docutils literal notranslate"><span class="pre">run_mcmc</span></code> remains a small DataTree-returning
+convenience API for existing diagnostic workflows.</p></li>
+</ul>
+</section>
+<section id="explicit-contracts-after-the-cleanup">
+<h2>Explicit contracts after the cleanup<a class="headerlink" href="#explicit-contracts-after-the-cleanup" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">get_psd_dataset(result.idata)</span></code> handles both stationary and scalar TV fits.
+Its labeled axes are <code class="docutils literal notranslate"><span class="pre">(chain,</span> <span class="pre">draw,</span> <span class="pre">channel,</span> <span class="pre">channel_aux,</span> <span class="pre">[time,]</span> <span class="pre">frequency)</span></code>.
+<code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code> moves the matrix axes to the end. Missing sample
+groups may be skipped; corrupt selected groups raise their original error.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PipelineConfig.chain_method</span></code> reaches NumPyro. The unused <code class="docutils literal notranslate"><span class="pre">design_from_vi</span></code>
+and <code class="docutils literal notranslate"><span class="pre">design_from_vi_tau</span></code> options have been removed. This does not remove the
+separate low-level design-weight fitting function.</p></li>
+<li><p>VI pointwise likelihoods are not currently computed. Their group is absent,
+so LOO metrics stay unavailable instead of being computed from zero arrays.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code> records <code class="docutils literal notranslate"><span class="pre">penalty_normalization</span></code>, <code class="docutils literal notranslate"><span class="pre">penalty_ridge</span></code> and
+<code class="docutils literal notranslate"><span class="pre">knot_convention</span></code>. Constructor keywords <code class="docutils literal notranslate"><span class="pre">normalization</span></code> and <code class="docutils literal notranslate"><span class="pre">ridge</span></code> expose
+these choices. Historical defaults are unchanged: <code class="docutils literal notranslate"><span class="pre">from_knots</span></code> uses max
+normalization, ridge 1e-6 and breakpoints; <code class="docutils literal notranslate"><span class="pre">from_grid</span></code> uses trace normalization,
+no ridge and clamped knots. Storage records the choices and preserves exact
+operators for clamped bases. Old stationary files retain historical defaults.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SpectralComponents.from_multivar_fft(...)</span></code> becomes
+<code class="docutils literal notranslate"><span class="pre">inference.initialisation.prepare_components(...)</span></code>.
+<code class="docutils literal notranslate"><span class="pre">components.compute_design_weights(S)</span></code> becomes
+<code class="docutils literal notranslate"><span class="pre">inference.initialisation.fit_design_weights(components,</span> <span class="pre">S)</span></code>.</p></li>
+</ul>
+<p>The cleanup did not transfer moving-periodogram preprocessing or implement
+multivariate TV inference. Keep those additions separate from changes to priors.</p>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./."
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="design_shrinkage.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Soft Shrinkage Toward a Design PSD</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="api.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-navigation">Code navigation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-dependence-shared-scalar-models">Time dependence: shared scalar models</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration">Migration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-contracts-after-the-cleanup">Explicit contracts after the cleanup</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By NZ Gravity
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2025.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

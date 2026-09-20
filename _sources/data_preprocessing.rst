@@ -7,11 +7,11 @@ Accepted Inputs
 The high-level pipeline accepts either time-domain data or precomputed
 frequency-domain statistics.
 
-``MultivariateTimeseries``
+``TimeSeries``
    Time-domain samples with shape ``(n, p)``. A one-dimensional input is
    promoted to ``(n, 1)``. The sampling frequency is inferred from ``t``.
 
-``MultivarFFT``
+``WishartData``
    Frequency-domain Wishart sufficient statistics. Use this when you need
    explicit control over FFT construction before calling the pipeline.
 
@@ -21,7 +21,7 @@ Time-Domain Container
 .. code-block:: python
 
    import numpy as np
-   from log_psplines.datatypes import MultivariateTimeseries
+   from log_psplines.data import TimeSeries
 
    fs = 64.0
    t = np.arange(512) / fs
@@ -30,7 +30,7 @@ Time-Domain Container
        np.cos(2.0 * np.pi * 8.0 * t),
    ])
 
-   ts = MultivariateTimeseries(y=y, t=t)
+   ts = TimeSeries(data=y, t=t)
 
 For PSD estimation, standardising at the boundary is often helpful:
 
@@ -44,8 +44,8 @@ can be rescaled back to physical units.
 Wishart Statistics
 ------------------
 
-``MultivariateTimeseries.to_wishart_stats`` and
-``MultivarFFT.compute_wishart`` split the data into ``Nb`` contiguous blocks,
+``TimeSeries.to_wishart_stats`` and
+``preprocessing.periodogram.compute_wishart`` split the data into ``Nb`` contiguous blocks,
 apply optional detrending and tapering, compute one-sided FFTs, drop DC, and
 store a factor ``U`` such that
 
@@ -86,7 +86,7 @@ spectral structure being estimated.
 
 .. code-block:: python
 
-   from log_psplines.pipeline.config import PipelineConfig
+   from log_psplines.config import PipelineConfig
    from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
    config = PipelineConfig(

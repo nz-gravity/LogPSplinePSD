@@ -27,8 +27,8 @@
   </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
-<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+  <link href="_static/styles/theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
     <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
@@ -39,10 +39,10 @@
     <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
   
   <!-- So that users can add custom icons -->
-  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="_static/scripts/fontawesome.js?digest=55c26ed414f5f8a31ebb"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
-<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb" />
 
     <script src="_static/documentation_options.js?v=9eb32ce0"></script>
     <script src="_static/doctools.js?v=9a2dae69"></script>
@@ -63,6 +63,7 @@
     <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'coarse_grain';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Multivariate Factorised Likelihood: Math to Code" href="multivar_blocked_nuts.html" />
@@ -70,20 +71,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
+  
+    
+    <script src="_static/searchtools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <script src="searchindex.js"></script>
+  
   </head>
-  
-  
-  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
-
+  <body data-default-mode="">
   
   
   <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
   
   <div id="pst-scroll-pixel-helper"></div>
   
   <button type="button" class="btn rounded-pill" id="pst-back-to-top">
     <i class="fa-solid fa-arrow-up"></i>Back to top</button>
-
+  
+  
+  
   
   <dialog id="pst-search-dialog">
     
@@ -109,7 +116,51 @@
 </div>
 
   
-    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
     </header>
   
 
@@ -174,6 +225,7 @@
 <li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">PSD architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
 </ul>
@@ -367,7 +419,7 @@
                 <h2> Contents </h2>
             </div>
             <nav aria-label="Page">
-                <ul class="visible nav section-nav flex-column">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-bins">Frequency bins</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#aggregating-fft-data">Aggregating FFT data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#likelihood-scaling">Likelihood scaling</a></li>
@@ -400,8 +452,8 @@ discrete Fourier grid.</p>
 <code class="docutils literal notranslate"><span class="pre">model.fmin</span></code>/<code class="docutils literal notranslate"><span class="pre">model.fmax</span></code>. Coarse-grain configuration controls only binning
 (<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p>
 <p>The binning logic is implemented by
-<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.compute_binning_structure" title="log_psplines.preprocessing.coarse_grain.compute_binning_structure"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.compute_binning_structure()</span></code></a>, which
-returns <a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code></a>. Only
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.compute_binning_structure()</span></code>, which
+returns <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code>. Only
 linear, full-band binning is supported. Exactly one construction mode must be
 chosen:</p>
 <ul class="simple">
@@ -420,18 +472,18 @@ trailing frequencies are trimmed so bins are equal sized.</p></li>
 </section>
 <section id="aggregating-fft-data">
 <h2>Aggregating FFT data<a class="headerlink" href="#aggregating-fft-data" title="Link to this heading">#</a></h2>
-<p><a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code></a>
-takes the <a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT" title="log_psplines.datatypes.multivar.MultivarFFT"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code></a> and
-<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code></a> and builds the
+<p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code>
+takes the <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.data.WishartData</span></code> and
+<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code> and builds the
 coarse representation used during sampling. The frequencies are
 grouped by bin across the <strong>entire</strong> retained band. Within each <span class="math notranslate nohighlight">\(J_h\)</span>, the
 individual Wishart matrices
 <span class="math notranslate nohighlight">\(\mathbf{Y}(f)=\mathbf{U}(f)\mathbf{U}(f)^H\)</span> are summed to form
 <span class="math notranslate nohighlight">\(\bar{\mathbf{Y}}_h = \sum_{f\in J_h}\mathbf{Y}(f)\)</span>, and the sum is
 re-factorized to obtain a single <span class="math notranslate nohighlight">\(\bar{\mathbf{U}}_h\)</span> per bin. The helper
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar_utils.Y_to_U()</span></code> performs the eigensystem
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.data_utils.Y_to_U()</span></code> performs the eigensystem
 factorisation used by this step.</p>
-<p>The returned <a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT" title="log_psplines.datatypes.multivar.MultivarFFT"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code></a> has
+<p>The returned <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.data.WishartData</span></code> has
 <code class="docutils literal notranslate"><span class="pre">len(spec.f_coarse)</span></code> frequencies and stores the constant bin size on
 <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>.</p>
 </section>
@@ -446,7 +498,7 @@ a Wishart observation with <span class="math notranslate nohighlight">\(N_b N_h\
 - \sum_{h=1}^{N_c} \frac{1}{T}\,\mathrm{tr}\!\left[\mathbf{S}(\bar f_h)^{-1}\,\bar{\mathbf{Y}}_h\right].\]</div>
 <p>When coarse graining is enabled, the pipeline model reads <code class="docutils literal notranslate"><span class="pre">Nh</span></code> from
 <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>. The NumPyro model
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.pipeline.models._blocked_channel_model()</span></code> multiplies the
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.inference.model._blocked_channel_model()</span></code> multiplies the
 summed <code class="docutils literal notranslate"><span class="pre">log_delta_sq</span></code> term by <code class="docutils literal notranslate"><span class="pre">Nh</span></code>, ensuring the total log-det term matches
 the aggregated <span class="math notranslate nohighlight">\(N_b N_h\)</span> degrees of freedom. The trace term uses the
 summed statistic <span class="math notranslate nohighlight">\(\bar{\mathbf{Y}}_h\)</span> directly, so no additional
@@ -521,7 +573,7 @@ implemented.</p>
     <i class="fa-solid fa-list"></i> Contents
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="visible nav section-nav flex-column">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-bins">Frequency bins</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#aggregating-fft-data">Aggregating FFT data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#likelihood-scaling">Likelihood scaling</a></li>
@@ -573,8 +625,8 @@ By NZ Gravity
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
-<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb"></script>
 
   <footer class="bd-footer">
   </footer>

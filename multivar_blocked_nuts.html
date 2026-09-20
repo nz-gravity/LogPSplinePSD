@@ -27,8 +27,8 @@
   </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
-<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+  <link href="_static/styles/theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
     <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
@@ -39,10 +39,10 @@
     <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
   
   <!-- So that users can add custom icons -->
-  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="_static/scripts/fontawesome.js?digest=55c26ed414f5f8a31ebb"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
-<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb" />
 
     <script src="_static/documentation_options.js?v=9eb32ce0"></script>
     <script src="_static/doctools.js?v=9a2dae69"></script>
@@ -63,6 +63,7 @@
     <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'multivar_blocked_nuts';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Soft Shrinkage Toward a Design PSD" href="design_shrinkage.html" />
@@ -70,20 +71,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
+  
+    
+    <script src="_static/searchtools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <script src="searchindex.js"></script>
+  
   </head>
-  
-  
-  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
-
+  <body data-default-mode="">
   
   
   <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
   
   <div id="pst-scroll-pixel-helper"></div>
   
   <button type="button" class="btn rounded-pill" id="pst-back-to-top">
     <i class="fa-solid fa-arrow-up"></i>Back to top</button>
-
+  
+  
+  
   
   <dialog id="pst-search-dialog">
     
@@ -109,7 +116,51 @@
 </div>
 
   
-    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
     </header>
   
 
@@ -174,6 +225,7 @@
 <li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">PSD architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
 </ul>
@@ -367,7 +419,7 @@
                 <h2> Contents </h2>
             </div>
             <nav aria-label="Page">
-                <ul class="visible nav section-nav flex-column">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-pointers">Code pointers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notation-and-sufficient-statistics">Notation and sufficient statistics</a></li>
@@ -396,7 +448,7 @@
 <h1>Multivariate Factorised Likelihood: Math to Code<a class="headerlink" href="#multivariate-factorised-likelihood-math-to-code" title="Link to this heading">#</a></h1>
 <p>This page documents the <em>implemented</em> multivariate likelihood and
 parameterisation used by the pipeline-owned factorised multivariate NUTS stage,
-<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.pipeline.stages.FactorizedMultivarNUTSStage</span></code>.</p>
+<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.inference.nuts.FactorizedMultivarNUTSStage</span></code>.</p>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
 <p>The multivariate pipeline is:</p>
@@ -415,7 +467,7 @@ at each retained Fourier frequency.</p>
 <h2>Code pointers<a class="headerlink" href="#code-pointers" title="Link to this heading">#</a></h2>
 <p>The links below point to the current repository layout:</p>
 <ul class="simple">
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L159-L299">Wishart FFT construction (MultivarFFT.compute_wishart)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L159-L299">Wishart FFT construction (WishartData.compute_wishart)</a></p></li>
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py">Blocked NumPyro likelihood (_blocked_channel_model)</a></p></li>
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py">Shared P-spline prior block (_sample_pspline_block)</a></p></li>
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/preprocessing/coarse_grain.py">Coarse graining (apply_coarse_grain_multivar_fft)</a></p></li>
@@ -438,12 +490,12 @@ time-domain blocks.</p>
 <p>where the columns of <span class="math notranslate nohighlight">\(U(f_k)\)</span> are the eigenvector-weighted components
 <span class="math notranslate nohighlight">\(\sqrt{\lambda_\ell^{(k)}} v_\ell^{(k)}\)</span>. These are exposed as
 <code class="docutils literal notranslate"><span class="pre">u_re</span></code> and <code class="docutils literal notranslate"><span class="pre">u_im</span></code> on
-<a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT" title="log_psplines.datatypes.multivar.MultivarFFT"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT</span></code></a>.</p>
+<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.data.WishartData</span></code>.</p>
 </section>
 <section id="data-to-wishart-statistics">
 <h2>Data to Wishart statistics<a class="headerlink" href="#data-to-wishart-statistics" title="Link to this heading">#</a></h2>
 <p>The sufficient statistics are computed by
-<a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT.compute_wishart" title="log_psplines.datatypes.multivar.MultivarFFT.compute_wishart"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.datatypes.multivar.MultivarFFT.compute_wishart()</span></code></a>.
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.data.WishartData.compute_wishart()</span></code>.
 Given time-domain data <code class="docutils literal notranslate"><span class="pre">x</span></code> with shape <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">p)</span></code>, the code:</p>
 <ul class="simple">
 <li><p>splits <code class="docutils literal notranslate"><span class="pre">x</span></code> into <code class="docutils literal notranslate"><span class="pre">Nb</span></code> contiguous non-overlapping blocks,</p></li>
@@ -472,7 +524,7 @@ scaling:</p>
 <div class="math notranslate nohighlight">
 \[d(f_k) = \Delta_t \sum_{t=1}^{n} Z_t \exp\left(-2\pi i \frac{k}{n} t\right).\]</div>
 <p>The implementation uses a one-sided Welch-style normalisation inside
-<a class="reference internal" href="api.html#log_psplines.datatypes.multivar.MultivarFFT.compute_wishart" title="log_psplines.datatypes.multivar.MultivarFFT.compute_wishart"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wishart()</span></code></a>, but keeps
+<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_wishart()</span></code>, but keeps
 the observation-duration factor explicit in the likelihood.</p>
 <p>Practical consequences:</p>
 <ul class="simple">
@@ -544,14 +596,14 @@ frequency <span class="math notranslate nohighlight">\(f_k\)</span>. Define the 
 <li><p><code class="docutils literal notranslate"><span class="pre">u_re</span></code> and <code class="docutils literal notranslate"><span class="pre">u_im</span></code> store the rows of <span class="math notranslate nohighlight">\(U(f_k)\)</span>.</p></li>
 </ul>
 <p>This is implemented in <code class="docutils literal notranslate"><span class="pre">_blocked_channel_model</span></code> inside
-<code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.pipeline.models</span></code>; the custom
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">log_psplines.inference.model</span></code>; the custom
 log-likelihood contribution is added via
 <code class="docutils literal notranslate"><span class="pre">numpyro.factor(&quot;likelihood_channel_*&quot;,</span> <span class="pre">log_likelihood)</span></code>.</p>
 </section>
 <section id="coarse-graining">
 <h2>Coarse graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
 <p>Coarse graining is performed by
-<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code></a>.
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code>.
 Within each coarse bin <span class="math notranslate nohighlight">\(J_h\)</span>, the code sums Wishart matrices</p>
 <div class="math notranslate nohighlight">
 \[\bar Y_h = \sum_{f \in J_h} Y(f)\]</div>
@@ -568,7 +620,7 @@ the log-determinant scaling changes.</p>
 <h2>Blocked versus unified multivariate NUTS<a class="headerlink" href="#blocked-versus-unified-multivariate-nuts" title="Link to this heading">#</a></h2>
 <p>The repository currently contains one multivariate NUTS stage:</p>
 <ul class="simple">
-<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.pipeline.stages.FactorizedMultivarNUTSStage</span></code></p></li>
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.inference.nuts.FactorizedMultivarNUTSStage</span></code></p></li>
 </ul>
 <p>It fits each Cholesky row as an independent NUTS problem. There is no separate
 all-parameters-joint multivariate NUTS sampler in <code class="docutils literal notranslate"><span class="pre">src/log_psplines</span></code> at
@@ -578,7 +630,7 @@ present.</p>
 <h2>PSD reconstruction and downstream outputs<a class="headerlink" href="#psd-reconstruction-and-downstream-outputs" title="Link to this heading">#</a></h2>
 <p>Posterior samples of <code class="docutils literal notranslate"><span class="pre">log_delta_sq</span></code> and <code class="docutils literal notranslate"><span class="pre">theta_re</span></code>/<code class="docutils literal notranslate"><span class="pre">theta_im</span></code> are
 converted into spectral density matrices by
-<a class="reference internal" href="api.html#log_psplines.psplines.multivar_psplines.MultivariateLogPSplines.reconstruct_psd_matrix" title="log_psplines.psplines.multivar_psplines.MultivariateLogPSplines.reconstruct_psd_matrix"><code class="xref py py-meth docutils literal notranslate"><span class="pre">log_psplines.psplines.multivar_psplines.MultivariateLogPSplines.reconstruct_psd_matrix()</span></code></a>.
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">log_psplines.arviz_utils.reconstruction.reconstruct_psd_matrix()</span></code>.
 For each frequency the code builds <span class="math notranslate nohighlight">\(T(f_k)\)</span> and
 <span class="math notranslate nohighlight">\(D(f_k) = \mathrm{diag}(\delta_j(f_k)^2)\)</span>, then returns</p>
 <div class="math notranslate nohighlight">
@@ -613,7 +665,7 @@ log-density for <span class="math notranslate nohighlight">\(\eta\)</span> is</p
 \log p_\Gamma(e^\eta \mid \delta) + \eta.\]</div>
 <p>That final <code class="docutils literal notranslate"><span class="pre">+</span> <span class="pre">eta</span></code> term is the Jacobian from the transformation
 <span class="math notranslate nohighlight">\(\phi = e^\eta\)</span>.</p>
-<p>In code, <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.pipeline.models._sample_pspline_block()</span></code>
+<p>In code, <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.inference.model._sample_pspline_block()</span></code>
 implements this by:</p>
 <ul class="simple">
 <li><p>sampling <code class="docutils literal notranslate"><span class="pre">log_phi</span></code> from a simple reference distribution,</p></li>
@@ -732,7 +784,7 @@ into the full posterior that NUTS sees.</p>
     <i class="fa-solid fa-list"></i> Contents
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="visible nav section-nav flex-column">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-pointers">Code pointers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notation-and-sufficient-statistics">Notation and sufficient statistics</a></li>
@@ -794,8 +846,8 @@ By NZ Gravity
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
-<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb"></script>
 
   <footer class="bd-footer">
   </footer>

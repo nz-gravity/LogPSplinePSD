@@ -2,7 +2,7 @@ Configuration
 =============
 
 Most user-facing behaviour is controlled by
-:class:`log_psplines.pipeline.config.PipelineConfig`. The configuration is a
+:class:`log_psplines.config.PipelineConfig`. The configuration is a
 flat dataclass so runs can be saved, logged, and reproduced without nested
 state.
 
@@ -11,7 +11,7 @@ Minimal Configuration
 
 .. code-block:: python
 
-   from log_psplines.pipeline.config import PipelineConfig
+   from log_psplines.config import PipelineConfig
 
    config = PipelineConfig(
        n_knots=8,

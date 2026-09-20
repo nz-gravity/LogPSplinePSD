@@ -8,41 +8,52 @@ stable user surface.
 High-Level Pipeline
 -------------------
 
+.. autofunction:: log_psplines.pipeline.fit
+
+.. autoclass:: log_psplines.results.PSDResult
+   :members:
+
 .. autofunction:: log_psplines.mcmc.run_mcmc
 
-.. autofunction:: log_psplines.pipeline.make_pipeline.make_pipeline
+.. autofunction:: log_psplines.pipeline.make_pipeline
 
-.. autoclass:: log_psplines.pipeline.config.PipelineConfig
+.. autoclass:: log_psplines.config.PipelineConfig
    :members:
    :undoc-members:
 
 Data Containers
 ---------------
 
-.. autoclass:: log_psplines.datatypes.multivar.MultivariateTimeseries
+.. autoclass:: log_psplines.data.TimeSeries
    :members:
 
-.. autoclass:: log_psplines.datatypes.multivar.MultivarFFT
+.. autoclass:: log_psplines.data.WishartData
    :members:
 
-.. autoclass:: log_psplines.datatypes.multivar.EmpiricalPSD
+.. autoclass:: log_psplines.data.EmpiricalPSD
    :members:
 
 Spline Models
 -------------
 
-.. autoclass:: log_psplines.psplines.psplines.LogPSplines
+.. autoclass:: log_psplines.basis.SplineBasis
    :members:
 
-.. autofunction:: log_psplines.psplines.psplines.build_spline
+.. autoclass:: log_psplines.models.matrix.SpectralMatrix
+   :members:
 
-.. autoclass:: log_psplines.psplines.multivar_psplines.MultivariateLogPSplines
+.. autoclass:: log_psplines.models.spectrum.LogPSpline
+   :members:
+
+.. autofunction:: log_psplines.models.spectrum.build_spline
+
+.. autoclass:: log_psplines.inference.components.SpectralComponents
    :members:
 
 Knot Initialisation
 -------------------
 
-.. autofunction:: log_psplines.psplines.knots_locator.knot_locator.init_knots
+.. autofunction:: log_psplines.preprocessing.knots_locator.knot_locator.init_knots
 
 Coarse Graining
 ---------------

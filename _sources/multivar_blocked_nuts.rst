@@ -3,7 +3,7 @@ Multivariate Factorised Likelihood: Math to Code
 
 This page documents the *implemented* multivariate likelihood and
 parameterisation used by the pipeline-owned factorised multivariate NUTS stage,
-:class:`log_psplines.pipeline.stages.FactorizedMultivarNUTSStage`.
+:class:`log_psplines.inference.nuts.FactorizedMultivarNUTSStage`.
 
 
 Overview
@@ -26,7 +26,7 @@ Code pointers
 
 The links below point to the current repository layout:
 
-- `Wishart FFT construction (MultivarFFT.compute_wishart) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L159-L299>`_
+- `Wishart FFT construction (WishartData.compute_wishart) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L159-L299>`_
 - `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py>`_
 - `Shared P-spline prior block (_sample_pspline_block) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py>`_
 - `Coarse graining (apply_coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/preprocessing/coarse_grain.py>`_
@@ -56,13 +56,13 @@ The code stores a factorisation
 where the columns of :math:`U(f_k)` are the eigenvector-weighted components
 :math:`\sqrt{\lambda_\ell^{(k)}} v_\ell^{(k)}`. These are exposed as
 ``u_re`` and ``u_im`` on
-:class:`log_psplines.datatypes.multivar.MultivarFFT`.
+:class:`log_psplines.data.WishartData`.
 
 Data to Wishart statistics
 --------------------------
 
 The sufficient statistics are computed by
-:func:`log_psplines.datatypes.multivar.MultivarFFT.compute_wishart`.
+:func:`log_psplines.data.WishartData.compute_wishart`.
 Given time-domain data ``x`` with shape ``(n, p)``, the code:
 
 - splits ``x`` into ``Nb`` contiguous non-overlapping blocks,
@@ -97,7 +97,7 @@ scaling:
    d(f_k) = \Delta_t \sum_{t=1}^{n} Z_t \exp\left(-2\pi i \frac{k}{n} t\right).
 
 The implementation uses a one-sided Welch-style normalisation inside
-:func:`~log_psplines.datatypes.multivar.MultivarFFT.compute_wishart`, but keeps
+:func:`~log_psplines.data.WishartData.compute_wishart`, but keeps
 the observation-duration factor explicit in the likelihood.
 
 Practical consequences:
@@ -187,7 +187,7 @@ Key mappings:
 - ``u_re`` and ``u_im`` store the rows of :math:`U(f_k)`.
 
 This is implemented in ``_blocked_channel_model`` inside
-:mod:`log_psplines.pipeline.models`; the custom
+:mod:`log_psplines.inference.model`; the custom
 log-likelihood contribution is added via
 ``numpyro.factor("likelihood_channel_*", log_likelihood)``.
 
@@ -218,7 +218,7 @@ Blocked versus unified multivariate NUTS
 
 The repository currently contains one multivariate NUTS stage:
 
-- :class:`log_psplines.pipeline.stages.FactorizedMultivarNUTSStage`
+- :class:`log_psplines.inference.nuts.FactorizedMultivarNUTSStage`
 
 It fits each Cholesky row as an independent NUTS problem. There is no separate
 all-parameters-joint multivariate NUTS sampler in ``src/log_psplines`` at
@@ -229,7 +229,7 @@ PSD reconstruction and downstream outputs
 
 Posterior samples of ``log_delta_sq`` and ``theta_re``/``theta_im`` are
 converted into spectral density matrices by
-:meth:`log_psplines.psplines.multivar_psplines.MultivariateLogPSplines.reconstruct_psd_matrix`.
+:meth:`log_psplines.arviz_utils.reconstruction.reconstruct_psd_matrix`.
 For each frequency the code builds :math:`T(f_k)` and
 :math:`D(f_k) = \mathrm{diag}(\delta_j(f_k)^2)`, then returns
 
@@ -282,7 +282,7 @@ log-density for :math:`\eta` is
 That final ``+ eta`` term is the Jacobian from the transformation
 :math:`\phi = e^\eta`.
 
-In code, :func:`log_psplines.pipeline.models._sample_pspline_block`
+In code, :func:`log_psplines.inference.model._sample_pspline_block`
 implements this by:
 
 - sampling ``log_phi`` from a simple reference distribution,

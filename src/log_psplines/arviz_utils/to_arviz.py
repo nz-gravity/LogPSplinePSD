@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+from log_psplines.inference.initialisation import fit_design_weights
+
 """Helpers for ArviZ-compatible DataTree packing and PSD reconstruction."""
-from log_psplines.arviz_utils.reconstruction import compute_psd_quantiles
-from log_psplines.arviz_utils.spline_storage import to_storage_payload
 from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import xarray as xr
 from xarray import DataArray, Dataset
 
+from log_psplines.arviz_utils.reconstruction import compute_psd_quantiles
+from log_psplines.arviz_utils.spline_storage import to_storage_payload
 from log_psplines.data import WishartData
 
 if TYPE_CHECKING:
+    from log_psplines.config import PipelineConfig, PowerSplineConfig
+    from log_psplines.data.spectral import PowerSpectrum
     from log_psplines.inference.components import SpectralComponents
+    from log_psplines.inference.vi import StageResult
+    from log_psplines.models.spectrum import LogPSpline
 
 SamplerConfig = Any
 
@@ -22,8 +29,8 @@ def _pack_model_component(
     model, prefix: str, data: dict[str, Any], coords: dict[str, Any]
 ) -> None:
     """Pack a single multivariate component into storage dictionaries."""
-    payload, component_coords = to_storage_payload(model,
-        prefix=prefix, include_linear_operators=False
+    payload, component_coords = to_storage_payload(
+        model, prefix=prefix, include_linear_operators=False
     )
     data.update(payload)
     coords.update(component_coords)
@@ -161,7 +168,7 @@ def _compute_prior_predictive_multivar(
             scale_matrix = np.outer(stds, stds)
             design_psd = design_psd / scale_matrix[np.newaxis, :, :]
 
-        design_weights = spline_model.compute_design_weights(design_psd)
+        design_weights = fit_design_weights(spline_model, design_psd)
 
     tau = getattr(config, "tau", None)
     alpha_phi = float(getattr(config, "alpha_phi", 1.0))
@@ -319,3 +326,297 @@ def _reconstruct_theta_params(
         )
 
     return theta
+
+
+def _losses_per_block_array(
+    losses_per_block: list[jnp.ndarray] | None,
+) -> np.ndarray:
+    if not losses_per_block:
+        return np.asarray([], dtype=float)
+
+    arrays = [
+        np.asarray(losses, dtype=float).reshape(-1)
+        for losses in losses_per_block
+    ]
+    max_len = max((arr.size for arr in arrays), default=0)
+    if max_len == 0:
+        return np.asarray([], dtype=float)
+
+    padded = np.full((len(arrays), max_len), np.nan, dtype=float)
+    for idx, arr in enumerate(arrays):
+        padded[idx, : arr.size] = arr
+    return padded
+
+
+def _vi_result_to_idata(result: StageResult) -> xr.DataTree:
+    """Wrap VI posterior draws into a minimal xr.DataTree."""
+    has_samples = result.samples is not None
+    values = result.samples if has_samples else result.init_values
+    if not values:
+        return xr.DataTree()
+    ds = _posterior_values_to_dataset(values, values_are_draws=has_samples)
+    return xr.DataTree(children={"posterior": xr.DataTree(dataset=ds)})
+
+
+def _posterior_values_to_dataset(
+    values: dict[str, jnp.ndarray],
+    *,
+    values_are_draws: bool,
+) -> xr.Dataset:
+    """Pack posterior-like values using ``chain``/``draw`` leading dims."""
+    data_vars = {}
+    draw_count: int | None = None
+    for name, value in values.items():
+        array = np.asarray(value)
+        if values_are_draws:
+            if array.ndim == 0:
+                raise ValueError(
+                    f"Posterior samples for '{name}' must include a draw axis."
+                )
+            array = array[None, ...]
+        else:
+            array = array[None, None, ...]
+        if draw_count is None:
+            draw_count = int(array.shape[1])
+        elif int(array.shape[1]) != draw_count:
+            raise ValueError(
+                f"Posterior value '{name}' has {array.shape[1]} draws; "
+                f"expected {draw_count}."
+            )
+
+        tail_dims = tuple(
+            f"{name}_dim_{axis}" for axis in range(array.ndim - 2)
+        )
+        data_vars[name] = xr.DataArray(
+            array,
+            dims=("chain", "draw", *tail_dims),
+        )
+
+    n_draws = int(draw_count or 0)
+    return xr.Dataset(
+        data_vars,
+        coords={"chain": [0], "draw": np.arange(n_draws)},
+    )
+
+
+def _init_values_to_dataset(values: dict[str, jnp.ndarray]) -> xr.Dataset:
+    """Pack VI point estimates using variable-specific trailing dimensions."""
+    data_vars = {}
+    for name, value in values.items():
+        array = np.asarray(value)[None, None, ...]
+        tail_dims = tuple(
+            f"{name}_dim_{axis}" for axis in range(array.ndim - 2)
+        )
+        data_vars[name] = xr.DataArray(
+            array,
+            dims=("chain", "draw", *tail_dims),
+        )
+    return xr.Dataset(
+        data_vars,
+        coords={"chain": [0], "draw": [0]},
+    )
+
+
+def _observed_data_dataset(data: WishartData) -> xr.Dataset:
+    freq = np.asarray(data.freq, dtype=float)
+    channel_coords = np.arange(int(data.p))
+    coords = {
+        "freq": freq,
+        "channels": channel_coords,
+        "channels_aux": channel_coords,
+    }
+    dims = ("freq", "channels", "channels_aux")
+    variables = {}
+    if data.raw_psd is not None:
+        variables["periodogram"] = xr.DataArray(
+            np.asarray(data.raw_psd, dtype=np.complex128),
+            dims=dims,
+            coords=coords,
+        )
+    return xr.Dataset(variables, coords=coords)
+
+
+def _vi_posterior_dataset(vi: StageResult) -> xr.Dataset:
+    has_samples = vi.samples is not None
+    values = vi.samples if has_samples else vi.init_values
+    if not values:
+        return xr.Dataset()
+    return _posterior_values_to_dataset(
+        values,
+        values_are_draws=has_samples,
+    )
+
+
+def pack_stationary_result(
+    idata: xr.DataTree,
+    data: WishartData,
+    spline_model: SpectralComponents,
+    config: PipelineConfig,
+    sampling_eta: float,
+    vi: StageResult | None,
+) -> xr.DataTree:
+    """Attach model/data groups needed by diagnostics and plotting."""
+    spline_ds = _pack_spline_model_multivar(spline_model)
+    attrs = {
+        "data_type": "multivariate",
+        "scaling_factor": float(data.scaling_factor or 1.0),
+        "channel_stds": (
+            None
+            if data.channel_stds is None
+            else np.asarray(data.channel_stds)
+        ),
+        "sampler": "factorized_multivar_nuts",
+    }
+
+    attrs.update(
+        {
+            "max_tree_depth": int(config.max_tree_depth),
+            "posterior_psd_max_draws": int(config.vi_psd_max_draws),
+            "vi_psd_max_draws": int(config.vi_psd_max_draws),
+            "alpha_phi": float(config.alpha_phi),
+            "beta_phi": float(config.beta_phi),
+            "alpha_delta": float(config.alpha_delta),
+            "beta_delta": float(config.beta_delta),
+            "eta": float(config.eta),
+            "sampling_eta": float(sampling_eta),
+        }
+    )
+    attrs["compute_lnz"] = bool(config.compute_lnz)
+    if config.target_accept_prob_by_channel is not None:
+        attrs["target_accept_prob_by_channel"] = list(
+            config.target_accept_prob_by_channel
+        )
+    if config.max_tree_depth_by_channel is not None:
+        attrs["max_tree_depth_by_channel"] = list(
+            config.max_tree_depth_by_channel
+        )
+    for channel_index in range(int(data.p)):
+        attrs[f"sampling_eta_channel_{channel_index}"] = float(sampling_eta)
+    idata.attrs.update(attrs)
+    idata["observed_data"] = xr.DataTree(dataset=_observed_data_dataset(data))
+    idata["spline_model"] = xr.DataTree(dataset=spline_ds)
+
+    if vi is not None:
+        idata["vi_posterior"] = xr.DataTree(dataset=_vi_posterior_dataset(vi))
+        losses = (
+            np.asarray(vi.losses, dtype=float)
+            if vi.losses is not None
+            else np.asarray([], dtype=float)
+        )
+        vi_stats = xr.Dataset(
+            {
+                "losses": xr.DataArray(
+                    losses,
+                    dims=("draw",),
+                    coords={"draw": np.arange(losses.size)},
+                )
+            }
+        )
+        losses_per_block = _losses_per_block_array(vi.losses_per_block)
+        if losses_per_block.size:
+            vi_stats["losses_per_block"] = xr.DataArray(
+                losses_per_block,
+                dims=("factor", "draw_per_factor"),
+                coords={
+                    "factor": np.arange(losses_per_block.shape[0]),
+                    "draw_per_factor": np.arange(losses_per_block.shape[1]),
+                },
+            )
+        idata["vi_sample_stats"] = xr.DataTree(dataset=vi_stats)
+        # Pointwise VI likelihoods are not computed here. Omit the group
+        # instead of presenting zero placeholders as observations.
+    return idata
+
+
+def pack_power_result(
+    data: PowerSpectrum,
+    spline: LogPSpline,
+    config: PowerSplineConfig,
+    samples: dict[str, np.ndarray],
+    stats: dict[str, jnp.ndarray],
+) -> xr.DataTree:
+    """Store compact coefficients and explicit grids for scalar power fits."""
+    from dataclasses import asdict
+
+    posterior = {}
+    for name, value in samples.items():
+        dims = ("chain", "draw")
+        if name == "weights":
+            dims += ("time_coefficient", "frequency_coefficient")
+        elif np.ndim(value) > 2:
+            dims += ("eigen_coefficient",)
+        posterior[name] = (dims, value)
+    observed = xr.Dataset(
+        {
+            "power": (("time", "frequency"), data.power),
+            "counts": (("time", "frequency"), data.counts),
+        },
+        coords={"time": data.time, "frequency": data.frequency},
+        attrs={"units": data.units},
+    )
+    basis = xr.Dataset(
+        {
+            "basis_time": (("time", "time_coefficient"), spline.time.basis),
+            "basis_frequency": (
+                ("frequency", "frequency_coefficient"),
+                spline.basis,
+            ),
+            "penalty_time": (
+                ("time_coefficient", "time_coefficient_aux"),
+                spline.time.penalty,
+            ),
+            "penalty_frequency": (
+                ("frequency_coefficient", "frequency_coefficient_aux"),
+                spline.frequency.penalty,
+            ),
+            "knots_time": (("time_knot",), spline.time.knots),
+            "knots_frequency": (("frequency_knot",), spline.frequency.knots),
+            "grid_time": (("time",), spline.time.grid),
+            "grid_frequency": (("frequency",), spline.frequency.grid),
+        },
+        attrs={
+            "degree_time": spline.time.degree,
+            "degree_frequency": spline.degree,
+            "penalty_order_time": spline.time.penalty_order,
+            "penalty_order_frequency": spline.frequency.penalty_order,
+            **{
+                f"{name}_{axis}": getattr(basis, name)
+                for axis, basis in (
+                    ("time", spline.time),
+                    ("frequency", spline.frequency),
+                )
+                for name in (
+                    "penalty_normalization",
+                    "penalty_ridge",
+                    "knot_convention",
+                )
+            },
+        },
+    )
+    idata = xr.DataTree.from_dict(
+        {
+            "/": xr.Dataset(
+                attrs={
+                    **asdict(config),
+                    "likelihood": "power_whittle",
+                    "units": data.units,
+                }
+            ),
+            "posterior": xr.Dataset(
+                posterior,
+                coords={
+                    "chain": np.arange(config.num_chains),
+                    "draw": np.arange(config.n_samples),
+                },
+            ),
+            "observed_data": observed,
+            "power_basis": basis,
+            "sample_stats": xr.Dataset(
+                {
+                    name: (("chain", "draw"), np.asarray(value))
+                    for name, value in stats.items()
+                }
+            ),
+        }
+    )
+    return idata

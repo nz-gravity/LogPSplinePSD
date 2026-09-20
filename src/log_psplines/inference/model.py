@@ -15,6 +15,7 @@ import numpyro.distributions as dist
 from log_psplines.config import PipelineConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.inference.components import SpectralComponents
+from log_psplines.inference.initialisation import prepare_components
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 from log_psplines.models.spectrum import build_spline
 
@@ -242,7 +243,7 @@ def _joint_multivar_model(
     """Joint NumPyro model that calls _blocked_channel_model for every channel.
 
     All channels are sampled in a single NumPyro model context, making it
-    compatible with the generic VIStage / NUTSStage interface.  Production
+    usable for joint-density evaluation. Production
     code uses factorized NUTS which runs independent
     per-channel chains.
     """
@@ -279,7 +280,7 @@ def prepare_model(
     data: WishartData,
     config: PipelineConfig,
 ) -> tuple[dict, SpectralComponents]:
-    spline = SpectralComponents.from_multivar_fft(
+    spline = prepare_components(
         data,
         n_knots=config.n_knots,
         degree=config.degree,

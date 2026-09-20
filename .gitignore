@@ -315,3 +315,10 @@ docs/studies/phi_test
 
 
 runs
+
+# Frozen numerical references are inputs to tests, not analysis outputs.
+!tests/reference/wdm_core.npz
+!tests/reference/wdm_core.json
+
+!tests/reference/ls2_wdm.npz
+!tests/reference/ls2_wdm.json

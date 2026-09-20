@@ -298,7 +298,7 @@ __all__ = ["GuideSpecifier", "VIResult", "resolve_guide", "fit_vi"]
 
 @dataclass
 class StageResult:
-    """Output of a VIStage run."""
+    """VI initialization, draws and optimization diagnostics."""
 
     init_values: dict[str, jnp.ndarray] | None
     losses: jnp.ndarray | None
@@ -310,8 +310,8 @@ class StageResult:
 
 
 @dataclass
-class VIStage:
-    """Variational inference stage wrapping :func:`fit_vi`."""
+class FactorizedMultivarVIStage:
+    """Run independent VI optimizations per multivariate Cholesky factor."""
 
     steps: int = 1500
     lr: float = 1e-2
@@ -321,54 +321,12 @@ class VIStage:
 
     def run(
         self,
-        model_fn: Callable[..., Any],
         model_kwargs: dict[str, Any],
         init_values: dict[str, jnp.ndarray] | None = None,
         *,
         rng_key: jax.Array,
         verbose: bool = False,
     ) -> StageResult:
-        kwargs = dict(model_kwargs)
-        kwargs["eta"] = self.eta
-
-        t0 = time.time()
-        result = fit_vi(
-            model_fn,
-            rng_key=rng_key,
-            vi_steps=self.steps,
-            optimizer_lr=self.lr,
-            model_kwargs=kwargs,
-            guide=self.guide,
-            posterior_draws=self.posterior_draws,
-            progress_bar=verbose,
-            init_values=init_values,
-        )
-        runtime = time.time() - t0
-
-        return StageResult(
-            init_values=result.means,
-            losses=result.losses,
-            khat=None,
-            guide_name=result.guide_name,
-            runtime=runtime,
-            samples=result.samples,
-        )
-
-
-@dataclass
-class FactorizedMultivarVIStage(VIStage):
-    """Run independent VI optimizations per multivariate Cholesky factor."""
-
-    def run(
-        self,
-        model_fn: Callable[..., Any],
-        model_kwargs: dict[str, Any],
-        init_values: dict[str, jnp.ndarray] | None = None,
-        *,
-        rng_key: jax.Array,
-        verbose: bool = False,
-    ) -> StageResult:
-        del model_fn
         from log_psplines.inference.model import _blocked_channel_model
 
         kwargs = dict(model_kwargs)

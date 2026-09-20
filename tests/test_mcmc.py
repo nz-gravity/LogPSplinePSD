@@ -35,7 +35,7 @@ def test_mcmc_p1(outdir: str):
     ### NOW WE CHECK THE OUTPUTS ###
     files_to_check = [
         "inference_data.nc",
-        "posterior_predictive.png",
+        "posterior_spectrum.png",
         "diagnostics/vi_summary.csv",
         "diagnostics/nuts_summary.csv",
     ]
@@ -93,7 +93,7 @@ def test_mcmc_multivar(outdir):
     _check_for_files(
         [
             "inference_data.nc",
-            "posterior_predictive.png",
+            "posterior_spectrum.png",
             "diagnostics/vi_summary.csv",
             "diagnostics/nuts_summary.csv",
             "diagnostics/preprocessing_eigenvalue_ratios.png",
@@ -129,11 +129,8 @@ def test_mcmc_multivar(outdir):
         atol=1e-8,
     ), "PSD should be Hermitian."
 
-    vi_log_likelihood = idata["vi_log_likelihood"].dataset
-    assert vi_log_likelihood is not None
-    assert "log_likelihood_block_0" in vi_log_likelihood
-    assert "log_likelihood_block_1" in vi_log_likelihood
-    assert vi_log_likelihood["log_likelihood_block_0"].ndim == 3
+    assert "vi_log_likelihood" not in idata.children
+
 
     _check_stats_are_finite(idata, outdir_str)
 

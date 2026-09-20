@@ -1,0 +1,17 @@
+{
+  "source": "/Users/avi/Documents/projects/wdm_psd/wdm_psd/tv_pspline_psd/model.py",
+  "source_sha256": "3377437231e57425684961dbc5f87a1cb6f171973ea9af1823562d7ff524b14e",
+  "functions_sha256": {
+    "tensor_product_surface": "698e23cef3f86dfb45bfb03b641e0d27de0677baaf73aa05f42ca0cb965753e5",
+    "whiten_penalty_pair": "e17146b5bebce802b3d1aab17ec52c377f0673b9fcd93df407d807455ef90890",
+    "eigen_prior_scale": "36ec9a9dab28402c3dd8150ada0e67b4f483d5f6a9fc7270188a9b0b9e6857ba",
+    "power_whittle_log_likelihood": "e9f694b8073f3987d3fda42b4755b536950a966dfd3250b8b5947ca9bc0e9eeb"
+  },
+  "seed": 83,
+  "jax_enable_x64": true,
+  "null_precision": 0.0001,
+  "ridge_eps": 1e-06,
+  "phi_time": 2.0,
+  "phi_freq": 3.0,
+  "note": "Captured from the existing WDM working tree, including its uncommitted changes. No WDM files modified."
+}

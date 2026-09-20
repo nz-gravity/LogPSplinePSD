@@ -2,17 +2,17 @@ from __future__ import annotations
 
 """Extract data and derived summaries from canonical ``xarray.DataTree`` objects."""
 
-from log_psplines.arviz_utils.reconstruction import reconstruct_psd_matrix
-from log_psplines.arviz_utils.spline_storage import from_storage_dataset
 from types import SimpleNamespace
 from typing import Literal
 
 import numpy as np
 import xarray as xr
 
-from log_psplines.inference.components import SpectralComponents
-from log_psplines.models.spectrum import LogPSpline
-from log_psplines.arviz_utils._datatree import require_dataset as _require_dataset
+from log_psplines.arviz_utils._datatree import (
+    require_dataset as _require_dataset,
+)
+from log_psplines.arviz_utils.reconstruction import reconstruct_psd_matrix
+from log_psplines.arviz_utils.spline_storage import from_storage_dataset
 from log_psplines.arviz_utils.to_arviz import (
     _compute_prior_predictive_multivar,
     _flatten_posterior_draws,
@@ -20,6 +20,7 @@ from log_psplines.arviz_utils.to_arviz import (
     _reconstruct_theta_params,
     _select_evenly_spaced_indices,
 )
+from log_psplines.inference.components import SpectralComponents
 
 SPECTRAL_DENSITY_VAR = "spectral_density"
 
@@ -219,11 +220,47 @@ def _compute_multivar_psd_dataset(
     )
 
 
+def _compute_power_psd_dataset(
+    idata: xr.DataTree,
+    source: ResolvedSampleSource,
+) -> xr.Dataset:
+    """Reconstruct scalar surfaces using the same labeled spectral contract."""
+    posterior = get_sample_dataset(idata, source=source)
+    basis = _require_dataset(idata, "power_basis")
+    observed = _require_dataset(idata, "observed_data")
+    log_psd = np.einsum(
+        "ti,cdij,fj->cdtf",
+        basis["basis_time"].values,
+        posterior["weights"].values,
+        basis["basis_frequency"].values,
+        optimize=True,
+    )
+    spectrum = np.exp(log_psd)[:, :, None, None, :, :]
+    dims = ("chain", "draw", "channel", "channel_aux", "time", "frequency")
+    return xr.Dataset(
+        {
+            "spectral_density": (dims, spectrum.astype(np.complex128)),
+            "coherence": (dims, np.ones_like(spectrum)),
+        },
+        coords={
+            "chain": np.arange(spectrum.shape[0]),
+            "draw": np.arange(spectrum.shape[1]),
+            "channel": [0],
+            "channel_aux": [0],
+            "time": observed.coords["time"].values,
+            "frequency": observed.coords["frequency"].values,
+        },
+        attrs={"units": idata.attrs.get("units", "coefficient variance")},
+    )
+
+
 def _get_psd_dataset_from_source(
     idata: xr.DataTree,
     source: ResolvedSampleSource,
 ) -> xr.Dataset:
     """Build standardized PSD/CSD draws from a resolved sample source."""
+    if "power_basis" in idata.children:
+        return _compute_power_psd_dataset(idata, source)
     return _compute_multivar_psd_dataset(idata, source)
 
 
@@ -241,18 +278,21 @@ def get_psd_dataset(
 
     Returned datasets contain:
     - ``spectral_density``: complex, dims ``(chain, draw, channel, channel_aux, frequency)``
-    - ``coherence``: real, dims ``(chain, draw, channel, channel_aux, frequency)``
+    - ``coherence``: real, with the same dimensions.
+
+    Time-frequency results insert ``time`` immediately before ``frequency``.
+    Source selection only skips absent groups; malformed data raises an error.
     """
     source = _canonical_sample_source(source)
     if source == "best":
-        for candidate in ("posterior", "vi", "prior"):
-            try:
+        for candidate, groups in (
+            ("posterior", ("posterior",)),
+            ("vi", ("vi_posterior",)),
+            ("prior", ("prior", "prior_predictive")),
+        ):
+            if any(group in idata.children for group in groups):
                 return _get_psd_dataset_from_source(idata, candidate)
-            except (KeyError, TypeError, ValueError, StopIteration):
-                continue
-        raise KeyError(
-            "Unable to resolve PSD draws from source='best' for this DataTree."
-        )
+        raise KeyError("No posterior, VI or prior sample group is available")
     if source not in {"posterior", "vi", "prior"}:
         raise ValueError(f"Unsupported PSD source '{source}'.")
     return _get_psd_dataset_from_source(idata, source)
@@ -297,9 +337,14 @@ def _quantiles_from_psd_draws(
         imag = imag[..., idx]
         coherence_q = coherence_q[..., idx]
 
-    spectral_density_q = np.moveaxis(real + 1j * imag, -1, 1)
-    coherence_q = np.moveaxis(coherence_q, -1, 1)
+    spectral_density_q = np.moveaxis(real + 1j * imag, (1, 2), (-2, -1))
+    coherence_q = np.moveaxis(coherence_q, (1, 2), (-2, -1))
     return {
+        **(
+            {"time": dataset.coords["time"].values}
+            if "time" in dataset.coords
+            else {}
+        ),
         "percentile": np.asarray(percentiles, dtype=float),
         "freq": freq,
         "spectral_density": np.asarray(
@@ -409,7 +454,7 @@ def get_weights(
     Returns
     -------
     jnp.ndarray
-        Weight samples, shape (n_samples_thinned, n_weights)
+        Weight samples: (samples, Kf) or (samples, Kt, Kf).
     """
     posterior = _require_dataset(idata, "posterior")
     if "weights" in posterior:
@@ -426,7 +471,7 @@ def get_weights(
     if weight_name is None:
         raise KeyError("No posterior spline weight variable found.")
     weight_samples = posterior[weight_name].values
-    weight_samples = weight_samples.reshape(-1, weight_samples.shape[-1])
+    weight_samples = weight_samples.reshape(-1, *weight_samples.shape[2:])
     return weight_samples[::thin]
 
 
@@ -486,7 +531,7 @@ def _get_multivar_frequency_grid(idata: xr.DataTree) -> np.ndarray:
     """Return the multivariate retained frequency grid from ``idata``."""
     observed_data = _require_dataset(idata, "observed_data")
     return np.asarray(
-        observed_data["periodogram"].coords["freq"].values,
+        observed_data.coords["freq"].values,
         dtype=float,
     )
 
@@ -579,7 +624,6 @@ def get_multivar_posterior_psd_quantiles(
     n_keep: int | None = None,
     percentiles: tuple[float, ...] = (5.0, 50.0, 95.0),
     compute_coherence: bool = True,
-    chunk_size: int = 2048,
     freq_idx: np.ndarray | list[int] | None = None,
 ) -> dict[str, np.ndarray | None]:
     """Return multivariate PSD/coherence quantiles reconstructed from posterior draws.
@@ -590,8 +634,7 @@ def get_multivar_posterior_psd_quantiles(
     - ``spectral_density``: ``(Q, F, p, p)`` complex
     - ``coherence``: ``(Q, F, p, p)`` or ``None``
     """
-    del compute_coherence, chunk_size
-    return _get_multivar_psd_quantiles(
+    quantiles = _get_multivar_psd_quantiles(
         idata,
         source="posterior",
         n_keep=n_keep,
@@ -599,24 +642,30 @@ def get_multivar_posterior_psd_quantiles(
         freq_idx=freq_idx,
     )
 
+    if not compute_coherence:
+        quantiles["coherence"] = None
+    return quantiles
+
 
 def get_multivar_vi_psd_quantiles(
     idata: xr.DataTree,
     n_keep: int | None = None,
     percentiles: tuple[float, ...] = (5.0, 50.0, 95.0),
     compute_coherence: bool = True,
-    chunk_size: int = 2048,
     freq_idx: np.ndarray | list[int] | None = None,
 ) -> dict[str, np.ndarray | None]:
     """Return multivariate VI PSD/coherence quantiles reconstructed lazily."""
-    del compute_coherence, chunk_size
-    return _get_multivar_psd_quantiles(
+    quantiles = _get_multivar_psd_quantiles(
         idata,
         source="vi",
         n_keep=n_keep,
         percentiles=percentiles,
         freq_idx=freq_idx,
     )
+
+    if not compute_coherence:
+        quantiles["coherence"] = None
+    return quantiles
 
 
 def get_multivar_prior_psd_quantiles(

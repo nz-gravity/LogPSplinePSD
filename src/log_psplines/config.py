@@ -77,12 +77,59 @@ class PipelineConfig:
     dense_mass: bool = True
     alpha_phi_theta: float | None = None
     beta_phi_theta: float | None = None
-    design_from_vi: bool = False
-    design_from_vi_tau: float = 10.0
 
     eta: float = 1.0
 
     extra_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
-__all__ = ["PipelineConfig"]
+__all__ = ["PipelineConfig", "PowerSplineConfig"]
+
+
+@dataclass
+class PowerSplineConfig:
+    """WDM power/count prior and NUTS settings, separate from Wishart priors.
+
+    ``phi_time`` and ``phi_freq`` posterior sites contain log precisions.
+    Gamma parameters use the shape/rate convention of the source model.
+    """
+
+    alpha_phi: float = 2.0
+    beta_phi: float = 1.0
+    phi_log_base_scale: float = 1.0
+    null_precision: float = 1e-4
+    ridge_eps: float = 1e-6
+    init_penalty_time: float = 0.05
+    init_penalty_freq: float = 0.05
+    centered: bool = False
+    n_warmup: int = 250
+    n_samples: int = 300
+    num_chains: int = 1
+    seed: int = 7
+    max_tree_depth: int = 10
+    target_accept_prob: float = 0.85
+    progress_bar: bool = True
+
+    def __post_init__(self) -> None:
+        for name in (
+            "alpha_phi",
+            "beta_phi",
+            "phi_log_base_scale",
+            "null_precision",
+            "ridge_eps",
+        ):
+            value = getattr(self, name)
+            if not np.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
+        for name in ("init_penalty_time", "init_penalty_freq"):
+            value = getattr(self, name)
+            if not np.isfinite(value) or value < 0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        for name in ("n_warmup", "n_samples", "num_chains", "max_tree_depth"):
+            value = getattr(self, name)
+            if not isinstance(value, int) or value < (
+                0 if name == "n_warmup" else 1
+            ):
+                raise ValueError(f"invalid {name}")
+        if not 0 < self.target_accept_prob < 1:
+            raise ValueError("target_accept_prob must lie in (0,1)")

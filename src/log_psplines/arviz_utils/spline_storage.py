@@ -1,10 +1,11 @@
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 
-from log_psplines.inference.initialisation import build_component
+from log_psplines.basis import SplineBasis
 from log_psplines.models.spectrum import LogPSpline
 
 
@@ -39,7 +40,11 @@ def to_storage_payload(
     prefix: str | None = None,
     include_linear_operators: bool = False,
 ) -> tuple[dict[str, tuple[list[str], np.ndarray]], dict[str, np.ndarray]]:
-    """Return dataset-ready payload for this spline component."""
+    """Return dataset-ready payload for a stationary spline component."""
+    if model.time is not None:
+        raise NotImplementedError(
+            "Time-frequency model storage is not yet supported"
+        )
     knots_key = _storage_name("knots", prefix)
     grid_key = _storage_name("grid_points", prefix)
     knots_dim = _storage_dim("knots_dim", prefix)
@@ -56,6 +61,15 @@ def to_storage_payload(
         knots_dim: np.arange(len(model.knots)),
         freq_dim: np.arange(int(model.n)),
     }
+
+    # Clamped knots are a different representation from historical breakpoints.
+    # Store the exact operators so loading never guesses a backend or prior.
+    include_linear_operators |= model.frequency.knot_convention == "clamped"
+    for name in ("penalty_normalization", "penalty_ridge", "knot_convention"):
+        data[_storage_name(name, prefix)] = (
+            [],
+            np.asarray(getattr(model.frequency, name)),
+        )
 
     if include_linear_operators:
         basis_key = _storage_name("basis", prefix)
@@ -137,13 +151,36 @@ def from_storage_dataset(
                 "{n, N, *_grid_points,  *_basis}."
             )
 
-    return build_component(
+    frequency = SplineBasis.create(
         degree=int(degree),
-        diffMatrixOrder=int(diffMatrixOrder),
+        penalty_order=int(diffMatrixOrder),
         n=int(n),
         knots=knots,
         basis=basis,
-        penalty_matrix=penalty_matrix,
-        weights=None,
-        grid_points=grid_points,
+        penalty=penalty_matrix,
+        grid=grid_points,
+        normalization=(
+            str(
+                _as_numpy(
+                    dataset[_storage_name("penalty_normalization", prefix)]
+                ).item()
+            )
+            if _storage_name("penalty_normalization", prefix) in dataset
+            else "max"
+        ),
+        ridge=(
+            float(
+                _as_numpy(
+                    dataset[_storage_name("penalty_ridge", prefix)]
+                ).item()
+            )
+            if _storage_name("penalty_ridge", prefix) in dataset
+            else 1e-6
+        ),
     )
+    key = _storage_name("knot_convention", prefix)
+    if key in dataset:
+        frequency = replace(
+            frequency, knot_convention=str(_as_numpy(dataset[key]).item())
+        )
+    return LogPSpline(frequency)

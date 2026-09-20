@@ -1,3 +1,4 @@
+from log_psplines.inference.initialisation import prepare_components
 from log_psplines.preprocessing.periodogram import compute_fft
 from log_psplines.plotting.basis import plot_spline_basis
 import os
@@ -54,7 +55,7 @@ def test_spline_init(mock_fft: WishartData, outdir):
 
     # init splines
     t0 = time.time()
-    spline_model = SpectralComponents.from_multivar_fft(
+    spline_model = prepare_components(
         mock_fft,
         n_knots=10,
         degree=3,
@@ -86,7 +87,7 @@ def test_spline_basis(mock_fft: WishartData, outdir):
 
     # init splines
     t0 = time.time()
-    spline_model = SpectralComponents.from_multivar_fft(
+    spline_model = prepare_components(
         mock_fft,
         n_knots=10,
         degree=3,
@@ -105,7 +106,7 @@ def test_spline_basis(mock_fft: WishartData, outdir):
 
 
 def test_closed_form_weight_initialiser_returns_finite_p1_weights(mock_fft):
-    spline_model = SpectralComponents.from_multivar_fft(
+    spline_model = prepare_components(
         mock_fft,
         n_knots=10,
         degree=3,

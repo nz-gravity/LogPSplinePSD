@@ -1,4 +1,4 @@
-# Stationary PSD architecture
+# PSD architecture
 
 The public entry point is `fit(data, config) -> PSDResult`:
 
@@ -40,12 +40,15 @@ It lives in the same file, rather than a separate factory module.
   `empirical_spectrum` are functions in `preprocessing/periodogram.py`.
 - `inference/components.py`: one collection of scalar models for diagonal,
   real off-diagonal and imaginary off-diagonal components. The duplicate
-  component registry has been removed. Analytical spectra can guide knot
-  placement without entering the scalar model or likelihood.
+  component registry has been removed. Observation-driven preparation lives
+  in `inference.initialisation.prepare_components`; the collection has no
+  constructor that reads data or fits coefficients.
 - `inference/model.py`: NumPyro priors, scalar evaluation, likelihood calls
   and preparation of model arguments. `vi.py` and `nuts.py` retain factorized
   VI, warm starts, per-channel tuning and blocked NUTS. Evidence remains an
-  optional inference operation in `inference/evidence.py`.
+  optional inference operation in `inference/evidence.py`. The blocked stages
+  have no generic base class and accept only the arguments they use.
+  Stationary and power fitting share `inference.nuts.run_nuts`.
 - `results.py` and `arviz_utils/`: `PSDResult`, storage, posterior reconstruction,
   quantiles and ArviZ interoperability. `.idata` exposes the original DataTree.
   Existing ArviZ variable names and coordinates are preserved. Result properties
@@ -53,24 +56,38 @@ It lives in the same file, rather than a separate factory module.
 
 `PSDResult.from_netcdf(path)` reloads posterior/model metadata and reconstructs
 spectral draws. It does not recreate live NumPyro optimizers or stage objects.
-`save(outdir)` also writes diagnostic plots. `to_netcdf(path)` only stores data.
+`save(outdir)` writes data first, then summaries and diagnostic plots. Unexpected
+reporting errors propagate. Spectrum plots are named `posterior_spectrum.png`;
+there is no fallback that substitutes a trace plot. `to_netcdf(path)` only stores
+data. Figure creation lives in `plotting/results.py`, diagnostic table writing
+in `diagnostics/report.py`, and result packing in `arviz_utils/to_arviz.py`.
 
-## Time dependence is an extension point
+## Time dependence: shared scalar models
 
 A stationary scalar component accepts weights `(Kf,)` and returns `(F,)`.
-A future time basis will accept weights `(Kt, Kf)` and evaluate
-`Bt @ weights @ Bf.T`, returning `(T, F)`. Passing a time basis currently raises
-`NotImplementedError` on evaluation. There is no separate time-varying class.
+A time basis accepts weights `(Kt, Kf)` and evaluates
+`Bt @ weights @ Bf.T`, returning `(T, F)`. This evaluator now uses the optimized
+contraction from `wdm_psd`. There is no separate time-varying class.
 
 `SpectralMatrix` accepts scalar values with any leading dimensions. Inputs
 `(..., C)` and `(..., C*(C-1)//2)` produce `(..., C, C)`. This includes both
 `(F, C, C)` and a future `(T, F, C, C)` without changing matrix algebra.
 Posterior sample axes use the same rule. It does not define temporal priors.
 
-`PSDResult.time` is reserved for a future time grid and is `None` for all fits
-produced here. Future `moving_periodogram.py` or `wdm.py` preprocessors will
-produce time-frequency observations. No moving-periodogram inference, WDM
-likelihood, 2D penalty or temporal smoothing parameter is implemented.
+`fit(PowerSpectrum, PowerSplineConfig, model=LogPSpline(...))` now samples
+scalar time-frequency surfaces with the source WDM tensor prior. It calls
+`inference/power.py` directly. The optional `preprocessing/wdm.py` adapter
+produces powers/counts; inference has no transform dependency.
+
+`PSDResult.time` contains the time grid for these fits. Coefficients and both
+bases are stored for reconstruction and NetCDF round trips. The old standalone
+scalar storage helper still rejects time bases; TV fit storage uses the common
+result's explicit `power_basis` group instead. Existing stationary plotting
+helpers remain stationary; `PSDResult.save()` renders a surface for TV fits.
+
+The historical stationary prior and VI/blocked-NUTS path are unchanged.
+Multivariate TV inference, moving-periodogram adapters and TV VI remain future
+work. See [the transfer notes](wdm-transfer.md) for conventions and LS2 checks.
 
 ## Migration
 
@@ -87,3 +104,28 @@ likelihood, 2D penalty or temporal smoothing parameter is implemented.
 - Old `pipeline/`, `psplines/` and `datatypes/` modules are removed rather
   than retained as aliases. `run_mcmc` remains a small DataTree-returning
   convenience API for existing diagnostic workflows.
+
+## Explicit contracts after the cleanup
+
+- `get_psd_dataset(result.idata)` handles both stationary and scalar TV fits.
+  Its labeled axes are `(chain, draw, channel, channel_aux, [time,] frequency)`.
+  `PSDResult.spectral_density` moves the matrix axes to the end. Missing sample
+  groups may be skipped; corrupt selected groups raise their original error.
+- `PipelineConfig.chain_method` reaches NumPyro. The unused `design_from_vi`
+  and `design_from_vi_tau` options have been removed. This does not remove the
+  separate low-level design-weight fitting function.
+- VI pointwise likelihoods are not currently computed. Their group is absent,
+  so LOO metrics stay unavailable instead of being computed from zero arrays.
+- `SplineBasis` records `penalty_normalization`, `penalty_ridge` and
+  `knot_convention`. Constructor keywords `normalization` and `ridge` expose
+  these choices. Historical defaults are unchanged: `from_knots` uses max
+  normalization, ridge 1e-6 and breakpoints; `from_grid` uses trace normalization,
+  no ridge and clamped knots. Storage records the choices and preserves exact
+  operators for clamped bases. Old stationary files retain historical defaults.
+- `SpectralComponents.from_multivar_fft(...)` becomes
+  `inference.initialisation.prepare_components(...)`.
+  `components.compute_design_weights(S)` becomes
+  `inference.initialisation.fit_design_weights(components, S)`.
+
+The cleanup did not transfer moving-periodogram preprocessing or implement
+multivariate TV inference. Keep those additions separate from changes to priors.

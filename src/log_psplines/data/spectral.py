@@ -253,3 +253,63 @@ class EmpiricalPSD:
 
     def __repr__(self):
         return f"EmpiricalPSD(N={self.freq.shape[0]}, p={self.psd.shape[1]})"
+
+
+@dataclass(frozen=True)
+class PowerSpectrum:
+    """Summed squared real components and exact counts on a spectral grid.
+
+    Stationary shape (F,), time-frequency shape (T,F). Counts may be
+    broadcastable on input. Missing cells must have power=count=0.
+    Values are component variances, not automatically a PSD per Hz.
+    """
+
+    power: np.ndarray
+    counts: np.ndarray
+    frequency: np.ndarray
+    time: np.ndarray | None = None
+    units: str = "coefficient variance"
+
+    def __post_init__(self) -> None:
+        frequency = np.asarray(self.frequency, dtype=float)
+        time = (
+            None if self.time is None else np.asarray(self.time, dtype=float)
+        )
+        for grid in (frequency, time):
+            if grid is not None and (
+                grid.ndim != 1
+                or grid.size == 0
+                or not np.isfinite(grid).all()
+                or np.any(np.diff(grid) <= 0)
+            ):
+                raise ValueError(
+                    "spectral grids must be finite and increasing"
+                )
+        shape = (
+            (len(frequency),) if time is None else (len(time), len(frequency))
+        )
+        power = np.asarray(self.power, dtype=float)
+        counts = np.broadcast_to(
+            np.asarray(self.counts, dtype=float), shape
+        ).copy()
+        if power.shape != shape:
+            raise ValueError(f"power must have shape {shape}")
+        if (
+            not np.isfinite(power).all()
+            or np.any(power < 0)
+            or not np.isfinite(counts).all()
+            or np.any(counts < 0)
+            or not np.any(counts > 0)
+        ):
+            raise ValueError(
+                "powers/counts must be finite, non-negative and observed"
+            )
+        if np.any((counts == 0) & (power != 0)):
+            raise ValueError("zero-count cells must have zero power")
+        for name, value in (
+            ("power", power),
+            ("counts", counts),
+            ("frequency", frequency),
+            ("time", time),
+        ):
+            object.__setattr__(self, name, value)

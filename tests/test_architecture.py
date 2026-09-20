@@ -50,8 +50,8 @@ def test_basis_and_integrated_penalty_independent_reference():
     np.testing.assert_allclose(
         model(weights), splines(grid) @ weights, atol=5e-8
     )
-    with pytest.raises(NotImplementedError, match="Time-dependent"):
-        LogPSpline(frequency, time=frequency)(jnp.zeros((6, 6)))
+    surface = LogPSpline(frequency, time=frequency)(jnp.zeros((6, 6)))
+    np.testing.assert_array_equal(surface, np.zeros((17, 17)))
 
 
 @pytest.mark.parametrize("channels", [1, 2, 3])

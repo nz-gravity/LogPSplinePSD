@@ -11,6 +11,7 @@ from log_psplines.arviz_utils.reconstruction import reconstruct_psd_matrix
 from log_psplines.config import PipelineConfig
 from log_psplines.data import TimeSeries
 from log_psplines.inference.initialisation import build_component
+from log_psplines.inference.model import _joint_multivar_model
 
 REFERENCE = Path(__file__).parent / "reference" / "stationary.npz"
 
@@ -40,7 +41,7 @@ def stationary_values():
         )
         pipeline = make_pipeline(data, config)
         trace = handlers.trace(
-            handlers.seed(pipeline.model_fn, jax.random.PRNGKey(9))
+            handlers.seed(_joint_multivar_model, jax.random.PRNGKey(9))
         ).get_trace(**pipeline.full_model_kwargs)
         values[f"u_{channels}"] = pipeline.data.U
         for name, site in trace.items():

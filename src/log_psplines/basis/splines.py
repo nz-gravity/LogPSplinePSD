@@ -1,12 +1,16 @@
 """One-dimensional B-splines and normalized integrated-derivative penalties."""
 
 from dataclasses import dataclass
+from typing import Literal
 
 import jax.numpy as jnp
 import numpy as np
+from scipy.interpolate import BSpline
 from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
 from skfda.representation.basis import BSplineBasis
+
+from .penalty import create_bspline_roughness_penalty
 
 
 @dataclass(frozen=True)
@@ -23,12 +27,88 @@ class SplineBasis:
     penalty: jnp.ndarray
     degree: int = 3
     penalty_order: int = 2
+    penalty_normalization: Literal["max", "trace"] = "max"
+    penalty_ridge: float = 1e-6
+    knot_convention: Literal["breakpoints", "clamped"] = "breakpoints"
 
     def __post_init__(self) -> None:
+        if self.penalty_normalization not in ("max", "trace"):
+            raise ValueError("penalty_normalization must be max or trace")
+        if not np.isfinite(self.penalty_ridge) or self.penalty_ridge < 0:
+            raise ValueError("penalty_ridge must be finite and non-negative")
+        if self.knot_convention not in ("breakpoints", "clamped"):
+            raise ValueError("knot_convention must be breakpoints or clamped")
         if self.basis.ndim != 2 or self.basis.shape[0] != len(self.grid):
             raise ValueError("basis must have shape (len(grid), K)")
         if self.penalty.shape != (self.basis.shape[1], self.basis.shape[1]):
             raise ValueError("penalty must have shape (K, K)")
+
+    @classmethod
+    def from_grid(
+        cls,
+        grid: np.ndarray,
+        n_interior_knots: int,
+        *,
+        degree: int = 3,
+        penalty_order: int = 2,
+        normalization: Literal["max", "trace"] = "trace",
+        ridge: float = 0.0,
+    ) -> "SplineBasis":
+        """WDM convention: clamped knots, trace-normalized unridged penalty.
+
+        Coordinates are used as supplied. For WDM parity use rescaled time
+        and frequency/frequency.max(). This differs deliberately from the
+        historical stationary ``from_knots`` convention.
+        """
+        grid = np.asarray(grid, dtype=float)
+        if (
+            grid.ndim != 1
+            or grid.size < 2
+            or not np.isfinite(grid).all()
+            or np.any(np.diff(grid) <= 0)
+        ):
+            raise ValueError("grid must be finite and strictly increasing")
+        if (
+            not isinstance(n_interior_knots, (int, np.integer))
+            or n_interior_knots < 0
+        ):
+            raise ValueError("n_interior_knots must be a non-negative integer")
+        if not 0 <= penalty_order <= degree:
+            raise ValueError("require 0 <= penalty_order <= degree")
+        interior = np.linspace(grid[0], grid[-1], n_interior_knots + 2)[1:-1]
+        knots = np.concatenate(
+            (
+                np.repeat(grid[0], degree + 1),
+                interior,
+                np.repeat(grid[-1], degree + 1),
+            )
+        )
+        n_basis = len(knots) - degree - 1
+        basis = BSpline(knots, np.eye(n_basis), degree, extrapolate=False)(
+            grid
+        )
+        basis = np.nan_to_num(basis)
+        basis /= np.maximum(basis.sum(axis=1, keepdims=True), 1e-12)
+        penalty = create_bspline_roughness_penalty(
+            knots, degree=degree, derivative_order=penalty_order
+        )
+        if normalization == "max":
+            penalty = penalty / np.max(penalty)
+        if ridge:
+            penalty = penalty + ridge * np.eye(n_basis)
+        # Keep host float64 through the eigendecomposition, including the
+        # numerical null space. Convert to JAX at the inference boundary.
+        return cls(
+            grid,
+            knots,
+            basis,
+            penalty,
+            degree,
+            penalty_order,
+            normalization,
+            ridge,
+            "clamped",
+        )
 
     @classmethod
     def from_knots(
@@ -37,6 +117,9 @@ class SplineBasis:
         knots: np.ndarray,
         degree: int = 3,
         penalty_order: int = 2,
+        *,
+        normalization: Literal["max", "trace"] = "max",
+        ridge: float = 1e-6,
     ) -> "SplineBasis":
         return cls.create(
             grid=grid,
@@ -44,6 +127,8 @@ class SplineBasis:
             degree=degree,
             penalty_order=penalty_order,
             n=len(grid),
+            normalization=normalization,
+            ridge=ridge,
         )
 
     @classmethod
@@ -57,6 +142,8 @@ class SplineBasis:
         basis: jnp.ndarray | None = None,
         penalty: jnp.ndarray | None = None,
         grid: np.ndarray | None = None,
+        normalization: Literal["max", "trace"] = "max",
+        ridge: float = 1e-6,
     ) -> "SplineBasis":
         """Construct from knots, or validate supplied linear operators."""
         if degree < penalty_order:
@@ -113,6 +200,8 @@ class SplineBasis:
                 n,
                 penalty_order,
                 grid_points=grid,
+                epsilon=ridge,
+                normalization=normalization,
             )
 
         basis = jnp.asarray(basis)
@@ -135,7 +224,17 @@ class SplineBasis:
                 f"{penalty.shape[0]} vs {basis.shape[1]}"
             )
 
-        return cls(grid, knots, basis, penalty, degree, penalty_order)
+        return cls(
+            grid,
+            knots,
+            basis,
+            penalty,
+            degree,
+            penalty_order,
+            normalization,
+            ridge,
+            "breakpoints",
+        )
 
 
 def init_basis_and_penalty(
@@ -145,6 +244,7 @@ def init_basis_and_penalty(
     diff_matrix_order: int,
     epsilon: float = 1e-6,
     grid_points: np.ndarray | None = None,
+    normalization: Literal["max", "trace"] = "max",
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """
     Generate B-spline basis matrix and penalty matrix.
@@ -196,7 +296,14 @@ def init_basis_and_penalty(
         LinearDifferentialOperator(diff_matrix_order)
     )
     penalty_matrix = regularization.penalty_matrix(basis)
-    penalty_matrix = penalty_matrix / np.max(penalty_matrix)
+    if normalization not in ("max", "trace"):
+        raise ValueError("normalization must be max or trace")
+    scale = (
+        np.max(penalty_matrix)
+        if normalization == "max"
+        else np.trace(penalty_matrix)
+    )
+    penalty_matrix = penalty_matrix / scale
     penalty_matrix = penalty_matrix + epsilon * np.eye(penalty_matrix.shape[1])
 
     return basis_matrix, jnp.asarray(penalty_matrix)

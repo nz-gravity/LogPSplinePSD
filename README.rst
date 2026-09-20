@@ -56,8 +56,10 @@ Architecture
 ------------
 
 See `the architecture and migration guide <docs/architecture.md>`_ for the
-shared scalar/matrix model and the reserved time-dependent extension points.
-Time-varying inference is not implemented.
+shared scalar/matrix model and time-frequency evaluation.
+Scalar time-varying power inference is available through ``fit()``; see
+`the WDM transfer guide <docs/wdm-transfer.md>`_. Multivariate TV inference
+is not yet implemented.
 
 Documentation
 -------------

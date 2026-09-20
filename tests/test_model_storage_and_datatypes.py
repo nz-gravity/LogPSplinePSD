@@ -1,3 +1,5 @@
+from log_psplines.inference.initialisation import fit_design_weights
+from log_psplines.inference.initialisation import prepare_components
 from log_psplines.arviz_utils.reconstruction import reconstruct_psd_matrix, compute_psd_quantiles
 from log_psplines.preprocessing.periodogram import compute_wishart, empirical_spectrum
 from log_psplines.plotting.basis import plot_spline_basis
@@ -304,7 +306,7 @@ def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> 
         design_psd[idx] = np.asarray(
             [[2.0 + 0.1 * idx, 0.1 + 0.05j], [0.1 - 0.05j, 1.5 + 0.1 * idx]]
         )
-    weights = model.compute_design_weights(design_psd)
+    weights = fit_design_weights(model, design_psd)
     assert set(weights) == {
         "delta_0",
         "delta_1",
@@ -340,7 +342,7 @@ def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> 
     with pytest.raises(ValueError, match="Invalid theta pair"):
         model.theta_index(0, 1)
     with pytest.raises(ValueError, match="design_psd"):
-        model.compute_design_weights(np.eye(2)[None])
+        fit_design_weights(model, np.eye(2)[None])
     with pytest.raises(ValueError, match="j must be"):
         MultivarComponentKey("delta", -1)
     with pytest.raises(ValueError, match="delta components"):
@@ -490,7 +492,7 @@ def test_multivar_factory_with_analytical_guides_and_validation() -> None:
             [[2.0 + 0.1 * idx, 0.1 + 0.02j], [0.1 - 0.02j, 1.5 + 0.1 * idx]]
         )
 
-    model = SpectralComponents.from_multivar_fft(
+    model = prepare_components(
         fft,
         n_knots={"delta": 3, "theta_re": 4, "theta_im": 5},
         degree=1,
@@ -503,7 +505,7 @@ def test_multivar_factory_with_analytical_guides_and_validation() -> None:
     assert isinstance(model.n_knots, list)
 
     with pytest.raises(ValueError, match="analytical_psd"):
-        SpectralComponents.from_multivar_fft(
+        prepare_components(
             fft,
             n_knots=3,
             degree=1,
@@ -511,7 +513,7 @@ def test_multivar_factory_with_analytical_guides_and_validation() -> None:
             analytical_psd=np.ones((fft.N, fft.p, fft.p + 1)),
         )
     with pytest.raises(ValueError, match="Unsupported"):
-        SpectralComponents.from_multivar_fft(
+        prepare_components(
             fft,
             n_knots=3,
             degree=1,
@@ -526,7 +528,7 @@ def test_multivar_factory_with_analytical_guides_and_validation() -> None:
         N=3,
         p=1,
     )
-    model_p1 = SpectralComponents.from_multivar_fft(
+    model_p1 = prepare_components(
         one_channel,
         n_knots=3,
         degree=1,

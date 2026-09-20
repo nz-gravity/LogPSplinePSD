@@ -8,6 +8,7 @@ import pytest
 import xarray as xr
 
 from log_psplines import make_pipeline
+from log_psplines.arviz_utils.to_arviz import _init_values_to_dataset
 from log_psplines.arviz_utils import (
     get_multivar_vi_psd_quantiles,
     get_psd_dataset,
@@ -17,7 +18,6 @@ from log_psplines.config import PipelineConfig
 from log_psplines.pipeline import (
     InferencePipeline,
     PSDResult,
-    _init_values_to_dataset,
 )
 from log_psplines.inference.nuts import FactorizedMultivarNUTSStage
 from log_psplines.inference.vi import FactorizedMultivarVIStage, StageResult
@@ -359,7 +359,7 @@ def test_posterior_predictive_save_overlays_vi_when_available(
         captured["spec"] = spec
 
     monkeypatch.setattr(
-        "log_psplines.results.plot_psd_matrix",
+        "log_psplines.plotting.results.plot_psd_matrix",
         _fake_plot_psd_matrix,
     )
     vi = StageResult(
@@ -376,7 +376,9 @@ def test_posterior_predictive_save_overlays_vi_when_available(
         idata=xr.DataTree(children={"sample_stats": xr.DataTree()}),
     )
 
-    result._save_posterior_predictive(str(tmp_path))
+    from log_psplines.plotting.results import plot_posterior_spectrum
+
+    plot_posterior_spectrum(result, tmp_path)
 
     spec = captured["spec"]
     assert spec.overlay_vi is True
@@ -394,7 +396,7 @@ def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
         captured["spec"] = spec
 
     monkeypatch.setattr(
-        "log_psplines.results.plot_psd_matrix",
+        "log_psplines.plotting.results.plot_psd_matrix",
         _fake_plot_psd_matrix,
     )
     vi = StageResult(
@@ -411,7 +413,9 @@ def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
         idata=xr.DataTree(),
     )
 
-    result._save_posterior_predictive(str(tmp_path))
+    from log_psplines.plotting.results import plot_posterior_spectrum
+
+    plot_posterior_spectrum(result, tmp_path)
 
     spec = captured["spec"]
     assert spec.overlay_vi is False

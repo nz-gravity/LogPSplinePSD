@@ -579,7 +579,7 @@ def compute_analytic_eta_candidates(
 
 def _compute_analytic_candidates_for_spec(spec: RunSpec) -> dict[str, float]:
     """Build basis/penalty matrices and compute analytic η candidates."""
-    from log_psplines.inference.initialisation import init_basis_and_penalty
+    from log_psplines.basis.splines import init_basis_and_penalty
 
     # Determine number of frequency bins after Bartlett + coarse graining.
     block_len = spec.N // spec.Nb

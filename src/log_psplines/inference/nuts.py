@@ -14,66 +14,43 @@ from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
 
-@dataclass
-class NUTSStage:
-    """NUTS sampling stage wrapping NumPyro MCMC."""
-
-    n_samples: int = 1000
-    n_warmup: int = 500
-    target_accept_prob: float = 0.8
-    max_tree_depth: int = 10
-    dense_mass: bool = True
-    num_chains: int = 1
-    eta: float = 1.0
-
-    def run(
-        self,
-        model_fn: Callable[..., Any],
-        model_kwargs: dict[str, Any],
-        init_values: dict[str, jnp.ndarray] | None = None,
-        *,
-        rng_key: jax.Array,
-        verbose: bool = False,
-    ) -> xr.DataTree:
-        kwargs = dict(model_kwargs)
-        kwargs["eta"] = self.eta
-
-        kernel_kwargs: dict[str, Any] = dict(
-            target_accept_prob=self.target_accept_prob,
-            max_tree_depth=self.max_tree_depth,
-            dense_mass=self.dense_mass,
-        )
-        if init_values is not None:
-            kernel_kwargs["init_strategy"] = init_to_value(values=init_values)
-
-        kernel = NUTS(model_fn, **kernel_kwargs)
-        mcmc = MCMC(
-            kernel,
-            num_warmup=self.n_warmup,
-            num_samples=self.n_samples,
-            num_chains=self.num_chains,
-            progress_bar=verbose,
-        )
-        mcmc.run(
-            rng_key,
-            extra_fields=(
-                "potential_energy",
-                "energy",
-                "num_steps",
-                "accept_prob",
-                "adapt_state.step_size",
-            ),
-            **kwargs,
-        )
-        idata = az.from_numpyro(mcmc)
-        stats = idata["sample_stats"].dataset
-        if (
-            stats is not None
-            and "lp" not in stats
-            and "potential_energy" in stats
-        ):
-            stats["lp"] = -stats["potential_energy"]
-        return idata
+def run_nuts(
+    model: Callable,
+    *,
+    rng_key: jax.Array,
+    model_kwargs: dict | None = None,
+    init_values: dict | None = None,
+    n_warmup: int,
+    n_samples: int,
+    num_chains: int = 1,
+    target_accept_prob: float = 0.8,
+    max_tree_depth: int = 10,
+    dense_mass: bool = False,
+    chain_method: str | None = None,
+    progress_bar: bool = False,
+    extra_fields: tuple[str, ...] = (),
+) -> MCMC:
+    """Execute NumPyro NUTS with explicit settings; no spectral mathematics."""
+    kernel_options = dict(
+        target_accept_prob=target_accept_prob,
+        max_tree_depth=max_tree_depth,
+        dense_mass=dense_mass,
+    )
+    if init_values is not None:
+        kernel_options["init_strategy"] = init_to_value(values=init_values)
+    chain_options = (
+        {} if chain_method is None else {"chain_method": chain_method}
+    )
+    mcmc = MCMC(
+        NUTS(model, **kernel_options),
+        num_warmup=n_warmup,
+        num_samples=n_samples,
+        num_chains=num_chains,
+        progress_bar=progress_bar,
+        **chain_options,
+    )
+    mcmc.run(rng_key, extra_fields=extra_fields, **(model_kwargs or {}))
+    return mcmc
 
 
 def _channel_model_kwargs(
@@ -212,8 +189,17 @@ def _merge_factor_idatas(idatas: list[xr.DataTree]) -> xr.DataTree:
 
 
 @dataclass
-class FactorizedMultivarNUTSStage(NUTSStage):
+class FactorizedMultivarNUTSStage:
     """Run independent NUTS chains for each multivariate Cholesky factor."""
+
+    n_samples: int = 1000
+    n_warmup: int = 500
+    target_accept_prob: float = 0.8
+    max_tree_depth: int = 10
+    dense_mass: bool = True
+    num_chains: int = 1
+    eta: float = 1.0
+    chain_method: str | None = None
 
     target_accept_prob_by_channel: list[float] | None = None
     max_tree_depth_by_channel: list[int] | None = None
@@ -238,14 +224,12 @@ class FactorizedMultivarNUTSStage(NUTSStage):
 
     def run(
         self,
-        model_fn: Callable[..., Any],
         model_kwargs: dict[str, Any],
         init_values: dict[str, jnp.ndarray] | None = None,
         *,
         rng_key: jax.Array,
         verbose: bool = False,
     ) -> xr.DataTree:
-        del model_fn
         from log_psplines.inference.model import _blocked_channel_model
 
         kwargs = dict(model_kwargs)
@@ -260,26 +244,19 @@ class FactorizedMultivarNUTSStage(NUTSStage):
                 init_values,
                 channel_index,
             )
-            kernel_kwargs: dict[str, Any] = dict(
+            mcmc = run_nuts(
+                _blocked_channel_model,
+                rng_key=keys[channel_index],
+                model_kwargs=channel_kwargs,
+                init_values=channel_init,
+                n_warmup=self.n_warmup,
+                n_samples=self.n_samples,
+                num_chains=self.num_chains,
+                dense_mass=self.dense_mass,
                 target_accept_prob=self._channel_target_accept(channel_index),
                 max_tree_depth=self._channel_max_tree_depth(channel_index),
-                dense_mass=self.dense_mass,
-            )
-            if channel_init is not None:
-                kernel_kwargs["init_strategy"] = init_to_value(
-                    values=channel_init
-                )
-
-            kernel = NUTS(_blocked_channel_model, **kernel_kwargs)
-            mcmc = MCMC(
-                kernel,
-                num_warmup=self.n_warmup,
-                num_samples=self.n_samples,
-                num_chains=self.num_chains,
+                chain_method=self.chain_method,
                 progress_bar=verbose,
-            )
-            mcmc.run(
-                keys[channel_index],
                 extra_fields=(
                     "potential_energy",
                     "energy",
@@ -287,7 +264,6 @@ class FactorizedMultivarNUTSStage(NUTSStage):
                     "accept_prob",
                     "adapt_state.step_size",
                 ),
-                **channel_kwargs,
             )
             idata = az.from_numpyro(mcmc)
             stats = idata["sample_stats"].dataset
@@ -306,6 +282,6 @@ class FactorizedMultivarNUTSStage(NUTSStage):
 
 
 __all__ = [
-    "NUTSStage",
+    "run_nuts",
     "FactorizedMultivarNUTSStage",
 ]

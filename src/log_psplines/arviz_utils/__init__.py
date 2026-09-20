@@ -1,6 +1,9 @@
 import logging
 
-from log_psplines.arviz_utils._datatree import open_inference_data, save_inference_data
+from log_psplines.arviz_utils._datatree import (
+    open_inference_data,
+    save_inference_data,
+)
 from log_psplines.arviz_utils.from_arviz import (
     get_multivar_posterior_psd_quantiles,
     get_multivar_prior_psd_quantiles,

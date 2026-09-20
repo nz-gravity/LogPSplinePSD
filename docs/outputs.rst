@@ -32,8 +32,8 @@ When ``PipelineConfig(outdir=...)`` is set, the pipeline writes:
 ``inference_data.nc``
    NetCDF serialisation of the returned ``DataTree``.
 
-``posterior_predictive.png``
-   PSD matrix summary plot.
+``posterior_spectrum.png``
+   PSD matrix summary or scalar time-frequency surface.
 
 ``diagnostics/vi_summary.csv``
    VI convergence and loss summary.
@@ -87,3 +87,17 @@ Diagnostics Checklist
 - Compare VI and NUTS posterior summaries when using VI warm starts.
 - If ``true_psd`` was supplied, review RIAE, L2, and coverage metrics in the
   saved summaries.
+
+Reporting contracts
+-------------------
+
+``get_psd_dataset(result.idata)`` reconstructs stationary and time-frequency
+results using named dimensions. Time-frequency results add a ``time`` axis
+before ``frequency``. ``PSDResult.spectral_density`` places channel axes last.
+
+VI pointwise log likelihoods are currently unavailable. No zero-filled
+``vi_log_likelihood`` group is written, and derived LOO metrics are unavailable.
+
+Saving writes ``inference_data.nc`` before rendering. Unexpected plotting or
+reporting failures raise an error; no substitute figure is saved under the
+requested figure's filename.

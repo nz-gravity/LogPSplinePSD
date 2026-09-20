@@ -16,11 +16,11 @@ def build_spline(basis: jax.Array, weights: jax.Array) -> jax.Array:
 
 @dataclass
 class LogPSpline:
-    """Stationary log S(f) = Bf @ weights.
+    """Scalar log spectrum on a frequency or time-frequency grid.
 
     time=None: weights (Kf,) -> (F,).
-    Future time basis: weights (Kt, Kf) -> (T, F), Bt @ weights @ Bf.T.
-    Time-dependent evaluation and priors are deliberately not implemented.
+    With time: weights (Kt, Kf) -> (T, F), Bt @ weights @ Bf.T.
+    Evaluation is independent of how the weights are fitted.
     """
 
     frequency: SplineBasis
@@ -28,23 +28,38 @@ class LogPSpline:
     weights: jax.Array | None = None
 
     def __post_init__(self) -> None:
+        shape = (
+            (self.n_basis,)
+            if self.time is None
+            else (self.time.basis.shape[1], self.n_basis)
+        )
         if self.weights is None:
-            self.weights = jnp.zeros(self.n_basis, dtype=self.basis.dtype)
+            self.weights = jnp.zeros(shape, dtype=self.basis.dtype)
         else:
             self.weights = jnp.asarray(self.weights)
             if self.time is None and self.weights.ndim != 1:
                 raise ValueError("weights must be 1-D")
-            if self.time is None and self.weights.shape != (self.n_basis,):
-                raise ValueError("weights length must match basis n_basis")
+            if self.weights.shape != shape:
+                raise ValueError(
+                    f"weights length and shape must match {shape}"
+                )
 
     def __call__(self, weights: jax.Array | None = None) -> jax.Array:
-        if self.time is not None:
-            raise NotImplementedError(
-                "Time-dependent spline evaluation is reserved for a future implementation"
-            )
         weights = self.weights if weights is None else weights
         if weights is None:
             raise ValueError("weights must be provided or initialized.")
+        if self.time is not None:
+            shape = (self.time.basis.shape[1], self.n_basis)
+            if weights.shape != shape:
+                raise ValueError(f"weights must have shape {shape}")
+            # Reuse the WDM contraction without constructing kron(Bt, Bf).
+            return jnp.einsum(
+                "ti,ij,fj->tf",
+                self.time.basis,
+                weights,
+                self.basis,
+                optimize="optimal",
+            )
         if weights.shape != (self.n_basis,):
             raise ValueError("weights must have shape (Kf,)")
         return build_spline(self.frequency.basis, weights)

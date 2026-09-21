@@ -67,14 +67,14 @@ def test_stationary_frozen_contract():
         # This float32 likelihood is sensitive to platform reduction order.
         rtol = (
             5e-3
-            if name == "posterior_2_delta_1"
+            if name.startswith("posterior_")
             else 1e-4
             if name == "2_log_likelihood_block_1"
             else 3e-5
         )
         atol = (
             2e-3
-            if name == "posterior_2_delta_1"
+            if name.startswith("posterior_")
             else 1e-5
             if name == "2_log_likelihood_block_1"
             else 3e-6

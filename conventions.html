@@ -217,12 +217,12 @@
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wdm-transfer.html">Reusing the WDM implementation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1"><a class="reference internal" href="architecture.html">PSD architecture</a></li>
@@ -536,11 +536,11 @@ u^{(h)}_\nu = \sqrt{\lambda^{(h)}_\nu}\, v^{(h)}_\nu.\]</div>
 </section>
 <section id="psd-terminology">
 <h2>PSD terminology<a class="headerlink" href="#psd-terminology" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">log_psplines.data_utils</span></code> centralises the conversion between
+<p><code class="docutils literal notranslate"><span class="pre">log_psplines.data.spectral_utils</span></code> centralises the conversion between
 Wishart statistics and PSD matrices. The current conventions are:</p>
 <ul class="simple">
 <li><p><strong>Normalisation</strong> – PSD matrices are <strong>one-sided</strong> and expressed per Hz. The
-helper <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.data_utils.Y_to_S()</span></code> converts summed
+helper <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.data.spectral_utils.Y_to_S()</span></code> converts summed
 Wishart matrices into PSD matrices using the stored block count, coarse-bin
 multiplier, duration, and scaling factor.</p></li>
 <li><p><strong>Degrees of freedom</strong> – <code class="docutils literal notranslate"><span class="pre">N_b</span></code> is the block count and <code class="docutils literal notranslate"><span class="pre">N_h</span></code> is the

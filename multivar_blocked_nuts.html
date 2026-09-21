@@ -66,7 +66,7 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Soft Shrinkage Toward a Design PSD" href="design_shrinkage.html" />
+    <link rel="next" title="PSD architecture" href="architecture.html" />
     <link rel="prev" title="Coarse-Graining" href="coarse_grain.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -217,12 +217,12 @@
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wdm-transfer.html">Reusing the WDM implementation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Multivariate Factorised Likelihood: Math to Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1"><a class="reference internal" href="architecture.html">PSD architecture</a></li>
@@ -467,12 +467,12 @@ at each retained Fourier frequency.</p>
 <h2>Code pointers<a class="headerlink" href="#code-pointers" title="Link to this heading">#</a></h2>
 <p>The links below point to the current repository layout:</p>
 <ul class="simple">
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L159-L299">Wishart FFT construction (WishartData.compute_wishart)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py">Blocked NumPyro likelihood (_blocked_channel_model)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py">Shared P-spline prior block (_sample_pspline_block)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/data/timeseries.py#L92-L130">Wishart FFT construction (TimeSeries.to_wishart_stats)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/inference/model.py#L88-L150">Blocked NumPyro likelihood (_blocked_channel_model)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/inference/model.py#L23-L85">Shared P-spline prior block (_sample_pspline_block)</a></p></li>
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/preprocessing/coarse_grain.py">Coarse graining (apply_coarse_grain_multivar_fft)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py">PSD reconstruction (reconstruct_psd_matrix)</a></p></li>
-<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar_utils.py">Wishart and PSD helpers (U_to_Y, Y_to_S, Y_to_U)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/arviz_utils/reconstruction.py">PSD reconstruction (reconstruct_psd_matrix)</a></p></li>
+<li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/data/spectral_utils.py">Wishart and PSD helpers (U_to_Y, Y_to_S, Y_to_U)</a></p></li>
 <li><p><a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/arviz_utils/to_arviz.py">ArviZ export for multivariate samples</a></p></li>
 </ul>
 </section>
@@ -490,7 +490,7 @@ time-domain blocks.</p>
 <p>where the columns of <span class="math notranslate nohighlight">\(U(f_k)\)</span> are the eigenvector-weighted components
 <span class="math notranslate nohighlight">\(\sqrt{\lambda_\ell^{(k)}} v_\ell^{(k)}\)</span>. These are exposed as
 <code class="docutils literal notranslate"><span class="pre">u_re</span></code> and <code class="docutils literal notranslate"><span class="pre">u_im</span></code> on
-<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.data.WishartData</span></code>.</p>
+<a class="reference internal" href="api.html#log_psplines.data.WishartData" title="log_psplines.data.WishartData"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.data.WishartData</span></code></a>.</p>
 </section>
 <section id="data-to-wishart-statistics">
 <h2>Data to Wishart statistics<a class="headerlink" href="#data-to-wishart-statistics" title="Link to this heading">#</a></h2>
@@ -603,7 +603,7 @@ log-likelihood contribution is added via
 <section id="coarse-graining">
 <h2>Coarse graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
 <p>Coarse graining is performed by
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code>.
+<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code></a>.
 Within each coarse bin <span class="math notranslate nohighlight">\(J_h\)</span>, the code sums Wishart matrices</p>
 <div class="math notranslate nohighlight">
 \[\bar Y_h = \sum_{f \in J_h} Y(f)\]</div>
@@ -759,11 +759,11 @@ into the full posterior that NUTS sees.</p>
       </div>
     </a>
     <a class="right-next"
-       href="design_shrinkage.html"
+       href="architecture.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Soft Shrinkage Toward a Design PSD</p>
+        <p class="prev-next-title">PSD architecture</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

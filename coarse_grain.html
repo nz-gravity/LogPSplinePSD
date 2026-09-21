@@ -217,12 +217,12 @@
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wdm-transfer.html">Reusing the WDM implementation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Coarse-Graining</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1"><a class="reference internal" href="architecture.html">PSD architecture</a></li>
@@ -452,8 +452,8 @@ discrete Fourier grid.</p>
 <code class="docutils literal notranslate"><span class="pre">model.fmin</span></code>/<code class="docutils literal notranslate"><span class="pre">model.fmax</span></code>. Coarse-grain configuration controls only binning
 (<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p>
 <p>The binning logic is implemented by
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.compute_binning_structure()</span></code>, which
-returns <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code>. Only
+<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.compute_binning_structure" title="log_psplines.preprocessing.coarse_grain.compute_binning_structure"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.compute_binning_structure()</span></code></a>, which
+returns <a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code></a>. Only
 linear, full-band binning is supported. Exactly one construction mode must be
 chosen:</p>
 <ul class="simple">
@@ -472,18 +472,18 @@ trailing frequencies are trimmed so bins are equal sized.</p></li>
 </section>
 <section id="aggregating-fft-data">
 <h2>Aggregating FFT data<a class="headerlink" href="#aggregating-fft-data" title="Link to this heading">#</a></h2>
-<p><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code>
-takes the <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.data.WishartData</span></code> and
-<code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code> and builds the
+<p><a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft()</span></code></a>
+takes the <a class="reference internal" href="api.html#log_psplines.data.WishartData" title="log_psplines.data.WishartData"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.data.WishartData</span></code></a> and
+<a class="reference internal" href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.preprocessing.coarse_grain.CoarseGrainSpec</span></code></a> and builds the
 coarse representation used during sampling. The frequencies are
 grouped by bin across the <strong>entire</strong> retained band. Within each <span class="math notranslate nohighlight">\(J_h\)</span>, the
 individual Wishart matrices
 <span class="math notranslate nohighlight">\(\mathbf{Y}(f)=\mathbf{U}(f)\mathbf{U}(f)^H\)</span> are summed to form
 <span class="math notranslate nohighlight">\(\bar{\mathbf{Y}}_h = \sum_{f\in J_h}\mathbf{Y}(f)\)</span>, and the sum is
 re-factorized to obtain a single <span class="math notranslate nohighlight">\(\bar{\mathbf{U}}_h\)</span> per bin. The helper
-<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.data_utils.Y_to_U()</span></code> performs the eigensystem
+<code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.data.spectral_utils.Y_to_U()</span></code> performs the eigensystem
 factorisation used by this step.</p>
-<p>The returned <code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.data.WishartData</span></code> has
+<p>The returned <a class="reference internal" href="api.html#log_psplines.data.WishartData" title="log_psplines.data.WishartData"><code class="xref py py-class docutils literal notranslate"><span class="pre">log_psplines.data.WishartData</span></code></a> has
 <code class="docutils literal notranslate"><span class="pre">len(spec.f_coarse)</span></code> frequencies and stores the constant bin size on
 <code class="docutils literal notranslate"><span class="pre">fft_data.Nh</span></code>.</p>
 </section>

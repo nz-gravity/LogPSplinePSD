@@ -26,12 +26,12 @@ Code pointers
 
 The links below point to the current repository layout:
 
-- `Wishart FFT construction (WishartData.compute_wishart) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar.py#L159-L299>`_
-- `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py>`_
-- `Shared P-spline prior block (_sample_pspline_block) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/pipeline/models.py>`_
+- `Wishart FFT construction (TimeSeries.to_wishart_stats) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/data/timeseries.py#L92-L130>`_
+- `Blocked NumPyro likelihood (_blocked_channel_model) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/inference/model.py#L88-L150>`_
+- `Shared P-spline prior block (_sample_pspline_block) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/inference/model.py#L23-L85>`_
 - `Coarse graining (apply_coarse_grain_multivar_fft) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/preprocessing/coarse_grain.py>`_
-- `PSD reconstruction (reconstruct_psd_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/psplines/multivar_psplines.py>`_
-- `Wishart and PSD helpers (U_to_Y, Y_to_S, Y_to_U) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/datatypes/multivar_utils.py>`_
+- `PSD reconstruction (reconstruct_psd_matrix) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/arviz_utils/reconstruction.py>`_
+- `Wishart and PSD helpers (U_to_Y, Y_to_S, Y_to_U) <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/data/spectral_utils.py>`_
 - `ArviZ export for multivariate samples <https://github.com/nz-gravity/LogPSplinePSD/blob/main/src/log_psplines/arviz_utils/to_arviz.py>`_
 
 Notation and sufficient statistics

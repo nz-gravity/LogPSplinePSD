@@ -91,11 +91,11 @@ We also use the eigendecomposition of :math:`\bar{Y}_h`:
 PSD terminology
 ---------------
 
-``log_psplines.data_utils`` centralises the conversion between
+``log_psplines.data.spectral_utils`` centralises the conversion between
 Wishart statistics and PSD matrices. The current conventions are:
 
 - **Normalisation** – PSD matrices are **one-sided** and expressed per Hz. The
-  helper :func:`log_psplines.data_utils.Y_to_S` converts summed
+  helper :func:`log_psplines.data.spectral_utils.Y_to_S` converts summed
   Wishart matrices into PSD matrices using the stored block count, coarse-bin
   multiplier, duration, and scaling factor.
 - **Degrees of freedom** – ``N_b`` is the block count and ``N_h`` is the

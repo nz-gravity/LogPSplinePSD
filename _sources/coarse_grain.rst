@@ -50,7 +50,7 @@ individual Wishart matrices
 :math:`\mathbf{Y}(f)=\mathbf{U}(f)\mathbf{U}(f)^H` are summed to form
 :math:`\bar{\mathbf{Y}}_h = \sum_{f\in J_h}\mathbf{Y}(f)`, and the sum is
 re-factorized to obtain a single :math:`\bar{\mathbf{U}}_h` per bin. The helper
-:func:`log_psplines.data_utils.Y_to_U` performs the eigensystem
+:func:`log_psplines.data.spectral_utils.Y_to_U` performs the eigensystem
 factorisation used by this step.
 
 The returned :class:`log_psplines.data.WishartData` has

@@ -215,12 +215,12 @@
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wdm-transfer.html">Reusing the WDM implementation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1"><a class="reference internal" href="architecture.html">PSD architecture</a></li>
@@ -418,12 +418,131 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#high-level-pipeline">High-Level Pipeline</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-containers">Data Containers</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spline-models">Spline Models</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-initialisation">Knot Initialisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arviz-helpers">ArviZ Helpers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#high-level-pipeline">High-Level Pipeline</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.pipeline.fit"><code class="docutils literal notranslate"><span class="pre">fit()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult"><code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.psd"><code class="docutils literal notranslate"><span class="pre">PSDResult.psd</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.spectral_density"><code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.to_netcdf"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_netcdf()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.mcmc.run_mcmc"><code class="docutils literal notranslate"><span class="pre">run_mcmc()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.pipeline.make_pipeline"><code class="docutils literal notranslate"><span class="pre">make_pipeline()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig"><code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.Nb"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.Nb</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.alpha_delta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.alpha_delta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.alpha_phi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.alpha_phi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.alpha_phi_theta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.alpha_phi_theta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.analytical_psd"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.analytical_psd</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.auto_coarse_vi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.auto_coarse_vi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.auto_coarse_vi_min_full_nfreq"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.auto_coarse_vi_min_full_nfreq</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.auto_coarse_vi_target_nfreq"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.auto_coarse_vi_target_nfreq</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.beta_delta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.beta_delta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.beta_phi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.beta_phi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.beta_phi_theta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.beta_phi_theta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.chain_method"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.chain_method</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.coarse_grain_config"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.coarse_grain_config</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.coarse_grain_config_vi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.coarse_grain_config_vi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.compute_lnz"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.compute_lnz</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.degree"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.degree</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.dense_mass"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.dense_mass</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.diffMatrixOrder"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.diffMatrixOrder</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.eta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.eta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.exclude_freq_bands"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.exclude_freq_bands</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.extra_kwargs"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.extra_kwargs</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.fmax"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.fmax</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.fmin"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.fmin</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.init_from_vi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.init_from_vi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.knot_kwargs"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.knot_kwargs</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.max_tree_depth"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.max_tree_depth</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.max_tree_depth_by_channel"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.max_tree_depth_by_channel</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.n_knots"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.n_knots</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.n_samples"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.n_samples</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.n_warmup"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.n_warmup</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.num_chains"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.num_chains</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.only_vi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.only_vi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.outdir"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.outdir</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.rng_key"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.rng_key</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.target_accept_prob"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.target_accept_prob</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.target_accept_prob_by_channel"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.target_accept_prob_by_channel</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.true_psd"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.true_psd</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.use_coarse_vi_for_init"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.use_coarse_vi_for_init</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.verbose"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.verbose</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_coarse_only"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_coarse_only</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_guide"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_guide</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_lr"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_lr</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_posterior_draws"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_posterior_draws</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_progress_bar"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_progress_bar</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_psd_max_draws"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_psd_max_draws</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_steps"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_steps</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.welch_noverlap"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.welch_noverlap</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.welch_nperseg"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.welch_nperseg</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.welch_window"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.welch_window</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.wishart_detrend"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.wishart_detrend</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.wishart_floor_fraction"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.wishart_floor_fraction</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.wishart_window"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.wishart_window</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-containers">Data Containers</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.TimeSeries"><code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData"><code class="docutils literal notranslate"><span class="pre">WishartData</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.U"><code class="docutils literal notranslate"><span class="pre">WishartData.U</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.Y"><code class="docutils literal notranslate"><span class="pre">WishartData.Y</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.apply_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.apply_mask()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.cut"><code class="docutils literal notranslate"><span class="pre">WishartData.cut()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.exclude_frequency_bands"><code class="docutils literal notranslate"><span class="pre">WishartData.exclude_frequency_bands()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.filter_frequency_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.filter_frequency_mask()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.EmpiricalPSD"><code class="docutils literal notranslate"><span class="pre">EmpiricalPSD</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spline-models">Spline Models</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.basis.SplineBasis"><code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.basis.SplineBasis.create"><code class="docutils literal notranslate"><span class="pre">SplineBasis.create()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.basis.SplineBasis.from_grid"><code class="docutils literal notranslate"><span class="pre">SplineBasis.from_grid()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.matrix.SpectralMatrix"><code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.matrix.SpectralMatrix.coherence"><code class="docutils literal notranslate"><span class="pre">SpectralMatrix.coherence()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.spectrum.LogPSpline"><code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.spectrum.build_spline"><code class="docutils literal notranslate"><span class="pre">build_spline()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents"><code class="docutils literal notranslate"><span class="pre">SpectralComponents</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.get_all_bases_and_penalties"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.get_all_bases_and_penalties()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.get_theta_model"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.get_theta_model()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.n_basis"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.n_basis</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.n_knots"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.n_knots</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.n_theta"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.n_theta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.theta_pairs"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.theta_pairs</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.total_components"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.total_components</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-initialisation">Knot Initialisation</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.knots_locator.knot_locator.init_knots"><code class="docutils literal notranslate"><span class="pre">init_knots()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig"><code class="docutils literal notranslate"><span class="pre">CoarseGrainConfig</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.compute_binning_structure"><code class="docutils literal notranslate"><span class="pre">compute_binning_structure()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="docutils literal notranslate"><span class="pre">apply_coarse_grain_multivar_fft()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arviz-helpers">ArviZ Helpers</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.open_inference_data"><code class="docutils literal notranslate"><span class="pre">open_inference_data()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.save_inference_data"><code class="docutils literal notranslate"><span class="pre">save_inference_data()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_psd_dataset"><code class="docutils literal notranslate"><span class="pre">get_psd_dataset()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">get_multivar_posterior_psd_quantiles()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_multivar_vi_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">get_multivar_vi_psd_quantiles()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_weights"><code class="docutils literal notranslate"><span class="pre">get_weights()</span></code></a></li>
+</ul>
+</li>
 </ul>
             </nav>
         </div>
@@ -442,21 +561,706 @@ helpers remain importable from their modules, but are not all part of the
 stable user surface.</p>
 <section id="high-level-pipeline">
 <h2>High-Level Pipeline<a class="headerlink" href="#high-level-pipeline" title="Link to this heading">#</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.pipeline.fit">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.pipeline.</span></span><span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.results.PSDResult" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></span><a class="headerlink" href="#log_psplines.pipeline.fit" title="Link to this definition">#</a></dt>
+<dd><p>Fit stationary Wishart data or scalar time-frequency powers.</p>
+<p>PowerSpectrum requires an explicit LogPSpline and PowerSplineConfig.
+Its NUTS path uses the WDM prior; the stationary VI/blocked path retains
+its historical prior and configuration.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.results.PSDResult">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.results.</span></span><span class="sig-name descname"><span class="pre">PSDResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi_coarse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">StageResult</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">StageResult</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.results.PSDResult" title="Link to this definition">#</a></dt>
+<dd><p>Outputs from InferencePipeline.run().</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.results.PSDResult.psd">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">psd</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#log_psplines.results.PSDResult.psd" title="Link to this definition">#</a></dt>
+<dd><p>Auto spectra (chain, draw, F) for C=1, (…, F, C) otherwise.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.results.PSDResult.spectral_density">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">spectral_density</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#log_psplines.results.PSDResult.spectral_density" title="Link to this definition">#</a></dt>
+<dd><p>Posterior draws (chain, draw, F, C, C), in original data units.</p>
+<p>A time grid inserts T before F. TV scalar results use C=1.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.results.PSDResult.to_netcdf">
+<span class="sig-name descname"><span class="pre">to_netcdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#log_psplines.results.PSDResult.to_netcdf" title="Link to this definition">#</a></dt>
+<dd><p>Save posterior, basis and metadata without rendering plots.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.mcmc.run_mcmc">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.mcmc.</span></span><span class="sig-name descname"><span class="pre">run_mcmc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataTree</span></span></span><a class="headerlink" href="#log_psplines.mcmc.run_mcmc" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.pipeline.make_pipeline">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.pipeline.</span></span><span class="sig-name descname"><span class="pre">make_pipeline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.config.PipelineConfig" title="log_psplines.config.PipelineConfig"><span class="pre">PipelineConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">InferencePipeline</span></span></span><a class="headerlink" href="#log_psplines.pipeline.make_pipeline" title="Link to this definition">#</a></dt>
+<dd><p>Build an InferencePipeline from data and config.</p>
+<section id="parameters">
+<h3>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt>data:</dt><dd><p>Time-domain <code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code> (including <code class="docutils literal notranslate"><span class="pre">y.shape</span> <span class="pre">==</span> <span class="pre">(n,)</span></code>)
+or pre-processed <code class="docutils literal notranslate"><span class="pre">WishartData</span></code>.</p>
+</dd>
+<dt>config:</dt><dd><p>Pipeline configuration.  Defaults to <code class="xref py py-class docutils literal notranslate"><span class="pre">PipelineConfig</span></code> with all
+default values.</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h3>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt>InferencePipeline</dt><dd><p>Ready-to-run pipeline.  Call <code class="docutils literal notranslate"><span class="pre">.run()</span></code> to execute it.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.config.</span></span><span class="sig-name descname"><span class="pre">PipelineConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">n_samples:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1000,</span> <span class="pre">n_warmup:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">500,</span> <span class="pre">num_chains:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">chain_method:</span> <span class="pre">~typing.Literal['parallel',</span> <span class="pre">'vectorized',</span> <span class="pre">'sequential']</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">alpha_phi:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0,</span> <span class="pre">beta_phi:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0,</span> <span class="pre">alpha_delta:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.0001,</span> <span class="pre">beta_delta:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.0001,</span> <span class="pre">rng_key:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">42,</span> <span class="pre">coarse_grain_config:</span> <span class="pre">~log_psplines.preprocessing.coarse_grain.CoarseGrainConfig</span> <span class="pre">|</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">Nb:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">wishart_window:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">tuple</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">wishart_detrend:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">'constant',</span> <span class="pre">wishart_floor_fraction:</span> <span class="pre">float</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">welch_nperseg:</span> <span class="pre">int</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">welch_noverlap:</span> <span class="pre">int</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">welch_window:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'hann',</span> <span class="pre">n_knots:</span> <span class="pre">int</span> <span class="pre">|</span> <span class="pre">dict[str,</span> <span class="pre">int]</span> <span class="pre">=</span> <span class="pre">10,</span> <span class="pre">degree:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">3,</span> <span class="pre">diffMatrixOrder:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">2,</span> <span class="pre">knot_kwargs:</span> <span class="pre">dict[str,</span> <span class="pre">~typing.Any]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">analytical_psd:</span> <span class="pre">~numpy.ndarray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">true_psd:</span> <span class="pre">None</span> <span class="pre">|</span> <span class="pre">~numpy.ndarray</span> <span class="pre">|</span> <span class="pre">tuple[~numpy.ndarray,</span> <span class="pre">~numpy.ndarray]</span> <span class="pre">|</span> <span class="pre">list</span> <span class="pre">|</span> <span class="pre">dict</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">fmin:</span> <span class="pre">float</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">fmax:</span> <span class="pre">float</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">exclude_freq_bands:</span> <span class="pre">tuple[tuple[float,</span> <span class="pre">float],</span> <span class="pre">...]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">verbose:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">True,</span> <span class="pre">outdir:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">compute_lnz:</span> <span class="pre">bool</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">only_vi:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">init_from_vi:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">True,</span> <span class="pre">vi_steps:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1500,</span> <span class="pre">vi_lr:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.01,</span> <span class="pre">vi_guide:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">vi_posterior_draws:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">50,</span> <span class="pre">vi_progress_bar:</span> <span class="pre">bool</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">vi_psd_max_draws:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">50,</span> <span class="pre">coarse_grain_config_vi:</span> <span class="pre">~log_psplines.preprocessing.coarse_grain.CoarseGrainConfig</span> <span class="pre">|</span> <span class="pre">dict</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">auto_coarse_vi:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">auto_coarse_vi_target_nfreq:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">192,</span> <span class="pre">auto_coarse_vi_min_full_nfreq:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">512,</span> <span class="pre">use_coarse_vi_for_init:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">True,</span> <span class="pre">vi_coarse_only:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">target_accept_prob:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.8,</span> <span class="pre">target_accept_prob_by_channel:</span> <span class="pre">list[float]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">max_tree_depth:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">10,</span> <span class="pre">max_tree_depth_by_channel:</span> <span class="pre">list[int]</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">dense_mass:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">True,</span> <span class="pre">alpha_phi_theta:</span> <span class="pre">float</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">beta_phi_theta:</span> <span class="pre">float</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">eta:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0,</span> <span class="pre">extra_kwargs:</span> <span class="pre">dict[str,</span> <span class="pre">~typing.Any]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.config.PipelineConfig" title="Link to this definition">#</a></dt>
+<dd><p>Flat configuration for preprocessing, VI, and MCMC pipeline setup.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.Nb">
+<span class="sig-name descname"><span class="pre">Nb</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.Nb" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.alpha_delta">
+<span class="sig-name descname"><span class="pre">alpha_delta</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0001</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.alpha_delta" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.alpha_phi">
+<span class="sig-name descname"><span class="pre">alpha_phi</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.alpha_phi" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.alpha_phi_theta">
+<span class="sig-name descname"><span class="pre">alpha_phi_theta</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.alpha_phi_theta" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.analytical_psd">
+<span class="sig-name descname"><span class="pre">analytical_psd</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.analytical_psd" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.auto_coarse_vi">
+<span class="sig-name descname"><span class="pre">auto_coarse_vi</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.auto_coarse_vi" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.auto_coarse_vi_min_full_nfreq">
+<span class="sig-name descname"><span class="pre">auto_coarse_vi_min_full_nfreq</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">512</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.auto_coarse_vi_min_full_nfreq" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.auto_coarse_vi_target_nfreq">
+<span class="sig-name descname"><span class="pre">auto_coarse_vi_target_nfreq</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">192</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.auto_coarse_vi_target_nfreq" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.beta_delta">
+<span class="sig-name descname"><span class="pre">beta_delta</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0001</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.beta_delta" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.beta_phi">
+<span class="sig-name descname"><span class="pre">beta_phi</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.beta_phi" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.beta_phi_theta">
+<span class="sig-name descname"><span class="pre">beta_phi_theta</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.beta_phi_theta" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.chain_method">
+<span class="sig-name descname"><span class="pre">chain_method</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'parallel'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'vectorized'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'sequential'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.chain_method" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.coarse_grain_config">
+<span class="sig-name descname"><span class="pre">coarse_grain_config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig" title="log_psplines.preprocessing.coarse_grain.CoarseGrainConfig"><span class="pre">CoarseGrainConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.coarse_grain_config" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.coarse_grain_config_vi">
+<span class="sig-name descname"><span class="pre">coarse_grain_config_vi</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig" title="log_psplines.preprocessing.coarse_grain.CoarseGrainConfig"><span class="pre">CoarseGrainConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.coarse_grain_config_vi" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.compute_lnz">
+<span class="sig-name descname"><span class="pre">compute_lnz</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.compute_lnz" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.degree">
+<span class="sig-name descname"><span class="pre">degree</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.degree" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.dense_mass">
+<span class="sig-name descname"><span class="pre">dense_mass</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.dense_mass" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.diffMatrixOrder">
+<span class="sig-name descname"><span class="pre">diffMatrixOrder</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.diffMatrixOrder" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.eta">
+<span class="sig-name descname"><span class="pre">eta</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.eta" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.exclude_freq_bands">
+<span class="sig-name descname"><span class="pre">exclude_freq_bands</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.exclude_freq_bands" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.extra_kwargs">
+<span class="sig-name descname"><span class="pre">extra_kwargs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.extra_kwargs" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.fmax">
+<span class="sig-name descname"><span class="pre">fmax</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.fmax" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.fmin">
+<span class="sig-name descname"><span class="pre">fmin</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.fmin" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.init_from_vi">
+<span class="sig-name descname"><span class="pre">init_from_vi</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.init_from_vi" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.knot_kwargs">
+<span class="sig-name descname"><span class="pre">knot_kwargs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.knot_kwargs" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.max_tree_depth">
+<span class="sig-name descname"><span class="pre">max_tree_depth</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.max_tree_depth" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.max_tree_depth_by_channel">
+<span class="sig-name descname"><span class="pre">max_tree_depth_by_channel</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.max_tree_depth_by_channel" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.n_knots">
+<span class="sig-name descname"><span class="pre">n_knots</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.n_knots" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.n_samples">
+<span class="sig-name descname"><span class="pre">n_samples</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1000</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.n_samples" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.n_warmup">
+<span class="sig-name descname"><span class="pre">n_warmup</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">500</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.n_warmup" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.num_chains">
+<span class="sig-name descname"><span class="pre">num_chains</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.num_chains" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.only_vi">
+<span class="sig-name descname"><span class="pre">only_vi</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.only_vi" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.outdir">
+<span class="sig-name descname"><span class="pre">outdir</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.outdir" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.rng_key">
+<span class="sig-name descname"><span class="pre">rng_key</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">42</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.rng_key" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.target_accept_prob">
+<span class="sig-name descname"><span class="pre">target_accept_prob</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.8</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.target_accept_prob" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.target_accept_prob_by_channel">
+<span class="sig-name descname"><span class="pre">target_accept_prob_by_channel</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.target_accept_prob_by_channel" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.true_psd">
+<span class="sig-name descname"><span class="pre">true_psd</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">None</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.true_psd" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.use_coarse_vi_for_init">
+<span class="sig-name descname"><span class="pre">use_coarse_vi_for_init</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.use_coarse_vi_for_init" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.verbose">
+<span class="sig-name descname"><span class="pre">verbose</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.verbose" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.vi_coarse_only">
+<span class="sig-name descname"><span class="pre">vi_coarse_only</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.vi_coarse_only" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.vi_guide">
+<span class="sig-name descname"><span class="pre">vi_guide</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.vi_guide" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.vi_lr">
+<span class="sig-name descname"><span class="pre">vi_lr</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.01</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.vi_lr" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.vi_posterior_draws">
+<span class="sig-name descname"><span class="pre">vi_posterior_draws</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">50</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.vi_posterior_draws" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.vi_progress_bar">
+<span class="sig-name descname"><span class="pre">vi_progress_bar</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.vi_progress_bar" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.vi_psd_max_draws">
+<span class="sig-name descname"><span class="pre">vi_psd_max_draws</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">50</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.vi_psd_max_draws" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.vi_steps">
+<span class="sig-name descname"><span class="pre">vi_steps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1500</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.vi_steps" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.welch_noverlap">
+<span class="sig-name descname"><span class="pre">welch_noverlap</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.welch_noverlap" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.welch_nperseg">
+<span class="sig-name descname"><span class="pre">welch_nperseg</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.welch_nperseg" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.welch_window">
+<span class="sig-name descname"><span class="pre">welch_window</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'hann'</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.welch_window" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.wishart_detrend">
+<span class="sig-name descname"><span class="pre">wishart_detrend</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'constant'</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.wishart_detrend" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.wishart_floor_fraction">
+<span class="sig-name descname"><span class="pre">wishart_floor_fraction</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.wishart_floor_fraction" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="log_psplines.config.PipelineConfig.wishart_window">
+<span class="sig-name descname"><span class="pre">wishart_window</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tuple</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#log_psplines.config.PipelineConfig.wishart_window" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 </section>
 <section id="data-containers">
 <h2>Data Containers<a class="headerlink" href="#data-containers" title="Link to this heading">#</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.data.TimeSeries">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.data.</span></span><span class="sig-name descname"><span class="pre">TimeSeries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'np.ndarray'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'np.ndarray</span> <span class="pre">|</span> <span class="pre">None'</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'np.ndarray</span> <span class="pre">|</span> <span class="pre">None'</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scaling_factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'float</span> <span class="pre">|</span> <span class="pre">None'</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">original_stds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'np.ndarray</span> <span class="pre">|</span> <span class="pre">None'</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.data.TimeSeries" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.data.WishartData">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.data.</span></span><span class="sig-name descname"><span class="pre">WishartData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">u_re</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_im</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nb</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scaling_factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel_stds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_psd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_freq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enbw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.data.WishartData" title="Link to this definition">#</a></dt>
+<dd><p>Discrete FFTs for multivariate time series.
+Stores Wishart replicates for multivariate spectral estimation.</p>
+<section id="attributes">
+<h3>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt>u_re</dt><dd><p>Real part of eigenvector-weighted periodogram replicates, shape
+<code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">p,</span> <span class="pre">p)</span></code>.</p>
+</dd>
+<dt>u_im</dt><dd><p>Imaginary part of eigenvector-weighted periodogram replicates, shape
+<code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">p,</span> <span class="pre">p)</span></code>.</p>
+</dd>
+<dt>Nb</dt><dd><p>Degrees of freedom, equal to the number of averaged blocks.</p>
+</dd>
+<dt>freq</dt><dd><p>Frequency grid, shape <code class="docutils literal notranslate"><span class="pre">(N,)</span></code>.</p>
+</dd>
+<dt>N</dt><dd><p>Number of frequencies.</p>
+</dd>
+<dt>p</dt><dd><p>Number of channels.</p>
+</dd>
+</dl>
+</section>
+<section id="notes">
+<h3>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h3>
+<p>The multivariate Wishart matrix is
+<code class="docutils literal notranslate"><span class="pre">Y(f_k)</span> <span class="pre">=</span> <span class="pre">sum_b</span> <span class="pre">X_b(f_k)</span> <span class="pre">X_b(f_k)^H</span></code>. It is encoded through <code class="docutils literal notranslate"><span class="pre">U</span></code> such
+that <code class="docutils literal notranslate"><span class="pre">Y(f_k)</span> <span class="pre">=</span> <span class="pre">U(f_k)</span> <span class="pre">U(f_k)^H</span></code>. The <code class="docutils literal notranslate"><span class="pre">U</span></code> factors are the sufficient
+statistics used by the Wishart likelihood. When coarse-graining, the code
+forms <code class="docutils literal notranslate"><span class="pre">Y_bar</span></code> by summing <code class="docutils literal notranslate"><span class="pre">Y(f)</span></code> across bins and then re-factorizes to
+get coarse <code class="docutils literal notranslate"><span class="pre">U</span></code>.</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.data.WishartData.U">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">U</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#log_psplines.data.WishartData.U" title="Link to this definition">#</a></dt>
+<dd><p>Return the complex Wishart factors U[f].</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.data.WishartData.Y">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Y</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#log_psplines.data.WishartData.Y" title="Link to this definition">#</a></dt>
+<dd><p>Return the Wishart matrices Y[f] = U[f] U[f]^H.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.data.WishartData.apply_mask">
+<span class="sig-name descname"><span class="pre">apply_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.data.WishartData.apply_mask" title="Link to this definition">#</a></dt>
+<dd><p>Return a new WishartData retaining only bins where <code class="docutils literal notranslate"><span class="pre">mask</span></code> is True.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.data.WishartData.cut">
+<span class="sig-name descname"><span class="pre">cut</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fmin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.data.WishartData.cut" title="Link to this definition">#</a></dt>
+<dd><p>Return a new WishartData within frequency range [fmin, fmax].</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.data.WishartData.exclude_frequency_bands">
+<span class="sig-name descname"><span class="pre">exclude_frequency_bands</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bands</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.data.WishartData.exclude_frequency_bands" title="Link to this definition">#</a></dt>
+<dd><p>Return a new WishartData excluding bins in <code class="docutils literal notranslate"><span class="pre">bands</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.data.WishartData.filter_frequency_mask">
+<span class="sig-name descname"><span class="pre">filter_frequency_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.data.WishartData.filter_frequency_mask" title="Link to this definition">#</a></dt>
+<dd><p>Alias for <a class="reference internal" href="#log_psplines.data.WishartData.apply_mask" title="log_psplines.data.WishartData.apply_mask"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply_mask()</span></code></a> for compatibility with newer callers.</p>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.data.EmpiricalPSD">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.data.</span></span><span class="sig-name descname"><span class="pre">EmpiricalPSD</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">freq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coherence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.data.EmpiricalPSD" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
 </section>
 <section id="spline-models">
 <h2>Spline Models<a class="headerlink" href="#spline-models" title="Link to this heading">#</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.basis.SplineBasis">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.basis.</span></span><span class="sig-name descname"><span class="pre">SplineBasis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">degree</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty_order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty_normalization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'max'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'trace'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'max'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty_ridge</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knot_convention</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'breakpoints'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'clamped'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'breakpoints'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.basis.SplineBasis" title="Link to this definition">#</a></dt>
+<dd><p>Mathematical basis on a normalized frequency or time grid.</p>
+<p>basis: (G, K), penalty: (K, K). No fitted state or inference machinery.
+The penalty is an integrated derivative, not a finite difference penalty.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.basis.SplineBasis.create">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">create</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">degree</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty_order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'max'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'trace'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'max'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ridge</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-06</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.basis.SplineBasis" title="log_psplines.basis.splines.SplineBasis"><span class="pre">SplineBasis</span></a></span></span><a class="headerlink" href="#log_psplines.basis.SplineBasis.create" title="Link to this definition">#</a></dt>
+<dd><p>Construct from knots, or validate supplied linear operators.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.basis.SplineBasis.from_grid">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_grid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_interior_knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">degree</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty_order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalization</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'max'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'trace'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'trace'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ridge</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.basis.SplineBasis" title="log_psplines.basis.splines.SplineBasis"><span class="pre">SplineBasis</span></a></span></span><a class="headerlink" href="#log_psplines.basis.SplineBasis.from_grid" title="Link to this definition">#</a></dt>
+<dd><p>WDM convention: clamped knots, trace-normalized unridged penalty.</p>
+<p>Coordinates are used as supplied. For WDM parity use rescaled time
+and frequency/frequency.max(). This differs deliberately from the
+historical stationary <code class="docutils literal notranslate"><span class="pre">from_knots</span></code> convention.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.models.matrix.SpectralMatrix">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.models.matrix.</span></span><span class="sig-name descname"><span class="pre">SpectralMatrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.models.matrix.SpectralMatrix" title="Link to this definition">#</a></dt>
+<dd><p>Construct S = inv(T) D inv(T)^H with T[j,l] = -theta[j,l].</p>
+<p>log_variance (…, C) and theta (…, C*(C-1)//2) use row-major
+strict-lower-triangle ordering. Leading axes are untouched: frequency,
+posterior draws, or a future (time, frequency) grid. This algebra does
+not implement time-varying inference. Reconstruction uses NumPy complex128
+as before, independently of JAX’s inference precision configuration.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.models.matrix.SpectralMatrix.coherence">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">coherence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spectrum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#log_psplines.models.matrix.SpectralMatrix.coherence" title="Link to this definition">#</a></dt>
+<dd><p>Squared coherence (…, C, C), including unit diagonal.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.models.spectrum.LogPSpline">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.models.spectrum.</span></span><span class="sig-name descname"><span class="pre">LogPSpline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">frequency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.basis.SplineBasis" title="log_psplines.basis.splines.SplineBasis"><span class="pre">SplineBasis</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.basis.SplineBasis" title="log_psplines.basis.splines.SplineBasis"><span class="pre">SplineBasis</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.models.spectrum.LogPSpline" title="Link to this definition">#</a></dt>
+<dd><p>Scalar log spectrum on a frequency or time-frequency grid.</p>
+<p>time=None: weights (Kf,) -&gt; (F,).
+With time: weights (Kt, Kf) -&gt; (T, F), Bt &#64; weights &#64; Bf.T.
+Evaluation is independent of how the weights are fitted.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.models.spectrum.build_spline">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.models.spectrum.</span></span><span class="sig-name descname"><span class="pre">build_spline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">basis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Array</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Array</span></span></span><a class="headerlink" href="#log_psplines.models.spectrum.build_spline" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.inference.components.</span></span><span class="sig-name descname"><span class="pre">SpectralComponents</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">degree:</span> <span class="pre">int,</span> <span class="pre">diffMatrixOrder:</span> <span class="pre">int,</span> <span class="pre">N:</span> <span class="pre">int,</span> <span class="pre">p:</span> <span class="pre">int,</span> <span class="pre">diagonal_models:</span> <span class="pre">list[~log_psplines.models.spectrum.LogPSpline],</span> <span class="pre">offdiag_re_models:</span> <span class="pre">dict[tuple[int,</span> <span class="pre">int],</span> <span class="pre">~log_psplines.models.spectrum.LogPSpline]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">offdiag_im_models:</span> <span class="pre">dict[tuple[int,</span> <span class="pre">int],</span> <span class="pre">~log_psplines.models.spectrum.LogPSpline]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">component_scores:</span> <span class="pre">dict[~log_psplines.inference.components.MultivarComponentKey,</span> <span class="pre">~numpy.ndarray]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents" title="Link to this definition">#</a></dt>
+<dd><p>Prepared scalar spline components for stationary matrix inference.</p>
+<p>Uses Cholesky decomposition: S(f) = T^(-1) D T^(-H) where:
+- D is diagonal matrix with exp(log_delta_sq) elements (one P-spline per channel)
+- T is lower triangular with -theta terms (separate P-splines for real/imaginary parts)</p>
+<p>This enables flexible modeling of both auto-spectra and cross-spectra while
+ensuring positive definiteness of the estimated PSD matrix.</p>
+<section id="id1">
+<h3>Parameters<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt>degree<span class="classifier">int</span></dt><dd><p>Polynomial degree of B-spline basis functions</p>
+</dd>
+<dt>diffMatrixOrder<span class="classifier">int</span></dt><dd><p>Order of the integrated-derivative penalty</p>
+</dd>
+<dt>N<span class="classifier">int</span></dt><dd><p>Number of frequency bins</p>
+</dd>
+<dt>p<span class="classifier">int</span></dt><dd><p>Number of channels in multivariate data</p>
+</dd>
+<dt>diagonal_models<span class="classifier">List[LogPSpline]</span></dt><dd><p>P-spline models for diagonal PSD components (one per channel)</p>
+</dd>
+<dt>offdiag_re_models<span class="classifier">Dict[Tuple[int, int], LogPSpline], optional</span></dt><dd><p>P-spline models for real parts of off-diagonal terms keyed by
+<code class="docutils literal notranslate"><span class="pre">(j,</span> <span class="pre">l)</span></code> with <code class="docutils literal notranslate"><span class="pre">j</span> <span class="pre">&gt;</span> <span class="pre">l</span></code>.</p>
+</dd>
+<dt>offdiag_im_models<span class="classifier">Dict[Tuple[int, int], LogPSpline], optional</span></dt><dd><p>P-spline models for imaginary parts of off-diagonal terms keyed by
+<code class="docutils literal notranslate"><span class="pre">(j,</span> <span class="pre">l)</span></code> with <code class="docutils literal notranslate"><span class="pre">j</span> <span class="pre">&gt;</span> <span class="pre">l</span></code>.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents.get_all_bases_and_penalties">
+<span class="sig-name descname"><span class="pre">get_all_bases_and_penalties</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents.get_all_bases_and_penalties" title="Link to this definition">#</a></dt>
+<dd><p>Get basis and penalty matrices for all components (for NumPyro model).</p>
+<section id="id2">
+<h4>Returns<a class="headerlink" href="#id2" title="Link to this heading">#</a></h4>
+<dl class="simple">
+<dt>Tuple[List[jnp.ndarray], List[jnp.ndarray]]</dt><dd><p>Lists of basis and penalty matrices for all components</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents.get_theta_model">
+<span class="sig-name descname"><span class="pre">get_theta_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">part</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">j</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.models.spectrum.LogPSpline" title="log_psplines.models.spectrum.LogPSpline"><span class="pre">LogPSpline</span></a></span></span><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents.get_theta_model" title="Link to this definition">#</a></dt>
+<dd><p>Return the model for theta_{j,l} real/imag part.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents.n_basis">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_basis</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents.n_basis" title="Link to this definition">#</a></dt>
+<dd><p>Basis counts per Cholesky entry, or one int when all are equal.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents.n_knots">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_knots</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents.n_knots" title="Link to this definition">#</a></dt>
+<dd><p>Knot counts per Cholesky entry, or one int when all are equal.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents.n_theta">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_theta</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents.n_theta" title="Link to this definition">#</a></dt>
+<dd><p>Number of off-diagonal parameters.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents.theta_pairs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">theta_pairs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents.theta_pairs" title="Link to this definition">#</a></dt>
+<dd><p>Lower-triangular (j, l) index pairs with j &gt; l in model order.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents.total_components">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">total_components</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents.total_components" title="Link to this definition">#</a></dt>
+<dd><p>Total number of P-spline components.</p>
+</dd></dl>
+
+</section>
+</dd></dl>
+
 </section>
 <section id="knot-initialisation">
 <h2>Knot Initialisation<a class="headerlink" href="#knot-initialisation" title="Link to this heading">#</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.preprocessing.knots_locator.knot_locator.init_knots">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.knots_locator.knot_locator.</span></span><span class="sig-name descname"><span class="pre">init_knots</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freqs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">guide_power</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'density'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#log_psplines.preprocessing.knots_locator.knot_locator.init_knots" title="Link to this definition">#</a></dt>
+<dd><p>Core knot allocation implementation from raw frequency/power arrays.</p>
+</dd></dl>
+
 </section>
 <section id="coarse-graining">
 <h2>Coarse Graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.CoarseGrainConfig">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">CoarseGrainConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enabled</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig" title="Link to this definition">#</a></dt>
+<dd><p>Configuration for frequency-domain coarse graining with equal-sized bins.</p>
+<dl class="simple">
+<dt>Exactly one of (Nc, Nh) must be provided:</dt><dd><ul class="simple">
+<li><p>Nc: number of coarse bins</p></li>
+<li><p>Nh: number of fine-grid frequencies per coarse bin</p></li>
+</ul>
+</dd>
+</dl>
+<p>The retained frequency count Nl must be divisible by the chosen parameter so
+that bins are exactly equal-sized across the provided frequency grid.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">CoarseGrainSpec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f_coarse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J_start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J_mid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="Link to this definition">#</a></dt>
+<dd><p>Static description of equal-sized coarse bins on a retained frequency grid.</p>
+<p>The provided retained grid of length Nl is partitioned into Nc disjoint,
+consecutive bins J_h, each of constant size Nh (odd).</p>
+<dl class="simple">
+<dt>For each bin h:</dt><dd><ul class="simple">
+<li><p>J_h spans indices J_start[h] : J_start[h] + Nh on the retained grid</p></li>
+<li><p>J_mid[h] = J_start[h] + (Nh // 2)</p></li>
+<li><p>f_coarse[h] = freqs_retained[J_mid[h]]</p></li>
+</ul>
+</dd>
+</dl>
+<section id="id3">
+<h3>Notes<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
+<p>This spec describes consecutive, full-band bins on the retained grid:
+no gaps, no overlaps, and no per-bin sorting.</p>
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.compute_binning_structure">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">compute_binning_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">freqs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Float</span><span class="p"><span class="pre">[</span></span><span class="pre">np.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">nl</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><span class="pre">CoarseGrainSpec</span></a></span></span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.compute_binning_structure" title="Link to this definition">#</a></dt>
+<dd><p>Compute equal-sized, consecutive coarse bins for a frequency grid.</p>
+<dl class="simple">
+<dt>Provide exactly one of:</dt><dd><ul class="simple">
+<li><p>Nc : number of coarse bins</p></li>
+<li><p>Nh : number of fine-grid frequencies per bin</p></li>
+</ul>
+</dd>
+</dl>
+<p>The retained frequency count Nl must be divisible by the chosen parameter so
+that bins are exactly equal-sized across the provided grid. Representative
+frequencies are midpoint Fourier frequencies (central indices), not averages.
+For even Nh, the lower-middle Fourier frequency is used.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">apply_coarse_grain_multivar_fft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fft</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><span class="pre">CoarseGrainSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="Link to this definition">#</a></dt>
+<dd><p>Coarse-grain a WishartData using equal-sized bins.</p>
+<section id="id4">
+<h3>Notes<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Y(f_k) is the Wishart matrix built from block FFTs (second-order). We
+form Y_bar by summing Y(f_k) across bins and then re-factorize to obtain
+the coarse-grid U factors used by the likelihood.</p></li>
+</ul>
+</section>
+</dd></dl>
+
 </section>
 <section id="arviz-helpers">
 <h2>ArviZ Helpers<a class="headerlink" href="#arviz-helpers" title="Link to this heading">#</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.arviz_utils.open_inference_data">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">open_inference_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'h5netcdf'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataTree</span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.open_inference_data" title="Link to this definition">#</a></dt>
+<dd><p>Load inference data saved by <code class="docutils literal notranslate"><span class="pre">save_inference_data</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.arviz_utils.save_inference_data">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">save_inference_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'h5netcdf'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.save_inference_data" title="Link to this definition">#</a></dt>
+<dd><p>Save inference data using the canonical grouped NetCDF layout.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.arviz_utils.get_psd_dataset">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">get_psd_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'best'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'posterior'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'vi'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'prior'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'primary'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'best'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dataset</span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.get_psd_dataset" title="Link to this definition">#</a></dt>
+<dd><p>Return standardized PSD/CSD draws for the requested source.</p>
+<p>Supported <code class="docutils literal notranslate"><span class="pre">source</span></code> values:
+- <code class="docutils literal notranslate"><span class="pre">&quot;best&quot;</span></code>: first available among posterior, VI, then prior.
+- <code class="docutils literal notranslate"><span class="pre">&quot;posterior&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;primary&quot;</span></code>: MCMC posterior draws.
+- <code class="docutils literal notranslate"><span class="pre">&quot;vi&quot;</span></code>: VI posterior draws.
+- <code class="docutils literal notranslate"><span class="pre">&quot;prior&quot;</span></code>: prior-like draws if present.</p>
+<p>Returned datasets contain:
+- <code class="docutils literal notranslate"><span class="pre">spectral_density</span></code>: complex, dims <code class="docutils literal notranslate"><span class="pre">(chain,</span> <span class="pre">draw,</span> <span class="pre">channel,</span> <span class="pre">channel_aux,</span> <span class="pre">frequency)</span></code>
+- <code class="docutils literal notranslate"><span class="pre">coherence</span></code>: real, with the same dimensions.</p>
+<p>Time-frequency results insert <code class="docutils literal notranslate"><span class="pre">time</span></code> immediately before <code class="docutils literal notranslate"><span class="pre">frequency</span></code>.
+Source selection only skips absent groups; malformed data raises an error.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">get_multivar_posterior_psd_quantiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_keep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(5.0,</span> <span class="pre">50.0,</span> <span class="pre">95.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_coherence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles" title="Link to this definition">#</a></dt>
+<dd><p>Return multivariate PSD/coherence quantiles reconstructed from posterior draws.</p>
+<p>Returned arrays follow the plotting/diagnostics layout:
+- <code class="docutils literal notranslate"><span class="pre">percentile</span></code>: <code class="docutils literal notranslate"><span class="pre">(Q,)</span></code>
+- <code class="docutils literal notranslate"><span class="pre">freq</span></code>: <code class="docutils literal notranslate"><span class="pre">(F,)</span></code>
+- <code class="docutils literal notranslate"><span class="pre">spectral_density</span></code>: <code class="docutils literal notranslate"><span class="pre">(Q,</span> <span class="pre">F,</span> <span class="pre">p,</span> <span class="pre">p)</span></code> complex
+- <code class="docutils literal notranslate"><span class="pre">coherence</span></code>: <code class="docutils literal notranslate"><span class="pre">(Q,</span> <span class="pre">F,</span> <span class="pre">p,</span> <span class="pre">p)</span></code> or <code class="docutils literal notranslate"><span class="pre">None</span></code></p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.arviz_utils.get_multivar_vi_psd_quantiles">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">get_multivar_vi_psd_quantiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_keep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(5.0,</span> <span class="pre">50.0,</span> <span class="pre">95.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_coherence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.get_multivar_vi_psd_quantiles" title="Link to this definition">#</a></dt>
+<dd><p>Return multivariate VI PSD/coherence quantiles reconstructed lazily.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.arviz_utils.get_weights">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">get_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.get_weights" title="Link to this definition">#</a></dt>
+<dd><p>Extract weight samples from the canonical posterior group.</p>
+<section id="id5">
+<h3>Parameters<a class="headerlink" href="#id5" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt>idata<span class="classifier">xr.DataTree</span></dt><dd><p>DataTree containing posterior weight samples</p>
+</dd>
+<dt>thin<span class="classifier">int</span></dt><dd><p>Thinning factor</p>
+</dd>
+</dl>
+</section>
+<section id="id6">
+<h3>Returns<a class="headerlink" href="#id6" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt>jnp.ndarray</dt><dd><p>Weight samples: (samples, Kf) or (samples, Kt, Kf).</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
 </section>
 </section>
 
@@ -526,12 +1330,131 @@ stable user surface.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#high-level-pipeline">High-Level Pipeline</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-containers">Data Containers</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spline-models">Spline Models</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-initialisation">Knot Initialisation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arviz-helpers">ArviZ Helpers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#high-level-pipeline">High-Level Pipeline</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.pipeline.fit"><code class="docutils literal notranslate"><span class="pre">fit()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult"><code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.psd"><code class="docutils literal notranslate"><span class="pre">PSDResult.psd</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.spectral_density"><code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.to_netcdf"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_netcdf()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.mcmc.run_mcmc"><code class="docutils literal notranslate"><span class="pre">run_mcmc()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.pipeline.make_pipeline"><code class="docutils literal notranslate"><span class="pre">make_pipeline()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig"><code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.Nb"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.Nb</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.alpha_delta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.alpha_delta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.alpha_phi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.alpha_phi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.alpha_phi_theta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.alpha_phi_theta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.analytical_psd"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.analytical_psd</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.auto_coarse_vi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.auto_coarse_vi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.auto_coarse_vi_min_full_nfreq"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.auto_coarse_vi_min_full_nfreq</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.auto_coarse_vi_target_nfreq"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.auto_coarse_vi_target_nfreq</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.beta_delta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.beta_delta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.beta_phi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.beta_phi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.beta_phi_theta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.beta_phi_theta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.chain_method"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.chain_method</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.coarse_grain_config"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.coarse_grain_config</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.coarse_grain_config_vi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.coarse_grain_config_vi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.compute_lnz"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.compute_lnz</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.degree"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.degree</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.dense_mass"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.dense_mass</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.diffMatrixOrder"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.diffMatrixOrder</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.eta"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.eta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.exclude_freq_bands"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.exclude_freq_bands</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.extra_kwargs"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.extra_kwargs</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.fmax"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.fmax</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.fmin"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.fmin</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.init_from_vi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.init_from_vi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.knot_kwargs"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.knot_kwargs</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.max_tree_depth"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.max_tree_depth</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.max_tree_depth_by_channel"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.max_tree_depth_by_channel</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.n_knots"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.n_knots</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.n_samples"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.n_samples</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.n_warmup"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.n_warmup</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.num_chains"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.num_chains</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.only_vi"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.only_vi</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.outdir"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.outdir</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.rng_key"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.rng_key</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.target_accept_prob"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.target_accept_prob</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.target_accept_prob_by_channel"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.target_accept_prob_by_channel</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.true_psd"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.true_psd</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.use_coarse_vi_for_init"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.use_coarse_vi_for_init</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.verbose"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.verbose</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_coarse_only"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_coarse_only</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_guide"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_guide</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_lr"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_lr</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_posterior_draws"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_posterior_draws</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_progress_bar"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_progress_bar</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_psd_max_draws"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_psd_max_draws</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.vi_steps"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.vi_steps</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.welch_noverlap"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.welch_noverlap</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.welch_nperseg"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.welch_nperseg</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.welch_window"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.welch_window</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.wishart_detrend"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.wishart_detrend</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.wishart_floor_fraction"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.wishart_floor_fraction</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PipelineConfig.wishart_window"><code class="docutils literal notranslate"><span class="pre">PipelineConfig.wishart_window</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-containers">Data Containers</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.TimeSeries"><code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData"><code class="docutils literal notranslate"><span class="pre">WishartData</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.U"><code class="docutils literal notranslate"><span class="pre">WishartData.U</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.Y"><code class="docutils literal notranslate"><span class="pre">WishartData.Y</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.apply_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.apply_mask()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.cut"><code class="docutils literal notranslate"><span class="pre">WishartData.cut()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.exclude_frequency_bands"><code class="docutils literal notranslate"><span class="pre">WishartData.exclude_frequency_bands()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.filter_frequency_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.filter_frequency_mask()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.EmpiricalPSD"><code class="docutils literal notranslate"><span class="pre">EmpiricalPSD</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spline-models">Spline Models</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.basis.SplineBasis"><code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.basis.SplineBasis.create"><code class="docutils literal notranslate"><span class="pre">SplineBasis.create()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.basis.SplineBasis.from_grid"><code class="docutils literal notranslate"><span class="pre">SplineBasis.from_grid()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.matrix.SpectralMatrix"><code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.matrix.SpectralMatrix.coherence"><code class="docutils literal notranslate"><span class="pre">SpectralMatrix.coherence()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.spectrum.LogPSpline"><code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.spectrum.build_spline"><code class="docutils literal notranslate"><span class="pre">build_spline()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents"><code class="docutils literal notranslate"><span class="pre">SpectralComponents</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.get_all_bases_and_penalties"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.get_all_bases_and_penalties()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.get_theta_model"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.get_theta_model()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.n_basis"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.n_basis</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.n_knots"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.n_knots</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.n_theta"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.n_theta</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.theta_pairs"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.theta_pairs</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.inference.components.SpectralComponents.total_components"><code class="docutils literal notranslate"><span class="pre">SpectralComponents.total_components</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-initialisation">Knot Initialisation</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.knots_locator.knot_locator.init_knots"><code class="docutils literal notranslate"><span class="pre">init_knots()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig"><code class="docutils literal notranslate"><span class="pre">CoarseGrainConfig</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.compute_binning_structure"><code class="docutils literal notranslate"><span class="pre">compute_binning_structure()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="docutils literal notranslate"><span class="pre">apply_coarse_grain_multivar_fft()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arviz-helpers">ArviZ Helpers</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.open_inference_data"><code class="docutils literal notranslate"><span class="pre">open_inference_data()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.save_inference_data"><code class="docutils literal notranslate"><span class="pre">save_inference_data()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_psd_dataset"><code class="docutils literal notranslate"><span class="pre">get_psd_dataset()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">get_multivar_posterior_psd_quantiles()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_multivar_vi_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">get_multivar_vi_psd_quantiles()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_weights"><code class="docutils literal notranslate"><span class="pre">get_weights()</span></code></a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
 

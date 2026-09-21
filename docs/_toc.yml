@@ -4,6 +4,7 @@ chapters:
   - file: quickstart.ipynb
   - file: configuration.rst
   - file: data_preprocessing.rst
+  - file: moving-periodogram-vs-wdm.rst
   - file: wdm-transfer.md
   - file: outputs.rst
   - file: technical_notes.rst

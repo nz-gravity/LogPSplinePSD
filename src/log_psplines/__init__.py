@@ -13,7 +13,8 @@ from .data.spectral import PowerSpectrum
 from .config import PipelineConfig, PowerSplineConfig
 from .pipeline import fit, make_pipeline
 from .results import PSDResult
+from .preprocessing.moving_periodogram import moving_periodogram
 
 __all__ = ["fit", "make_pipeline", "PipelineConfig", "PSDResult", "SplineBasis",
            "LogPSpline", "SpectralMatrix", "TimeSeries", "WishartData",
-           "PowerSplineConfig", "PowerSpectrum"]
+           "PowerSplineConfig", "PowerSpectrum", "moving_periodogram"]

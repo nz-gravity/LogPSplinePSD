@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Reusing the WDM implementation &#8212; LogPSplinePSD</title>
+    <title>Time-varying PSD estimation (WDM) &#8212; LogPSplinePSD</title>
   
   
   
@@ -60,12 +60,14 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'wdm-transfer';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Outputs and Diagnostics" href="outputs.html" />
-    <link rel="prev" title="Data and Preprocessing" href="data_preprocessing.html" />
+    <link rel="prev" title="Moving periodogram versus WDM" href="moving-periodogram-vs-wdm.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -215,7 +217,8 @@
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Reusing the WDM implementation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Time-varying PSD estimation (WDM)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
@@ -408,7 +411,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Reusing the WDM implementation</h1>
+    <h1>Time-varying PSD estimation (WDM)</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -418,8 +421,9 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-model">The model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#demo-a-drifting-spectral-peak">Demo: a drifting spectral peak</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-moved">What moved</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#small-example">Small example</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scientific-conventions">Scientific conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-and-scope">Validation and scope</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recorded-comparison">Recorded comparison</a></li>
@@ -437,12 +441,102 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="reusing-the-wdm-implementation">
-<h1>Reusing the WDM implementation<a class="headerlink" href="#reusing-the-wdm-implementation" title="Link to this heading">#</a></h1>
-<p>Scalar time-frequency fitting now runs through the existing <code class="docutils literal notranslate"><span class="pre">fit()</span></code> entry
-point. It uses <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code>, with the same <code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code> type for time and
-frequency, and returns <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>. No separate TV model hierarchy or second
-pipeline was added. The stationary Wishart/VI/blocked-NUTS path is unchanged.</p>
+  <section class="tex2jax_ignore mathjax_ignore" id="time-varying-psd-estimation-wdm">
+<h1>Time-varying PSD estimation (WDM)<a class="headerlink" href="#time-varying-psd-estimation-wdm" title="Link to this heading">#</a></h1>
+<p>Most of this package estimates a single, stationary PSD from a whole time
+series. Real signals are often not stationary: the spectrum itself drifts
+over time (a chirp, a changing noise floor, a resonance that turns on and
+off). This page shows how <code class="docutils literal notranslate"><span class="pre">log_psplines</span></code> estimates a <strong>time-varying PSD</strong>
+<span class="math notranslate nohighlight">\(S(t, f)\)</span> from a wavelet-domain (WDM) time-frequency transform, using the
+same log-P-spline machinery as the stationary case, just with a
+two-dimensional spline surface instead of a one-dimensional curve.</p>
+<p>Scalar time-frequency fitting runs through the existing <code class="docutils literal notranslate"><span class="pre">fit()</span></code> entry point.
+It uses <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code>, with the same <code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code> type for time and
+frequency, and returns a <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>. No separate TV model hierarchy or
+second pipeline was added; the stationary Wishart/VI/blocked-NUTS path is
+unchanged.</p>
+<section id="the-model">
+<h2>The model<a class="headerlink" href="#the-model" title="Link to this heading">#</a></h2>
+<p>The WDM transform turns a real time series into a grid of coefficients
+<span class="math notranslate nohighlight">\(w_{t,f}\)</span>, one per retained time bin <span class="math notranslate nohighlight">\(t\)</span> and frequency bin <span class="math notranslate nohighlight">\(f\)</span>. Each
+coefficient behaves like a zero-mean Gaussian whose variance is the local
+PSD, so <span class="math notranslate nohighlight">\(w_{t,f}^2\)</span> is a noisy time-frequency power estimate — the
+time-varying analogue of an ordinary periodogram ordinate.</p>
+<p><code class="docutils literal notranslate"><span class="pre">log_psplines</span></code> models the log-PSD surface as a tensor-product B-spline:</p>
+<div class="math notranslate nohighlight">
+\[
+\log S(t, f) = \mathbf{B}_t(t)\,\mathbf{W}\,\mathbf{B}_f(f)^\mathsf{T},
+\]</div>
+<p>where <span class="math notranslate nohighlight">\(\mathbf{B}_t\)</span> and <span class="math notranslate nohighlight">\(\mathbf{B}_f\)</span> are B-spline bases on the (rescaled)
+time and frequency axes and <span class="math notranslate nohighlight">\(\mathbf{W} \in \mathbb{R}^{K_t \times K_f}\)</span> is a
+matrix of spline weights. This is exactly <code class="docutils literal notranslate"><span class="pre">LogPSpline.__call__</span></code> with a time
+basis supplied; the stationary 1-D case is the same call with <code class="docutils literal notranslate"><span class="pre">time=None</span></code>.</p>
+<p>Smoothness is controlled by a Gaussian prior on <span class="math notranslate nohighlight">\(\mathbf{W}\)</span> with precision</p>
+<div class="math notranslate nohighlight">
+\[
+Q = \phi_t \,(\mathbf{I}_{K_f} \otimes \mathbf{Q}_t)
+  + \phi_f \,(\mathbf{Q}_f \otimes \mathbf{I}_{K_t}),
+\]</div>
+<p>where <span class="math notranslate nohighlight">\(\mathbf{Q}_t\)</span> and <span class="math notranslate nohighlight">\(\mathbf{Q}_f\)</span> are the usual integrated-squared-
+second-derivative roughness penalties for the time and frequency bases, and
+<span class="math notranslate nohighlight">\(\phi_t, \phi_f\)</span> are smoothing precisions with their own Gamma priors,
+sampled jointly with <span class="math notranslate nohighlight">\(\mathbf{W}\)</span> under NUTS. Large <span class="math notranslate nohighlight">\(\phi_t\)</span> penalizes
+wiggliness across time; large <span class="math notranslate nohighlight">\(\phi_f\)</span> penalizes wiggliness across
+frequency. <span class="math notranslate nohighlight">\(Q\)</span> is a Kronecker sum, so it is block-structured: each frequency
+column of <span class="math notranslate nohighlight">\(\mathbf{W}\)</span> is penalized along time by <span class="math notranslate nohighlight">\(\mathbf{Q}_t\)</span>, and each
+time row is independently penalized along frequency by <span class="math notranslate nohighlight">\(\mathbf{Q}_f\)</span>.</p>
+<a class="reference internal image-reference" href="_static/wdm-demo-precision.png"><img alt="Heatmap of the tensor-product roughness precision matrix Q" class="align-center" src="_static/wdm-demo-precision.png" style="width: 60%;" />
+</a>
+<p>The banded, repeating block pattern is the Kronecker sum: the fine diagonal
+bands come from <span class="math notranslate nohighlight">\(\mathbf{Q}_t\)</span> (smoothing along time within each frequency
+block) and the coarser off-diagonal bands come from <span class="math notranslate nohighlight">\(\mathbf{Q}_f\)</span>
+(smoothing along frequency, coupling equivalent time indices across blocks).</p>
+</section>
+<section id="demo-a-drifting-spectral-peak">
+<h2>Demo: a drifting spectral peak<a class="headerlink" href="#demo-a-drifting-spectral-peak" title="Link to this heading">#</a></h2>
+<p>The example below simulates a non-stationary MA(1) process whose moving-
+average coefficient oscillates in time (the LS2 test case from Tang et al.),
+so its spectral peak drifts back and forth. It computes the WDM periodogram,
+fits it with <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code> + <code class="docutils literal notranslate"><span class="pre">fit()</span></code>, and reads off the posterior median
+log-PSD surface.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TimeSeries</span><span class="p">,</span> <span class="n">SplineBasis</span><span class="p">,</span> <span class="n">LogPSpline</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">,</span> <span class="n">fit</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.preprocessing.wdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">wdm_periodogram</span>
+
+<span class="c1"># A non-stationary MA(1): the coefficient oscillates, so the spectral</span>
+<span class="c1"># peak drifts over time.</span>
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">n</span> <span class="o">=</span> <span class="mi">2048</span>
+<span class="n">noise</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="n">n</span> <span class="o">+</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">time</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">/</span> <span class="n">n</span>
+<span class="n">coefficient</span> <span class="o">=</span> <span class="mf">1.1</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mf">1.5</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mi">4</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">time</span><span class="p">))</span>
+<span class="n">values</span> <span class="o">=</span> <span class="n">noise</span><span class="p">[</span><span class="mi">1</span> <span class="p">:</span> <span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">coefficient</span> <span class="o">*</span> <span class="n">noise</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span>
+
+<span class="n">series</span> <span class="o">=</span> <span class="n">TimeSeries</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">values</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.1</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">wdm_periodogram</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">nt</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">LogPSpline</span><span class="p">(</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">frequency</span> <span class="o">/</span> <span class="n">data</span><span class="o">.</span><span class="n">frequency</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mi">4</span><span class="p">),</span>
+    <span class="n">time</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">(),</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+<span class="c1"># result.psd: (chain, draw, time, frequency)</span>
+<span class="n">result</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"output"</span><span class="p">)</span>
+<span class="n">result</span><span class="o">.</span><span class="n">to_netcdf</span><span class="p">(</span><span class="s2">"fit.nc"</span><span class="p">)</span>
+</pre></div>
+</div>
+<a class="reference internal image-reference" href="_static/wdm-demo-fit.png"><img alt="Simulated time-varying signal, its WDM periodogram, and the posterior median log-PSD surface" class="align-center" src="_static/wdm-demo-fit.png" style="width: 100%;" />
+</a>
+<p>From top to bottom: the simulated series, the raw WDM periodogram (one
+coefficient per time-frequency cell), and the posterior median of the fitted
+log-PSD surface. The spline surface smooths out the periodogram’s cell-to-
+cell noise while still tracking the peak’s drift across time — the same
+bias/variance trade-off that log-P-splines make in the stationary case,
+now in two dimensions.</p>
+<p>The full script that generates both figures is
+<code class="docutils literal notranslate"><span class="pre">docs/studies/wdm_demo.py</span></code>.</p>
+</section>
 <section id="what-moved">
 <h2>What moved<a class="headerlink" href="#what-moved" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -480,33 +574,15 @@ pipeline was added. The stationary Wishart/VI/blocked-NUTS path is unchanged.</p
 is distinct from the historical stationary configuration because the two
 priors have different normalization and hyperparameters. The caller supplies
 the scalar model explicitly, so knot selection stays outside inference.</p>
-</section>
-<section id="small-example">
-<h2>Small example<a class="headerlink" href="#small-example" title="Link to this heading">#</a></h2>
 <p>Install the optional transform with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">'.[wdm]'</span></code>. Already prepared
-powers/counts require no WDM dependency.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">TimeSeries</span><span class="p">,</span> <span class="n">SplineBasis</span><span class="p">,</span> <span class="n">LogPSpline</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">,</span> <span class="n">fit</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.preprocessing.wdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">wdm_periodogram</span>
-
-<span class="n">series</span> <span class="o">=</span> <span class="n">TimeSeries</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">))</span> <span class="o">*</span> <span class="n">dt</span><span class="p">)</span>
-<span class="n">data</span> <span class="o">=</span> <span class="n">wdm_periodogram</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">nt</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">LogPSpline</span><span class="p">(</span>
-    <span class="n">frequency</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">frequency</span> <span class="o">/</span> <span class="n">data</span><span class="o">.</span><span class="n">frequency</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mi">4</span><span class="p">),</span>
-    <span class="n">time</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-<span class="p">)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">(),</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
-<span class="c1"># result.psd: (chain, draw, time, frequency)</span>
-<span class="n">result</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"output"</span><span class="p">)</span>
-<span class="n">result</span><span class="o">.</span><span class="n">to_netcdf</span><span class="p">(</span><span class="s2">"fit.nc"</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Time is rescaled by full series duration. Output values retain WDM
-<strong>coefficient-variance units</strong>; they are not silently converted to PSD/Hz.
-Full surface draws are reconstructed on request. Stored results contain
-compact coefficients and both basis matrices, not a surface per MCMC step.</p>
+powers/counts require no WDM dependency. Time is rescaled by full series
+duration. Output values retain WDM <strong>coefficient-variance units</strong>; they are
+not silently converted to PSD/Hz. Full surface draws are reconstructed on
+request. Stored results contain compact coefficients and both basis
+matrices, not a surface per MCMC step.</p>
+<hr class="docutils" />
+<p>The remaining sections are implementation and validation notes for
+contributors; they are not required to use the model above.</p>
 </section>
 <section id="scientific-conventions">
 <h2>Scientific conventions<a class="headerlink" href="#scientific-conventions" title="Link to this heading">#</a></h2>
@@ -548,7 +624,16 @@ NetCDF round trips and plot generation are also checked. Run:</p>
 <p>The second command writes comparisons under <code class="docutils literal notranslate"><span class="pre">tests/test_output/ls2_transfer</span></code>.
 These are <strong>short numerical integration checks</strong>, not convergence, coverage or
 LS2 recovery claims. A larger matched campaign remains a separate validation.</p>
-<p>Not yet transferred: moving-periodogram/STFT adapters, adaptive knots and
+<p>The moving-periodogram adapter is available from
+<code class="docutils literal notranslate"><span class="pre">log_psplines.preprocessing.moving_periodogram</span></code>.  It follows the Tang
+zig-zag frequencies and no-padding/whole-block boundary convention used in
+the companion implementation.  <code class="docutils literal notranslate"><span class="pre">tang_moving_periodogram</span></code> returns the exact
+scattered complex ordinates, while <code class="docutils literal notranslate"><span class="pre">moving_periodogram</span></code> pools them into the
+rectangular <code class="docutils literal notranslate"><span class="pre">PowerSpectrum</span></code> contract used by <code class="docutils literal notranslate"><span class="pre">fit</span></code>.  The rectangular
+adapter represents each retained time block by its pooled centre; use the raw
+function when per-ordinate scattered coordinates are required.</p>
+<p>Not yet transferred: moving-periodogram scattered-coordinate inference,
+STFT adapters, adaptive knots and
 binning, fixed-reference residual models, alternate exploratory hyperpriors,
 TV VI, large-grid chunked summaries, or multivariate TV inference. Scalar
 surface outputs already compose with <code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code>; its trailing matrix
@@ -623,12 +708,12 @@ units. Its results are descriptive; this is not a calibrated coverage study.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="data_preprocessing.html"
+       href="moving-periodogram-vs-wdm.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Data and Preprocessing</p>
+        <p class="prev-next-title">Moving periodogram versus WDM</p>
       </div>
     </a>
     <a class="right-next"
@@ -658,8 +743,9 @@ units. Its results are descriptive; this is not a calibrated coverage study.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-model">The model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#demo-a-drifting-spectral-peak">Demo: a drifting spectral peak</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-moved">What moved</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#small-example">Small example</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scientific-conventions">Scientific conventions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-and-scope">Validation and scope</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recorded-comparison">Recorded comparison</a></li>

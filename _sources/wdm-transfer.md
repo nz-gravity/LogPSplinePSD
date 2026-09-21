@@ -1,9 +1,116 @@
-# Reusing the WDM implementation
+# Time-varying PSD estimation (WDM)
 
-Scalar time-frequency fitting now runs through the existing `fit()` entry
-point. It uses `LogPSpline`, with the same `SplineBasis` type for time and
-frequency, and returns `PSDResult`. No separate TV model hierarchy or second
-pipeline was added. The stationary Wishart/VI/blocked-NUTS path is unchanged.
+Most of this package estimates a single, stationary PSD from a whole time
+series. Real signals are often not stationary: the spectrum itself drifts
+over time (a chirp, a changing noise floor, a resonance that turns on and
+off). This page shows how `log_psplines` estimates a **time-varying PSD**
+$S(t, f)$ from a wavelet-domain (WDM) time-frequency transform, using the
+same log-P-spline machinery as the stationary case, just with a
+two-dimensional spline surface instead of a one-dimensional curve.
+
+Scalar time-frequency fitting runs through the existing `fit()` entry point.
+It uses `LogPSpline`, with the same `SplineBasis` type for time and
+frequency, and returns a `PSDResult`. No separate TV model hierarchy or
+second pipeline was added; the stationary Wishart/VI/blocked-NUTS path is
+unchanged.
+
+## The model
+
+The WDM transform turns a real time series into a grid of coefficients
+$w_{t,f}$, one per retained time bin $t$ and frequency bin $f$. Each
+coefficient behaves like a zero-mean Gaussian whose variance is the local
+PSD, so $w_{t,f}^2$ is a noisy time-frequency power estimate — the
+time-varying analogue of an ordinary periodogram ordinate.
+
+`log_psplines` models the log-PSD surface as a tensor-product B-spline:
+
+$$
+\log S(t, f) = \mathbf{B}_t(t)\,\mathbf{W}\,\mathbf{B}_f(f)^\mathsf{T},
+$$
+
+where $\mathbf{B}_t$ and $\mathbf{B}_f$ are B-spline bases on the (rescaled)
+time and frequency axes and $\mathbf{W} \in \mathbb{R}^{K_t \times K_f}$ is a
+matrix of spline weights. This is exactly `LogPSpline.__call__` with a time
+basis supplied; the stationary 1-D case is the same call with `time=None`.
+
+Smoothness is controlled by a Gaussian prior on $\mathbf{W}$ with precision
+
+$$
+Q = \phi_t \,(\mathbf{I}_{K_f} \otimes \mathbf{Q}_t)
+  + \phi_f \,(\mathbf{Q}_f \otimes \mathbf{I}_{K_t}),
+$$
+
+where $\mathbf{Q}_t$ and $\mathbf{Q}_f$ are the usual integrated-squared-
+second-derivative roughness penalties for the time and frequency bases, and
+$\phi_t, \phi_f$ are smoothing precisions with their own Gamma priors,
+sampled jointly with $\mathbf{W}$ under NUTS. Large $\phi_t$ penalizes
+wiggliness across time; large $\phi_f$ penalizes wiggliness across
+frequency. $Q$ is a Kronecker sum, so it is block-structured: each frequency
+column of $\mathbf{W}$ is penalized along time by $\mathbf{Q}_t$, and each
+time row is independently penalized along frequency by $\mathbf{Q}_f$.
+
+```{image} _static/wdm-demo-precision.png
+:alt: Heatmap of the tensor-product roughness precision matrix Q
+:width: 60%
+:align: center
+```
+
+The banded, repeating block pattern is the Kronecker sum: the fine diagonal
+bands come from $\mathbf{Q}_t$ (smoothing along time within each frequency
+block) and the coarser off-diagonal bands come from $\mathbf{Q}_f$
+(smoothing along frequency, coupling equivalent time indices across blocks).
+
+## Demo: a drifting spectral peak
+
+The example below simulates a non-stationary MA(1) process whose moving-
+average coefficient oscillates in time (the LS2 test case from Tang et al.),
+so its spectral peak drifts back and forth. It computes the WDM periodogram,
+fits it with `LogPSpline` + `fit()`, and reads off the posterior median
+log-PSD surface.
+
+```python
+import numpy as np
+from log_psplines import (
+    TimeSeries, SplineBasis, LogPSpline, PowerSplineConfig, fit,
+)
+from log_psplines.preprocessing.wdm import wdm_periodogram
+
+# A non-stationary MA(1): the coefficient oscillates, so the spectral
+# peak drifts over time.
+rng = np.random.default_rng(4)
+n = 2048
+noise = rng.normal(size=n + 2)
+time = np.arange(n) / n
+coefficient = 1.1 * np.cos(1.5 - np.cos(4 * np.pi * time))
+values = noise[1 : n + 1] + coefficient * noise[:n]
+
+series = TimeSeries(data=values, t=np.arange(n) * 0.1)
+data = wdm_periodogram(series, nt=32)
+model = LogPSpline(
+    frequency=SplineBasis.from_grid(data.frequency / data.frequency[-1], 4),
+    time=SplineBasis.from_grid(data.time, 4),
+)
+result = fit(data, PowerSplineConfig(), model=model)
+# result.psd: (chain, draw, time, frequency)
+result.save("output")
+result.to_netcdf("fit.nc")
+```
+
+```{image} _static/wdm-demo-fit.png
+:alt: Simulated time-varying signal, its WDM periodogram, and the posterior median log-PSD surface
+:width: 100%
+:align: center
+```
+
+From top to bottom: the simulated series, the raw WDM periodogram (one
+coefficient per time-frequency cell), and the posterior median of the fitted
+log-PSD surface. The spline surface smooths out the periodogram's cell-to-
+cell noise while still tracking the peak's drift across time — the same
+bias/variance trade-off that log-P-splines make in the stationary case,
+now in two dimensions.
+
+The full script that generates both figures is
+`docs/studies/wdm_demo.py`.
 
 ## What moved
 
@@ -22,34 +129,17 @@ is distinct from the historical stationary configuration because the two
 priors have different normalization and hyperparameters. The caller supplies
 the scalar model explicitly, so knot selection stays outside inference.
 
-## Small example
-
 Install the optional transform with `pip install -e '.[wdm]'`. Already prepared
-powers/counts require no WDM dependency.
+powers/counts require no WDM dependency. Time is rescaled by full series
+duration. Output values retain WDM **coefficient-variance units**; they are
+not silently converted to PSD/Hz. Full surface draws are reconstructed on
+request. Stored results contain compact coefficients and both basis
+matrices, not a surface per MCMC step.
 
-```python
-import numpy as np
-from log_psplines import (
-    TimeSeries, SplineBasis, LogPSpline, PowerSplineConfig, fit,
-)
-from log_psplines.preprocessing.wdm import wdm_periodogram
+---
 
-series = TimeSeries(data=x, t=np.arange(len(x)) * dt)
-data = wdm_periodogram(series, nt=32)
-model = LogPSpline(
-    frequency=SplineBasis.from_grid(data.frequency / data.frequency[-1], 4),
-    time=SplineBasis.from_grid(data.time, 4),
-)
-result = fit(data, PowerSplineConfig(), model=model)
-# result.psd: (chain, draw, time, frequency)
-result.save("output")
-result.to_netcdf("fit.nc")
-```
-
-Time is rescaled by full series duration. Output values retain WDM
-**coefficient-variance units**; they are not silently converted to PSD/Hz.
-Full surface draws are reconstructed on request. Stored results contain
-compact coefficients and both basis matrices, not a surface per MCMC step.
+The remaining sections are implementation and validation notes for
+contributors; they are not required to use the model above.
 
 ## Scientific conventions
 
@@ -93,7 +183,17 @@ The second command writes comparisons under `tests/test_output/ls2_transfer`.
 These are **short numerical integration checks**, not convergence, coverage or
 LS2 recovery claims. A larger matched campaign remains a separate validation.
 
-Not yet transferred: moving-periodogram/STFT adapters, adaptive knots and
+The moving-periodogram adapter is available from
+``log_psplines.preprocessing.moving_periodogram``.  It follows the Tang
+zig-zag frequencies and no-padding/whole-block boundary convention used in
+the companion implementation.  ``tang_moving_periodogram`` returns the exact
+scattered complex ordinates, while ``moving_periodogram`` pools them into the
+rectangular ``PowerSpectrum`` contract used by ``fit``.  The rectangular
+adapter represents each retained time block by its pooled centre; use the raw
+function when per-ordinate scattered coordinates are required.
+
+Not yet transferred: moving-periodogram scattered-coordinate inference,
+STFT adapters, adaptive knots and
 binning, fixed-reference residual models, alternate exploratory hyperpriors,
 TV VI, large-grid chunked summaries, or multivariate TV inference. Scalar
 surface outputs already compose with `SpectralMatrix`; its trailing matrix

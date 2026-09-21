@@ -215,7 +215,8 @@
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Quick Start</a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="wdm-transfer.html">Reusing the WDM implementation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wdm-transfer.html">Time-varying PSD estimation (WDM)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
@@ -515,14 +516,14 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.003, max_var_ratio=1.030, covariance_rel_drift=0.024).</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.029, max_var_ratio=1.038, covariance_rel_drift=0.032).</span>
 </pre></div>
 </div>
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7f2e777248f0&gt;,
- &lt;matplotlib.lines.Line2D at 0x7f2e77724920&gt;]
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7f0386880230&gt;,
+ &lt;matplotlib.lines.Line2D at 0x7f0386880260&gt;]
 </pre></div>
 </div>
-<img alt="_images/2b345925b6f52a57a6c549b3077eb2635345948471d11fcbb1b64f1cc68fea4a.png" src="_images/2b345925b6f52a57a6c549b3077eb2635345948471d11fcbb1b64f1cc68fea4a.png" />
+<img alt="_images/0ea9a751fbf1e840787ac11935d41c08f51442b382b98f4237472ecc297e587d.png" src="_images/0ea9a751fbf1e840787ac11935d41c08f51442b382b98f4237472ecc297e587d.png" />
 </div>
 </div>
 </section>
@@ -557,13 +558,13 @@
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Wishart averaging (blocks=8): n=16384 -&gt; Lb=2048, N=1024, p=2</span>
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.38e+00</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.37e+00</span>
 </pre></div>
 </div>
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Inferred sampler type: multivar_blocked_nuts</span>
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:14| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: SpectralComponents(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:13| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: SpectralComponents(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
 </pre></div>
 </div>
 <div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/home/runner/work/LogPSplinePSD/LogPSplinePSD/src/log_psplines/inference/nuts.py:44: UserWarning: There are not enough devices to run parallel chains: expected 2 but got 1. Chains will be drawn sequentially. If you are running MCMC in CPU, consider using `numpyro.set_host_device_count(2)` at the beginning of your program. You can double-check how many devices are available in your system using `jax.local_device_count()`.
@@ -596,7 +597,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<img alt="_images/75a11d34d7c33f9d96089ecc3fc15f2891526d7653442842327603bdc221b3dc.png" src="_images/75a11d34d7c33f9d96089ecc3fc15f2891526d7653442842327603bdc221b3dc.png" />
+<img alt="_images/4d18cd23fdb7f83fa40d4e158028fc7007cbada75fa6e5d337c03b94949eb40b.png" src="_images/4d18cd23fdb7f83fa40d4e158028fc7007cbada75fa6e5d337c03b94949eb40b.png" />
 </div>
 </div>
 <p><img alt="" src="_images/var3_psd_matrix.png" /></p>

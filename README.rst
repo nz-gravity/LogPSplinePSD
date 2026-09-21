@@ -31,26 +31,44 @@ For package use:
 
    python -m pip install LogPSplinePSD
 
-Quick Example
--------------
+Five-Minute Example
+-------------------
 
 .. code-block:: python
 
-   from log_psplines.example_datasets.varma_data import VARMAData
-   from log_psplines import fit, PipelineConfig
+   import numpy as np
 
-   data = VARMAData(n_samples=256, fs=64.0, seed=7)
+   from log_psplines import PipelineConfig, TimeSeries, fit
+
+   rng = np.random.default_rng(7)
+   fs = 64.0
+   t = np.arange(512) / fs
+   data = TimeSeries(
+      data=np.sin(2 * np.pi * 4 * t) + 0.5 * rng.normal(size=t.size),
+      t=t,
+   )
 
    result = fit(
-       data.ts,
+      data,
        PipelineConfig(
-           n_knots=6,
-           n_warmup=50,
-           n_samples=100,
+         n_knots=8,
            vi_steps=200,
-           outdir="runs/varma_quickstart",
+         n_warmup=100,
+         n_samples=200,
+         rng_key=7,
        ),
    )
+
+   frequency = result.frequency
+   psd_draws = result.psd
+
+Next Steps
+----------
+
+- Read the `five-minute guide <docs/five-minute.rst>`_.
+- Learn the `PSDResult interface <docs/results.rst>`_.
+- Follow the `multivariate example <docs/multivariate.rst>`_.
+- Explore `time-varying PSDs <docs/time-varying-psd.md>`_.
 
 Architecture
 ------------

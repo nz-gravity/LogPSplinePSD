@@ -1,17 +1,20 @@
 format: jb-book
 root: intro.rst
 chapters:
-  - file: quickstart.ipynb
+  - file: five-minute.rst
+  - file: results.rst
   - file: configuration.rst
-  - file: data_preprocessing.rst
-  - file: moving-periodogram-vs-wdm.rst
+  - file: multivariate.rst
   - file: time-varying-psd.md
   - file: outputs.rst
+  - file: data_preprocessing.rst
+  - file: moving-periodogram-vs-wdm.rst
   - file: technical_notes.rst
     sections:
       - file: conventions.rst
       - file: coarse_grain.rst
       - file: multivar_blocked_nuts.rst
+      - file: design_shrinkage.md
   - file: architecture.md
   - file: api.rst
   - file: development.md

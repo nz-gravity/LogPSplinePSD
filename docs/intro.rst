@@ -53,14 +53,16 @@ For package use outside the repository:
 Where To Start
 --------------
 
-- :doc:`quickstart` shows a small synthetic run.
-- :doc:`configuration` explains the main knobs in ``PipelineConfig``.
-- :doc:`data_preprocessing` describes accepted inputs and FFT preprocessing.
-- :doc:`time-varying-psd` documents the scalar time-varying PSD path (WDM
-  and Tang moving periodogram) and the LS2 numerical-parity demo.
-- :doc:`outputs` explains the returned ``DataTree`` and saved diagnostics.
-- :doc:`technical_notes` links the implemented likelihood to the code.
-- :doc:`api` lists the most useful public classes and functions.
+Follow the pages in this order:
+
+1. :doc:`five-minute` runs a small univariate analysis.
+2. :doc:`results` explains the returned ``PSDResult``.
+3. :doc:`configuration` covers the settings for a real analysis.
+4. :doc:`multivariate` introduces spectral matrices and coherence.
+5. :doc:`time-varying-psd` introduces scalar time-varying PSDs.
+6. :doc:`outputs` documents saved files and diagnostic checks.
+7. The remaining pages contain preprocessing details, technical notes, and the
+   :doc:`api` reference.
 
 References
 ----------

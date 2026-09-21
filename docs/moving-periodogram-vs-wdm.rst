@@ -111,6 +111,20 @@ The first eight rungs repeat ``1, ..., 8`` for each complete block.  When the
 thinning factor changes, the repeated blocks are farther apart in time, while
 the frequency cycle itself stays the same.
 
+.. image:: _static/moving-periodogram-thinning.png
+   :alt: Moving periodogram at thin=1,2,4 for a fixed window size, showing wider gaps between retained blocks
+   :width: 100%
+
+Same ``m`` (so the same window width and the same ``m`` frequency rungs),
+only ``thin`` changes across the three panels.  The shaded bands and
+connecting lines are the same retained window-blocks as in the geometry
+figure above; increasing ``thin`` keeps every block's shape identical but
+drops whole blocks, so the gaps between shaded bands widen and fewer blocks
+survive.  This is the "dependence control" mentioned in the module
+docstring: nearby windows overlap heavily, so thinning reduces how many
+highly-correlated blocks are fed to the likelihood, at the cost of using
+less of the series.
+
 Window size: the resolution trade-off
 --------------------------------------
 

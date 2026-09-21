@@ -66,7 +66,7 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Quick Start" href="quickstart.html" />
+    <link rel="next" title="Five-Minute Example" href="five-minute.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -215,16 +215,19 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="five-minute.html">Five-Minute Example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Understanding <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multivariate.html">Multivariate Example</a></li>
 <li class="toctree-l1"><a class="reference internal" href="time-varying-psd.html">Time-varying PSD estimation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
 <li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1"><a class="reference internal" href="architecture.html">PSD architecture</a></li>
@@ -485,16 +488,17 @@ python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </sp
 </section>
 <section id="where-to-start">
 <h2>Where To Start<a class="headerlink" href="#where-to-start" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p><a class="reference internal" href="quickstart.html"><span class="doc">Quick Start</span></a> shows a small synthetic run.</p></li>
-<li><p><a class="reference internal" href="configuration.html"><span class="doc">Configuration</span></a> explains the main knobs in <code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code>.</p></li>
-<li><p><a class="reference internal" href="data_preprocessing.html"><span class="doc">Data and Preprocessing</span></a> describes accepted inputs and FFT preprocessing.</p></li>
-<li><p><a class="reference internal" href="time-varying-psd.html"><span class="doc">Time-varying PSD estimation</span></a> documents the scalar time-varying PSD path (WDM
-and Tang moving periodogram) and the LS2 numerical-parity demo.</p></li>
-<li><p><a class="reference internal" href="outputs.html"><span class="doc">Outputs and Diagnostics</span></a> explains the returned <code class="docutils literal notranslate"><span class="pre">DataTree</span></code> and saved diagnostics.</p></li>
-<li><p><a class="reference internal" href="technical_notes.html"><span class="doc">Technical Notes</span></a> links the implemented likelihood to the code.</p></li>
-<li><p><a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> lists the most useful public classes and functions.</p></li>
-</ul>
+<p>Follow the pages in this order:</p>
+<ol class="arabic simple">
+<li><p><a class="reference internal" href="five-minute.html"><span class="doc">Five-Minute Example</span></a> runs a small univariate analysis.</p></li>
+<li><p><a class="reference internal" href="results.html"><span class="doc">Understanding PSDResult</span></a> explains the returned <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>.</p></li>
+<li><p><a class="reference internal" href="configuration.html"><span class="doc">Configuration</span></a> covers the settings for a real analysis.</p></li>
+<li><p><a class="reference internal" href="multivariate.html"><span class="doc">Multivariate Example</span></a> introduces spectral matrices and coherence.</p></li>
+<li><p><a class="reference internal" href="time-varying-psd.html"><span class="doc">Time-varying PSD estimation</span></a> introduces scalar time-varying PSDs.</p></li>
+<li><p><a class="reference internal" href="outputs.html"><span class="doc">Outputs and Diagnostics</span></a> documents saved files and diagnostic checks.</p></li>
+<li><p>The remaining pages contain preprocessing details, technical notes, and the
+<a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> reference.</p></li>
+</ol>
 </section>
 <section id="references">
 <h2>References<a class="headerlink" href="#references" title="Link to this heading">#</a></h2>
@@ -539,11 +543,11 @@ with a discrete penalty</em>. <a class="reference external" href="https://arxiv.
                   
 <div class="prev-next-area">
     <a class="right-next"
-       href="quickstart.html"
+       href="five-minute.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Quick Start</p>
+        <p class="prev-next-title">Five-Minute Example</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

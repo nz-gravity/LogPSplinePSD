@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Data and Preprocessing &#8212; LogPSplinePSD</title>
+    <title>Multivariate Example &#8212; LogPSplinePSD</title>
   
   
   
@@ -60,14 +60,12 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'data_preprocessing';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'multivariate';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Moving periodogram versus WDM" href="moving-periodogram-vs-wdm.html" />
-    <link rel="prev" title="Outputs and Diagnostics" href="outputs.html" />
+    <link rel="next" title="Time-varying PSD estimation" href="time-varying-psd.html" />
+    <link rel="prev" title="Configuration" href="configuration.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -155,10 +153,6 @@
   
 
   
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
 </div>
 
     </header>
@@ -217,10 +211,10 @@
 <li class="toctree-l1"><a class="reference internal" href="five-minute.html">Five-Minute Example</a></li>
 <li class="toctree-l1"><a class="reference internal" href="results.html">Understanding <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivariate.html">Multivariate Example</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Multivariate Example</a></li>
 <li class="toctree-l1"><a class="reference internal" href="time-varying-psd.html">Time-varying PSD estimation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Data and Preprocessing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
@@ -308,7 +302,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fdata_preprocessing.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivariate.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -338,7 +332,7 @@
       
       
       
-      <li><a href="_sources/data_preprocessing.rst" target="_blank"
+      <li><a href="_sources/multivariate.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -401,9 +395,7 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</button>
+
 </div></div>
       
     </div>
@@ -414,23 +406,11 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Data and Preprocessing</h1>
+    <h1>Multivariate Example</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#accepted-inputs">Accepted Inputs</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a></li>
-</ul>
-            </nav>
         </div>
     </div>
 </div>
@@ -440,90 +420,30 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="data-and-preprocessing">
-<h1>Data and Preprocessing<a class="headerlink" href="#data-and-preprocessing" title="Link to this heading">#</a></h1>
-<section id="accepted-inputs">
-<h2>Accepted Inputs<a class="headerlink" href="#accepted-inputs" title="Link to this heading">#</a></h2>
-<p>The high-level pipeline accepts either time-domain data or precomputed
-frequency-domain statistics.</p>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code></dt><dd><p>Time-domain samples with shape <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">p)</span></code>. A one-dimensional input is
-promoted to <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">1)</span></code>. The sampling frequency is inferred from <code class="docutils literal notranslate"><span class="pre">t</span></code>.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">WishartData</span></code></dt><dd><p>Frequency-domain Wishart sufficient statistics. Use this when you need
-explicit control over FFT construction before calling the pipeline.</p>
-</dd>
-</dl>
-</section>
-<section id="time-domain-container">
-<h2>Time-Domain Container<a class="headerlink" href="#time-domain-container" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeSeries</span>
+  <section id="multivariate-example">
+<h1>Multivariate Example<a class="headerlink" href="#multivariate-example" title="Link to this heading">#</a></h1>
+<p>The multivariate example is provided as a notebook because it includes plots
+and a comparison between variational inference and blocked NUTS.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This is the next example after the <a class="reference internal" href="five-minute.html"><span class="doc">Five-Minute Example</span></a> univariate run. It is
+intentionally more expensive and is meant to show the spectral matrix and
+coherence workflow rather than the minimum API.</p>
+</div>
+<p>The notebook simulates a two-channel VAR process, runs the multivariate
+pipeline, and plots posterior auto-spectra, cross-spectra, and coherence:</p>
+<p><a class="reference download internal" download="" href="_downloads/7a37e13e7a9856d6a5f204df5a37cd38/quickstart.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Open</span> <span class="pre">the</span> <span class="pre">multivariate</span> <span class="pre">example</span> <span class="pre">notebook</span></code></a></p>
+<p>The notebook uses the same public pattern as the short example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineConfig</span><span class="p">,</span> <span class="n">fit</span>
 
-<span class="n">fs</span> <span class="o">=</span> <span class="mf">64.0</span>
-<span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">512</span><span class="p">)</span> <span class="o">/</span> <span class="n">fs</span>
-<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span>
-    <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="mf">4.0</span> <span class="o">*</span> <span class="n">t</span><span class="p">),</span>
-    <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="mf">8.0</span> <span class="o">*</span> <span class="n">t</span><span class="p">),</span>
-<span class="p">])</span>
-
-<span class="n">ts</span> <span class="o">=</span> <span class="n">TimeSeries</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">two_channel_data</span><span class="p">,</span> <span class="n">PipelineConfig</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
 </pre></div>
 </div>
-<p>For PSD estimation, standardising at the boundary is often helpful:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">ts_std</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">standardise_for_psd</span><span class="p">()</span>
-</pre></div>
-</div>
-<p>The original channel standard deviations are carried through so exported PSDs
-can be rescaled back to physical units.</p>
-</section>
-<section id="wishart-statistics">
-<h2>Wishart Statistics<a class="headerlink" href="#wishart-statistics" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">TimeSeries.to_wishart_stats</span></code> and
-<code class="docutils literal notranslate"><span class="pre">preprocessing.periodogram.compute_wishart</span></code> split the data into <code class="docutils literal notranslate"><span class="pre">Nb</span></code> contiguous blocks,
-apply optional detrending and tapering, compute one-sided FFTs, drop DC, and
-store a factor <code class="docutils literal notranslate"><span class="pre">U</span></code> such that</p>
-<div class="math notranslate nohighlight">
-\[Y(f_k) = U(f_k) U(f_k)^H.\]</div>
-<p>The pipeline uses <code class="docutils literal notranslate"><span class="pre">Y(f_k)</span></code> as the multivariate Whittle/Wishart sufficient
-statistic.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">fft</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">standardise_for_psd</span><span class="p">()</span><span class="o">.</span><span class="n">to_wishart_stats</span><span class="p">(</span>
-    <span class="n">Nb</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
-    <span class="n">fmin</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
-    <span class="n">fmax</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span>
-    <span class="n">window</span><span class="o">=</span><span class="s2">"hann"</span><span class="p">,</span>
-    <span class="n">detrend</span><span class="o">=</span><span class="s2">"constant"</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="frequency-selection">
-<h2>Frequency Selection<a class="headerlink" href="#frequency-selection" title="Link to this heading">#</a></h2>
-<p>Frequency selection is applied in this order:</p>
-<ol class="arabic simple">
-<li><p>Convert time-domain data to the positive <code class="docutils literal notranslate"><span class="pre">rfft</span></code> grid.</p></li>
-<li><p>Drop the DC bin.</p></li>
-<li><p>Apply <code class="docutils literal notranslate"><span class="pre">fmin</span></code> and <code class="docutils literal notranslate"><span class="pre">fmax</span></code> if provided.</p></li>
-<li><p>Remove any <code class="docutils literal notranslate"><span class="pre">exclude_freq_bands</span></code>.</p></li>
-<li><p>Optionally coarse grain the retained grid.</p></li>
-</ol>
-</section>
-<section id="coarse-graining">
-<h2>Coarse Graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
-<p>Coarse graining sums neighbouring Wishart matrices into equal-size consecutive
-frequency bins. It is useful when the frequency grid is much denser than the
-spectral structure being estimated.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineConfig</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.preprocessing.coarse_grain</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoarseGrainConfig</span>
-
-<span class="n">config</span> <span class="o">=</span> <span class="n">PipelineConfig</span><span class="p">(</span>
-    <span class="n">coarse_grain_config</span><span class="o">=</span><span class="n">CoarseGrainConfig</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">Nc</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">Nh</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>See <a class="reference internal" href="coarse_grain.html"><span class="doc">Coarse-Graining</span></a> for the mathematical details and implementation
-constraints.</p>
-</section>
+<p>For the reconstructed matrix, use <code class="docutils literal notranslate"><span class="pre">result.spectral_density</span></code>. For coherence,
+use <code class="docutils literal notranslate"><span class="pre">result.coherence</span></code>. Both preserve the channel dimensions and posterior
+sample axes.</p>
+<p>Multivariate time-varying inference is not currently implemented. For scalar
+time-varying inference, continue to <a class="reference internal" href="time-varying-psd.html"><span class="doc">Time-varying PSD estimation</span></a>.</p>
 </section>
 
     <script type="text/x-thebe-config">
@@ -557,20 +477,20 @@ constraints.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="outputs.html"
+       href="configuration.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Outputs and Diagnostics</p>
+        <p class="prev-next-title">Configuration</p>
       </div>
     </a>
     <a class="right-next"
-       href="moving-periodogram-vs-wdm.html"
+       href="time-varying-psd.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Moving periodogram versus WDM</p>
+        <p class="prev-next-title">Time-varying PSD estimation</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -580,27 +500,6 @@ constraints.</p>
             </div>
             
             
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item"><div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#accepted-inputs">Accepted Inputs</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
           </div>

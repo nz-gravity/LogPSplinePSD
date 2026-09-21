@@ -1,5 +1,5 @@
 Moving periodogram versus WDM
-============================
+=============================
 
 This page is a visual intuition guide for two time–frequency summaries that
 can feed the scalar time-varying log-P-spline model.  They use the same input

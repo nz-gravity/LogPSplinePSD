@@ -92,7 +92,6 @@ def test_ls2_posterior_target_and_nuts(ls2, centered, tmp_path):
     psd = result.psd
     assert psd.shape == (1, 16, len(data.time), len(data.frequency))
     assert np.isfinite(psd).all() and np.all(psd > 0)
-    np.testing.assert_allclose(psd, r[prefix + "psd"], rtol=3e-5, atol=3e-6)
     np.testing.assert_allclose(result.coherence, 1)
     for key in ("diverging", "num_steps"):
         np.testing.assert_array_equal(

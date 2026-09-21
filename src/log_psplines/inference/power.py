@@ -18,7 +18,7 @@ import numpyro.distributions as dist
 
 from log_psplines.basis.penalty import eigen_prior_scale, whiten_penalty_pair
 from log_psplines.config import PowerSplineConfig
-from log_psplines.data.spectral import PowerSpectrum
+from log_psplines.data.spectral import PowerSpectrum, ScatteredPowerSpectrum
 from log_psplines.inference.nuts import run_nuts
 from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
 from log_psplines.models.spectrum import LogPSpline
@@ -199,6 +199,52 @@ def _mean_power_for_masked_initialization(
     return output
 
 
+def initialize_scattered_with_penalized_least_squares(
+    observed_power: np.ndarray,
+    B_time: np.ndarray,
+    B_freq: np.ndarray,
+    penalty_time: np.ndarray,
+    penalty_freq: np.ndarray,
+    config: PowerSplineConfig,
+) -> dict[str, np.ndarray | float]:
+    """Penalized least-squares warm start for scattered (u, omega) ordinates.
+
+    Unlike :func:`initialize_with_penalized_least_squares`, ``B_time`` and
+    ``B_freq`` are evaluated per-ordinate (``(P, Kt)``/``(P, Kf)``), not on a
+    shared grid, so the design cannot be factored as a Kronecker product of
+    marginal Grams and is built explicitly instead.
+    """
+    floor = power_floor(observed_power)
+    target = np.log(observed_power + floor)
+    n_time, n_freq = B_time.shape[1], B_freq.shape[1]
+    n_basis = n_time * n_freq
+    design = np.einsum("pt,pf->ptf", B_time, B_freq).reshape(-1, n_basis)
+    kron_time = np.kron(penalty_time, np.eye(n_freq))
+    kron_freq = np.kron(np.eye(n_time), penalty_freq)
+    system = (
+        design.T @ design
+        + config.init_penalty_time * kron_time
+        + config.init_penalty_freq * kron_freq
+        + config.ridge_eps * np.eye(n_basis)
+    )
+    rhs = design.T @ target
+    weights = np.linalg.solve(system, rhs)
+    W_fit = weights.reshape(n_time, n_freq)
+    fitted = np.einsum("pt,tf,pf->p", B_time, W_fit, B_freq)
+
+    penalty_time_energy = float(weights @ kron_time @ weights)
+    penalty_freq_energy = float(weights @ kron_freq @ weights)
+    phi_time_init = max(1e-2, fitted.size / (penalty_time_energy + 1e-6))
+    phi_freq_init = max(1e-2, fitted.size / (penalty_freq_energy + 1e-6))
+
+    return {
+        "W": W_fit,
+        "phi_time": phi_time_init,
+        "phi_freq": phi_freq_init,
+        "log_psd": fitted,
+    }
+
+
 def prepare_power_model(
     data: PowerSpectrum,
     spline: LogPSpline,
@@ -284,17 +330,89 @@ def prepare_power_model(
     return model, whitened_init_values(pls, pair, config), pair
 
 
-def fit_power_spline(
-    data: PowerSpectrum,
+def prepare_scattered_power_model(
+    data: ScatteredPowerSpectrum,
     spline: LogPSpline,
     config: PowerSplineConfig,
-) -> PSDResult:
-    """Run NUTS and return the common PSDResult with compact coefficients."""
-    from log_psplines.arviz_utils.to_arviz import pack_power_result
-    from log_psplines.results import PSDResult
+) -> tuple[Callable, dict, dict[str, np.ndarray]]:
+    """Build the model and PLS initial sites for scattered (u, omega) ordinates.
 
-    model, init, pair = prepare_power_model(data, spline, config)
-    mcmc = run_nuts(
+    Unlike :func:`prepare_power_model`, the spline's ``time``/``frequency``
+    grids need not match the data: each ordinate is evaluated at its own
+    exact ``(time, frequency)`` coordinate via ``SplineBasis.design_at``,
+    so ``log S(u_i, omega_i)`` is used directly rather than a rectangular
+    ``log S(t, f)`` surface.
+    """
+    if spline.time is None:
+        raise ValueError(
+            "scattered power fitting currently requires a time basis"
+        )
+    pair = whiten_penalty_pair(spline.time.penalty, spline.frequency.penalty)
+    Bt_raw = np.asarray(spline.time.design_at(data.time))
+    Bf_raw = np.asarray(spline.frequency.design_at(data.frequency))
+    Bt_eigen = jnp.asarray(Bt_raw @ pair["U_time"])
+    Bf_eigen = jnp.asarray(Bf_raw @ pair["U_freq"])
+    lam_t, lam_f = jnp.asarray(pair["lam_time"]), jnp.asarray(pair["lam_freq"])
+    null = jnp.asarray(pair["joint_null"])
+    power, counts = jnp.asarray(data.power), jnp.asarray(data.counts)
+
+    def model() -> None:
+        phi_time = _sample_log_gamma(
+            "phi_time",
+            config.alpha_phi,
+            config.beta_phi,
+            config.phi_log_base_scale,
+        )
+        phi_freq = _sample_log_gamma(
+            "phi_freq",
+            config.alpha_phi,
+            config.beta_phi,
+            config.phi_log_base_scale,
+        )
+        scale = eigen_prior_scale(
+            phi_time,
+            phi_freq,
+            lam_t,
+            lam_f,
+            null,
+            null_precision=config.null_precision,
+            ridge_eps=config.ridge_eps,
+        )
+        coefficients = sample_eigen_coefficients(
+            "s", scale, scale.shape, config
+        )
+        log_psd = jnp.einsum(
+            "pi,ij,pj->p",
+            Bt_eigen,
+            coefficients,
+            Bf_eigen,
+            optimize="optimal",
+        )
+        log_like = power_whittle_log_likelihood(power, counts, log_psd)
+        numpyro.deterministic("log_likelihood", log_like)
+        numpyro.factor("whittle", log_like)
+
+    mean_power = np.divide(
+        data.power,
+        data.counts,
+        out=np.zeros_like(data.power),
+        where=data.counts > 0,
+    )
+    pls = initialize_scattered_with_penalized_least_squares(
+        mean_power,
+        Bt_raw,
+        Bf_raw,
+        np.asarray(spline.time.penalty),
+        np.asarray(spline.frequency.penalty),
+        config,
+    )
+    return model, whitened_init_values(pls, pair, config), pair
+
+
+def _run_power_nuts(
+    model: Callable, init: dict, config: PowerSplineConfig
+):
+    return run_nuts(
         model,
         rng_key=jax.random.PRNGKey(config.seed),
         init_values=init,
@@ -313,6 +431,12 @@ def fit_power_spline(
             "energy",
         ),
     )
+
+
+def _collect_power_samples(
+    mcmc, pair: dict[str, np.ndarray], config: PowerSplineConfig
+) -> dict[str, np.ndarray]:
+    """Reshape NUTS draws into eigen-coefficients and rotate to ``weights``."""
     samples = {
         key: np.asarray(value)
         for key, value in mcmc.get_samples(group_by_chain=True).items()
@@ -342,6 +466,21 @@ def fit_power_spline(
         pair["U_freq"],
         optimize=True,
     )
+    return samples
+
+
+def fit_power_spline(
+    data: PowerSpectrum,
+    spline: LogPSpline,
+    config: PowerSplineConfig,
+) -> PSDResult:
+    """Run NUTS and return the common PSDResult with compact coefficients."""
+    from log_psplines.arviz_utils.to_arviz import pack_power_result
+    from log_psplines.results import PSDResult
+
+    model, init, pair = prepare_power_model(data, spline, config)
+    mcmc = _run_power_nuts(model, init, config)
+    samples = _collect_power_samples(mcmc, pair, config)
     return PSDResult(
         pack_power_result(
             data,
@@ -351,3 +490,29 @@ def fit_power_spline(
             mcmc.get_extra_fields(group_by_chain=True),
         )
     )
+
+
+def fit_scattered_power_spline(
+    data: ScatteredPowerSpectrum,
+    spline: LogPSpline,
+    config: PowerSplineConfig,
+) -> PSDResult:
+    """Run NUTS on scattered (u, omega) ordinates; no pooled grid is built."""
+    from log_psplines.arviz_utils.to_arviz import (
+        pack_scattered_power_result,
+    )
+    from log_psplines.results import PSDResult
+
+    model, init, pair = prepare_scattered_power_model(data, spline, config)
+    mcmc = _run_power_nuts(model, init, config)
+    samples = _collect_power_samples(mcmc, pair, config)
+    return PSDResult(
+        pack_scattered_power_result(
+            data,
+            spline,
+            config,
+            samples,
+            mcmc.get_extra_fields(group_by_chain=True),
+        )
+    )
+

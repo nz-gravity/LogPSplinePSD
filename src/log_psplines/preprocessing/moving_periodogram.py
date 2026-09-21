@@ -18,7 +18,7 @@ from typing import TypedDict
 
 import numpy as np
 
-from log_psplines.data.spectral import PowerSpectrum
+from log_psplines.data.spectral import PowerSpectrum, ScatteredPowerSpectrum
 
 
 class MovingPeriodogram(TypedDict):
@@ -192,5 +192,29 @@ __all__ = [
     "MovingPeriodogram",
     "bin_tang_ordinates",
     "moving_periodogram",
+    "scattered_moving_periodogram",
     "tang_moving_periodogram",
 ]
+
+
+def scattered_moving_periodogram(
+    data: np.ndarray, *, dt: float, m: int, thin: int = 2
+) -> ScatteredPowerSpectrum:
+    """Prepare moving-periodogram powers at their exact (u, omega) ordinates.
+
+    Unlike :func:`moving_periodogram`, no rectangular pooling is applied: each
+    retained window keeps its own exact centre and rung frequency, so no
+    cross-rung time-averaging is introduced. Use this with
+    :meth:`~log_psplines.models.spectrum.LogPSpline.at_points` (evaluating
+    S(u, omega) directly) rather than the rectangular tensor-spline surface.
+    """
+    if not np.isfinite(dt) or dt <= 0:
+        raise ValueError("dt must be strictly positive.")
+    raw = tang_moving_periodogram(data, m=m, thin=thin)
+    return ScatteredPowerSpectrum(
+        power=2.0 * raw["mi"],
+        counts=np.full_like(raw["mi"], 2.0),
+        time=raw["u"],
+        frequency=raw["omega"] / (2.0 * np.pi * dt),
+        units="moving-periodogram coefficient variance",
+    )

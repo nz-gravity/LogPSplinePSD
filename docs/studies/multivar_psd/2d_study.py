@@ -9,8 +9,8 @@ import os
 
 import numpy as np
 
+from log_psplines import fit
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.mcmc import TimeSeries, run_mcmc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -24,7 +24,7 @@ def simulation_study(outdir: str = "out", N=1024, K=7, SEED=42):
     np.random.seed(SEED)
     varma = VARMAData(n_samples=N, seed=SEED)
     ts = TimeSeries(t=varma.time, data=varma.data)
-    run_mcmc(
+    fit(
         data=ts,
         n_knots=K,
         degree=3,

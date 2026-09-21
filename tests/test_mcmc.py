@@ -1,4 +1,4 @@
-"""Integration tests for run_mcmc (pipeline path)."""
+"""Integration tests for the canonical fit() pipeline path."""
 
 import os
 from typing import cast
@@ -8,13 +8,13 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from log_psplines import fit
 from log_psplines.arviz_utils import (
     get_multivar_posterior_psd_quantiles,
     get_posterior_psd,
     get_weights,
     open_inference_data,
 )
-from log_psplines.mcmc import run_mcmc
 from log_psplines.config import PipelineConfig
 from log_psplines.inference.evidence import (
     MorphZEvidenceResult,
@@ -333,10 +333,10 @@ def _run_p1_mcmc(outdir):
         init_from_vi=True,
         num_chains=2,
     )
-    idata = run_mcmc(
+    idata = fit(
         data.ts,
         config=config,
-    )
+    ).idata
     return idata, data, psd_scale
 
 
@@ -421,8 +421,8 @@ def _run_multivar_mcmc(outdir):
             }
         },
     )
-    idata = run_mcmc(
+    idata = fit(
         data=ts_run,
         config=config,
-    )
+    ).idata
     return idata, expected_freq

@@ -3,10 +3,10 @@ import os
 import arviz as az
 import numpy as np
 
+from log_psplines import fit
 from log_psplines.data import Periodogram, Timeseries
 from log_psplines.data.spectral import EmpiricalPSD
 from log_psplines.example_datasets.lvk_data import LVKData
-from log_psplines.mcmc import run_mcmc
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 from log_psplines.models.spectrum import LogPSpline
 
@@ -84,7 +84,7 @@ else:
     ax.set_xscale("linear")
     fig.savefig(os.path.join(out, "test_spline_init.png"))
 
-    idata = run_mcmc(
+    idata = fit(
         ts,
         n_samples=2000,
         n_warmup=2000,

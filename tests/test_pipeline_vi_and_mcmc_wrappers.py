@@ -4,10 +4,10 @@ import numpy as np
 import pytest
 import xarray as xr
 
-import log_psplines.mcmc as mcmc_module
 import log_psplines.pipeline as pipeline_module
 import log_psplines.preprocessing.spectral as preprocessing_module
 import log_psplines.inference.vi as vi_module
+from log_psplines import fit
 from log_psplines.config import PipelineConfig
 
 
@@ -91,9 +91,7 @@ def test_resolve_guide_custom_and_invalid_variants():
         vi_module.resolve_guide(123, _model)
 
 
-def test_run_mcmc_wrapper_kwargs_config_save_and_validation(
-    tmp_path, monkeypatch
-):
+def test_fit_entrypoint_handles_config_and_save(tmp_path, monkeypatch):
     saved = {}
     captured = {}
 
@@ -107,15 +105,17 @@ def test_run_mcmc_wrapper_kwargs_config_save_and_validation(
     class DummyPipeline:
         data = object()
 
+        def __init__(self, data, config):
+            self.data = data
+            self.config = config
+
         def run(self):
             return DummyResult()
 
     def fake_make_pipeline(data, config):
         captured["data"] = data
         captured["config"] = config
-        pipeline = DummyPipeline()
-        pipeline.config = config
-        return pipeline
+        return DummyPipeline(data, config)
 
     monkeypatch.setattr(pipeline_module, "make_pipeline", fake_make_pipeline)
     monkeypatch.setattr(
@@ -124,20 +124,18 @@ def test_run_mcmc_wrapper_kwargs_config_save_and_validation(
         lambda true_psd, data: ("aligned", true_psd, data),
     )
 
-    idata = mcmc_module.run_mcmc(
+    result = fit(
         "series",
-        only_vi=True,
-        n_knots=4,
-        vi_steps=2,
-        outdir=str(tmp_path),
-        true_psd=np.ones(3),
+        PipelineConfig(
+            outdir=str(tmp_path),
+            n_knots=4,
+            vi_steps=2,
+            true_psd=np.ones(3),
+        ),
     )
 
-    assert isinstance(idata, xr.DataTree)
+    assert isinstance(result, object)
     assert captured["data"] == "series"
     assert isinstance(captured["config"], PipelineConfig)
     assert saved["outdir"] == str(tmp_path)
     assert saved["true_psd"][0] == "aligned"
-
-    with pytest.raises(ValueError, match="Cannot use both config and kwargs"):
-        mcmc_module.run_mcmc("series", PipelineConfig(), only_vi=True)

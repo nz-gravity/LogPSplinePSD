@@ -39,8 +39,8 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
+from log_psplines import fit
 from log_psplines.logger import logger, set_level
-from log_psplines.mcmc import TimeSeries, run_mcmc
 
 set_level("INFO")
 
@@ -475,7 +475,7 @@ def run_single(
     )
 
     t0 = time.time()
-    idata = run_mcmc(
+    idata = fit(
         data=ts,
         n_knots=spec.n_knots,
         degree=DEGREE,

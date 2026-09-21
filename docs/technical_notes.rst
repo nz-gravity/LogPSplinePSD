@@ -19,8 +19,8 @@ Core Invariants
 Implementation Map
 ------------------
 
-``log_psplines.mcmc``
-   High-level ``run_mcmc`` convenience function.
+``log_psplines.pipeline``
+   Canonical high-level ``fit()`` entry point plus orchestration helpers.
 
 ``log_psplines.pipeline``
    Pipeline construction, preprocessing, VI, NUTS, saving, and evidence

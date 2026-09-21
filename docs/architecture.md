@@ -102,8 +102,8 @@ work. See [the time-varying PSD notes](time-varying-psd.md) for conventions and 
   plotting in `plotting.basis.plot_spline_basis`.
 - `PipelineConfig` is in `config.py`; `PipelineResult` becomes `PSDResult`.
 - Old `pipeline/`, `psplines/` and `datatypes/` modules are removed rather
-  than retained as aliases. `run_mcmc` remains a small DataTree-returning
-  convenience API for existing diagnostic workflows.
+  than retained as aliases. The canonical public API is the single `fit()`
+  entry point, with `make_pipeline()` available for explicit orchestration.
 
 ## Explicit contracts after the cleanup
 

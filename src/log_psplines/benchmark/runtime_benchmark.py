@@ -8,8 +8,8 @@ import jax
 import numpy as np
 from tqdm.auto import tqdm
 
+from log_psplines import fit
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.mcmc import run_mcmc
 from log_psplines.config import PipelineConfig
 
 from ..logger import logger
@@ -95,7 +95,7 @@ class RuntimeBenchmark:
                     verbose=self.verbose,
                 )
                 t0 = time.perf_counter()
-                idata = run_mcmc(data=data.ts, config=config)
+                idata = fit(data=data.ts, config=config).idata
                 runtimes_i.append(time.perf_counter() - t0)
                 ess_i.append(_compute_ess(idata))
 
@@ -153,7 +153,7 @@ class RuntimeBenchmark:
                     verbose=self.verbose,
                 )
                 t0 = time.perf_counter()
-                idata = run_mcmc(data=ts_data, config=config)
+                idata = fit(data=ts_data, config=config).idata
                 runtimes_i.append(time.perf_counter() - t0)
                 ess_i.append(_compute_ess(idata))
             ess.append(np.concatenate(ess_i))

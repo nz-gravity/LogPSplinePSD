@@ -293,20 +293,29 @@ def fit(data, config=None, *, model=None) -> PSDResult:
 
     PowerSpectrum requires an explicit LogPSpline and PowerSplineConfig.
     Its NUTS path uses the WDM prior; the stationary VI/blocked path retains
-    its historical prior and configuration.
+    its historical prior and configuration. ScatteredPowerSpectrum uses the
+    same prior but evaluates log S(u, omega) directly at each ordinate,
+    without pooling onto a rectangular time/frequency grid.
     """
     from log_psplines.config import PowerSplineConfig
-    from log_psplines.data.spectral import PowerSpectrum
-    from log_psplines.inference.power import fit_power_spline
+    from log_psplines.data.spectral import PowerSpectrum, ScatteredPowerSpectrum
+    from log_psplines.inference.power import (
+        fit_power_spline,
+        fit_scattered_power_spline,
+    )
 
-    if isinstance(data, PowerSpectrum):
+    if isinstance(data, (PowerSpectrum, ScatteredPowerSpectrum)):
         if model is None:
             raise ValueError(
-                "PowerSpectrum fitting requires model=LogPSpline(...)"
+                f"{type(data).__name__} fitting requires model=LogPSpline(...)"
             )
         config = PowerSplineConfig() if config is None else config
         if not isinstance(config, PowerSplineConfig):
-            raise TypeError("PowerSpectrum requires PowerSplineConfig")
+            raise TypeError(
+                f"{type(data).__name__} requires PowerSplineConfig"
+            )
+        if isinstance(data, ScatteredPowerSpectrum):
+            return fit_scattered_power_spline(data, model, config)
         return fit_power_spline(data, model, config)
     if model is not None:
         raise ValueError(

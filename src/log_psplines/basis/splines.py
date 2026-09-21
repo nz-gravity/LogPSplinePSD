@@ -110,6 +110,27 @@ class SplineBasis:
             "clamped",
         )
 
+    def design_at(self, points: np.ndarray) -> jnp.ndarray:
+        """Evaluate this basis's B-splines at arbitrary points, not ``grid``.
+
+        Used for scattered (non-rectangular) observations, e.g. Tang
+        moving-periodogram ordinates, where each point has its own exact
+        coordinate rather than sharing a common axis with other points.
+        Applies the same row-sum normalization as :meth:`from_grid`.
+        """
+        points = np.asarray(points, dtype=np.float64)
+        if points.ndim != 1 or points.size == 0:
+            raise ValueError("points must be non-empty and one-dimensional")
+        if not np.isfinite(points).all():
+            raise ValueError("points must be finite")
+        n_basis = self.basis.shape[1]
+        design = BSpline(
+            self.knots, np.eye(n_basis), self.degree, extrapolate=False
+        )(points)
+        design = np.nan_to_num(design)
+        design /= np.maximum(design.sum(axis=1, keepdims=True), 1e-12)
+        return jnp.asarray(design)
+
     @classmethod
     def from_knots(
         cls,

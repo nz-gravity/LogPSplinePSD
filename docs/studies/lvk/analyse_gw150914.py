@@ -21,13 +21,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import kstest, norm
 
+from log_psplines import fit
 from log_psplines.arviz_utils import (
     get_periodogram,
     get_spline_model,
     get_weights,
 )
 from log_psplines.data import Timeseries
-from log_psplines.mcmc import run_mcmc
 
 # Configuration constants
 DEFAULT_N_KNOTS = 100
@@ -326,7 +326,7 @@ def process_detector_data(
         # Create and fit initial spline model
 
         # Run MCMC sampling
-        idata = run_mcmc(
+        idata = fit(
             ts,
             sampler="nuts",
             n_samples=DEFAULT_N_SAMPLES,

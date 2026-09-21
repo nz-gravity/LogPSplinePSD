@@ -14,7 +14,7 @@ from utils.preprocessing import (
     setup_coarse_grain,
 )
 
-from log_psplines.mcmc import ModelConfig, RunMCMCConfig
+from log_psplines.config import PipelineConfig
 from log_psplines.preprocessing.preprocessing import _preprocess_data
 
 

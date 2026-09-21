@@ -64,6 +64,30 @@ class LogPSpline:
             raise ValueError("weights must have shape (Kf,)")
         return build_spline(self.frequency.basis, weights)
 
+    def at_points(
+        self,
+        time_points: jax.Array,
+        freq_points: jax.Array,
+        weights: jax.Array | None = None,
+    ) -> jax.Array:
+        """Evaluate log S(u, omega) at scattered (time, frequency) ordinates.
+
+        Unlike ``__call__``, points need not share a common time or
+        frequency axis: ordinate ``p`` uses ``time_points[p]`` and
+        ``freq_points[p]`` independently, with no grid ever built.
+        """
+        if self.time is None:
+            raise ValueError("scattered evaluation requires a time basis")
+        weights = self.weights if weights is None else weights
+        if weights is None:
+            raise ValueError("weights must be provided or initialized.")
+        shape = (self.time.basis.shape[1], self.n_basis)
+        if weights.shape != shape:
+            raise ValueError(f"weights must have shape {shape}")
+        bt = self.time.design_at(np.asarray(time_points))
+        bf = self.frequency.design_at(np.asarray(freq_points))
+        return jnp.einsum("pi,ij,pj->p", bt, weights, bf, optimize="optimal")
+
     @property
     def basis(self) -> jax.Array:
         return self.frequency.basis

@@ -7,10 +7,10 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 import xarray as xr
 
+from log_psplines import fit
 from log_psplines.data import TimeSeries
 from log_psplines.data.spectral_utils import interp_matrix
 from log_psplines.logger import logger
-from log_psplines.mcmc import run_mcmc
 from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
 FMIN = 1e-4
@@ -173,45 +173,47 @@ def run_lisa_mcmc(
             "pipeline API."
         )
 
-    idata = run_mcmc(
+    idata = fit(
         data=ts,
-        n_samples=n_samples,
-        n_warmup=n_warmup,
-        num_chains=num_chains,
-        n_knots=K,
-        degree=2,
-        diffMatrixOrder=diff_order,
-        knot_kwargs=dict(method=knot_method),
-        analytical_psd=analytical_psd,
-        outdir=outdir,
-        verbose=True,
-        coarse_grain_config=coarse_cfg,
-        wishart_window=wishart_window,
-        wishart_detrend=wishart_detrend,
-        wishart_floor_fraction=wishart_floor_fraction,
-        Nb=Nb,
-        fmin=fmin,
-        fmax=fmax,
-        exclude_freq_bands=exclude_freq_bands_tuple,
-        alpha_delta=alpha_delta,
-        beta_delta=beta_delta,
-        only_vi=only_vi,
-        init_from_vi=vi,
-        vi_steps=vi_steps if vi else 0,
-        vi_lr=vi_lr,
-        vi_guide=vi_guide,
-        vi_posterior_draws=vi_posterior_draws,
-        coarse_grain_config_vi=coarse_grain_config_vi,
-        auto_coarse_vi=auto_coarse_vi,
-        auto_coarse_vi_target_nfreq=auto_coarse_vi_target_nfreq,
-        vi_progress_bar=True,
-        target_accept_prob=target_accept,
-        max_tree_depth=max_tree_depth,
-        dense_mass=dense_mass,
-        true_psd=true_psd_source,
-        compute_lnz=False,
-        eta=float(eta),
-    )
+        config=dict(
+            n_samples=n_samples,
+            n_warmup=n_warmup,
+            num_chains=num_chains,
+            n_knots=K,
+            degree=2,
+            diffMatrixOrder=diff_order,
+            knot_kwargs=dict(method=knot_method),
+            analytical_psd=analytical_psd,
+            outdir=outdir,
+            verbose=True,
+            coarse_grain_config=coarse_cfg,
+            wishart_window=wishart_window,
+            wishart_detrend=wishart_detrend,
+            wishart_floor_fraction=wishart_floor_fraction,
+            Nb=Nb,
+            fmin=fmin,
+            fmax=fmax,
+            exclude_freq_bands=exclude_freq_bands_tuple,
+            alpha_delta=alpha_delta,
+            beta_delta=beta_delta,
+            only_vi=only_vi,
+            init_from_vi=vi,
+            vi_steps=vi_steps if vi else 0,
+            vi_lr=vi_lr,
+            vi_guide=vi_guide,
+            vi_posterior_draws=vi_posterior_draws,
+            coarse_grain_config_vi=coarse_grain_config_vi,
+            auto_coarse_vi=auto_coarse_vi,
+            auto_coarse_vi_target_nfreq=auto_coarse_vi_target_nfreq,
+            vi_progress_bar=True,
+            target_accept_prob=target_accept,
+            max_tree_depth=max_tree_depth,
+            dense_mass=dense_mass,
+            true_psd=true_psd_source,
+            compute_lnz=False,
+            eta=float(eta),
+        ),
+    ).idata
 
     attach_truth_psd_group(idata, freq_true=freq_true, S_true=S_true)
     return idata

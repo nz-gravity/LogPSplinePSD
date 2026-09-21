@@ -4,7 +4,7 @@ Outputs and Diagnostics
 Return Value
 ------------
 
-``run_mcmc`` returns an ``xarray.DataTree``. Important groups include:
+``fit(...).idata`` returns an ``xarray.DataTree``. Important groups include:
 
 ``posterior``
    NUTS posterior samples for spline weights and model parameters.

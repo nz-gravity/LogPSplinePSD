@@ -172,7 +172,6 @@ module = [
     "log_psplines.arviz_utils.rhat",
     "log_psplines.arviz_utils.from_arviz",
     "log_psplines.arviz_utils.to_arviz",
-    "log_psplines.mcmc",
     "log_psplines.benchmark.runtime_benchmark",
 ]
 disable_error_code = ["import-untyped", "import-not-found"]

@@ -17,7 +17,7 @@ from log_psplines.data import WishartData
 
 if TYPE_CHECKING:
     from log_psplines.config import PipelineConfig, PowerSplineConfig
-    from log_psplines.data.spectral import PowerSpectrum
+    from log_psplines.data.spectral import PowerSpectrum, ScatteredPowerSpectrum
     from log_psplines.inference.components import SpectralComponents
     from log_psplines.inference.vi import StageResult
     from log_psplines.models.spectrum import LogPSpline
@@ -552,6 +552,109 @@ def pack_power_result(
             "counts": (("time", "frequency"), data.counts),
         },
         coords={"time": data.time, "frequency": data.frequency},
+        attrs={"units": data.units},
+    )
+    basis = xr.Dataset(
+        {
+            "basis_time": (("time", "time_coefficient"), spline.time.basis),
+            "basis_frequency": (
+                ("frequency", "frequency_coefficient"),
+                spline.basis,
+            ),
+            "penalty_time": (
+                ("time_coefficient", "time_coefficient_aux"),
+                spline.time.penalty,
+            ),
+            "penalty_frequency": (
+                ("frequency_coefficient", "frequency_coefficient_aux"),
+                spline.frequency.penalty,
+            ),
+            "knots_time": (("time_knot",), spline.time.knots),
+            "knots_frequency": (("frequency_knot",), spline.frequency.knots),
+            "grid_time": (("time",), spline.time.grid),
+            "grid_frequency": (("frequency",), spline.frequency.grid),
+        },
+        attrs={
+            "degree_time": spline.time.degree,
+            "degree_frequency": spline.degree,
+            "penalty_order_time": spline.time.penalty_order,
+            "penalty_order_frequency": spline.frequency.penalty_order,
+            **{
+                f"{name}_{axis}": getattr(basis, name)
+                for axis, basis in (
+                    ("time", spline.time),
+                    ("frequency", spline.frequency),
+                )
+                for name in (
+                    "penalty_normalization",
+                    "penalty_ridge",
+                    "knot_convention",
+                )
+            },
+        },
+    )
+    idata = xr.DataTree.from_dict(
+        {
+            "/": xr.Dataset(
+                attrs={
+                    **asdict(config),
+                    "likelihood": "power_whittle",
+                    "units": data.units,
+                }
+            ),
+            "posterior": xr.Dataset(
+                posterior,
+                coords={
+                    "chain": np.arange(config.num_chains),
+                    "draw": np.arange(config.n_samples),
+                },
+            ),
+            "observed_data": observed,
+            "power_basis": basis,
+            "sample_stats": xr.Dataset(
+                {
+                    name: (("chain", "draw"), np.asarray(value))
+                    for name, value in stats.items()
+                }
+            ),
+        }
+    )
+    return idata
+
+
+def pack_scattered_power_result(
+    data: "ScatteredPowerSpectrum",
+    spline: LogPSpline,
+    config: PowerSplineConfig,
+    samples: dict[str, np.ndarray],
+    stats: dict[str, jnp.ndarray],
+) -> xr.DataTree:
+    """Store compact coefficients and scattered ordinates for point fits.
+
+    Companion to :func:`pack_power_result` for data without a shared
+    time/frequency axis (e.g. raw Tang moving-periodogram ordinates). The
+    ``power_basis`` group still holds the spline's own reconstruction grid
+    (``spline.time.grid``/``spline.frequency.grid``), independent of where
+    the ordinates were observed.
+    """
+    from dataclasses import asdict
+
+    posterior = {}
+    for name, value in samples.items():
+        dims = ("chain", "draw")
+        if name == "weights":
+            dims += ("time_coefficient", "frequency_coefficient")
+        elif np.ndim(value) > 2:
+            dims += ("eigen_coefficient",)
+        posterior[name] = (dims, value)
+    observed = xr.Dataset(
+        {
+            "power": (("ordinate",), data.power),
+            "counts": (("ordinate",), data.counts),
+            "time": (("ordinate",), data.time),
+            "frequency": (("ordinate",), data.frequency),
+        },
+        coords={"ordinate": np.arange(data.power.size)},
         attrs={"units": data.units},
     )
     basis = xr.Dataset(

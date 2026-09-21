@@ -27,7 +27,11 @@ class PSDResult:
 
     def __post_init__(self) -> None:
         if "power_basis" in self.idata.children:
-            self.time = self.idata["observed_data"].coords["time"].values
+            from log_psplines.arviz_utils._datatree import require_dataset
+
+            self.time = require_dataset(self.idata, "power_basis")[
+                "grid_time"
+            ].values
 
     @property
     def posterior(self) -> xr.Dataset:
@@ -46,7 +50,11 @@ class PSDResult:
         )
 
         if "power_basis" in self.idata.children:
-            return self.idata["observed_data"].coords["frequency"].values
+            from log_psplines.arviz_utils._datatree import require_dataset
+
+            return require_dataset(self.idata, "power_basis")[
+                "grid_frequency"
+            ].values
         return _get_multivar_frequency_grid(self.idata)
 
     @property

@@ -56,20 +56,21 @@ Both parameters default to `None`. When `design_psd=None` the behaviour is **ide
 ## Usage
 
 ```python
-from log_psplines import run_mcmc
+from log_psplines import PipelineConfig, fit
 import numpy as np
 
 # true_psd: (N, p, p) complex array at FFT frequencies, original units
 # freqs_hz: (N,) frequency array matching true_psd rows
 
-result = run_mcmc(
-    timeseries=data,
-    sampler="multivar_blocked_nuts",
-    n_knots=10,
-    n_samples=1000,
-    n_warmup=500,
-    design_psd=(freqs_hz, true_psd),   # (freqs, psd) tuple → auto-interpolated
-    tau=1.0,                            # level-shrinkage scale; None = off
+result = fit(
+    data,
+    PipelineConfig(
+        n_knots=10,
+        n_samples=1000,
+        n_warmup=500,
+        true_psd=(freqs_hz, true_psd),  # (freqs, psd) tuple → auto-interpolated
+        extra_kwargs={"tau": 1.0},    # level-shrinkage scale; None = off
+    ),
 )
 ```
 

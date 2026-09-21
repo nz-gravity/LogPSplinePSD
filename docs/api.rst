@@ -13,8 +13,6 @@ High-Level Pipeline
 .. autoclass:: log_psplines.results.PSDResult
    :members:
 
-.. autofunction:: log_psplines.mcmc.run_mcmc
-
 .. autofunction:: log_psplines.pipeline.make_pipeline
 
 .. autoclass:: log_psplines.config.PipelineConfig

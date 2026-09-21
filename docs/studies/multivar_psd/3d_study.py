@@ -17,11 +17,11 @@ os.environ.setdefault("XLA_FLAGS", "--xla_force_host_platform_device_count=4")
 import jax
 import numpy as np
 
+from log_psplines import fit
 from log_psplines.arviz_utils.from_arviz import (
     get_multivar_posterior_psd_quantiles,
 )
 from log_psplines.logger import logger, set_level
-from log_psplines.mcmc import TimeSeries, run_mcmc
 
 jax.config.update("jax_enable_x64", True)
 
@@ -733,7 +733,7 @@ def simulation_study(
         # Use the true PSD as design target with the given shrinkage scale.
         run_mcmc_kwargs["design_psd"] = (freq_true_hz, true_psd)
         run_mcmc_kwargs["tau"] = tau
-    idata = run_mcmc(**run_mcmc_kwargs)
+    idata = fit(**run_mcmc_kwargs).idata
     _save_compact_ci_curves(outdir, idata)
     _save_compact_run_summary(
         outdir,

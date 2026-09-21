@@ -313,3 +313,55 @@ class PowerSpectrum:
             ("time", time),
         ):
             object.__setattr__(self, name, value)
+
+
+@dataclass(frozen=True)
+class ScatteredPowerSpectrum:
+    """Summed squared real components observed at scattered (time, freq) points.
+
+    Companion to :class:`PowerSpectrum` for transforms whose ordinates do not
+    share a common time or frequency axis (e.g. the Tang zig-zag moving
+    periodogram before pooling). ``time``, ``frequency``, ``power`` and
+    ``counts`` are all one-dimensional and share the same length: ordinate
+    ``i`` was observed at ``(time[i], frequency[i])``. Values are component
+    variances, not automatically a PSD per Hz.
+    """
+
+    power: np.ndarray
+    counts: np.ndarray
+    time: np.ndarray
+    frequency: np.ndarray
+    units: str = "coefficient variance"
+
+    def __post_init__(self) -> None:
+        power = np.asarray(self.power, dtype=float)
+        time = np.asarray(self.time, dtype=float)
+        frequency = np.asarray(self.frequency, dtype=float)
+        counts = np.broadcast_to(
+            np.asarray(self.counts, dtype=float), power.shape
+        ).copy()
+        if power.ndim != 1 or power.size == 0:
+            raise ValueError("scattered power must be non-empty and 1-D")
+        if not (power.shape == counts.shape == time.shape == frequency.shape):
+            raise ValueError(
+                "power, counts, time and frequency must share shape"
+            )
+        for name, value in (
+            ("power", power),
+            ("counts", counts),
+            ("time", time),
+            ("frequency", frequency),
+        ):
+            if not np.isfinite(value).all():
+                raise ValueError(f"{name} must be finite")
+        if np.any(power < 0) or np.any(counts <= 0):
+            raise ValueError(
+                "power must be non-negative and counts strictly positive"
+            )
+        for name, value in (
+            ("power", power),
+            ("counts", counts),
+            ("time", time),
+            ("frequency", frequency),
+        ):
+            object.__setattr__(self, name, value)

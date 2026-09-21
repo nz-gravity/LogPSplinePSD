@@ -224,10 +224,15 @@ def _compute_power_psd_dataset(
     idata: xr.DataTree,
     source: ResolvedSampleSource,
 ) -> xr.Dataset:
-    """Reconstruct scalar surfaces using the same labeled spectral contract."""
+    """Reconstruct scalar surfaces using the same labeled spectral contract.
+
+    Coordinates come from the spline's own reconstruction grid
+    (``power_basis``), not the observed ordinates, so this works whether the
+    data shared a rectangular time/frequency axis (WDM) or was scattered
+    (moving-periodogram ordinates evaluated via ``LogPSpline.at_points``).
+    """
     posterior = get_sample_dataset(idata, source=source)
     basis = _require_dataset(idata, "power_basis")
-    observed = _require_dataset(idata, "observed_data")
     log_psd = np.einsum(
         "ti,cdij,fj->cdtf",
         basis["basis_time"].values,
@@ -247,8 +252,8 @@ def _compute_power_psd_dataset(
             "draw": np.arange(spectrum.shape[1]),
             "channel": [0],
             "channel_aux": [0],
-            "time": observed.coords["time"].values,
-            "frequency": observed.coords["frequency"].values,
+            "time": basis["grid_time"].values,
+            "frequency": basis["grid_frequency"].values,
         },
         attrs={"units": idata.attrs.get("units", "coefficient variance")},
     )

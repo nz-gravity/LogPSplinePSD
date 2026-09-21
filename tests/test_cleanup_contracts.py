@@ -65,6 +65,15 @@ def test_tv_result_has_the_same_public_spectral_accessor():
         get_psd_dataset(result.idata)
 
 
+def test_public_api_has_a_single_canonical_entry_point():
+    import log_psplines
+
+    assert callable(log_psplines.fit)
+    assert not hasattr(log_psplines, "run_mcmc")
+    assert "fit" in log_psplines.__all__
+    assert "run_mcmc" not in log_psplines.__all__
+
+
 def test_unsupported_design_options_are_rejected():
     with pytest.raises(TypeError, match="design_from_vi"):
         PipelineConfig(design_from_vi=True)

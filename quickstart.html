@@ -516,14 +516,14 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.029, max_var_ratio=1.038, covariance_rel_drift=0.032).</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:00| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.024, max_var_ratio=1.010, covariance_rel_drift=0.008).</span>
 </pre></div>
 </div>
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7f0386880230&gt;,
- &lt;matplotlib.lines.Line2D at 0x7f0386880260&gt;]
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7f64bfe35760&gt;,
+ &lt;matplotlib.lines.Line2D at 0x7f64bfe35790&gt;]
 </pre></div>
 </div>
-<img alt="_images/0ea9a751fbf1e840787ac11935d41c08f51442b382b98f4237472ecc297e587d.png" src="_images/0ea9a751fbf1e840787ac11935d41c08f51442b382b98f4237472ecc297e587d.png" />
+<img alt="_images/fbe591ef16a2026b3503fdb531c4a6fd8291df21e79fe05613c96fbcd9ef7aa5.png" src="_images/fbe591ef16a2026b3503fdb531c4a6fd8291df21e79fe05613c96fbcd9ef7aa5.png" />
 </div>
 </div>
 </section>
@@ -555,16 +555,16 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Wishart averaging (blocks=8): n=16384 -&gt; Lb=2048, N=1024, p=2</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Wishart averaging (blocks=8): n=16384 -&gt; Lb=2048, N=1024, p=2</span>
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.37e+00</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.37e+00</span>
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Inferred sampler type: multivar_blocked_nuts</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Inferred sampler type: multivar_blocked_nuts</span>
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:13| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: SpectralComponents(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:08| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: SpectralComponents(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
 </pre></div>
 </div>
 <div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/home/runner/work/LogPSplinePSD/LogPSplinePSD/src/log_psplines/inference/nuts.py:44: UserWarning: There are not enough devices to run parallel chains: expected 2 but got 1. Chains will be drawn sequentially. If you are running MCMC in CPU, consider using `numpyro.set_host_device_count(2)` at the beginning of your program. You can double-check how many devices are available in your system using `jax.local_device_count()`.
@@ -597,7 +597,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<img alt="_images/4d18cd23fdb7f83fa40d4e158028fc7007cbada75fa6e5d337c03b94949eb40b.png" src="_images/4d18cd23fdb7f83fa40d4e158028fc7007cbada75fa6e5d337c03b94949eb40b.png" />
+<img alt="_images/50ea7adb88fbb758519c05b92e9f2f00fa3c410c63c686c6bb5b64d4830fee65.png" src="_images/50ea7adb88fbb758519c05b92e9f2f00fa3c410c63c686c6bb5b64d4830fee65.png" />
 </div>
 </div>
 <p><img alt="" src="_images/var3_psd_matrix.png" /></p>

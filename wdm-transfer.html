@@ -485,7 +485,7 @@ wiggliness across time; large <span class="math notranslate nohighlight">\(\phi_
 frequency. <span class="math notranslate nohighlight">\(Q\)</span> is a Kronecker sum, so it is block-structured: each frequency
 column of <span class="math notranslate nohighlight">\(\mathbf{W}\)</span> is penalized along time by <span class="math notranslate nohighlight">\(\mathbf{Q}_t\)</span>, and each
 time row is independently penalized along frequency by <span class="math notranslate nohighlight">\(\mathbf{Q}_f\)</span>.</p>
-<a class="reference internal image-reference" href="_static/wdm-demo-precision.png"><img alt="Heatmap of the tensor-product roughness precision matrix Q" class="align-center" src="_static/wdm-demo-precision.png" style="width: 60%;" />
+<a class="reference internal image-reference" href="_images/wdm-demo-precision.png"><img alt="Heatmap of the tensor-product roughness precision matrix Q" class="align-center" src="_images/wdm-demo-precision.png" style="width: 60%;" />
 </a>
 <p>The banded, repeating block pattern is the Kronecker sum: the fine diagonal
 bands come from <span class="math notranslate nohighlight">\(\mathbf{Q}_t\)</span> (smoothing along time within each frequency
@@ -526,7 +526,7 @@ log-PSD surface.</p>
 <span class="n">result</span><span class="o">.</span><span class="n">to_netcdf</span><span class="p">(</span><span class="s2">"fit.nc"</span><span class="p">)</span>
 </pre></div>
 </div>
-<a class="reference internal image-reference" href="_static/wdm-demo-fit.png"><img alt="Simulated time-varying signal, its WDM periodogram, and the posterior median log-PSD surface" class="align-center" src="_static/wdm-demo-fit.png" style="width: 100%;" />
+<a class="reference internal image-reference" href="_images/wdm-demo-fit.png"><img alt="Simulated time-varying signal, its WDM periodogram, and the posterior median log-PSD surface" class="align-center" src="_images/wdm-demo-fit.png" style="width: 100%;" />
 </a>
 <p>From top to bottom: the simulated series, the raw WDM periodogram (one
 coefficient per time-frequency cell), and the posterior median of the fitted

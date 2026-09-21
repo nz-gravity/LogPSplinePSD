@@ -426,7 +426,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spline-options">Spline Options</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vi-and-nuts">VI and NUTS</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-vi-and-coarse-graining">Coarse VI and Coarse Graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output-and-evidence">Output and Evidence</a></li>
 </ul>
             </nav>
@@ -496,31 +496,27 @@ the likelihood.</p>
 <section id="vi-and-nuts">
 <h2>VI and NUTS<a class="headerlink" href="#vi-and-nuts" title="Link to this heading">#</a></h2>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">init_from_vi</span></code></dt><dd><p>Run stochastic variational inference before NUTS and use the fitted guide to
-initialise the sampler. Enabled by default.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">method</span></code></dt><dd><p>Either <code class="docutils literal notranslate"><span class="pre">&quot;nuts&quot;</span></code> (default) or <code class="docutils literal notranslate"><span class="pre">&quot;vi&quot;</span></code>. VI and NUTS are independent,
+standalone fits: VI never seeds NUTS’s initial values, and the unselected
+stage never executes.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">only_vi</span></code></dt><dd><p>Stop after the VI stage. This is the fastest way to check data scaling,
-frequency selection, and spline flexibility.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">method=&quot;vi&quot;</span></code></dt><dd><p>Fit with stochastic variational inference only. This is a fast way to
+check data scaling, frequency selection, and spline flexibility, and to
+diagnose the model before committing to a full NUTS run.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">vi_steps</span></code>, <code class="docutils literal notranslate"><span class="pre">vi_lr</span></code>, <code class="docutils literal notranslate"><span class="pre">vi_guide</span></code></dt><dd><p>Optimisation settings for the VI warm start.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">vi_steps</span></code>, <code class="docutils literal notranslate"><span class="pre">vi_lr</span></code>, <code class="docutils literal notranslate"><span class="pre">vi_guide</span></code></dt><dd><p>VI optimisation settings, used only when <code class="docutils literal notranslate"><span class="pre">method=&quot;vi&quot;</span></code>.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">n_warmup</span></code>, <code class="docutils literal notranslate"><span class="pre">n_samples</span></code>, <code class="docutils literal notranslate"><span class="pre">num_chains</span></code></dt><dd><p>Standard NUTS run length controls.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">n_warmup</span></code>, <code class="docutils literal notranslate"><span class="pre">n_samples</span></code>, <code class="docutils literal notranslate"><span class="pre">num_chains</span></code></dt><dd><p>Standard NUTS run length controls, used only when <code class="docutils literal notranslate"><span class="pre">method=&quot;nuts&quot;</span></code>.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">target_accept_prob</span></code> and <code class="docutils literal notranslate"><span class="pre">max_tree_depth</span></code></dt><dd><p>NumPyro NUTS tuning controls. Per-channel values can be supplied with
 <code class="docutils literal notranslate"><span class="pre">target_accept_prob_by_channel</span></code> and <code class="docutils literal notranslate"><span class="pre">max_tree_depth_by_channel</span></code>.</p>
 </dd>
 </dl>
 </section>
-<section id="coarse-vi-and-coarse-graining">
-<h2>Coarse VI and Coarse Graining<a class="headerlink" href="#coarse-vi-and-coarse-graining" title="Link to this heading">#</a></h2>
+<section id="coarse-graining">
+<h2>Coarse Graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">coarse_grain_config</span></code></dt><dd><p>Coarse grain the frequency grid used by the full inference stage.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">coarse_grain_config_vi</span></code></dt><dd><p>Coarse grain only the VI warm-start stage.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">auto_coarse_vi</span></code></dt><dd><p>Let the pipeline choose a coarse VI grid when the full grid is large.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">use_coarse_vi_for_init</span></code></dt><dd><p>Use the coarse VI result as the initial point for full-resolution inference.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">coarse_grain_config</span></code></dt><dd><p>Coarse grain the frequency grid used by the inference stage.</p>
 </dd>
 </dl>
 </section>
@@ -611,7 +607,7 @@ interpolated.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spline-options">Spline Options</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vi-and-nuts">VI and NUTS</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-vi-and-coarse-graining">Coarse VI and Coarse Graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#output-and-evidence">Output and Evidence</a></li>
 </ul>
   </nav></div>

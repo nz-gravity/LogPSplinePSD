@@ -62,38 +62,31 @@ Frequency Selection
 VI and NUTS
 -----------
 
-``init_from_vi``
-   Run stochastic variational inference before NUTS and use the fitted guide to
-   initialise the sampler. Enabled by default.
+``method``
+   Either ``"nuts"`` (default) or ``"vi"``. VI and NUTS are independent,
+   standalone fits: VI never seeds NUTS's initial values, and the unselected
+   stage never executes.
 
-``only_vi``
-   Stop after the VI stage. This is the fastest way to check data scaling,
-   frequency selection, and spline flexibility.
+``method="vi"``
+   Fit with stochastic variational inference only. This is a fast way to
+   check data scaling, frequency selection, and spline flexibility, and to
+   diagnose the model before committing to a full NUTS run.
 
 ``vi_steps``, ``vi_lr``, ``vi_guide``
-   Optimisation settings for the VI warm start.
+   VI optimisation settings, used only when ``method="vi"``.
 
 ``n_warmup``, ``n_samples``, ``num_chains``
-   Standard NUTS run length controls.
+   Standard NUTS run length controls, used only when ``method="nuts"``.
 
 ``target_accept_prob`` and ``max_tree_depth``
    NumPyro NUTS tuning controls. Per-channel values can be supplied with
    ``target_accept_prob_by_channel`` and ``max_tree_depth_by_channel``.
 
-Coarse VI and Coarse Graining
------------------------------
+Coarse Graining
+---------------
 
 ``coarse_grain_config``
-   Coarse grain the frequency grid used by the full inference stage.
-
-``coarse_grain_config_vi``
-   Coarse grain only the VI warm-start stage.
-
-``auto_coarse_vi``
-   Let the pipeline choose a coarse VI grid when the full grid is large.
-
-``use_coarse_vi_for_init``
-   Use the coarse VI result as the initial point for full-resolution inference.
+   Coarse grain the frequency grid used by the inference stage.
 
 Output and Evidence
 -------------------

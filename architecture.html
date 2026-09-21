@@ -532,8 +532,8 @@ for inference and the independent <code class="docutils literal notranslate"><sp
 plotting in <code class="docutils literal notranslate"><span class="pre">plotting.basis.plot_spline_basis</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code> is in <code class="docutils literal notranslate"><span class="pre">config.py</span></code>; <code class="docutils literal notranslate"><span class="pre">PipelineResult</span></code> becomes <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>.</p></li>
 <li><p>Old <code class="docutils literal notranslate"><span class="pre">pipeline/</span></code>, <code class="docutils literal notranslate"><span class="pre">psplines/</span></code> and <code class="docutils literal notranslate"><span class="pre">datatypes/</span></code> modules are removed rather
-than retained as aliases. <code class="docutils literal notranslate"><span class="pre">run_mcmc</span></code> remains a small DataTree-returning
-convenience API for existing diagnostic workflows.</p></li>
+than retained as aliases. The canonical public API is the single <code class="docutils literal notranslate"><span class="pre">fit()</span></code>
+entry point, with <code class="docutils literal notranslate"><span class="pre">make_pipeline()</span></code> available for explicit orchestration.</p></li>
 </ul>
 </section>
 <section id="explicit-contracts-after-the-cleanup">

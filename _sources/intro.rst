@@ -16,7 +16,7 @@ is derived from the reconstructed matrix.
 What Is Included
 ----------------
 
-- A high-level pipeline interface via :func:`log_psplines.mcmc.run_mcmc` and
+- A high-level pipeline interface via :func:`log_psplines.fit` and
   :func:`log_psplines.make_pipeline`.
 - Data containers for time-domain series and frequency-domain Wishart
   statistics.

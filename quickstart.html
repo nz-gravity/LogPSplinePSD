@@ -503,6 +503,23 @@
 </pre></div>
 </div>
 </div>
+<div class="cell_output docutils container">
+<div class="output traceback highlight-ipythontb notranslate"><div class="highlight"><pre><span></span><span class="gt">---------------------------------------------------------------------------</span>
+<span class="ne">ModuleNotFoundError</span><span class="g g-Whitespace">                       </span>Traceback (most recent call last)
+<span class="n">Cell</span> <span class="n">In</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">line</span> <span class="mi">16</span>
+<span class="g g-Whitespace">     </span><span class="mi">12</span>     <span class="n">get_multivar_posterior_psd_quantiles</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">13</span>     <span class="n">get_multivar_vi_psd_quantiles</span><span class="p">,</span>
+<span class="g g-Whitespace">     </span><span class="mi">14</span> <span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">15</span> <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeSeries</span>
+<span class="ne">---&gt; </span><span class="mi">16</span> <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.mcmc</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_mcmc</span>
+<span class="g g-Whitespace">     </span><span class="mi">17</span> <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineConfig</span>
+<span class="g g-Whitespace">     </span><span class="mi">18</span> <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.plotting</span><span class="w"> </span><span class="kn">import</span> <span class="n">PSDMatrixPlotSpec</span><span class="p">,</span> <span class="n">plot_psd_matrix</span>
+<span class="g g-Whitespace">     </span><span class="mi">19</span> <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.example_datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">VARMAData</span>
+
+<span class="ne">ModuleNotFoundError</span>: No module named 'log_psplines.mcmc'
+</pre></div>
+</div>
+</div>
 </div>
 </section>
 <section id="simulate-a-two-channel-var-process">
@@ -516,14 +533,10 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.055, max_var_ratio=1.022, covariance_rel_drift=0.014).</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|03:53| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.043, max_var_ratio=1.034, covariance_rel_drift=0.024).</span>
 </pre></div>
 </div>
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7f9f59380500&gt;,
- &lt;matplotlib.lines.Line2D at 0x7f9f593c83e0&gt;]
-</pre></div>
-</div>
-<img alt="_images/2b998d886c01c74993f9a3a14220b9f4683b3ce19c3ece266713d4855c76c1e8.png" src="_images/2b998d886c01c74993f9a3a14220b9f4683b3ce19c3ece266713d4855c76c1e8.png" />
+<img alt="_images/6a1b97b7a562288b0375f8516f2dd497eae05640fdb18fdc03ea9e6b2b5636d9.png" src="_images/6a1b97b7a562288b0375f8516f2dd497eae05640fdb18fdc03ea9e6b2b5636d9.png" />
 </div>
 </div>
 </section>
@@ -555,20 +568,16 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Wishart averaging (blocks=8): n=16384 -&gt; Lb=2048, N=1024, p=2</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|07:23| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Wishart averaging (blocks=8): n=16384 -&gt; Lb=2048, N=1024, p=2</span>
+|07:23| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.35e+00</span>
+|07:23| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Inferred sampler type: multivar_blocked_nuts</span>
+|07:25| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: MultivariateLogPSplines(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.39e+00</span>
-</pre></div>
-</div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Inferred sampler type: multivar_blocked_nuts</span>
-</pre></div>
-</div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:14| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: SpectralComponents(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
-</pre></div>
-</div>
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/home/runner/work/LogPSplinePSD/LogPSplinePSD/src/log_psplines/inference/nuts.py:44: UserWarning: There are not enough devices to run parallel chains: expected 2 but got 1. Chains will be drawn sequentially. If you are running MCMC in CPU, consider using `numpyro.set_host_device_count(2)` at the beginning of your program. You can double-check how many devices are available in your system using `jax.local_device_count()`.
-  mcmc = MCMC(
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>sample: 100%|██████████| 1250/1250 [00:01&lt;00:00, 1010.23it/s, 31 steps of size 1.62e-01. acc. prob=0.96]
+sample: 100%|██████████| 1250/1250 [00:00&lt;00:00, 1503.34it/s, 31 steps of size 1.78e-01. acc. prob=0.96]
+sample: 100%|██████████| 1250/1250 [00:02&lt;00:00, 555.74it/s, 15 steps of size 3.49e-01. acc. prob=0.91] 
+sample: 100%|██████████| 1250/1250 [00:01&lt;00:00, 761.26it/s, 15 steps of size 3.30e-01. acc. prob=0.93] 
 </pre></div>
 </div>
 </div>
@@ -597,7 +606,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<img alt="_images/ccf339de6ef12a9d613ad0b3f5d9d6abdf2e49ee7fd7f7a295d5deb153877c8b.png" src="_images/ccf339de6ef12a9d613ad0b3f5d9d6abdf2e49ee7fd7f7a295d5deb153877c8b.png" />
+<img alt="_images/3f312a260bddd0d0683630fbb88872d57ac63d809f260f94b1228f85592df9ae.png" src="_images/3f312a260bddd0d0683630fbb88872d57ac63d809f260f94b1228f85592df9ae.png" />
 </div>
 </div>
 <p><img alt="" src="_images/var3_psd_matrix.png" /></p>

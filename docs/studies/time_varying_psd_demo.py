@@ -1,16 +1,20 @@
-"""Public-facing WDM time-varying PSD demo.
+"""Public-facing time-varying PSD demo (WDM and Tang moving periodogram).
 
 Simulates the Tang LS2 signal (an MA(1) whose coefficient drifts smoothly in
 time, so its spectral peak moves too), fits it with the scalar
 time-frequency ``LogPSpline`` model through the normal ``fit`` entry point,
-and saves two documentation figures:
+once from a WDM transform and once from the Tang zig-zag moving
+periodogram, and saves three documentation figures:
 
 ``wdm-demo-fit.png``
     Input series, WDM periodogram, and posterior median log-PSD surface.
+``moving-periodogram-demo-fit.png``
+    Input series, Tang moving periodogram, and posterior median log-PSD
+    surface.
 ``wdm-demo-precision.png``
     The tensor-product roughness precision ``Q`` used by the prior.
 
-Run with ``.venv/bin/python docs/studies/wdm_demo.py``.
+Run with ``.venv/bin/python docs/studies/time_varying_psd_demo.py``.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from log_psplines import (
     TimeSeries,
     fit,
 )
+from log_psplines.preprocessing.moving_periodogram import moving_periodogram
 from log_psplines.preprocessing.wdm import wdm_periodogram
 
 DOCS = Path(__file__).resolve().parents[1]
@@ -40,7 +45,9 @@ def simulate_ls2(rng: np.random.Generator, n: int = 2048) -> np.ndarray:
     return noise[1 : n + 1] + coefficient * noise[:n]
 
 
-def plot_fit(series: TimeSeries, data, result, *, path: Path) -> None:
+def plot_fit(
+    series: TimeSeries, data, result, *, path: Path, periodogram_title: str
+) -> None:
     import matplotlib.pyplot as plt
 
     median = np.median(result.psd, axis=(0, 1))
@@ -58,7 +65,7 @@ def plot_fit(series: TimeSeries, data, result, *, path: Path) -> None:
         np.log10(np.maximum(data.power.T, 1e-12)),
         shading="nearest", cmap="magma",
     )
-    axes[1].set(title="WDM periodogram", ylabel="frequency [Hz]")
+    axes[1].set(title=periodogram_title, ylabel="frequency [Hz]")
     fig.colorbar(mesh0, ax=axes[1], pad=0.02, label="log10 power")
 
     mesh1 = axes[2].pcolormesh(
@@ -104,23 +111,40 @@ def plot_precision(*, path: Path) -> None:
     print(f"saved {path}")
 
 
-def main() -> None:
-    STATIC.mkdir(parents=True, exist_ok=True)
-    rng = np.random.default_rng(4)
-    values = simulate_ls2(rng)
-    series = TimeSeries(values, np.arange(len(values)) * 0.1)
-    data = wdm_periodogram(series, nt=32)
-
+def fit_surface(data, *, seed: int):
+    """Fit a scalar time-frequency ``LogPSpline`` surface to ``data``."""
     model = LogPSpline(
         frequency=SplineBasis.from_grid(data.frequency / data.frequency[-1], 4),
         time=SplineBasis.from_grid(data.time, 4),
     )
     config = PowerSplineConfig(
-        n_warmup=250, n_samples=250, seed=4, progress_bar=False
+        n_warmup=250, n_samples=250, seed=seed, progress_bar=False
     )
-    result = fit(data, config, model=model)
+    return fit(data, config, model=model)
 
-    plot_fit(series, data, result, path=STATIC / "wdm-demo-fit.png")
+
+def main() -> None:
+    STATIC.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(4)
+    values = simulate_ls2(rng)
+    series = TimeSeries(values, np.arange(len(values)) * 0.1)
+
+    wdm_data = wdm_periodogram(series, nt=32)
+    wdm_result = fit_surface(wdm_data, seed=4)
+    plot_fit(
+        series, wdm_data, wdm_result,
+        path=STATIC / "wdm-demo-fit.png",
+        periodogram_title="WDM periodogram",
+    )
+
+    mp_data = moving_periodogram(values, dt=0.1, m=16, thin=2)
+    mp_result = fit_surface(mp_data, seed=4)
+    plot_fit(
+        series, mp_data, mp_result,
+        path=STATIC / "moving-periodogram-demo-fit.png",
+        periodogram_title="Tang moving periodogram",
+    )
+
     plot_precision(path=STATIC / "wdm-demo-precision.png")
 
 

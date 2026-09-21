@@ -1,12 +1,27 @@
-# Time-varying PSD estimation (WDM)
+# Time-varying PSD estimation
 
 Most of this package estimates a single, stationary PSD from a whole time
 series. Real signals are often not stationary: the spectrum itself drifts
 over time (a chirp, a changing noise floor, a resonance that turns on and
 off). This page shows how `log_psplines` estimates a **time-varying PSD**
-$S(t, f)$ from a wavelet-domain (WDM) time-frequency transform, using the
-same log-P-spline machinery as the stationary case, just with a
-two-dimensional spline surface instead of a one-dimensional curve.
+$S(t, f)$ from a time-frequency transform of the series, using the same
+log-P-spline machinery as the stationary case, just with a two-dimensional
+spline surface instead of a one-dimensional curve.
+
+Two time-frequency transforms feed the same model:
+
+- a **wavelet-domain (WDM)** transform, which evaluates a coefficient at
+  every retained time and frequency cell (`preprocessing/wdm.py`, optional
+  `wdm-transform` dependency), and
+- the **Tang zig-zag moving periodogram**, which slides a window over the
+  series and cycles through frequencies in a zig-zag pattern, so it spends
+  one observation per window rather than a full grid
+  (`preprocessing/moving_periodogram.py`, no extra dependency).
+
+See [Moving periodogram versus WDM](moving-periodogram-vs-wdm.rst) for a
+visual comparison of how the two transforms spend their observations.
+Both produce a rectangular `PowerSpectrum` with `time` and `frequency` axes,
+so both fit through the same scalar time-frequency `fit()` entry point.
 
 Scalar time-frequency fitting runs through the existing `fit()` entry point.
 It uses `LogPSpline`, with the same `SplineBasis` type for time and
@@ -16,10 +31,11 @@ unchanged.
 
 ## The model
 
-The WDM transform turns a real time series into a grid of coefficients
-$w_{t,f}$, one per retained time bin $t$ and frequency bin $f$. Each
-coefficient behaves like a zero-mean Gaussian whose variance is the local
-PSD, so $w_{t,f}^2$ is a noisy time-frequency power estimate — the
+Both transforms turn a real time series into a grid of coefficients
+$w_{t,f}$, one per retained time bin $t$ and frequency bin $f$ (WDM fills the
+full grid; the moving periodogram fills it one zig-zag rung per window).
+Each coefficient behaves like a zero-mean Gaussian whose variance is the
+local PSD, so $w_{t,f}^2$ is a noisy time-frequency power estimate — the
 time-varying analogue of an ordinary periodogram ordinate.
 
 `log_psplines` models the log-PSD surface as a tensor-product B-spline:
@@ -64,9 +80,10 @@ block) and the coarser off-diagonal bands come from $\mathbf{Q}_f$
 
 The example below simulates a non-stationary MA(1) process whose moving-
 average coefficient oscillates in time (the LS2 test case from Tang et al.),
-so its spectral peak drifts back and forth. It computes the WDM periodogram,
-fits it with `LogPSpline` + `fit()`, and reads off the posterior median
-log-PSD surface.
+so its spectral peak drifts back and forth. It fits the same series twice —
+once from the WDM periodogram, once from the Tang moving periodogram — with
+`LogPSpline` + `fit()`, and reads off the posterior median log-PSD surface
+each time.
 
 ```python
 import numpy as np
@@ -74,6 +91,7 @@ from log_psplines import (
     TimeSeries, SplineBasis, LogPSpline, PowerSplineConfig, fit,
 )
 from log_psplines.preprocessing.wdm import wdm_periodogram
+from log_psplines.preprocessing.moving_periodogram import moving_periodogram
 
 # A non-stationary MA(1): the coefficient oscillates, so the spectral
 # peak drifts over time.
@@ -85,15 +103,24 @@ coefficient = 1.1 * np.cos(1.5 - np.cos(4 * np.pi * time))
 values = noise[1 : n + 1] + coefficient * noise[:n]
 
 series = TimeSeries(data=values, t=np.arange(n) * 0.1)
-data = wdm_periodogram(series, nt=32)
-model = LogPSpline(
-    frequency=SplineBasis.from_grid(data.frequency / data.frequency[-1], 4),
-    time=SplineBasis.from_grid(data.time, 4),
-)
-result = fit(data, PowerSplineConfig(), model=model)
-# result.psd: (chain, draw, time, frequency)
-result.save("output")
-result.to_netcdf("fit.nc")
+
+
+def fit_surface(data):
+    model = LogPSpline(
+        frequency=SplineBasis.from_grid(data.frequency / data.frequency[-1], 4),
+        time=SplineBasis.from_grid(data.time, 4),
+    )
+    return fit(data, PowerSplineConfig(), model=model)
+
+
+wdm_data = wdm_periodogram(series, nt=32)
+wdm_result = fit_surface(wdm_data)
+
+mp_data = moving_periodogram(values, dt=0.1, m=16, thin=2)
+mp_result = fit_surface(mp_data)
+# each result.psd: (chain, draw, time, frequency)
+wdm_result.save("output/wdm")
+mp_result.save("output/moving_periodogram")
 ```
 
 ```{image} _static/wdm-demo-fit.png
@@ -102,15 +129,25 @@ result.to_netcdf("fit.nc")
 :align: center
 ```
 
-From top to bottom: the simulated series, the raw WDM periodogram (one
-coefficient per time-frequency cell), and the posterior median of the fitted
-log-PSD surface. The spline surface smooths out the periodogram's cell-to-
-cell noise while still tracking the peak's drift across time — the same
-bias/variance trade-off that log-P-splines make in the stationary case,
-now in two dimensions.
+```{image} _static/moving-periodogram-demo-fit.png
+:alt: Simulated time-varying signal, its Tang moving periodogram, and the posterior median log-PSD surface
+:width: 100%
+:align: center
+```
 
-The full script that generates both figures is
-`docs/studies/wdm_demo.py`.
+From top to bottom in each figure: the simulated series, the raw periodogram
+(a full WDM grid, or the Tang zig-zag's per-window ordinates pooled into
+rectangular cells), and the posterior median of the fitted log-PSD surface.
+In both cases the spline surface smooths out the periodogram's cell-to-cell
+noise while still tracking the peak's drift across time — the same
+bias/variance trade-off that log-P-splines make in the stationary case, now
+in two dimensions. The WDM grid fills every time-frequency cell, whereas the
+moving periodogram visits one frequency rung per window, so its raw panel is
+noisier for a comparable number of retained cells; the fitted surfaces are
+nonetheless comparable because both feed the same tensor-spline model.
+
+The full script that generates all three figures is
+`docs/studies/time_varying_psd_demo.py`.
 
 ## What moved
 

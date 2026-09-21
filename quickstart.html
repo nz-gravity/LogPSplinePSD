@@ -216,7 +216,7 @@
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="wdm-transfer.html">Time-varying PSD estimation (WDM)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="time-varying-psd.html">Time-varying PSD estimation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
@@ -516,14 +516,14 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:00| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.024, max_var_ratio=1.010, covariance_rel_drift=0.008).</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.055, max_var_ratio=1.022, covariance_rel_drift=0.014).</span>
 </pre></div>
 </div>
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7f64bfe35760&gt;,
- &lt;matplotlib.lines.Line2D at 0x7f64bfe35790&gt;]
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7f9f59380500&gt;,
+ &lt;matplotlib.lines.Line2D at 0x7f9f593c83e0&gt;]
 </pre></div>
 </div>
-<img alt="_images/fbe591ef16a2026b3503fdb531c4a6fd8291df21e79fe05613c96fbcd9ef7aa5.png" src="_images/fbe591ef16a2026b3503fdb531c4a6fd8291df21e79fe05613c96fbcd9ef7aa5.png" />
+<img alt="_images/2b998d886c01c74993f9a3a14220b9f4683b3ce19c3ece266713d4855c76c1e8.png" src="_images/2b998d886c01c74993f9a3a14220b9f4683b3ce19c3ece266713d4855c76c1e8.png" />
 </div>
 </div>
 </section>
@@ -555,16 +555,16 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Wishart averaging (blocks=8): n=16384 -&gt; Lb=2048, N=1024, p=2</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Wishart averaging (blocks=8): n=16384 -&gt; Lb=2048, N=1024, p=2</span>
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.37e+00</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.39e+00</span>
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Inferred sampler type: multivar_blocked_nuts</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:03| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Inferred sampler type: multivar_blocked_nuts</span>
 </pre></div>
 </div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:08| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: SpectralComponents(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:14| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: SpectralComponents(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
 </pre></div>
 </div>
 <div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/home/runner/work/LogPSplinePSD/LogPSplinePSD/src/log_psplines/inference/nuts.py:44: UserWarning: There are not enough devices to run parallel chains: expected 2 but got 1. Chains will be drawn sequentially. If you are running MCMC in CPU, consider using `numpyro.set_host_device_count(2)` at the beginning of your program. You can double-check how many devices are available in your system using `jax.local_device_count()`.
@@ -597,7 +597,7 @@
 </div>
 </div>
 <div class="cell_output docutils container">
-<img alt="_images/50ea7adb88fbb758519c05b92e9f2f00fa3c410c63c686c6bb5b64d4830fee65.png" src="_images/50ea7adb88fbb758519c05b92e9f2f00fa3c410c63c686c6bb5b64d4830fee65.png" />
+<img alt="_images/ccf339de6ef12a9d613ad0b3f5d9d6abdf2e49ee7fd7f7a295d5deb153877c8b.png" src="_images/ccf339de6ef12a9d613ad0b3f5d9d6abdf2e49ee7fd7f7a295d5deb153877c8b.png" />
 </div>
 </div>
 <p><img alt="" src="_images/var3_psd_matrix.png" /></p>

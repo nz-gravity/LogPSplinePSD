@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Time-varying PSD estimation (WDM) &#8212; LogPSplinePSD</title>
+    <title>Time-varying PSD estimation &#8212; LogPSplinePSD</title>
   
   
   
@@ -62,7 +62,7 @@
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
     <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'wdm-transfer';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'time-varying-psd';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -218,7 +218,7 @@
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Time-varying PSD estimation (WDM)</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Time-varying PSD estimation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
@@ -305,7 +305,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fwdm-transfer.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Ftime-varying-psd.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -335,7 +335,7 @@
       
       
       
-      <li><a href="_sources/wdm-transfer.md" target="_blank"
+      <li><a href="_sources/time-varying-psd.md" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -411,7 +411,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Time-varying PSD estimation (WDM)</h1>
+    <h1>Time-varying PSD estimation</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -441,15 +441,29 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="time-varying-psd-estimation-wdm">
-<h1>Time-varying PSD estimation (WDM)<a class="headerlink" href="#time-varying-psd-estimation-wdm" title="Link to this heading">#</a></h1>
+  <section class="tex2jax_ignore mathjax_ignore" id="time-varying-psd-estimation">
+<h1>Time-varying PSD estimation<a class="headerlink" href="#time-varying-psd-estimation" title="Link to this heading">#</a></h1>
 <p>Most of this package estimates a single, stationary PSD from a whole time
 series. Real signals are often not stationary: the spectrum itself drifts
 over time (a chirp, a changing noise floor, a resonance that turns on and
 off). This page shows how <code class="docutils literal notranslate"><span class="pre">log_psplines</span></code> estimates a <strong>time-varying PSD</strong>
-<span class="math notranslate nohighlight">\(S(t, f)\)</span> from a wavelet-domain (WDM) time-frequency transform, using the
-same log-P-spline machinery as the stationary case, just with a
-two-dimensional spline surface instead of a one-dimensional curve.</p>
+<span class="math notranslate nohighlight">\(S(t, f)\)</span> from a time-frequency transform of the series, using the same
+log-P-spline machinery as the stationary case, just with a two-dimensional
+spline surface instead of a one-dimensional curve.</p>
+<p>Two time-frequency transforms feed the same model:</p>
+<ul class="simple">
+<li><p>a <strong>wavelet-domain (WDM)</strong> transform, which evaluates a coefficient at
+every retained time and frequency cell (<code class="docutils literal notranslate"><span class="pre">preprocessing/wdm.py</span></code>, optional
+<code class="docutils literal notranslate"><span class="pre">wdm-transform</span></code> dependency), and</p></li>
+<li><p>the <strong>Tang zig-zag moving periodogram</strong>, which slides a window over the
+series and cycles through frequencies in a zig-zag pattern, so it spends
+one observation per window rather than a full grid
+(<code class="docutils literal notranslate"><span class="pre">preprocessing/moving_periodogram.py</span></code>, no extra dependency).</p></li>
+</ul>
+<p>See <a class="reference internal" href="moving-periodogram-vs-wdm.html"><span class="std std-doc">Moving periodogram versus WDM</span></a> for a
+visual comparison of how the two transforms spend their observations.
+Both produce a rectangular <code class="docutils literal notranslate"><span class="pre">PowerSpectrum</span></code> with <code class="docutils literal notranslate"><span class="pre">time</span></code> and <code class="docutils literal notranslate"><span class="pre">frequency</span></code> axes,
+so both fit through the same scalar time-frequency <code class="docutils literal notranslate"><span class="pre">fit()</span></code> entry point.</p>
 <p>Scalar time-frequency fitting runs through the existing <code class="docutils literal notranslate"><span class="pre">fit()</span></code> entry point.
 It uses <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code>, with the same <code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code> type for time and
 frequency, and returns a <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>. No separate TV model hierarchy or
@@ -457,10 +471,11 @@ second pipeline was added; the stationary Wishart/VI/blocked-NUTS path is
 unchanged.</p>
 <section id="the-model">
 <h2>The model<a class="headerlink" href="#the-model" title="Link to this heading">#</a></h2>
-<p>The WDM transform turns a real time series into a grid of coefficients
-<span class="math notranslate nohighlight">\(w_{t,f}\)</span>, one per retained time bin <span class="math notranslate nohighlight">\(t\)</span> and frequency bin <span class="math notranslate nohighlight">\(f\)</span>. Each
-coefficient behaves like a zero-mean Gaussian whose variance is the local
-PSD, so <span class="math notranslate nohighlight">\(w_{t,f}^2\)</span> is a noisy time-frequency power estimate — the
+<p>Both transforms turn a real time series into a grid of coefficients
+<span class="math notranslate nohighlight">\(w_{t,f}\)</span>, one per retained time bin <span class="math notranslate nohighlight">\(t\)</span> and frequency bin <span class="math notranslate nohighlight">\(f\)</span> (WDM fills the
+full grid; the moving periodogram fills it one zig-zag rung per window).
+Each coefficient behaves like a zero-mean Gaussian whose variance is the
+local PSD, so <span class="math notranslate nohighlight">\(w_{t,f}^2\)</span> is a noisy time-frequency power estimate — the
 time-varying analogue of an ordinary periodogram ordinate.</p>
 <p><code class="docutils literal notranslate"><span class="pre">log_psplines</span></code> models the log-PSD surface as a tensor-product B-spline:</p>
 <div class="math notranslate nohighlight">
@@ -496,14 +511,16 @@ block) and the coarser off-diagonal bands come from <span class="math notranslat
 <h2>Demo: a drifting spectral peak<a class="headerlink" href="#demo-a-drifting-spectral-peak" title="Link to this heading">#</a></h2>
 <p>The example below simulates a non-stationary MA(1) process whose moving-
 average coefficient oscillates in time (the LS2 test case from Tang et al.),
-so its spectral peak drifts back and forth. It computes the WDM periodogram,
-fits it with <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code> + <code class="docutils literal notranslate"><span class="pre">fit()</span></code>, and reads off the posterior median
-log-PSD surface.</p>
+so its spectral peak drifts back and forth. It fits the same series twice —
+once from the WDM periodogram, once from the Tang moving periodogram — with
+<code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code> + <code class="docutils literal notranslate"><span class="pre">fit()</span></code>, and reads off the posterior median log-PSD surface
+each time.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">TimeSeries</span><span class="p">,</span> <span class="n">SplineBasis</span><span class="p">,</span> <span class="n">LogPSpline</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">,</span> <span class="n">fit</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.preprocessing.wdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">wdm_periodogram</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.preprocessing.moving_periodogram</span><span class="w"> </span><span class="kn">import</span> <span class="n">moving_periodogram</span>
 
 <span class="c1"># A non-stationary MA(1): the coefficient oscillates, so the spectral</span>
 <span class="c1"># peak drifts over time.</span>
@@ -515,27 +532,42 @@ log-PSD surface.</p>
 <span class="n">values</span> <span class="o">=</span> <span class="n">noise</span><span class="p">[</span><span class="mi">1</span> <span class="p">:</span> <span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">coefficient</span> <span class="o">*</span> <span class="n">noise</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span>
 
 <span class="n">series</span> <span class="o">=</span> <span class="n">TimeSeries</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">values</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.1</span><span class="p">)</span>
-<span class="n">data</span> <span class="o">=</span> <span class="n">wdm_periodogram</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">nt</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">LogPSpline</span><span class="p">(</span>
-    <span class="n">frequency</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">frequency</span> <span class="o">/</span> <span class="n">data</span><span class="o">.</span><span class="n">frequency</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mi">4</span><span class="p">),</span>
-    <span class="n">time</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
-<span class="p">)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">(),</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
-<span class="c1"># result.psd: (chain, draw, time, frequency)</span>
-<span class="n">result</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"output"</span><span class="p">)</span>
-<span class="n">result</span><span class="o">.</span><span class="n">to_netcdf</span><span class="p">(</span><span class="s2">"fit.nc"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">fit_surface</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">LogPSpline</span><span class="p">(</span>
+        <span class="n">frequency</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">frequency</span> <span class="o">/</span> <span class="n">data</span><span class="o">.</span><span class="n">frequency</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mi">4</span><span class="p">),</span>
+        <span class="n">time</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">(),</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+
+
+<span class="n">wdm_data</span> <span class="o">=</span> <span class="n">wdm_periodogram</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">nt</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+<span class="n">wdm_result</span> <span class="o">=</span> <span class="n">fit_surface</span><span class="p">(</span><span class="n">wdm_data</span><span class="p">)</span>
+
+<span class="n">mp_data</span> <span class="o">=</span> <span class="n">moving_periodogram</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">m</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">thin</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">mp_result</span> <span class="o">=</span> <span class="n">fit_surface</span><span class="p">(</span><span class="n">mp_data</span><span class="p">)</span>
+<span class="c1"># each result.psd: (chain, draw, time, frequency)</span>
+<span class="n">wdm_result</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"output/wdm"</span><span class="p">)</span>
+<span class="n">mp_result</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"output/moving_periodogram"</span><span class="p">)</span>
 </pre></div>
 </div>
 <a class="reference internal image-reference" href="_images/wdm-demo-fit.png"><img alt="Simulated time-varying signal, its WDM periodogram, and the posterior median log-PSD surface" class="align-center" src="_images/wdm-demo-fit.png" style="width: 100%;" />
 </a>
-<p>From top to bottom: the simulated series, the raw WDM periodogram (one
-coefficient per time-frequency cell), and the posterior median of the fitted
-log-PSD surface. The spline surface smooths out the periodogram’s cell-to-
-cell noise while still tracking the peak’s drift across time — the same
-bias/variance trade-off that log-P-splines make in the stationary case,
-now in two dimensions.</p>
-<p>The full script that generates both figures is
-<code class="docutils literal notranslate"><span class="pre">docs/studies/wdm_demo.py</span></code>.</p>
+<a class="reference internal image-reference" href="_images/moving-periodogram-demo-fit.png"><img alt="Simulated time-varying signal, its Tang moving periodogram, and the posterior median log-PSD surface" class="align-center" src="_images/moving-periodogram-demo-fit.png" style="width: 100%;" />
+</a>
+<p>From top to bottom in each figure: the simulated series, the raw periodogram
+(a full WDM grid, or the Tang zig-zag’s per-window ordinates pooled into
+rectangular cells), and the posterior median of the fitted log-PSD surface.
+In both cases the spline surface smooths out the periodogram’s cell-to-cell
+noise while still tracking the peak’s drift across time — the same
+bias/variance trade-off that log-P-splines make in the stationary case, now
+in two dimensions. The WDM grid fills every time-frequency cell, whereas the
+moving periodogram visits one frequency rung per window, so its raw panel is
+noisier for a comparable number of retained cells; the fitted surfaces are
+nonetheless comparable because both feed the same tensor-spline model.</p>
+<p>The full script that generates all three figures is
+<code class="docutils literal notranslate"><span class="pre">docs/studies/time_varying_psd_demo.py</span></code>.</p>
 </section>
 <section id="what-moved">
 <h2>What moved<a class="headerlink" href="#what-moved" title="Link to this heading">#</a></h2>

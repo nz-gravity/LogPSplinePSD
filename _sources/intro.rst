@@ -56,8 +56,8 @@ Where To Start
 - :doc:`quickstart` shows a small synthetic run.
 - :doc:`configuration` explains the main knobs in ``PipelineConfig``.
 - :doc:`data_preprocessing` describes accepted inputs and FFT preprocessing.
-- :doc:`wdm-transfer` documents the scalar WDM transfer path and the LS2
-  numerical-parity demo.
+- :doc:`time-varying-psd` documents the scalar time-varying PSD path (WDM
+  and Tang moving periodogram) and the LS2 numerical-parity demo.
 - :doc:`outputs` explains the returned ``DataTree`` and saved diagnostics.
 - :doc:`technical_notes` links the implemented likelihood to the code.
 - :doc:`api` lists the most useful public classes and functions.

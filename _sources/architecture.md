@@ -87,7 +87,7 @@ helpers remain stationary; `PSDResult.save()` renders a surface for TV fits.
 
 The historical stationary prior and VI/blocked-NUTS path are unchanged.
 Multivariate TV inference, moving-periodogram adapters and TV VI remain future
-work. See [the transfer notes](wdm-transfer.md) for conventions and LS2 checks.
+work. See [the time-varying PSD notes](time-varying-psd.md) for conventions and LS2 checks.
 
 ## Migration
 

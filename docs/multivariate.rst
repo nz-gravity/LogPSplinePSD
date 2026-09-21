@@ -13,7 +13,7 @@ and a comparison between variational inference and blocked NUTS.
 The notebook simulates a two-channel VAR process, runs the multivariate
 pipeline, and plots posterior auto-spectra, cross-spectra, and coherence:
 
-:download:`Open the multivariate example notebook <quickstart.ipynb>`
+:download:`Open the multivariate example notebook <multivariate-example.ipynb>`
 
 The notebook uses the same public pattern as the short example:
 

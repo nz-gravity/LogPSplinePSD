@@ -36,7 +36,6 @@ def test_mcmc_p1(outdir: str):
     files_to_check = [
         "inference_data.nc",
         "posterior_spectrum.png",
-        "diagnostics/vi_summary.csv",
         "diagnostics/nuts_summary.csv",
     ]
     _check_for_files(files_to_check, outdir_str)
@@ -77,7 +76,6 @@ def test_mcmc_p1(outdir: str):
     # check for diagnostic plots
     _check_for_files(
         [
-            "diagnostics/vi_loss.png",
             "diagnostics/traces.png",
             "diagnostics/energy.png",
         ],
@@ -94,7 +92,6 @@ def test_mcmc_multivar(outdir):
         [
             "inference_data.nc",
             "posterior_spectrum.png",
-            "diagnostics/vi_summary.csv",
             "diagnostics/nuts_summary.csv",
             "diagnostics/preprocessing_eigenvalue_ratios.png",
         ],
@@ -130,7 +127,7 @@ def test_mcmc_multivar(outdir):
     ), "PSD should be Hermitian."
 
     assert "vi_log_likelihood" not in idata.children
-
+    assert "vi_posterior" not in idata.children
 
     _check_stats_are_finite(idata, outdir_str)
 
@@ -138,7 +135,6 @@ def test_mcmc_multivar(outdir):
     files_to_check = [
         "diagnostics/traces.png",
         "diagnostics/energy.png",
-        "diagnostics/vi_loss.png",
     ]
     _check_for_files(files_to_check, outdir_str)
 
@@ -234,13 +230,6 @@ def test_multivar_lnz_sums_factor_results(monkeypatch) -> None:
         coarse_grain_config=CoarseGrainConfig(enabled=True, Nc=None, Nh=2),
         verbose=False,
         outdir=None,
-        init_from_vi=True,
-        only_vi=False,
-        vi_steps=8,
-        vi_lr=5e-3,
-        vi_progress_bar=False,
-        vi_posterior_draws=8,
-        vi_psd_max_draws=8,
         compute_lnz=False,
     )
     pipeline = make_pipeline(ts_run, config)
@@ -265,9 +254,7 @@ def test_multivar_lnz_sums_factor_results(monkeypatch) -> None:
 
 
 def _check_stats_are_finite(idata, outdir) -> None:
-    vi_stats = idata["vi_sample_stats"].dataset
     nuts_stats = idata["sample_stats"].dataset
-    vi_stats_pd = pd.read_csv(f"{outdir}/diagnostics/vi_summary.csv")
     nuts_stats_pd = pd.read_csv(f"{outdir}/diagnostics/nuts_summary.csv")
 
     def check_finite(d: dict, key: list[str]) -> None:
@@ -282,12 +269,9 @@ def _check_stats_are_finite(idata, outdir) -> None:
         "step_size",
         "max_treedepth_hits",
     ]
-    vi_keys = ["riae", "l2", "coverage", "pareto_k_max"]
 
     check_finite(nuts_stats.attrs, nuts_keys)
     check_finite(nuts_stats_pd.iloc[0], nuts_keys)
-    check_finite(vi_stats.attrs, vi_keys)
-    check_finite(vi_stats_pd.iloc[0], vi_keys)
 
 
 def _check_for_files(expected_files, outdir):
@@ -330,7 +314,6 @@ def _run_p1_mcmc(outdir):
         verbose=True,
         outdir=outdir,
         compute_lnz=compute_lnz,
-        init_from_vi=True,
         num_chains=2,
     )
     idata = fit(
@@ -377,7 +360,6 @@ def _run_multivar_mcmc(outdir):
     )
 
     n_samples = n_warmup = 200
-    vi_steps = 5000
     Nb = 4  # Number of blocks for Welch periodogram
 
     expected_freq = _expected_coarse_freq_multivar(
@@ -401,13 +383,6 @@ def _run_multivar_mcmc(outdir):
         true_psd=varma_data.get_true_psd(),
         verbose=True,
         outdir=outdir,
-        init_from_vi=True,
-        only_vi=False,
-        vi_steps=vi_steps,
-        vi_lr=5e-3,
-        vi_progress_bar=False,
-        vi_posterior_draws=100,
-        vi_psd_max_draws=100,
         compute_lnz=False,
         extra_kwargs={
             "lnz_kwargs": {

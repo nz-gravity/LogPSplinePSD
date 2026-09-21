@@ -21,7 +21,6 @@ class PSDResult:
     """Outputs from InferencePipeline.run()."""
 
     idata: xr.DataTree
-    vi_coarse: StageResult | None = None
     vi: StageResult | None = None
     time: np.ndarray | None = None
 
@@ -131,8 +130,3 @@ class PSDResult:
                     os.path.join(outdir, "vi_losses_per_block.npy"),
                     losses_per_block,
                 )
-        if self.vi_coarse is not None and self.vi_coarse.losses is not None:
-            np.save(
-                os.path.join(outdir, "vi_coarse_losses.npy"),
-                np.asarray(self.vi_coarse.losses),
-            )

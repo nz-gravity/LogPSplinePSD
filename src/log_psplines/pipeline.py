@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 import xarray as xr
 
 from log_psplines.arviz_utils.to_arviz import (
@@ -19,53 +18,46 @@ from log_psplines.inference.evidence import (
 )
 from log_psplines.inference.model import prepare_model
 from log_psplines.inference.nuts import FactorizedMultivarNUTSStage
-from log_psplines.inference.vi import (
-    FactorizedMultivarVIStage,
-    StageResult,
-)
+from log_psplines.inference.vi import FactorizedMultivarVIStage
 from log_psplines.preprocessing.checks import _save_preprocessing_plot
-from log_psplines.preprocessing.spectral import (
-    coarse_vi_freq_domain,
-    preprocess_to_freq_domain,
-)
+from log_psplines.preprocessing.spectral import preprocess_to_freq_domain
 from log_psplines.results import PSDResult
 
 from .logger import logger
 
 
 class InferencePipeline:
-    """Sequential vi_coarse → vi → nuts inference pipeline.
+    """Runs either a standalone VI fit or a standalone NUTS fit.
 
-    Each stage receives ``init_values`` from the previous stage so that
-    downstream optimisation / sampling starts near the posterior mode.
+    ``config.method`` selects the stage; VI never seeds NUTS initial values.
     """
 
     def __init__(
         self,
         full_model_kwargs: dict,
-        coarse_model_kwargs: dict | None,
         data: WishartData,
         spline_model: SpectralComponents,
         config: PipelineConfig,
-        vi_stage: FactorizedMultivarVIStage,
-        nuts_stage: FactorizedMultivarNUTSStage,
+        vi_stage: FactorizedMultivarVIStage | None,
+        nuts_stage: FactorizedMultivarNUTSStage | None,
     ) -> None:
         self.full_model_kwargs = full_model_kwargs
-        self.coarse_model_kwargs = coarse_model_kwargs
         self.data = data
         self.spline_model = spline_model
         self.config = config
         self.vi_stage = vi_stage
         self.nuts_stage = nuts_stage
 
-    def _attach_lnz_metadata(self, idata: xr.DataTree) -> xr.DataTree:
+    def _attach_lnz_metadata(
+        self, idata: xr.DataTree, *, eta: float
+    ) -> xr.DataTree:
         """Compute optional lnZ and store summary attrs on ``idata``."""
         if not bool(self.config.compute_lnz):
             return idata
 
         try:
             lnz_model_kwargs = dict(self.full_model_kwargs)
-            lnz_model_kwargs["eta"] = float(self.nuts_stage.eta)
+            lnz_model_kwargs["eta"] = float(eta)
             result = estimate_pipeline_lnz(
                 idata=idata,
                 data=self.data,
@@ -131,13 +123,11 @@ class InferencePipeline:
             else self.config.rng_key
         )
 
-        vi_coarse: StageResult | None = None
-        init_values: dict[str, jnp.ndarray] | None = None
-
-        if self.coarse_model_kwargs is not None:
+        if self.config.method == "vi":
+            assert self.vi_stage is not None
             rng, key = jax.random.split(rng)
-            vi_coarse = self.vi_stage.run(
-                self.coarse_model_kwargs,
+            vi = self.vi_stage.run(
+                self.full_model_kwargs,
                 init_values=None,
                 rng_key=key,
                 verbose=(
@@ -146,56 +136,24 @@ class InferencePipeline:
                     else self.config.vi_progress_bar
                 ),
             )
-            init_values = vi_coarse.init_values
-
-        if self.config.vi_coarse_only:
-            if vi_coarse is None:
-                raise ValueError(
-                    "vi_coarse_only=True requires coarse_model_kwargs. "
-                    "Set coarse_grain_config_vi or auto_coarse_vi."
-                )
-            idata = _vi_result_to_idata(vi_coarse)
-            idata = pack_stationary_result(
-                idata,
-                self.data,
-                self.spline_model,
-                self.config,
-                self.nuts_stage.eta,
-                vi_coarse,
-            )
-            return PSDResult(vi_coarse=vi_coarse, vi=None, idata=idata)
-
-        rng, key = jax.random.split(rng)
-        vi = self.vi_stage.run(
-            self.full_model_kwargs,
-            init_values=init_values,
-            rng_key=key,
-            verbose=(
-                self.config.verbose
-                if self.config.vi_progress_bar is None
-                else self.config.vi_progress_bar
-            ),
-        )
-        init_values = vi.init_values if self.config.init_from_vi else None
-
-        if self.config.only_vi:
             idata = _vi_result_to_idata(vi)
             idata = pack_stationary_result(
                 idata,
                 self.data,
                 self.spline_model,
                 self.config,
-                self.nuts_stage.eta,
+                self.config.eta,
                 vi,
             )
-            return PSDResult(vi_coarse=vi_coarse, vi=vi, idata=idata)
+            return PSDResult(vi=vi, idata=idata)
 
+        assert self.nuts_stage is not None
         logger.info(f"Spline model: {self.spline_model}")
 
         rng, key = jax.random.split(rng)
         idata = self.nuts_stage.run(
             self.full_model_kwargs,
-            init_values=init_values,
+            init_values=None,
             rng_key=key,
             verbose=self.config.verbose,
         )
@@ -205,11 +163,11 @@ class InferencePipeline:
             self.spline_model,
             self.config,
             self.nuts_stage.eta,
-            vi,
+            None,
         )
         idata = self._attach_pointwise_log_likelihood(idata)
-        idata = self._attach_lnz_metadata(idata)
-        return PSDResult(vi_coarse=vi_coarse, vi=vi, idata=idata)
+        idata = self._attach_lnz_metadata(idata, eta=self.nuts_stage.eta)
+        return PSDResult(vi=None, idata=idata)
 
 
 def make_pipeline(
@@ -245,41 +203,37 @@ def make_pipeline(
     if isinstance(data, WishartData) and config.outdir is not None:
         _save_preprocessing_plot(data, config, spline_model=spline_model)
 
-    coarse_data = (
-        coarse_vi_freq_domain(data, config)
-        if config.init_from_vi and config.use_coarse_vi_for_init
-        else None
-    )
-    coarse_kwargs = (
-        prepare_model(coarse_data, config)[0]
-        if coarse_data is not None
-        else None
-    )
-
     eta = float(config.eta)
-    vi_stage = FactorizedMultivarVIStage(
-        steps=config.vi_steps,
-        lr=config.vi_lr,
-        guide=config.vi_guide or "diag",
-        posterior_draws=config.vi_posterior_draws,
-        eta=eta,
+    vi_stage = (
+        FactorizedMultivarVIStage(
+            steps=config.vi_steps,
+            lr=config.vi_lr,
+            guide=config.vi_guide or "diag",
+            posterior_draws=config.vi_posterior_draws,
+            eta=eta,
+        )
+        if config.method == "vi"
+        else None
     )
-    nuts_stage = FactorizedMultivarNUTSStage(
-        n_samples=config.n_samples,
-        n_warmup=config.n_warmup,
-        target_accept_prob=config.target_accept_prob,
-        max_tree_depth=config.max_tree_depth,
-        dense_mass=config.dense_mass,
-        num_chains=config.num_chains,
-        chain_method=config.chain_method,
-        eta=eta,
-        target_accept_prob_by_channel=config.target_accept_prob_by_channel,
-        max_tree_depth_by_channel=config.max_tree_depth_by_channel,
+    nuts_stage = (
+        FactorizedMultivarNUTSStage(
+            n_samples=config.n_samples,
+            n_warmup=config.n_warmup,
+            target_accept_prob=config.target_accept_prob,
+            max_tree_depth=config.max_tree_depth,
+            dense_mass=config.dense_mass,
+            num_chains=config.num_chains,
+            chain_method=config.chain_method,
+            eta=eta,
+            target_accept_prob_by_channel=config.target_accept_prob_by_channel,
+            max_tree_depth_by_channel=config.max_tree_depth_by_channel,
+        )
+        if config.method == "nuts"
+        else None
     )
 
     return InferencePipeline(
         full_model_kwargs=full_kwargs,
-        coarse_model_kwargs=coarse_kwargs,
         data=data,
         spline_model=spline_model,
         config=config,

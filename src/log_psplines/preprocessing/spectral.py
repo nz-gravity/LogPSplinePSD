@@ -6,8 +6,6 @@ This module converts input data to the frequency-domain objects consumed by
 
 from __future__ import annotations
 
-from math import ceil
-
 import numpy as np
 
 from log_psplines._jaxtypes import Complex, Float
@@ -15,11 +13,6 @@ from log_psplines._typecheck import runtime_typecheck
 from log_psplines.data.spectral import WishartData
 from log_psplines.data.spectral_utils import _interp_frequency_indexed_array
 from ..logger import logger
-from log_psplines.preprocessing.coarse_grain import (
-    CoarseGrainConfig,
-    _closest_divisor,
-    _smallest_divisor_geq,
-)
 from log_psplines.preprocessing.data_prep import (
     _apply_frequency_exclusion,
     _coarse_grain_processed_data,
@@ -44,16 +37,6 @@ def preprocess_to_freq_domain(data, config: PipelineConfig) -> FrequencyData:
     freq_data = _apply_frequency_exclusion(freq_data, excl_bands)
 
     return freq_data
-
-
-def _frequency_count(data: FrequencyData) -> int:
-    return int(len(data.freq))
-
-
-def _max_n_knots(n_knots: int | dict[str, int]) -> int:
-    if isinstance(n_knots, int):
-        return int(n_knots)
-    return max(int(value) for value in n_knots.values())
 
 
 def _unpack_true_psd(
@@ -122,75 +105,8 @@ def align_true_psd_to_freq(
     )
 
 
-def _resolve_explicit_coarse_vi_config(
-    data: FrequencyData,
-    config: PipelineConfig,
-) -> CoarseGrainConfig | None:
-    cg_config = _normalize_coarse_grain_config(config.coarse_grain_config_vi)
-    if not cg_config.enabled:
-        return None
-
-    full_nfreq = _frequency_count(data)
-    if cg_config.Nc is not None and full_nfreq % int(cg_config.Nc) != 0:
-        requested = int(cg_config.Nc)
-        adjusted = _closest_divisor(full_nfreq, requested)
-        logger.info(
-            f"Adjusting explicit coarse VI bins: N_full={full_nfreq} "
-            f"not divisible by Nc={requested}; using Nc={adjusted}."
-        )
-        return CoarseGrainConfig(enabled=True, Nc=adjusted, Nh=None)
-
-    if cg_config.Nh is not None and full_nfreq % int(cg_config.Nh) != 0:
-        requested = int(cg_config.Nh)
-        adjusted = _closest_divisor(full_nfreq, requested)
-        logger.info(
-            f"Adjusting explicit coarse VI bin width: N_full={full_nfreq} "
-            f"not divisible by Nh={requested}; using Nh={adjusted}."
-        )
-        return CoarseGrainConfig(enabled=True, Nc=None, Nh=adjusted)
-
-    return cg_config
-
-
-def coarse_vi_freq_domain(
-    data: FrequencyData,
-    config: PipelineConfig,
-) -> FrequencyData | None:
-    """Return a separate coarse VI grid, or ``None`` when not requested."""
-    explicit = _resolve_explicit_coarse_vi_config(data, config)
-    if explicit is not None:
-        coarse_data, _ = _coarse_grain_processed_data(data, explicit, None)
-        assert coarse_data is not None, "Coarse VI gridding removed all data."
-        return coarse_data
-
-    if not config.auto_coarse_vi:
-        return None
-
-    full_nfreq = _frequency_count(data)
-    k_basis = int(_max_n_knots(config.n_knots) + config.degree - 1)
-    min_required = max(
-        1,
-        int(config.auto_coarse_vi_min_full_nfreq),
-        20 * k_basis,
-    )
-    if full_nfreq < min_required:
-        return None
-
-    target = max(1, min(config.auto_coarse_vi_target_nfreq, full_nfreq - 1))
-    min_nh = max(2, int(ceil(full_nfreq / float(target))))
-    nh = _smallest_divisor_geq(full_nfreq, min_nh)
-    if nh is None or nh <= 1:
-        return None
-
-    cg_config = CoarseGrainConfig(enabled=True, Nc=None, Nh=nh)
-    coarse_data, _ = _coarse_grain_processed_data(data, cg_config, None)
-    assert coarse_data is not None, "Coarse VI gridding removed all data."
-    return coarse_data
-
-
 __all__ = [
     "FrequencyData",
     "align_true_psd_to_freq",
     "preprocess_to_freq_domain",
-    "coarse_vi_freq_domain",
 ]

@@ -6,10 +6,8 @@ import xarray as xr
 from log_psplines.data import WishartData, TimeSeries
 from log_psplines.config import PipelineConfig
 from log_psplines.preprocessing.spectral import (
-    _max_n_knots,
     _unpack_true_psd,
     align_true_psd_to_freq,
-    coarse_vi_freq_domain,
     preprocess_to_freq_domain,
 )
 from log_psplines.plotting.base import (
@@ -48,14 +46,12 @@ def _fft(n: int = 12) -> WishartData:
     )
 
 
-def test_pipeline_preprocessing_alignment_and_coarse_vi() -> None:
+def test_pipeline_preprocessing_alignment() -> None:
     fft = _fft(12)
     psd = np.stack([np.eye(2) * (1.0 + idx) for idx in range(12)]).astype(
         complex
     )
 
-    assert _max_n_knots(5) == 5
-    assert _max_n_knots({"delta": 4, "theta_re": 6, "theta_im": 5}) == 6
     assert _unpack_true_psd(None) == (None, None)
     freq, unpacked = _unpack_true_psd({"freq": fft.freq, "psd": psd})
     np.testing.assert_allclose(freq, fft.freq)
@@ -75,48 +71,6 @@ def test_pipeline_preprocessing_alignment_and_coarse_vi() -> None:
         _unpack_true_psd({"freq": fft.freq})
     with pytest.raises(ValueError, match="matching lengths"):
         align_true_psd_to_freq((fft.freq[:-1], psd), fft)
-
-    explicit = coarse_vi_freq_domain(
-        fft,
-        PipelineConfig(coarse_grain_config_vi={"enabled": True, "Nc": 5}),
-    )
-    assert explicit is not None
-    assert explicit.N in {4, 6}
-
-    explicit_nh = coarse_vi_freq_domain(
-        fft,
-        PipelineConfig(
-            coarse_grain_config_vi={"enabled": True, "Nc": None, "Nh": 5}
-        ),
-    )
-    assert explicit_nh is not None
-    assert explicit_nh.Nh in {4, 6}
-
-    assert (
-        coarse_vi_freq_domain(fft, PipelineConfig(auto_coarse_vi=False))
-        is None
-    )
-    assert (
-        coarse_vi_freq_domain(
-            fft,
-            PipelineConfig(
-                auto_coarse_vi=True, auto_coarse_vi_min_full_nfreq=999
-            ),
-        )
-        is None
-    )
-    auto = coarse_vi_freq_domain(
-        _fft(60),
-        PipelineConfig(
-            auto_coarse_vi=True,
-            n_knots=3,
-            degree=1,
-            auto_coarse_vi_min_full_nfreq=1,
-            auto_coarse_vi_target_nfreq=10,
-        ),
-    )
-    assert auto is not None
-    assert auto.N < 60
 
     ts = TimeSeries(np.arange(16.0), t=np.arange(16.0))
     processed = preprocess_to_freq_domain(ts, PipelineConfig())

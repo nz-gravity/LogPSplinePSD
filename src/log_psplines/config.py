@@ -55,20 +55,13 @@ class PipelineConfig:
     outdir: str | None = None
     compute_lnz: bool | None = None
 
-    only_vi: bool = False
-    init_from_vi: bool = True
+    method: Literal["nuts", "vi"] = "nuts"
     vi_steps: int = 1500
     vi_lr: float = 1e-2
     vi_guide: str | None = None
     vi_posterior_draws: int = 50
     vi_progress_bar: bool | None = None
     vi_psd_max_draws: int = 50
-    coarse_grain_config_vi: CoarseGrainConfig | dict | None = None
-    auto_coarse_vi: bool = False
-    auto_coarse_vi_target_nfreq: int = 192
-    auto_coarse_vi_min_full_nfreq: int = 512
-    use_coarse_vi_for_init: bool = True
-    vi_coarse_only: bool = False
 
     target_accept_prob: float = 0.8
     target_accept_prob_by_channel: list[float] | None = None

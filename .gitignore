@@ -16,6 +16,7 @@ pyvenv.cfg
 *.csv
 *.pdf
 *.png
+!docs/_static/five-minute-psd.png
 *.DS_Store
 plots/
 *.npy

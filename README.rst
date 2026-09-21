@@ -36,26 +36,21 @@ Five-Minute Example
 
 .. code-block:: python
 
-   import numpy as np
+   from log_psplines import PipelineConfig, fit
+   from log_psplines.example_datasets import VARMAData
 
-   from log_psplines import PipelineConfig, TimeSeries, fit
-
-   rng = np.random.default_rng(7)
-   fs = 64.0
-   t = np.arange(512) / fs
-   data = TimeSeries(
-      data=np.sin(2 * np.pi * 4 * t) + 0.5 * rng.normal(size=t.size),
-      t=t,
-   )
+   data = VARMAData.ar(order=4, n_samples=8192, fs=64.0, seed=7)
 
    result = fit(
-      data,
+      data.ts,
        PipelineConfig(
-         n_knots=8,
+           n_knots=16,
+           knot_kwargs={"method": "density"},
            vi_steps=200,
-         n_warmup=100,
+           n_warmup=100,
          n_samples=200,
          rng_key=7,
+           true_psd=data.get_true_psd(),
        ),
    )
 

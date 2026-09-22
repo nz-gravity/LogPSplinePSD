@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Outputs and Diagnostics &#8212; LogPSplinePSD</title>
+    <title>Multivariate Example &#8212; LogPSplinePSD</title>
   
   
   
@@ -60,12 +60,12 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'outputs';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'multivariate-example';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Data and Preprocessing" href="data_preprocessing.html" />
-    <link rel="prev" title="Time-varying PSD estimation" href="time-varying-psd.html" />
+    <link rel="next" title="Time-varying Example" href="timevarying-example.html" />
+    <link rel="prev" title="Configuration" href="configuration.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -215,10 +215,10 @@
 <li class="toctree-l1"><a class="reference internal" href="five-minute.html">Five-Minute Example</a></li>
 <li class="toctree-l1"><a class="reference internal" href="results.html">Understanding <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a></li>
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivariate-example.html">Multivariate Example</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Multivariate Example</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timevarying-example.html">Time-varying Example</a></li>
 <li class="toctree-l1"><a class="reference internal" href="time-varying-psd.html">Time-varying PSD estimation</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Outputs and Diagnostics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -282,6 +282,37 @@
 
 
 
+<div class="dropdown dropdown-launch-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
+    <i class="fas fa-rocket"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://colab.research.google.com/github/nz-gravity/LogPSplinePSD/blob/main/docs/multivariate-example.ipynb" target="_blank"
+   class="btn btn-sm dropdown-item"
+   title="Launch on Colab"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  
+    <img alt="Colab logo" src="_static/images/logo_colab.png">
+  </span>
+<span class="btn__text-container">Colab</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
 <div class="dropdown dropdown-source-buttons">
   <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
     <i class="fab fa-github"></i>
@@ -307,7 +338,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Foutputs.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivariate-example.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -337,7 +368,7 @@
       
       
       
-      <li><a href="_sources/outputs.rst" target="_blank"
+      <li><a href="_sources/multivariate-example.ipynb" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -347,7 +378,7 @@
 <span class="btn__icon-container">
   <i class="fas fa-file"></i>
   </span>
-<span class="btn__text-container">.rst</span>
+<span class="btn__text-container">.ipynb</span>
 </a>
 </li>
       
@@ -413,7 +444,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Outputs and Diagnostics</h1>
+    <h1>Multivariate Example</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -423,12 +454,11 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#return-value">Return Value</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#saved-files">Saved Files</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-results">Loading Results</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#extracting-psd-summaries">Extracting PSD Summaries</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-checklist">Diagnostics Checklist</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reporting-contracts">Reporting contracts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#imports">Imports</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulate-a-two-channel-var-process">Simulate a two-channel VAR process</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-vi-warm-start-and-nuts">Run VI warm start and NUTS</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-vi-and-nuts-posterior-psds">Compare VI and NUTS posterior PSDs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-check">What to check</a></li>
 </ul>
             </nav>
         </div>
@@ -440,93 +470,151 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="outputs-and-diagnostics">
-<h1>Outputs and Diagnostics<a class="headerlink" href="#outputs-and-diagnostics" title="Link to this heading">#</a></h1>
-<section id="return-value">
-<h2>Return Value<a class="headerlink" href="#return-value" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">fit(...).idata</span></code> returns an <code class="docutils literal notranslate"><span class="pre">xarray.DataTree</span></code>. Important groups include:</p>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">posterior</span></code></dt><dd><p>NUTS posterior samples for spline weights and model parameters.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">sample_stats</span></code></dt><dd><p>Per-channel sampler diagnostics such as acceptance rate, step size, tree
-depth, and log probability.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">observed_data</span></code></dt><dd><p>Frequency grid and empirical PSD-like data derived from the Wishart
-statistics.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">vi_posterior</span></code> and <code class="docutils literal notranslate"><span class="pre">vi_sample_stats</span></code></dt><dd><p>VI draws, losses, and warm-start diagnostics when VI is enabled.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">prior_predictive</span></code> and <code class="docutils literal notranslate"><span class="pre">posterior_predictive</span></code></dt><dd><p>Reconstructed spectral quantities used by plotting and diagnostics when
-available.</p>
-</dd>
-</dl>
-</section>
-<section id="saved-files">
-<h2>Saved Files<a class="headerlink" href="#saved-files" title="Link to this heading">#</a></h2>
-<p>When <code class="docutils literal notranslate"><span class="pre">PipelineConfig(outdir=...)</span></code> is set, the pipeline writes:</p>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">inference_data.nc</span></code></dt><dd><p>NetCDF serialisation of the returned <code class="docutils literal notranslate"><span class="pre">DataTree</span></code>.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">posterior_spectrum.png</span></code></dt><dd><p>PSD matrix summary or scalar time-frequency surface.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">diagnostics/vi_summary.csv</span></code></dt><dd><p>VI convergence and loss summary.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">diagnostics/nuts_summary.csv</span></code></dt><dd><p>NUTS diagnostics and, when a truth PSD is supplied, error metrics.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">diagnostics/vi_loss.png</span></code></dt><dd><p>VI loss trace.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">diagnostics/traces.png</span></code> and <code class="docutils literal notranslate"><span class="pre">diagnostics/energy.png</span></code></dt><dd><p>Standard MCMC trace and energy diagnostics.</p>
-</dd>
-</dl>
-<p>Some files are conditional. For example, preprocessing eigenvalue plots are
-written for multivariate frequency-domain inputs when an output directory is
-available.</p>
-</section>
-<section id="loading-results">
-<h2>Loading Results<a class="headerlink" href="#loading-results" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.arviz_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">open_inference_data</span>
-
-<span class="n">idata</span> <span class="o">=</span> <span class="n">open_inference_data</span><span class="p">(</span><span class="s2">"runs/example/inference_data.nc"</span><span class="p">)</span>
+  <section class="tex2jax_ignore mathjax_ignore" id="multivariate-example">
+<h1>Multivariate Example<a class="headerlink" href="#multivariate-example" title="Link to this heading">#</a></h1>
+<p>This notebook runs a two-channel VAR example and compares the VI warm-start posterior with the NUTS posterior.</p>
+<p>The model fitted here is the real multivariate pipeline: time-domain data are converted to Wishart frequency-domain statistics, a log-P-spline spectral matrix is fitted, and posterior PSD/coherence summaries are reconstructed from the sampled spline weights.</p>
+<p>This is an advanced example. Start with the five-minute univariate guide before running it.</p>
+<div class="cell tag_skip-execution docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">!</span><span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-q<span class="w"> </span>--upgrade<span class="w"> </span><span class="s2">"LogPSplinePSD"</span><span class="w"> </span><span class="s2">"multimethod&gt;=1.12,&lt;2"</span>
 </pre></div>
 </div>
-</section>
-<section id="extracting-psd-summaries">
-<h2>Extracting PSD Summaries<a class="headerlink" href="#extracting-psd-summaries" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.arviz_utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</div>
+</div>
+<section id="imports">
+<h2>Imports<a class="headerlink" href="#imports" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">"XLA_FLAGS"</span><span class="p">,</span> <span class="s2">"--xla_force_host_platform_device_count=1"</span><span class="p">)</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">jax</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">"jax_enable_x64"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineConfig</span><span class="p">,</span> <span class="n">fit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.arviz_utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">get_multivar_posterior_psd_quantiles</span><span class="p">,</span>
-    <span class="n">get_psd_dataset</span><span class="p">,</span>
+    <span class="n">get_multivar_vi_psd_quantiles</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.plotting</span><span class="w"> </span><span class="kn">import</span> <span class="n">PSDMatrixPlotSpec</span><span class="p">,</span> <span class="n">plot_psd_matrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.example_datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">VARMAData</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="simulate-a-two-channel-var-process">
+<h2>Simulate a two-channel VAR process<a class="headerlink" href="#simulate-a-two-channel-var-process" title="Link to this heading">#</a></h2>
+<p>The coefficient matrices below match the VAR3 study used elsewhere in the repository, but this notebook uses a smaller sample size and shorter inference settings.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">varma</span> <span class="o">=</span> <span class="n">VARMAData</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">2</span><span class="o">**</span><span class="mi">14</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">varma</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.023, max_var_ratio=1.039, covariance_rel_drift=0.028).</span>
+</pre></div>
+</div>
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7fadbabb6690&gt;,
+ &lt;matplotlib.lines.Line2D at 0x7fadbabf0e90&gt;]
+</pre></div>
+</div>
+<img alt="_images/c232bf29920281ffa6b66a438be25eafdfc160fd6c40a703cf5572ca32fab69f.png" src="_images/c232bf29920281ffa6b66a438be25eafdfc160fd6c40a703cf5572ca32fab69f.png" />
+</div>
+</div>
+</section>
+<section id="run-vi-warm-start-and-nuts">
+<h2>Run VI warm start and NUTS<a class="headerlink" href="#run-vi-warm-start-and-nuts" title="Link to this heading">#</a></h2>
+<p>These settings are small enough for an interactive quickstart. Increase <code class="docutils literal notranslate"><span class="pre">N</span></code>, <code class="docutils literal notranslate"><span class="pre">n_warmup</span></code>, <code class="docutils literal notranslate"><span class="pre">n_samples</span></code>, <code class="docutils literal notranslate"><span class="pre">vi_steps</span></code>, and <code class="docutils literal notranslate"><span class="pre">n_knots</span></code> for a real analysis.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">config</span> <span class="o">=</span> <span class="n">PipelineConfig</span><span class="p">(</span>
+    <span class="n">n_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">degree</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">diffMatrixOrder</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">n_warmup</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">n_samples</span><span class="o">=</span><span class="mi">750</span><span class="p">,</span>
+    <span class="n">num_chains</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"nuts"</span><span class="p">,</span>
+    <span class="n">vi_guide</span><span class="o">=</span><span class="s2">"diag"</span><span class="p">,</span>
+    <span class="n">Nb</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">target_accept_prob</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+    <span class="n">max_tree_depth</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">true_psd</span><span class="o">=</span><span class="n">varma</span><span class="o">.</span><span class="n">get_true_psd</span><span class="p">(),</span>
+    <span class="n">rng_key</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">psd_draws</span> <span class="o">=</span> <span class="n">get_psd_dataset</span><span class="p">(</span><span class="n">idata</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">"posterior"</span><span class="p">)</span>
-<span class="n">q</span> <span class="o">=</span> <span class="n">get_multivar_posterior_psd_quantiles</span><span class="p">(</span><span class="n">idata</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">varma</span><span class="o">.</span><span class="n">ts</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+<span class="n">idata</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">idata</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">get_psd_dataset</span></code> returns posterior draws when available. Quantile helpers
-return compact arrays suitable for plotting and reporting.</p>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:02| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Wishart averaging (blocks=8): n=16384 -&gt; Lb=2048, N=1024, p=2</span>
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:02| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.38e+00</span>
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:02| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Inferred sampler type: multivar_blocked_nuts</span>
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:02| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: SpectralComponents(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
+</pre></div>
+</div>
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/home/runner/work/LogPSplinePSD/LogPSplinePSD/src/log_psplines/inference/nuts.py:44: UserWarning: There are not enough devices to run parallel chains: expected 2 but got 1. Chains will be drawn sequentially. If you are running MCMC in CPU, consider using `numpyro.set_host_device_count(2)` at the beginning of your program. You can double-check how many devices are available in your system using `jax.local_device_count()`.
+  mcmc = MCMC(
+</pre></div>
+</div>
+</div>
+</div>
 </section>
-<section id="diagnostics-checklist">
-<h2>Diagnostics Checklist<a class="headerlink" href="#diagnostics-checklist" title="Link to this heading">#</a></h2>
+<section id="compare-vi-and-nuts-posterior-psds">
+<h2>Compare VI and NUTS posterior PSDs<a class="headerlink" href="#compare-vi-and-nuts-posterior-psds" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plot_psd_matrix</span><span class="p">(</span>
+    <span class="n">PSDMatrixPlotSpec</span><span class="p">(</span>
+        <span class="n">idata</span><span class="o">=</span><span class="n">idata</span><span class="p">,</span>
+        <span class="n">overlay_vi</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">"NUTS 90% CI"</span><span class="p">,</span>
+        <span class="n">vi_label</span><span class="o">=</span><span class="s2">"VI 90% CI"</span><span class="p">,</span>
+        <span class="n">channel_labels</span><span class="o">=</span><span class="p">[</span><span class="s2">"x0"</span><span class="p">,</span> <span class="s2">"x1"</span><span class="p">],</span>
+        <span class="n">show_knots</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">save</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">close</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">"VAR3 posterior spectral matrix: NUTS with VI overlay"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">1.02</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">"_static/var3_psd_matrix.png"</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s2">"tight"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:18| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Yellow">WARNING</span> | <span class=" -Color -Color-Yellow">overlay_vi requested but VI quantiles unavailable; ignoring.</span>
+</pre></div>
+</div>
+<img alt="_images/75e4ec7b932d9aa7e35308ddfec2e4504f9afd9244d20f6f7fad993a0ada9b09.png" src="_images/75e4ec7b932d9aa7e35308ddfec2e4504f9afd9244d20f6f7fad993a0ada9b09.png" />
+</div>
+</div>
+<p><img alt="" src="_images/var3_psd_matrix.png" /></p>
+</section>
+<section id="what-to-check">
+<h2>What to check<a class="headerlink" href="#what-to-check" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Check that posterior PSD diagonals are positive.</p></li>
-<li><p>For multivariate runs, check Hermitian symmetry and positive definiteness of
-reconstructed spectral matrices.</p></li>
-<li><p>Check coherence lies in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">1]</span></code>.</p></li>
-<li><p>Inspect NUTS divergences, tree-depth hits, and effective sample size.</p></li>
-<li><p>Compare VI and NUTS posterior summaries when using VI warm starts.</p></li>
-<li><p>If <code class="docutils literal notranslate"><span class="pre">true_psd</span></code> was supplied, review RIAE, L2, and coverage metrics in the
-saved summaries.</p></li>
+<li><p>The diagonal PSD panels should be positive and broadly track the analytical PSD.</p></li>
+<li><p>VI and NUTS should have similar large-scale structure; exact agreement is not expected for this very short smoke-test run.</p></li>
+<li><p>For production runs, increase the warmup/draw counts and inspect the saved diagnostics from <code class="docutils literal notranslate"><span class="pre">PipelineConfig(outdir=...)</span></code>.</p></li>
 </ul>
-</section>
-<section id="reporting-contracts">
-<h2>Reporting contracts<a class="headerlink" href="#reporting-contracts" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">get_psd_dataset(result.idata)</span></code> reconstructs stationary and time-frequency
-results using named dimensions. Time-frequency results add a <code class="docutils literal notranslate"><span class="pre">time</span></code> axis
-before <code class="docutils literal notranslate"><span class="pre">frequency</span></code>. <code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code> places channel axes last.</p>
-<p>VI pointwise log likelihoods are currently unavailable. No zero-filled
-<code class="docutils literal notranslate"><span class="pre">vi_log_likelihood</span></code> group is written, and derived LOO metrics are unavailable.</p>
-<p>Saving writes <code class="docutils literal notranslate"><span class="pre">inference_data.nc</span></code> before rendering. Unexpected plotting or
-reporting failures raise an error; no substitute figure is saved under the
-requested figure’s filename.</p>
 </section>
 </section>
 
@@ -561,20 +649,20 @@ requested figure’s filename.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="time-varying-psd.html"
+       href="configuration.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Time-varying PSD estimation</p>
+        <p class="prev-next-title">Configuration</p>
       </div>
     </a>
     <a class="right-next"
-       href="data_preprocessing.html"
+       href="timevarying-example.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Data and Preprocessing</p>
+        <p class="prev-next-title">Time-varying Example</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -596,12 +684,11 @@ requested figure’s filename.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#return-value">Return Value</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#saved-files">Saved Files</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-results">Loading Results</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#extracting-psd-summaries">Extracting PSD Summaries</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-checklist">Diagnostics Checklist</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reporting-contracts">Reporting contracts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#imports">Imports</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulate-a-two-channel-var-process">Simulate a two-channel VAR process</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-vi-warm-start-and-nuts">Run VI warm start and NUTS</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-vi-and-nuts-posterior-psds">Compare VI and NUTS posterior PSDs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-check">What to check</a></li>
 </ul>
   </nav></div>
 

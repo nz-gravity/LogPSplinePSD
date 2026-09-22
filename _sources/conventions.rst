@@ -130,3 +130,149 @@ The multivariate pipeline follows a fixed sequence of transformations:
    ``observed_data['periodogram']`` using the canonical normalisation.
 6. **Plotting** – visualisers consume the precomputed posterior quantiles and
    empirical PSD without re-deriving spectra.
+
+
+
+Technical Notes
+===============
+
+These pages document the assumptions and implementation details that matter for
+maintaining or extending the inference code.
+
+Core Invariants
+---------------
+
+- PSD diagonal entries must stay strictly positive.
+- Multivariate spectral matrices must stay Hermitian positive definite at each
+  retained frequency.
+- Coherence is derived from the spectral matrix and should remain bounded by
+  ``[0, 1]`` up to numerical tolerance.
+- Randomness should be controlled through explicit seeds or JAX PRNG keys.
+- Shape conventions should be documented near public functions and checked in
+  non-JIT code paths.
+
+Implementation Map
+------------------
+
+``log_psplines.pipeline``
+   Canonical high-level ``fit()`` entry point plus orchestration helpers.
+
+``log_psplines.pipeline``
+   Pipeline construction, preprocessing, VI, NUTS, saving, and evidence
+   estimation.
+
+``log_psplines.data``
+   Time-domain and frequency-domain containers.
+
+``log_psplines.psplines``
+   Spline basis construction, P-spline penalties, knot placement, and
+   multivariate PSD reconstruction.
+
+``log_psplines.preprocessing``
+   Frequency selection, Wishart preprocessing, and coarse graining.
+
+``log_psplines.arviz_utils``
+   Loading, saving, and extracting posterior spectral summaries.
+
+``log_psplines.diagnostics`` and ``log_psplines.plotting``
+   Convergence checks, error metrics, and visual summaries.
+
+
+
+Data and Preprocessing
+======================
+
+Accepted Inputs
+---------------
+
+The high-level pipeline accepts either time-domain data or precomputed
+frequency-domain statistics.
+
+``TimeSeries``
+   Time-domain samples with shape ``(n, p)``. A one-dimensional input is
+   promoted to ``(n, 1)``. The sampling frequency is inferred from ``t``.
+
+``WishartData``
+   Frequency-domain Wishart sufficient statistics. Use this when you need
+   explicit control over FFT construction before calling the pipeline.
+
+Time-Domain Container
+---------------------
+
+.. code-block:: python
+
+   import numpy as np
+   from log_psplines.data import TimeSeries
+
+   fs = 64.0
+   t = np.arange(512) / fs
+   y = np.column_stack([
+       np.sin(2.0 * np.pi * 4.0 * t),
+       np.cos(2.0 * np.pi * 8.0 * t),
+   ])
+
+   ts = TimeSeries(data=y, t=t)
+
+For PSD estimation, standardising at the boundary is often helpful:
+
+.. code-block:: python
+
+   ts_std = ts.standardise_for_psd()
+
+The original channel standard deviations are carried through so exported PSDs
+can be rescaled back to physical units.
+
+Wishart Statistics
+------------------
+
+``TimeSeries.to_wishart_stats`` and
+``preprocessing.periodogram.compute_wishart`` split the data into ``Nb`` contiguous blocks,
+apply optional detrending and tapering, compute one-sided FFTs, drop DC, and
+store a factor ``U`` such that
+
+.. math::
+
+   Y(f_k) = U(f_k) U(f_k)^H.
+
+The pipeline uses ``Y(f_k)`` as the multivariate Whittle/Wishart sufficient
+statistic.
+
+.. code-block:: python
+
+   fft = ts.standardise_for_psd().to_wishart_stats(
+       Nb=4,
+       fmin=1.0,
+       fmax=30.0,
+       window="hann",
+       detrend="constant",
+   )
+
+Frequency Selection
+-------------------
+
+Frequency selection is applied in this order:
+
+1. Convert time-domain data to the positive ``rfft`` grid.
+2. Drop the DC bin.
+3. Apply ``fmin`` and ``fmax`` if provided.
+4. Remove any ``exclude_freq_bands``.
+5. Optionally coarse grain the retained grid.
+
+Coarse Graining
+---------------
+
+Coarse graining sums neighbouring Wishart matrices into equal-size consecutive
+frequency bins. It is useful when the frequency grid is much denser than the
+spectral structure being estimated.
+
+.. code-block:: python
+
+   from log_psplines.config import PipelineConfig
+   from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
+
+   config = PipelineConfig(
+       coarse_grain_config=CoarseGrainConfig(enabled=True, Nc=128, Nh=None),
+   )
+
+See :doc:`coarse_grain` for the mathematical details and implementation
+constraints.

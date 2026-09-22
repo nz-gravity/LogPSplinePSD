@@ -2,13 +2,13 @@
 <!DOCTYPE html>
 
 
-<html lang="en" data-content_root="./" >
+<html lang="en" data-content_root="../" >
 
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Multivariate Example &#8212; LogPSplinePSD</title>
+    <title>Multivariate PSD estimation &#8212; LogPSplinePSD</title>
   
   
   
@@ -27,53 +27,53 @@
   </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="_static/styles/theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
-<link href="_static/styles/pydata-sphinx-theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+  <link href="../_static/styles/theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
 
-    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
-    <link rel="stylesheet" type="text/css" href="_static/togglebutton.css?v=9c3e77be" />
-    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
-    <link rel="stylesheet" type="text/css" href="_static/sphinx-thebe.css?v=4fa983c6" />
-    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
   
   <!-- So that users can add custom icons -->
-  <script defer src="_static/scripts/fontawesome.js?digest=55c26ed414f5f8a31ebb"></script>
+  <script defer src="../_static/scripts/fontawesome.js?digest=55c26ed414f5f8a31ebb"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb" />
-<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb" />
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb" />
 
-    <script src="_static/documentation_options.js?v=9eb32ce0"></script>
-    <script src="_static/doctools.js?v=9a2dae69"></script>
-    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
-    <script src="_static/copybutton.js?v=f281be69"></script>
-    <script src="_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script src="../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
     <script>let toggleHintShow = 'Click to show';</script>
     <script>let toggleHintHide = 'Click to hide';</script>
     <script>let toggleOpenOnPrint = 'true';</script>
-    <script src="_static/togglebutton.js?v=b8b12719"></script>
+    <script src="../_static/togglebutton.js?v=b8b12719"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
-    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
+    <script async="async" src="../_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'multivariate-example';</script>
+    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/multivariate-example';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Time-varying Example" href="timevarying-example.html" />
-    <link rel="prev" title="Configuration" href="configuration.html" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
   
     
-    <script src="_static/searchtools.js"></script>
-    <script src="_static/language_data.js"></script>
-    <script src="searchindex.js"></script>
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
   
   </head>
   <body data-default-mode="">
@@ -93,7 +93,7 @@
   <dialog id="pst-search-dialog">
     
 <form class="bd-search d-flex align-items-center"
-      action="search.html"
+      action="../search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -167,6 +167,8 @@
       
       
       
+        
+      
       <dialog id="pst-primary-sidebar-modal"></dialog>
       <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
         
@@ -186,7 +188,7 @@
     
   
 
-<a class="navbar-brand logo" href="intro.html">
+<a class="navbar-brand logo" href="../intro.html">
   
   
   
@@ -197,8 +199,8 @@
       
     
     
-    <img src="_static/logo.png" class="logo__image only-light" alt="LogPSplinePSD - Home"/>
-    <img src="_static/logo.png" class="logo__image only-dark pst-js-only" alt="LogPSplinePSD - Home"/>
+    <img src="../_static/logo.png" class="logo__image only-light" alt="LogPSplinePSD - Home"/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt="LogPSplinePSD - Home"/>
   
   
 </a></div>
@@ -211,26 +213,13 @@
 </button></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="five-minute.html">Five-Minute Example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="results.html">Understanding <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Multivariate Example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="timevarying-example.html">Time-varying Example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="time-varying-psd.html">Time-varying PSD estimation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
-<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture.html">PSD architecture</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../conventions.html">Conventions</a></li>
+
+
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../development.html">Development Guide</a></li>
+
 </ul>
 
     </div>
@@ -290,7 +279,7 @@
       
       
       
-      <li><a href="https://colab.research.google.com/github/nz-gravity/LogPSplinePSD/blob/main/docs/multivariate-example.ipynb" target="_blank"
+      <li><a href="https://colab.research.google.com/github/nz-gravity/LogPSplinePSD/blob/main/docs/examples/multivariate-example.ipynb" target="_blank"
    class="btn btn-sm dropdown-item"
    title="Launch on Colab"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -299,7 +288,7 @@
 
 <span class="btn__icon-container">
   
-    <img alt="Colab logo" src="_static/images/logo_colab.png">
+    <img alt="Colab logo" src="../_static/images/logo_colab.png">
   </span>
 <span class="btn__text-container">Colab</span>
 </a>
@@ -338,7 +327,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fmultivariate-example.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fexamples/multivariate-example.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -368,7 +357,7 @@
       
       
       
-      <li><a href="_sources/multivariate-example.ipynb" target="_blank"
+      <li><a href="../_sources/examples/multivariate-example.ipynb" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -444,7 +433,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Multivariate Example</h1>
+    <h1>Multivariate PSD estimation</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -454,11 +443,13 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#imports">Imports</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulate-a-two-channel-var-process">Simulate a two-channel VAR process</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-vi-warm-start-and-nuts">Run VI warm start and NUTS</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-vi-and-nuts-posterior-psds">Compare VI and NUTS posterior PSDs</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-check">What to check</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multivariate-whittle-likelihood">Multivariate Whittle likelihood</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cholesky-parameterisation">Cholesky parameterisation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#p-spline-model">P-spline model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#factorisation-by-cholesky-row">Factorisation by Cholesky row</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse-graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validity-of-coarse-graining">Validity of coarse-graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example">Example</a></li>
 </ul>
             </nav>
         </div>
@@ -470,11 +461,367 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="multivariate-example">
-<h1>Multivariate Example<a class="headerlink" href="#multivariate-example" title="Link to this heading">#</a></h1>
-<p>This notebook runs a two-channel VAR example and compares the VI warm-start posterior with the NUTS posterior.</p>
-<p>The model fitted here is the real multivariate pipeline: time-domain data are converted to Wishart frequency-domain statistics, a log-P-spline spectral matrix is fitted, and posterior PSD/coherence summaries are reconstructed from the sampled spline weights.</p>
-<p>This is an advanced example. Start with the five-minute univariate guide before running it.</p>
+  <section class="tex2jax_ignore mathjax_ignore" id="multivariate-psd-estimation">
+<h1>Multivariate PSD estimation<a class="headerlink" href="#multivariate-psd-estimation" title="Link to this heading">#</a></h1>
+<p>For a <span class="math notranslate nohighlight">\(p\)</span>-channel stationary time series, the spectral density is no longer a
+single scalar PSD. Instead, at each frequency <span class="math notranslate nohighlight">\(f\)</span> we infer a complex Hermitian
+spectral density matrix</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf{S}(f)
+\in
+\mathbb{C}^{p\times p}.
+\]</div>
+<p>The diagonal elements</p>
+<div class="math notranslate nohighlight">
+\[
+S_{jj}(f)
+\]</div>
+<p>are the auto-spectral densities of the individual channels, while the
+off-diagonal elements</p>
+<div class="math notranslate nohighlight">
+\[
+S_{jl}(f)
+\]</div>
+<p>describe the cross-spectral density between channels <span class="math notranslate nohighlight">\(j\)</span> and <span class="math notranslate nohighlight">\(l\)</span>.</p>
+<p>The aim is therefore to infer a smooth, positive-definite matrix-valued function</p>
+<div class="math notranslate nohighlight">
+\[
+f \mapsto \mathbf{S}(f).
+\]</div>
+<section id="multivariate-whittle-likelihood">
+<h2>Multivariate Whittle likelihood<a class="headerlink" href="#multivariate-whittle-likelihood" title="Link to this heading">#</a></h2>
+<p>Let</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\mathbf{d}_b(f_k)
+=
+\begin{bmatrix}
+d_{b,1}(f_k)\\
+\vdots\\
+d_{b,p}(f_k)
+\end{bmatrix}
+\end{split}\]</div>
+<p>denote the complex Fourier coefficients from block <span class="math notranslate nohighlight">\(b\)</span> at frequency <span class="math notranslate nohighlight">\(f_k\)</span>.</p>
+<p>For a stationary Gaussian process, the multivariate Whittle approximation treats
+the Fourier coefficients as approximately independent complex Gaussian variables,</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf{d}_b(f_k)
+\sim
+\mathcal{CN}
+\left(
+\mathbf{0},
+T\,\mathbf{S}(f_k)
+\right),
+\]</div>
+<p>where <span class="math notranslate nohighlight">\(T\)</span> is the duration of each time-domain block.</p>
+<p>For <span class="math notranslate nohighlight">\(N_b\)</span> independent blocks, define the Wishart sufficient statistic</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\mathbf{Y}(f_k)
+=
+\sum_{b=1}^{N_b}
+\mathbf{d}_b(f_k)
+\mathbf{d}_b(f_k)^H
+}
+\]</div>
+<p>where <span class="math notranslate nohighlight">\(H\)</span> denotes the conjugate transpose.</p>
+<p>Then, up to constants independent of <span class="math notranslate nohighlight">\(\mathbf{S}\)</span>,</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\log \mathcal{L}
+=
+-
+\sum_k
+N_b \log \left|\mathbf{S}(f_k)\right|
+-
+\frac{1}{T}
+\sum_k
+\operatorname{tr}
+\left[
+\mathbf{S}(f_k)^{-1}
+\mathbf{Y}(f_k)
+\right]
+}
+\]</div>
+<p>This is the multivariate analogue of the scalar Whittle likelihood.</p>
+</section>
+<section id="cholesky-parameterisation">
+<h2>Cholesky parameterisation<a class="headerlink" href="#cholesky-parameterisation" title="Link to this heading">#</a></h2>
+<p>Directly modelling every element of <span class="math notranslate nohighlight">\(\mathbf{S}(f)\)</span> is inconvenient because the
+matrix must remain positive definite at every frequency.</p>
+<p>Instead, we parameterise the inverse spectral density matrix as</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\mathbf{S}(f)^{-1}
+=
+\mathbf{T}(f)^H
+\mathbf{D}(f)^{-1}
+\mathbf{T}(f)
+}
+\]</div>
+<p>where</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf{D}(f)
+=
+\operatorname{diag}
+\left(
+\delta_1(f)^2,
+\ldots,
+\delta_p(f)^2
+\right)
+\]</div>
+<p>is diagonal and positive, and</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\mathbf{T}(f)
+=
+\begin{pmatrix}
+1 &amp; 0 &amp; \cdots &amp; 0 \\
+-\theta_{21}(f) &amp; 1 &amp; \cdots &amp; 0 \\
+-\theta_{31}(f) &amp; -\theta_{32}(f) &amp; \ddots &amp; 0 \\
+\vdots &amp; \vdots &amp; \ddots &amp; 1
+\end{pmatrix}
+\end{split}\]</div>
+<p>is a complex unit lower-triangular matrix.</p>
+<p>The spectral density matrix is reconstructed as</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\mathbf{S}(f)
+=
+\mathbf{T}(f)^{-1}
+\mathbf{D}(f)
+\mathbf{T}(f)^{-H}
+}
+\]</div>
+<p>which guarantees that <span class="math notranslate nohighlight">\(\mathbf{S}(f)\)</span> is positive definite.</p>
+</section>
+<section id="p-spline-model">
+<h2>P-spline model<a class="headerlink" href="#p-spline-model" title="Link to this heading">#</a></h2>
+<p>Each frequency-dependent component of the Cholesky decomposition is represented
+using a P-spline.</p>
+<p>For the diagonal terms,</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\log \delta_j(f)^2
+=
+\sum_{m=1}^{K_j}
+B_{j,m}(f)\,
+w^{(\delta)}_{j,m}
+}
+\]</div>
+<p>so that <span class="math notranslate nohighlight">\(\delta_j(f)^2 &gt; 0\)</span>.</p>
+<p>For the complex off-diagonal terms,</p>
+<div class="math notranslate nohighlight">
+\[
+\theta_{jl}(f)
+=
+\theta_{jl}^{(\mathrm{R})}(f)
++
+i\,\theta_{jl}^{(\mathrm{I})}(f),
+\qquad l&lt;j,
+\]</div>
+<p>with</p>
+<div class="math notranslate nohighlight">
+\[
+\theta_{jl}^{(\mathrm{R})}(f)
+=
+\sum_{m=1}^{K_{jl}}
+B_{jl,m}(f)\,
+w^{(\mathrm{R})}_{jl,m},
+\]</div>
+<p>and</p>
+<div class="math notranslate nohighlight">
+\[
+\theta_{jl}^{(\mathrm{I})}(f)
+=
+\sum_{m=1}^{K_{jl}}
+B_{jl,m}(f)\,
+w^{(\mathrm{I})}_{jl,m}.
+\]</div>
+<p>Each diagonal, real off-diagonal, and imaginary off-diagonal field therefore has
+its own spline coefficients and smoothness prior.</p>
+</section>
+<section id="factorisation-by-cholesky-row">
+<h2>Factorisation by Cholesky row<a class="headerlink" href="#factorisation-by-cholesky-row" title="Link to this heading">#</a></h2>
+<p>An important consequence of the inverse-Cholesky parameterisation is that the
+likelihood can be written as a product of contributions from the individual
+rows of <span class="math notranslate nohighlight">\(\mathbf{T}\)</span>.</p>
+<p>Write a factorisation of the Wishart statistic as</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf{Y}(f_k)
+=
+\mathbf{U}(f_k)
+\mathbf{U}(f_k)^H.
+\]</div>
+<p>Let <span class="math notranslate nohighlight">\(\mathbf{u}_j(f_k)\)</span> denote row <span class="math notranslate nohighlight">\(j\)</span> of <span class="math notranslate nohighlight">\(\mathbf{U}(f_k)\)</span>. Define the residual</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\mathbf{r}_j(f_k)
+=
+\mathbf{u}_j(f_k)
+-
+\sum_{l&lt;j}
+\theta_{jl}(f_k)\,
+\mathbf{u}_l(f_k)
+}
+\]</div>
+<p>Then the contribution from row <span class="math notranslate nohighlight">\(j\)</span> is</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\log \mathcal{L}_j
+\propto
+-
+N_b
+\sum_k
+\log \delta_j(f_k)^2
+-
+\sum_k
+\frac{
+\left\|
+\mathbf{r}_j(f_k)
+\right\|_2^2
+}{
+T\,\delta_j(f_k)^2
+}
+}
+\]</div>
+<p>and the full likelihood is</p>
+<div class="math notranslate nohighlight">
+\[
+\log \mathcal{L}
+=
+\sum_{j=1}^{p}
+\log \mathcal{L}_j.
+\]</div>
+<p>For three channels, the three factors depend on</p>
+<div class="math notranslate nohighlight">
+\[
+\delta_1,
+\]</div>
+<div class="math notranslate nohighlight">
+\[
+(\delta_2,\theta_{21}),
+\]</div>
+<p>and</p>
+<div class="math notranslate nohighlight">
+\[
+(\delta_3,\theta_{31},\theta_{32}),
+\]</div>
+<p>respectively.</p>
+<p>This factorisation allows the Cholesky rows to be sampled separately when
+independent priors are placed on their parameter blocks.</p>
+</section>
+<section id="coarse-graining">
+<h2>Coarse-graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
+<p>For long time series, evaluating the likelihood at every Fourier frequency can
+be expensive. Nearby frequencies can therefore be grouped into coarse bins.</p>
+<p>Let the retained Fourier frequencies be divided into consecutive disjoint sets</p>
+<div class="math notranslate nohighlight">
+\[
+J_1,\ldots,J_{N_c},
+\]</div>
+<p>where bin <span class="math notranslate nohighlight">\(J_h\)</span> contains <span class="math notranslate nohighlight">\(N_h\)</span> fine-frequency bins.</p>
+<p>Let <span class="math notranslate nohighlight">\(\bar f_h\)</span> denote the representative frequency of bin <span class="math notranslate nohighlight">\(h\)</span>.</p>
+<p>Within each coarse bin, the Wishart sufficient statistics are summed:</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\bar{\mathbf{Y}}_h
+=
+\sum_{f_k\in J_h}
+\mathbf{Y}(f_k)
+}
+\]</div>
+<p>If the spectral density varies slowly within the bin,</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf{S}(f_k)
+\approx
+\mathbf{S}(\bar f_h),
+\qquad
+f_k\in J_h,
+\]</div>
+<p>then the sum can be approximated as a single Wishart statistic with</p>
+<div class="math notranslate nohighlight">
+\[
+N_b N_h
+\]</div>
+<p>effective degrees of freedom.</p>
+<p>The coarse-grained likelihood is therefore</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\log \mathcal{L}_{\mathrm{CG}}
+\approx
+-
+\sum_{h=1}^{N_c}
+N_b N_h
+\log
+\left|
+\mathbf{S}(\bar f_h)
+\right|
+-
+\frac{1}{T}
+\sum_{h=1}^{N_c}
+\operatorname{tr}
+\left[
+\mathbf{S}(\bar f_h)^{-1}
+\bar{\mathbf{Y}}_h
+\right]
+}
+\]</div>
+<p>The factor <span class="math notranslate nohighlight">\(N_h\)</span> appears explicitly in the log-determinant term because each
+coarse bin represents <span class="math notranslate nohighlight">\(N_h\)</span> Fourier frequencies.</p>
+<p>It does <strong>not</strong> appear as an additional factor in the trace term because</p>
+<div class="math notranslate nohighlight">
+\[
+\bar{\mathbf{Y}}_h
+=
+\sum_{f_k\in J_h}
+\mathbf{Y}(f_k)
+\]</div>
+<p>already contains the summed contribution from those frequencies.</p>
+</section>
+<section id="validity-of-coarse-graining">
+<h2>Validity of coarse-graining<a class="headerlink" href="#validity-of-coarse-graining" title="Link to this heading">#</a></h2>
+<p>The coarse-grained likelihood assumes that the spectral density is approximately
+constant within each bin,</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf{S}(f)
+\approx
+\mathbf{S}(\bar f_h),
+\qquad
+f\in J_h.
+\]</div>
+<p>This is generally a good approximation in smooth regions of the spectrum, but
+can break down if a bin spans a sharp feature such as a narrow spectral line or
+a rapid change in the cross-spectrum.</p>
+<p>The coarse-bin width therefore introduces a trade-off:</p>
+<ul class="simple">
+<li><p>smaller bins retain more frequency resolution and more closely approximate
+the original likelihood,</p></li>
+<li><p>larger bins reduce the number of likelihood evaluations but make a stronger
+assumption that the spectrum is approximately constant within each bin.</p></li>
+</ul>
+<p>The current implementation uses consecutive, equal-sized frequency bins over
+the retained frequency band.</p>
+</section>
+<section id="example">
+<h2>Example<a class="headerlink" href="#example" title="Link to this heading">#</a></h2>
+<p>In the following cells, we demonstrate the fit on some multivar VAR(2) data.</p>
+<p><img alt="" src="../_images/var3_psd_matrix.png" /></p>
 <div class="cell tag_skip-execution docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">!</span><span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-q<span class="w"> </span>--upgrade<span class="w"> </span><span class="s2">"LogPSplinePSD"</span><span class="w"> </span><span class="s2">"multimethod&gt;=1.12,&lt;2"</span>
@@ -482,8 +829,6 @@
 </div>
 </div>
 </div>
-<section id="imports">
-<h2>Imports<a class="headerlink" href="#imports" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
@@ -497,45 +842,18 @@
 <span class="n">jax</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">"jax_enable_x64"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineConfig</span><span class="p">,</span> <span class="n">fit</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.arviz_utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">get_multivar_posterior_psd_quantiles</span><span class="p">,</span>
-    <span class="n">get_multivar_vi_psd_quantiles</span><span class="p">,</span>
-<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.plotting</span><span class="w"> </span><span class="kn">import</span> <span class="n">PSDMatrixPlotSpec</span><span class="p">,</span> <span class="n">plot_psd_matrix</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.example_datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">VARMAData</span>
-</pre></div>
-</div>
-</div>
-</div>
-</section>
-<section id="simulate-a-two-channel-var-process">
-<h2>Simulate a two-channel VAR process<a class="headerlink" href="#simulate-a-two-channel-var-process" title="Link to this heading">#</a></h2>
-<p>The coefficient matrices below match the VAR3 study used elsewhere in the repository, but this notebook uses a smaller sample size and shorter inference settings.</p>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">varma</span> <span class="o">=</span> <span class="n">VARMAData</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">2</span><span class="o">**</span><span class="mi">14</span><span class="p">)</span>
+
+
+
+<span class="c1"># Simulate multivar data</span>
+<span class="n">varma</span> <span class="o">=</span> <span class="n">VARMAData</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">2</span><span class="o">**</span><span class="mi">14</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">varma</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-<div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:01| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">VAR sanity check passed: stationary AR dynamics (companion spectral radius=0.707107) with finite samples. Empirical stationarity passed (max_mean_shift_z=0.023, max_var_ratio=1.039, covariance_rel_drift=0.028).</span>
-</pre></div>
-</div>
-<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&lt;matplotlib.lines.Line2D at 0x7fadbabb6690&gt;,
- &lt;matplotlib.lines.Line2D at 0x7fadbabf0e90&gt;]
-</pre></div>
-</div>
-<img alt="_images/c232bf29920281ffa6b66a438be25eafdfc160fd6c40a703cf5572ca32fab69f.png" src="_images/c232bf29920281ffa6b66a438be25eafdfc160fd6c40a703cf5572ca32fab69f.png" />
-</div>
-</div>
-</section>
-<section id="run-vi-warm-start-and-nuts">
-<h2>Run VI warm start and NUTS<a class="headerlink" href="#run-vi-warm-start-and-nuts" title="Link to this heading">#</a></h2>
-<p>These settings are small enough for an interactive quickstart. Increase <code class="docutils literal notranslate"><span class="pre">N</span></code>, <code class="docutils literal notranslate"><span class="pre">n_warmup</span></code>, <code class="docutils literal notranslate"><span class="pre">n_samples</span></code>, <code class="docutils literal notranslate"><span class="pre">vi_steps</span></code>, and <code class="docutils literal notranslate"><span class="pre">n_knots</span></code> for a real analysis.</p>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">config</span> <span class="o">=</span> <span class="n">PipelineConfig</span><span class="p">(</span>
+
+
+<span class="c1"># Run inference on the simulated data</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">PipelineConfig</span><span class="p">(</span>
     <span class="n">n_knots</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
     <span class="n">degree</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
     <span class="n">diffMatrixOrder</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
@@ -551,39 +869,12 @@
     <span class="n">rng_key</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span>
     <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
-
 <span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">varma</span><span class="o">.</span><span class="n">ts</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
-<span class="n">idata</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">idata</span>
-</pre></div>
-</div>
-</div>
-<div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:02| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Wishart averaging (blocks=8): n=16384 -&gt; Lb=2048, N=1024, p=2</span>
-</pre></div>
-</div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:02| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Standardized data: scale ~1.38e+00</span>
-</pre></div>
-</div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:02| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Inferred sampler type: multivar_blocked_nuts</span>
-</pre></div>
-</div>
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:02| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Black">INFO</span> | <span class=" -Color -Color-Black">Spline model: SpectralComponents(channels=2, knots=10, degree=2, penaltyOrder=2, N=1024, basis_shapes=[(1024, 11), (1024, 11), (1024, 11), (1024, 11)])</span>
-</pre></div>
-</div>
-<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/home/runner/work/LogPSplinePSD/LogPSplinePSD/src/log_psplines/inference/nuts.py:44: UserWarning: There are not enough devices to run parallel chains: expected 2 but got 1. Chains will be drawn sequentially. If you are running MCMC in CPU, consider using `numpyro.set_host_device_count(2)` at the beginning of your program. You can double-check how many devices are available in your system using `jax.local_device_count()`.
-  mcmc = MCMC(
-</pre></div>
-</div>
-</div>
-</div>
-</section>
-<section id="compare-vi-and-nuts-posterior-psds">
-<h2>Compare VI and NUTS posterior PSDs<a class="headerlink" href="#compare-vi-and-nuts-posterior-psds" title="Link to this heading">#</a></h2>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plot_psd_matrix</span><span class="p">(</span>
+
+<span class="c1"># plot results </span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plot_psd_matrix</span><span class="p">(</span>
     <span class="n">PSDMatrixPlotSpec</span><span class="p">(</span>
-        <span class="n">idata</span><span class="o">=</span><span class="n">idata</span><span class="p">,</span>
+        <span class="n">idata</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">idata</span><span class="p">,</span>
         <span class="n">overlay_vi</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">label</span><span class="o">=</span><span class="s2">"NUTS 90% CI"</span><span class="p">,</span>
         <span class="n">vi_label</span><span class="o">=</span><span class="s2">"VI 90% CI"</span><span class="p">,</span>
@@ -594,27 +885,11 @@
     <span class="p">)</span>
 <span class="p">)</span>
 <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">"VAR3 posterior spectral matrix: NUTS with VI overlay"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">1.02</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">"_static/var3_psd_matrix.png"</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s2">"tight"</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
-<div class="cell_output docutils container">
-<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>|00:18| <span class=" -Color -Color-Blue">LogPSpline</span> | <span class=" -Color -Color-Bold -Color-Bold-Yellow">WARNING</span> | <span class=" -Color -Color-Yellow">overlay_vi requested but VI quantiles unavailable; ignoring.</span>
-</pre></div>
 </div>
-<img alt="_images/75e4ec7b932d9aa7e35308ddfec2e4504f9afd9244d20f6f7fad993a0ada9b09.png" src="_images/75e4ec7b932d9aa7e35308ddfec2e4504f9afd9244d20f6f7fad993a0ada9b09.png" />
-</div>
-</div>
-<p><img alt="" src="_images/var3_psd_matrix.png" /></p>
-</section>
-<section id="what-to-check">
-<h2>What to check<a class="headerlink" href="#what-to-check" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p>The diagonal PSD panels should be positive and broadly track the analytical PSD.</p></li>
-<li><p>VI and NUTS should have similar large-scale structure; exact agreement is not expected for this very short smoke-test run.</p></li>
-<li><p>For production runs, increase the warmup/draw counts and inspect the saved diagnostics from <code class="docutils literal notranslate"><span class="pre">PipelineConfig(outdir=...)</span></code>.</p></li>
-</ul>
 </section>
 </section>
 
@@ -631,7 +906,7 @@
         },
         kernelOptions: {
             name: "python3",
-            path: "./."
+            path: "./examples"
         },
         predefinedOutput: true
     }
@@ -648,24 +923,6 @@
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
-    <a class="left-prev"
-       href="configuration.html"
-       title="previous page">
-      <i class="fa-solid fa-angle-left"></i>
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Configuration</p>
-      </div>
-    </a>
-    <a class="right-next"
-       href="timevarying-example.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Time-varying Example</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
-    </a>
 </div>
                 </footer>
               
@@ -684,11 +941,13 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#imports">Imports</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulate-a-two-channel-var-process">Simulate a two-channel VAR process</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-vi-warm-start-and-nuts">Run VI warm start and NUTS</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-vi-and-nuts-posterior-psds">Compare VI and NUTS posterior PSDs</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-check">What to check</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multivariate-whittle-likelihood">Multivariate Whittle likelihood</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cholesky-parameterisation">Cholesky parameterisation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#p-spline-model">P-spline model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#factorisation-by-cholesky-row">Factorisation by Cholesky row</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse-graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validity-of-coarse-graining">Validity of coarse-graining</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example">Example</a></li>
 </ul>
   </nav></div>
 
@@ -737,8 +996,8 @@ By NZ Gravity
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script defer src="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb"></script>
-<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb"></script>
+  <script defer src="../_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb"></script>
 
   <footer class="bd-footer">
   </footer>

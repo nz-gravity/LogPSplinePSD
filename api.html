@@ -65,7 +65,7 @@
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Development Guide" href="development.html" />
-    <link rel="prev" title="PSD architecture" href="architecture.html" />
+    <link rel="prev" title="Conventions" href="conventions.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -212,25 +212,12 @@
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="five-minute.html">Five-Minute Example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="results.html">Understanding <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivariate-example.html">Multivariate Example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="timevarying-example.html">Time-varying Example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="time-varying-psd.html">Time-varying PSD estimation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs and Diagnostics</a></li>
-<li class="toctree-l1"><a class="reference internal" href="data_preprocessing.html">Data and Preprocessing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="moving-periodogram-vs-wdm.html">Moving periodogram versus WDM</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="technical_notes.html">Technical Notes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="conventions.html">Conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="coarse_grain.html">Coarse-Graining</a></li>
-<li class="toctree-l2"><a class="reference internal" href="multivar_blocked_nuts.html">Multivariate Factorised Likelihood: Math to Code</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design_shrinkage.html">Soft Shrinkage Toward a Design PSD</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture.html">PSD architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conventions.html">Conventions</a></li>
+
+
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">API Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
+
 </ul>
 
     </div>
@@ -535,6 +522,15 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="docutils literal notranslate"><span class="pre">apply_coarse_grain_multivar_fft()</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#result-objects">Result objects</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id0"><code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id5"><code class="docutils literal notranslate"><span class="pre">PSDResult.psd</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id6"><code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id7"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_netcdf()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arviz-helpers">ArviZ Helpers</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.open_inference_data"><code class="docutils literal notranslate"><span class="pre">open_inference_data()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.save_inference_data"><code class="docutils literal notranslate"><span class="pre">save_inference_data()</span></code></a></li>
@@ -564,7 +560,7 @@ stable user surface.</p>
 <h2>High-Level Pipeline<a class="headerlink" href="#high-level-pipeline" title="Link to this heading">#</a></h2>
 <dl class="py function">
 <dt class="sig sig-object py" id="log_psplines.pipeline.fit">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.pipeline.</span></span><span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.results.PSDResult" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></span><a class="headerlink" href="#log_psplines.pipeline.fit" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">log_psplines.pipeline.</span></span><span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#id0" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></span><a class="headerlink" href="#log_psplines.pipeline.fit" title="Link to this definition">#</a></dt>
 <dd><p>Fit stationary Wishart data or scalar time-frequency powers.</p>
 <p>PowerSpectrum requires an explicit LogPSpline and PowerSplineConfig.
 Its NUTS path uses the WDM prior; the stationary VI/blocked path retains
@@ -1174,6 +1170,34 @@ the coarse-grid U factors used by the likelihood.</p></li>
 </dd></dl>
 
 </section>
+<section id="result-objects">
+<h2>Result objects<a class="headerlink" href="#result-objects" title="Link to this heading">#</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="id0">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.results.</span></span><span class="sig-name descname"><span class="pre">PSDResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">StageResult</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#id0" title="Link to this definition">#</a></dt>
+<dd><p>Outputs from InferencePipeline.run().</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="id5">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">psd</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#id5" title="Link to this definition">#</a></dt>
+<dd><p>Auto spectra (chain, draw, F) for C=1, (…, F, C) otherwise.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="id6">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">spectral_density</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#id6" title="Link to this definition">#</a></dt>
+<dd><p>Posterior draws (chain, draw, F, C, C), in original data units.</p>
+<p>A time grid inserts T before F. TV scalar results use C=1.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="id7">
+<span class="sig-name descname"><span class="pre">to_netcdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#id7" title="Link to this definition">#</a></dt>
+<dd><p>Save posterior, basis and metadata without rendering plots.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
 <section id="arviz-helpers">
 <h2>ArviZ Helpers<a class="headerlink" href="#arviz-helpers" title="Link to this heading">#</a></h2>
 <dl class="py function">
@@ -1225,8 +1249,8 @@ Source selection only skips absent groups; malformed data raises an error.</p>
 <dt class="sig sig-object py" id="log_psplines.arviz_utils.get_weights">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">get_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.get_weights" title="Link to this definition">#</a></dt>
 <dd><p>Extract weight samples from the canonical posterior group.</p>
-<section id="id5">
-<h3>Parameters<a class="headerlink" href="#id5" title="Link to this heading">#</a></h3>
+<section id="id8">
+<h3>Parameters<a class="headerlink" href="#id8" title="Link to this heading">#</a></h3>
 <dl class="simple">
 <dt>idata<span class="classifier">xr.DataTree</span></dt><dd><p>DataTree containing posterior weight samples</p>
 </dd>
@@ -1234,8 +1258,8 @@ Source selection only skips absent groups; malformed data raises an error.</p>
 </dd>
 </dl>
 </section>
-<section id="id6">
-<h3>Returns<a class="headerlink" href="#id6" title="Link to this heading">#</a></h3>
+<section id="id9">
+<h3>Returns<a class="headerlink" href="#id9" title="Link to this heading">#</a></h3>
 <dl class="simple">
 <dt>jnp.ndarray</dt><dd><p>Weight samples: (samples, Kf) or (samples, Kt, Kf).</p>
 </dd>
@@ -1277,12 +1301,12 @@ Source selection only skips absent groups; malformed data raises an error.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="architecture.html"
+       href="conventions.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">PSD architecture</p>
+        <p class="prev-next-title">Conventions</p>
       </div>
     </a>
     <a class="right-next"
@@ -1422,6 +1446,15 @@ Source selection only skips absent groups; malformed data raises an error.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.compute_binning_structure"><code class="docutils literal notranslate"><span class="pre">compute_binning_structure()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="docutils literal notranslate"><span class="pre">apply_coarse_grain_multivar_fft()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#result-objects">Result objects</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id0"><code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id5"><code class="docutils literal notranslate"><span class="pre">PSDResult.psd</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id6"><code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id7"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_netcdf()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arviz-helpers">ArviZ Helpers</a><ul class="nav section-nav flex-column">

@@ -16,7 +16,7 @@ html:
   use_issues_button: true
   use_multitoc_numbering: false
   home_page_in_navbar: false
-  # favicon: "_static/favicon.png"
+  favicon: "_static/favicon.png"
   comments:
     hypothesis: false
     utterances: false

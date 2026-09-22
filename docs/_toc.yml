@@ -2,13 +2,9 @@ format: jb-book
 root: intro.rst
 
 chapters:
-  - file: examples/
-    sections:
-      - file: examples/univar-example.ipynb
-      - file: examples/multivariate-example.ipynb
-      - file: examples/timevarying-example.ipynb
-
+  - file: examples/univar-example.ipynb
+  - file: examples/multivariate-example.ipynb
+  - file: examples/timevarying-example.ipynb
   - file: conventions.rst
-  - file: architecture.md
   - file: api.rst
   - file: development.md

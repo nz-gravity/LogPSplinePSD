@@ -52,7 +52,7 @@ class LogPSpline:
             shape = (self.time.basis.shape[1], self.n_basis)
             if weights.shape != shape:
                 raise ValueError(f"weights must have shape {shape}")
-            # Reuse the WDM contraction without constructing kron(Bt, Bf).
+            # Evaluate the tensor contraction without constructing kron(Bt, Bf).
             return jnp.einsum(
                 "ti,ij,fj->tf",
                 self.time.basis,

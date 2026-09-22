@@ -1,10 +1,10 @@
-"""Tensor-penalty algebra reused from wdm_psd.tv_pspline_psd.model.
+"""Tensor-penalty algebra for time-frequency spline models.
 
-Operate on supplied marginal penalties, without constructing a dense
-Kronecker precision or choosing a smoothing hyperprior. WDM supplies
+Operate on supplied marginal penalties without constructing a dense Kronecker
+precision or choosing a smoothing hyperprior. The time-frequency prior uses
 trace-normalized penalties before adding a ridge. The existing stationary
-SplineBasis default is max-normalized and already ridged: it must not be
-silently substituted when reproducing a WDM prior.
+SplineBasis default is max-normalized and already ridged, so it must not be
+silently substituted for the time-frequency prior.
 """
 
 import jax.numpy as jnp
@@ -53,9 +53,10 @@ def eigen_prior_scale(
     """Normal scales (Kt,Kf) for the anisotropic tensor eigen-coefficients.
 
     Precision is phi_time*lambda_time + phi_freq*lambda_freq outside the
-    joint null space. Constants match the WDM defaults, without depending
-    on its configuration class. A singleton zero time penalty gives a 1D
-    prior with the WDM convention, not this package's stationary hierarchy.
+    joint null space. Constants match the time-frequency prior defaults
+    without depending on a configuration class. A singleton zero time
+    penalty gives a 1D prior with the time-frequency convention, not this
+    package's stationary hierarchy.
     """
     precision = phi_time * lam_time[:, None] + phi_freq * lam_freq[None, :]
     return jnp.where(

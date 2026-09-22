@@ -16,8 +16,8 @@ def wdm_periodogram(
 ) -> PowerSpectrum:
     """Transform one channel, preserving WDM coefficient-variance units.
 
-    Time is divided by the full duration, as in wdm_psd. No automatic
-    cropping, calibration, coarse graining or detrending is performed.
+    Time is divided by the full duration. No automatic cropping, calibration,
+    coarse graining or detrending is performed.
     """
     from wdm_transform import TimeSeries as WDMTimeSeries
 

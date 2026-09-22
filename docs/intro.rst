@@ -7,9 +7,11 @@ time series are converted into Wishart sufficient statistics, smooth spline
 models are fitted with NumPyro/JAX. Time-varying PSDs are a WIP.
 
 
-<video autoplay muted loop playsinline preload="metadata">
-  <source src="animation/logpspline-hero.webm" type="video/webm">
-</video>
+.. raw:: html
+
+    <video autoplay muted loop playsinline preload="metadata">
+       <source src="logpspline-hero.webm" type="video/webm">
+    </video>
 
 
 

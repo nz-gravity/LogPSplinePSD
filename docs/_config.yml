@@ -43,6 +43,8 @@ sphinx:
 #    'sphinx.ext.matplotlib.plot',
     ]
   config:
+    html_extra_path:
+      - animation/logpspline-hero.webm
     mathjax3_config:
       tex:
         macros:

@@ -4,7 +4,8 @@ chapters:
   - file: five-minute.rst
   - file: results.rst
   - file: configuration.rst
-  - file: multivariate.rst
+  - file: multivariate-example.ipynb
+  - file: timevarying-example.ipynb
   - file: time-varying-psd.md
   - file: outputs.rst
   - file: data_preprocessing.rst

@@ -1,6 +1,7 @@
 import numpy as np
 
 from log_psplines.example_datasets.varma_data import VARMAData
+from log_psplines.example_datasets.ls2_data import LS2Data
 
 
 def test_varma_ar_p1(outdir):
@@ -58,3 +59,25 @@ def test_varma_validity_flags():
     assert non_stationary.empirical_stationarity_metrics is not None
     assert non_stationary.var_companion_spectral_radius is not None
     assert non_stationary.var_companion_spectral_radius >= 1.0
+
+
+
+
+def test_ls2_data(outdir):
+    N = 512 * 8
+    data = LS2Data(
+        n_samples=N,
+        fs=64.0,
+        seed=42,
+    )
+    data.plot(fname=f"{outdir}/ls2_data_analysis.png")
+
+    assert data.p == 1
+    assert data.data.shape == (N, 1)
+    assert data.get_true_psd().shape == (
+        N,
+        len(data.freq),
+    )
+
+    assert np.all(data.freq > 0)
+    assert np.isclose(data.freq.max(), data.fs / 2.0)

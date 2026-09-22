@@ -66,8 +66,9 @@ in `diagnostics/report.py`, and result packing in `arviz_utils/to_arviz.py`.
 
 A stationary scalar component accepts weights `(Kf,)` and returns `(F,)`.
 A time basis accepts weights `(Kt, Kf)` and evaluates
-`Bt @ weights @ Bf.T`, returning `(T, F)`. This evaluator now uses the optimized
-contraction from `wdm_psd`. There is no separate time-varying class.
+`Bt @ weights @ Bf.T`, returning `(T, F)`. This evaluator uses an optimized
+tensor contraction and does not require a dense Kronecker basis. There is no
+separate time-varying class.
 
 `SpectralMatrix` accepts scalar values with any leading dimensions. Inputs
 `(..., C)` and `(..., C*(C-1)//2)` produce `(..., C, C)`. This includes both
@@ -75,7 +76,7 @@ contraction from `wdm_psd`. There is no separate time-varying class.
 Posterior sample axes use the same rule. It does not define temporal priors.
 
 `fit(PowerSpectrum, PowerSplineConfig, model=LogPSpline(...))` now samples
-scalar time-frequency surfaces with the source WDM tensor prior. It calls
+scalar time-frequency surfaces with the package's WDM tensor prior. It calls
 `inference/power.py` directly. The optional `preprocessing/wdm.py` adapter
 produces powers/counts; inference has no transform dependency.
 

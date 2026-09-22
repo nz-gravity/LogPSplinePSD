@@ -4,38 +4,26 @@ LogPSplinePSD
 ``LogPSplinePSD`` estimates power spectral densities (PSDs) with Bayesian
 log-P-splines. It is built around multichannel frequency-domain inference:
 time series are converted into Wishart sufficient statistics, smooth spline
-models are fitted with NumPyro/JAX, and results are returned as ArviZ-compatible
-``xarray.DataTree`` objects.
+models are fitted with NumPyro/JAX. Time-varying PSDs are a WIP.
 
-The package is useful when you need posterior uncertainty on a univariate PSD,
-a multivariate spectral matrix, cross spectra, or coherence. The implementation
-keeps the main spectral invariants explicit: PSD diagonals are positive,
-multivariate spectral matrices are Hermitian positive definite, and coherence
-is derived from the reconstructed matrix.
 
-What Is Included
-----------------
 
-- A high-level pipeline interface via :func:`log_psplines.fit` and
-  :func:`log_psplines.make_pipeline`.
-- Data containers for time-domain series and frequency-domain Wishart
-  statistics.
-- P-spline models for diagonal PSD terms and complex off-diagonal structure.
-- VI warm starts and factorised multivariate NUTS stages.
-- Optional frequency-domain coarse graining for large frequency grids.
-- ArviZ-style outputs, diagnostic summaries, posterior PSD quantiles, and
-  plotting helpers.
+<video autoplay muted loop playsinline preload="metadata">
+  <source src="animation/logpspline-hero.webm" type="video/webm">
+</video>
 
-What Is Not Covered Here
-------------------------
 
-Application-specific gravitational-wave examples are intentionally left out of
-this documentation set for now. The public docs focus on package concepts,
-synthetic examples, configuration, outputs, and API reference. Domain examples
-can be added later as separate case studies.
 
 Install
 -------
+
+
+For package use outside the repository:
+
+.. code-block:: bash
+
+   python -m pip install LogPSplinePSD
+
 
 Use the project virtual environment during development:
 
@@ -44,11 +32,7 @@ Use the project virtual environment during development:
    source .venv/bin/activate
    python -m pip install -e '.[dev]'
 
-For package use outside the repository:
 
-.. code-block:: bash
-
-   python -m pip install LogPSplinePSD
 
 Where To Start
 --------------

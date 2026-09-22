@@ -222,8 +222,8 @@ LS2 recovery claims. A larger matched campaign remains a separate validation.
 
 The moving-periodogram adapter is available from
 ``log_psplines.preprocessing.moving_periodogram``.  It follows the Tang
-zig-zag frequencies and no-padding/whole-block boundary convention used in
-the companion implementation.  ``tang_moving_periodogram`` returns the exact
+zig-zag frequencies and no-padding/whole-block boundary convention used by
+the package.  ``tang_moving_periodogram`` returns the exact
 scattered complex ordinates, while ``moving_periodogram`` pools them into the
 rectangular ``PowerSpectrum`` contract used by ``fit``.  The rectangular
 adapter represents each retained time block by its pooled centre; use the raw
@@ -252,7 +252,7 @@ variation between source and port was `7.11e-15` (non-centered) and `7.22e-15`
 To reproduce that longer check without overwriting the test fixtures:
 
 ```sh
-.venv/bin/python tests/reference/capture_ls2.py /path/to/wdm_psd \
+.venv/bin/python tests/reference/capture_ls2.py /path/to/reference-source \
   --warmup 200 --draws 100 --max-tree-depth 8 --output /tmp/ls2-reference
 .venv/bin/python docs/studies/ls2_transfer.py \
   --reference /tmp/ls2-reference/ls2_wdm.npz \

@@ -502,14 +502,15 @@ in <code class="docutils literal notranslate"><span class="pre">diagnostics/repo
 <h2>Time dependence: shared scalar models<a class="headerlink" href="#time-dependence-shared-scalar-models" title="Link to this heading">#</a></h2>
 <p>A stationary scalar component accepts weights <code class="docutils literal notranslate"><span class="pre">(Kf,)</span></code> and returns <code class="docutils literal notranslate"><span class="pre">(F,)</span></code>.
 A time basis accepts weights <code class="docutils literal notranslate"><span class="pre">(Kt,</span> <span class="pre">Kf)</span></code> and evaluates
-<code class="docutils literal notranslate"><span class="pre">Bt</span> <span class="pre">&#64;</span> <span class="pre">weights</span> <span class="pre">&#64;</span> <span class="pre">Bf.T</span></code>, returning <code class="docutils literal notranslate"><span class="pre">(T,</span> <span class="pre">F)</span></code>. This evaluator now uses the optimized
-contraction from <code class="docutils literal notranslate"><span class="pre">wdm_psd</span></code>. There is no separate time-varying class.</p>
+<code class="docutils literal notranslate"><span class="pre">Bt</span> <span class="pre">&#64;</span> <span class="pre">weights</span> <span class="pre">&#64;</span> <span class="pre">Bf.T</span></code>, returning <code class="docutils literal notranslate"><span class="pre">(T,</span> <span class="pre">F)</span></code>. This evaluator uses an optimized
+tensor contraction and does not require a dense Kronecker basis. There is no
+separate time-varying class.</p>
 <p><code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code> accepts scalar values with any leading dimensions. Inputs
 <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C)</span></code> and <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C*(C-1)//2)</span></code> produce <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C,</span> <span class="pre">C)</span></code>. This includes both
 <code class="docutils literal notranslate"><span class="pre">(F,</span> <span class="pre">C,</span> <span class="pre">C)</span></code> and a future <code class="docutils literal notranslate"><span class="pre">(T,</span> <span class="pre">F,</span> <span class="pre">C,</span> <span class="pre">C)</span></code> without changing matrix algebra.
 Posterior sample axes use the same rule. It does not define temporal priors.</p>
 <p><code class="docutils literal notranslate"><span class="pre">fit(PowerSpectrum,</span> <span class="pre">PowerSplineConfig,</span> <span class="pre">model=LogPSpline(...))</span></code> now samples
-scalar time-frequency surfaces with the source WDM tensor prior. It calls
+scalar time-frequency surfaces with the package’s WDM tensor prior. It calls
 <code class="docutils literal notranslate"><span class="pre">inference/power.py</span></code> directly. The optional <code class="docutils literal notranslate"><span class="pre">preprocessing/wdm.py</span></code> adapter
 produces powers/counts; inference has no transform dependency.</p>
 <p><code class="docutils literal notranslate"><span class="pre">PSDResult.time</span></code> contains the time grid for these fits. Coefficients and both

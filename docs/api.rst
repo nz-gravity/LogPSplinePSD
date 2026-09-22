@@ -66,6 +66,14 @@ Coarse Graining
 
 .. autofunction:: log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft
 
+
+Result objects
+--------------
+
+.. autoclass:: log_psplines.results.PSDResult
+   :members:
+
+
 ArviZ Helpers
 -------------
 

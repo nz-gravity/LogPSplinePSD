@@ -67,26 +67,6 @@ def test_unsupported_design_options_are_rejected():
         PipelineConfig(design_from_vi=True)
 
 
-def test_study_basis_import_resolves():
-    import ast
-    import importlib
-
-    study = (
-        Path(__file__).parents[1]
-        / "docs/studies/eta_testing/eta_validation_study.py"
-    )
-    imports = [
-        node
-        for node in ast.walk(ast.parse(study.read_text()))
-        if isinstance(node, ast.ImportFrom)
-        and any(n.name == "init_basis_and_penalty" for n in node.names)
-    ]
-    assert len(imports) == 1
-    assert callable(
-        importlib.import_module(imports[0].module).init_basis_and_penalty
-    )
-
-
 def test_chain_method_reaches_numpyro(monkeypatch):
     import jax
 

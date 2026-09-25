@@ -291,7 +291,8 @@ def test_pipeline_multivar_nuts(multivar_data):
     assert "weights_delta_0" in ds
     assert "weights_delta_1" in ds
     assert ds["weights_delta_0"].sizes["draw"] == config.n_samples
-    stats = result.idata["sample_stats"].dataset
+    stats = result.sample_stats
+    assert stats is not None
     assert "acceptance_rate_channel_0" in stats
     assert "acceptance_rate_channel_1" in stats
     assert result.metadata["data_type"] == "multivariate"

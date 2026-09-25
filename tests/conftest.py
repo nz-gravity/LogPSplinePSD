@@ -1,12 +1,9 @@
 import os
-import shutil
-from pathlib import Path
 
 import pytest
 
 from log_psplines.logger import set_level
 
-HERE = Path(__file__).parent
 if os.getenv("GITHUB_ACTIONS") == "true":
     os.environ.setdefault("LOG_PSPLINES_SLOW_TESTS", "0")
 else:
@@ -44,29 +41,6 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture
-def outdir(request):
-    # 1. Get Git branch
-    try:
-        from git import Repo
-
-        branch = Repo(".", search_parent_directories=True).active_branch.name
-    except Exception:
-        branch = "unknown_branch"
-
-    # 2. Get the filename (e.g., 'test_physics') and test name (e.g., 'test_simulation')
-    # request.path.stem gives 'test_logic' from 'test_logic.py'
-    file_stem = request.path.stem
-    test_name = request.node.name
-
-    # 3. Build path: .../test_logic/branch_[main]/test_simulation
-    target_dir = (
-        HERE / "test_output" / f"branch_[{branch}]" / file_stem / test_name
-    )
-
-    # 4. Cleanup and Create
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    return target_dir
+def outdir(tmp_path):
+    """Give each test a clean output directory managed by pytest."""
+    return tmp_path

@@ -1,7 +1,7 @@
 """Stationary periodograms and Wishart sufficient statistics.
 
-Future moving_periodogram.py and wdm.py may return time-frequency observations.
-Their likelihoods and inference are not implemented by these stationary routines.
+Time-frequency power preprocessing lives in ``moving_periodogram.py`` and
+``wdm.py``; its scalar likelihood and inference live in ``inference.power``.
 """
 
 import numpy as np
@@ -240,10 +240,7 @@ def empirical_spectrum(
     if nperseg is None:
         # Use half or full data length depending on total size
         n = data.shape[0]
-        if n <= 512:
-            nperseg = n  # full segment for short data
-        else:
-            nperseg = n // 2
+        nperseg = n if n <= 512 else n // 2
     if noverlap is None:
         noverlap = nperseg // 2
 

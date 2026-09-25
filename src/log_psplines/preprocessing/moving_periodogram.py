@@ -5,11 +5,10 @@ The raw transform follows Definition 1 of Tang et al. (2026): centred
 zig-zag pattern.  Thinning is applied by retaining complete blocks, which is
 the dependence-control step used by the dynamic-Whittle implementation.
 
-The package's scalar spline likelihood currently consumes rectangular
-``PowerSpectrum`` objects.  :func:`moving_periodogram` therefore pools the
-scattered ordinates into rectangular time-frequency cells.  Use
-:func:`tang_moving_periodogram` when the exact scattered coordinates are
-needed.
+For exact scattered-coordinate fitting, use
+:func:`scattered_moving_periodogram`. :func:`moving_periodogram` instead pools
+the ordinates onto a rectangular ``PowerSpectrum`` grid. Use
+:func:`tang_moving_periodogram` when complex coefficients are also needed.
 """
 
 from __future__ import annotations
@@ -204,9 +203,9 @@ def scattered_moving_periodogram(
 
     Unlike :func:`moving_periodogram`, no rectangular pooling is applied: each
     retained window keeps its own exact centre and rung frequency, so no
-    cross-rung time-averaging is introduced. Use this with
-    :meth:`~log_psplines.models.spectrum.LogPSpline.at_points` (evaluating
-    S(u, omega) directly) rather than the rectangular tensor-spline surface.
+    cross-rung time-averaging is introduced. Pass the result to ``fit`` with
+    an explicit ``LogPSpline``; the likelihood evaluates the spline at each
+    ordinate's own time and frequency.
     """
     if not np.isfinite(dt) or dt <= 0:
         raise ValueError("dt must be strictly positive.")

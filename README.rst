@@ -13,6 +13,7 @@ Highlights
 - Multivariate Wishart likelihoods for spectral matrices.
 - VI warm starts and factorised multivariate NUTS.
 - Optional frequency-domain coarse graining.
+- Scalar time-varying fits from WDM and moving-periodogram powers.
 - Posterior PSD quantiles, coherence summaries, and diagnostic plots.
 
 Install
@@ -42,14 +43,14 @@ Five-Minute Example
    data = VARMAData.ar(order=4, n_samples=8192, fs=64.0, seed=7)
 
    result = fit(
-      data.ts,
+       data.ts,
        PipelineConfig(
            n_knots=16,
            knot_kwargs={"method": "density"},
            vi_steps=200,
            n_warmup=100,
-         n_samples=200,
-         rng_key=7,
+           n_samples=200,
+           rng_key=7,
            true_psd=data.get_true_psd(),
        ),
    )
@@ -60,19 +61,18 @@ Five-Minute Example
 Next Steps
 ----------
 
-- Read the `five-minute guide <docs/five-minute.rst>`_.
-- Learn the `PSDResult interface <docs/results.rst>`_.
-- Follow the `multivariate example <docs/multivariate.rst>`_.
-- Explore `time-varying PSDs <docs/time-varying-psd.md>`_.
+- Follow the `univariate example <docs/examples/univar-example.ipynb>`_.
+- Explore the `multivariate example <docs/examples/multivariate-example.ipynb>`_.
+- Try the `time-varying example <docs/examples/timevarying-example.ipynb>`_.
+- Read the `spectral conventions <docs/conventions.rst>`_.
 
 Architecture
 ------------
 
-See `the architecture and migration guide <docs/architecture.md>`_ for the
-shared scalar/matrix model and time-frequency evaluation.
-Scalar time-varying power inference is available through ``fit()``; see
-`the time-varying PSD guide <docs/time-varying-psd.md>`_. Multivariate TV inference
-is not yet implemented.
+See the `development notes <docs/development.md>`_ for the shared scalar/matrix
+model and time-frequency evaluation. Scalar time-varying power inference is
+available through ``fit()``. Multivariate time-varying inference is not yet
+implemented.
 
 Documentation
 -------------

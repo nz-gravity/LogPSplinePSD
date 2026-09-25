@@ -47,8 +47,9 @@ class SplineBasis:
     def from_grid(
         cls,
         grid: np.ndarray,
-        n_interior_knots: int,
+        n_interior_knots: int | None = None,
         *,
+        interior_knots: np.ndarray | None = None,
         degree: int = 3,
         penalty_order: int = 2,
         normalization: Literal["max", "trace"] = "trace",
@@ -58,7 +59,8 @@ class SplineBasis:
 
         Coordinates are used as supplied. For WDM parity use rescaled time
         and frequency/frequency.max(). This differs deliberately from the
-        historical stationary ``from_knots`` convention.
+        historical stationary ``from_knots`` convention. Supply either the
+        number of uniform interior knots or explicit ``interior_knots``.
         """
         grid = np.asarray(grid, dtype=float)
         if (
@@ -68,14 +70,36 @@ class SplineBasis:
             or np.any(np.diff(grid) <= 0)
         ):
             raise ValueError("grid must be finite and strictly increasing")
-        if (
-            not isinstance(n_interior_knots, (int, np.integer))
-            or n_interior_knots < 0
-        ):
-            raise ValueError("n_interior_knots must be a non-negative integer")
+        if (n_interior_knots is None) == (interior_knots is None):
+            raise ValueError(
+                "supply exactly one of n_interior_knots or interior_knots"
+            )
         if not 0 <= penalty_order <= degree:
             raise ValueError("require 0 <= penalty_order <= degree")
-        interior = np.linspace(grid[0], grid[-1], n_interior_knots + 2)[1:-1]
+        if interior_knots is None:
+            if (
+                not isinstance(n_interior_knots, (int, np.integer))
+                or isinstance(n_interior_knots, bool)
+                or n_interior_knots < 0
+            ):
+                raise ValueError(
+                    "n_interior_knots must be a non-negative integer"
+                )
+            interior = np.linspace(
+                grid[0], grid[-1], n_interior_knots + 2
+            )[1:-1]
+        else:
+            interior = np.asarray(interior_knots, dtype=float)
+            if (
+                interior.ndim != 1
+                or not np.isfinite(interior).all()
+                or np.any(np.diff(interior) <= 0)
+                or np.any(interior <= grid[0])
+                or np.any(interior >= grid[-1])
+            ):
+                raise ValueError(
+                    "interior_knots must be strictly increasing inside grid"
+                )
         knots = np.concatenate(
             (
                 np.repeat(grid[0], degree + 1),

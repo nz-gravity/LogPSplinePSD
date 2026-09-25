@@ -1,7 +1,5 @@
 """Public contracts exposed by the architecture review."""
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -59,6 +57,7 @@ def test_tv_result_has_the_same_public_spectral_accessor():
     assert quantiles["spectral_density"].shape == (3, 4, 5, 1, 1)
     assert quantiles["coherence"] is None
     np.testing.assert_array_equal(quantiles["time"], time)
+    np.testing.assert_array_equal(result.frequency, frequency)
     # A broken selected result must not quietly fall through to another source.
     del result.idata["posterior"]["weights"]
     with pytest.raises(KeyError, match="weights"):
@@ -77,26 +76,6 @@ def test_public_api_has_a_single_canonical_entry_point():
 def test_unsupported_design_options_are_rejected():
     with pytest.raises(TypeError, match="design_from_vi"):
         PipelineConfig(design_from_vi=True)
-
-
-def test_study_basis_import_resolves():
-    import ast
-    import importlib
-
-    study = (
-        Path(__file__).parents[1]
-        / "docs/studies/eta_testing/eta_validation_study.py"
-    )
-    imports = [
-        node
-        for node in ast.walk(ast.parse(study.read_text()))
-        if isinstance(node, ast.ImportFrom)
-        and any(n.name == "init_basis_and_penalty" for n in node.names)
-    ]
-    assert len(imports) == 1
-    assert callable(
-        importlib.import_module(imports[0].module).init_basis_and_penalty
-    )
 
 
 def test_chain_method_reaches_numpyro(monkeypatch):

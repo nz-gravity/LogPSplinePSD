@@ -242,7 +242,7 @@ def make_pipeline(
     )
 
 
-def fit(data, config=None, *, model=None) -> PSDResult:
+def fit(data, config=None, *, model=None, partition=None) -> PSDResult:
     """Fit stationary Wishart data or scalar time-frequency powers.
 
     PowerSpectrum requires an explicit LogPSpline and PowerSplineConfig.
@@ -250,9 +250,15 @@ def fit(data, config=None, *, model=None) -> PSDResult:
     its historical prior and configuration. ScatteredPowerSpectrum uses the
     same prior but evaluates log S(u, omega) directly at each ordinate,
     without pooling onto a rectangular time/frequency grid.
+
+    ``partition`` optionally pools rectangular PowerSpectrum statistics while
+    reconstructing posterior spectra on the model's native grid.
     """
     from log_psplines.config import PowerSplineConfig
-    from log_psplines.data.spectral import PowerSpectrum, ScatteredPowerSpectrum
+    from log_psplines.data.spectral import (
+        PowerSpectrum,
+        ScatteredPowerSpectrum,
+    )
     from log_psplines.inference.power import (
         fit_power_spline,
         fit_scattered_power_spline,
@@ -269,11 +275,17 @@ def fit(data, config=None, *, model=None) -> PSDResult:
                 f"{type(data).__name__} requires PowerSplineConfig"
             )
         if isinstance(data, ScatteredPowerSpectrum):
+            if partition is not None:
+                raise ValueError(
+                    "partition requires rectangular PowerSpectrum"
+                )
             return fit_scattered_power_spline(data, model, config)
-        return fit_power_spline(data, model, config)
+        return fit_power_spline(data, model, config, partition=partition)
+    if partition is not None:
+        raise ValueError("partition requires PowerSpectrum")
     if model is not None:
         raise ValueError(
-            "explicit model is currently supported for PowerSpectrum only"
+            "explicit model requires PowerSpectrum or ScatteredPowerSpectrum"
         )
     pipeline = make_pipeline(data, config)
     result = pipeline.run()

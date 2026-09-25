@@ -64,8 +64,9 @@ where :math:`(\cdot)^*` denotes the conjugate transpose.
 Coarse-graining conventions
 ---------------------------
 
-We “coarse-grain” the Fourier frequencies by dividing them into :math:`N_c` subsequent disjoint subsets
-:math:`J_h` (each containing an odd number :math:`N_h` of frequencies):
+We “coarse-grain” the Fourier frequencies by dividing them into :math:`N_c`
+consecutive disjoint subsets :math:`J_h`, each containing :math:`N_h`
+frequencies:
 
 .. math::
 
@@ -157,9 +158,8 @@ Implementation Map
 ``log_psplines.pipeline``
    Canonical high-level ``fit()`` entry point plus orchestration helpers.
 
-``log_psplines.pipeline``
-   Pipeline construction, preprocessing, VI, NUTS, saving, and evidence
-   estimation.
+``log_psplines.inference``
+   Model preparation, VI, NUTS, and evidence estimation.
 
 ``log_psplines.data``
    Time-domain and frequency-domain containers.
@@ -274,5 +274,4 @@ spectral structure being estimated.
        coarse_grain_config=CoarseGrainConfig(enabled=True, Nc=128, Nh=None),
    )
 
-See :doc:`coarse_grain` for the mathematical details and implementation
-constraints.
+See `Coarse-graining conventions`_ above for the mathematical details.

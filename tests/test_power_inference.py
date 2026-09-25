@@ -72,26 +72,31 @@ def test_ls2_posterior_target_and_nuts(ls2, centered, tmp_path):
         progress_bar=False,
     )
     model, init, _ = prepare_power_model(data, spline, config)
-    for key, value in init.items():
-        assert np.asarray(value).shape == r[prefix + "init_" + key].shape
+    assert init["s"].shape == r[prefix + "init_s"].shape
+    for value in init.values():
         assert np.isfinite(value).all()
 
     def target(sites):
         return log_density(model, (), {}, sites)[0]
 
     value, gradient = jax.value_and_grad(target)(init)
-    np.testing.assert_allclose(
-        value, r[prefix + "log_density"], rtol=1e-5, atol=1e-5
-    )
+    # The archived density used a Gamma roughness prior; current fits use
+    # HalfNormal roughness. Check the new target is finite and differentiable.
+    assert np.isfinite(value)
     for _key, value in gradient.items():
         assert np.isfinite(value).all()
     result = fit(data, config, model=spline)
-    for key in ("s", "phi_time", "phi_freq", "log_likelihood"):
-        assert result.posterior[key].shape == r[prefix + "sample_" + key].shape
+    for key in ("s", "sigma_time", "sigma_freq", "log_likelihood"):
+        reference_key = key.replace("sigma_", "phi_")
+        assert (
+            result.posterior[key].shape
+            == r[prefix + "sample_" + reference_key].shape
+        )
         assert np.isfinite(result.posterior[key]).all()
     psd = result.psd
     assert psd.shape == (1, 16, len(data.time), len(data.frequency))
     assert np.isfinite(psd).all() and np.all(psd > 0)
+    np.testing.assert_array_equal(result.frequency, data.frequency)
     np.testing.assert_allclose(result.coherence, 1)
     # Discrete NUTS diagnostics can differ by platform at a trajectory
     # boundary even with the same seed. Keep structural and validity checks.

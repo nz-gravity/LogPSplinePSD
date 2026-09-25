@@ -158,8 +158,9 @@ result's explicit `power_basis` group instead. Existing stationary plotting
 helpers remain stationary; `PSDResult.save()` renders a surface for TV fits.
 
 The historical stationary prior and VI/blocked-NUTS path are unchanged.
-Multivariate TV inference, moving-periodogram adapters and TV VI remain future
-work. See [the time-varying PSD notes](time-varying-psd.md) for conventions and LS2 checks.
+Multivariate TV inference and TV VI remain future work. The
+[time-varying example](examples/timevarying-example.ipynb) demonstrates the WDM
+and moving-periodogram adapters.
 
 ## Migration
 
@@ -199,5 +200,5 @@ work. See [the time-varying PSD notes](time-varying-psd.md) for conventions and 
   `components.compute_design_weights(S)` becomes
   `inference.initialisation.fit_design_weights(components, S)`.
 
-The cleanup did not transfer moving-periodogram preprocessing or implement
-multivariate TV inference. Keep those additions separate from changes to priors.
+Moving-periodogram preprocessing and scattered-coordinate scalar inference are
+available. Multivariate TV inference remains future work.

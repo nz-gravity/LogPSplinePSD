@@ -40,28 +40,10 @@ def power_floor(power: np.ndarray) -> float:
     return 0.05 * float(np.percentile(positive, 10.0))
 
 
-def _sample_log_gamma(
-    name: str,
-    alpha: float,
-    beta: float,
-    base_scale: float,
-) -> jnp.ndarray:
-    """Sample ``phi`` with a ``Gamma(alpha, beta)`` prior on the log scale.
-
-    The site itself is ``log phi`` with a broad Normal reference measure; a
-    ``factor`` corrects the density to the exact ``Gamma`` prior (with the
-    log-Jacobian), giving an unconstrained, well-scaled sampling variable. This
-    mirrors the approach used in ``log_psplines``.
-    """
-    base = dist.Normal(0.0, base_scale)
-    log_phi = numpyro.sample(name, base)
-    phi = jnp.exp(log_phi)
-    gamma = dist.Gamma(alpha, beta)
-    numpyro.factor(
-        f"{name}_prior",
-        gamma.log_prob(phi) + log_phi - base.log_prob(log_phi),
-    )
-    return phi
+def _sample_precision(name: str, config: PowerSplineConfig) -> jnp.ndarray:
+    """Sample a HalfNormal roughness scale and derive its precision."""
+    sigma = numpyro.sample(name, dist.HalfNormal(config.roughness_scale))
+    return sigma**-2
 
 
 def sample_eigen_coefficients(
@@ -161,8 +143,8 @@ def whitened_init_values(
         s = eig_coeffs * inv_scale
     return {
         "s": s.reshape(-1),
-        "phi_time": float(np.log(phi_time)),
-        "phi_freq": float(np.log(phi_freq)),
+        "sigma_time": float(phi_time**-0.5),
+        "sigma_freq": float(phi_freq**-0.5),
     }
 
 
@@ -279,18 +261,8 @@ def prepare_power_model(
     power, counts = jnp.asarray(data.power), jnp.asarray(data.counts)
 
     def model() -> None:
-        phi_time = _sample_log_gamma(
-            "phi_time",
-            config.alpha_phi,
-            config.beta_phi,
-            config.phi_log_base_scale,
-        )
-        phi_freq = _sample_log_gamma(
-            "phi_freq",
-            config.alpha_phi,
-            config.beta_phi,
-            config.phi_log_base_scale,
-        )
+        phi_time = _sample_precision("sigma_time", config)
+        phi_freq = _sample_precision("sigma_freq", config)
         scale = eigen_prior_scale(
             phi_time,
             phi_freq,
@@ -335,7 +307,7 @@ def prepare_scattered_power_model(
     spline: LogPSpline,
     config: PowerSplineConfig,
 ) -> tuple[Callable, dict, dict[str, np.ndarray]]:
-    """Build the model and PLS initial sites for scattered (u, omega) ordinates.
+    """Build the model and PLS initial sites for scattered ordinates.
 
     Unlike :func:`prepare_power_model`, the spline's ``time``/``frequency``
     grids need not match the data: each ordinate is evaluated at its own
@@ -357,18 +329,8 @@ def prepare_scattered_power_model(
     power, counts = jnp.asarray(data.power), jnp.asarray(data.counts)
 
     def model() -> None:
-        phi_time = _sample_log_gamma(
-            "phi_time",
-            config.alpha_phi,
-            config.beta_phi,
-            config.phi_log_base_scale,
-        )
-        phi_freq = _sample_log_gamma(
-            "phi_freq",
-            config.alpha_phi,
-            config.beta_phi,
-            config.phi_log_base_scale,
-        )
+        phi_time = _sample_precision("sigma_time", config)
+        phi_freq = _sample_precision("sigma_freq", config)
         scale = eigen_prior_scale(
             phi_time,
             phi_freq,
@@ -448,8 +410,8 @@ def _collect_power_samples(
         scale = jax.vmap(
             jax.vmap(
                 lambda pt, pf: eigen_prior_scale(
-                    jnp.exp(pt),
-                    jnp.exp(pf),
+                    pt**-2,
+                    pf**-2,
                     jnp.asarray(pair["lam_time"]),
                     jnp.asarray(pair["lam_freq"]),
                     jnp.asarray(pair["joint_null"]),
@@ -457,7 +419,7 @@ def _collect_power_samples(
                     ridge_eps=config.ridge_eps,
                 )
             )
-        )(samples["phi_time"], samples["phi_freq"])
+        )(samples["sigma_time"], samples["sigma_freq"])
         coefficients = coefficients * np.asarray(scale)
     samples["weights"] = np.einsum(
         "ia,cdab,jb->cdij",
@@ -473,21 +435,57 @@ def fit_power_spline(
     data: PowerSpectrum,
     spline: LogPSpline,
     config: PowerSplineConfig,
+    *,
+    partition=None,
 ) -> PSDResult:
-    """Run NUTS and return the common PSDResult with compact coefficients."""
+    """Fit native or pooled powers, retaining native PSD reconstruction."""
     from log_psplines.arviz_utils.to_arviz import pack_power_result
+    from log_psplines.preprocessing.power_partition import coarse_grain_power
     from log_psplines.results import PSDResult
 
-    model, init, pair = prepare_power_model(data, spline, config)
+    fit_data = data
+    fit_spline = spline
+    if partition is not None:
+        if (
+            spline.time is None
+            or data.time is None
+            or len(spline.time.grid) != len(data.time)
+            or len(spline.frequency.grid) != len(data.frequency)
+        ):
+            raise ValueError("partitioned fits require a native-grid spline")
+        fit_data = coarse_grain_power(data, partition)
+        ts = np.asarray(partition.time_starts)
+        fs = np.asarray(partition.frequency_starts)
+        model_time = np.add.reduceat(spline.time.grid, ts) / np.diff(
+            np.r_[ts, len(data.time)]
+        )
+        model_frequency = np.add.reduceat(spline.frequency.grid, fs) / np.diff(
+            np.r_[fs, len(data.frequency)]
+        )
+        fit_spline = LogPSpline(
+            frequency=replace(
+                spline.frequency,
+                grid=model_frequency,
+                basis=spline.frequency.design_at(model_frequency),
+            ),
+            time=replace(
+                spline.time,
+                grid=model_time,
+                basis=spline.time.design_at(model_time),
+            ),
+        )
+    model, init, pair = prepare_power_model(fit_data, fit_spline, config)
     mcmc = _run_power_nuts(model, init, config)
     samples = _collect_power_samples(mcmc, pair, config)
     return PSDResult(
         pack_power_result(
-            data,
+            fit_data,
             spline,
             config,
             samples,
             mcmc.get_extra_fields(group_by_chain=True),
+            partition=partition,
+            native_data=data,
         )
     )
 
@@ -515,4 +513,3 @@ def fit_scattered_power_spline(
             mcmc.get_extra_fields(group_by_chain=True),
         )
     )
-

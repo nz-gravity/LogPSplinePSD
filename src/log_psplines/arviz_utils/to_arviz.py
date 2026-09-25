@@ -534,9 +534,14 @@ def pack_power_result(
     config: PowerSplineConfig,
     samples: dict[str, np.ndarray],
     stats: dict[str, jnp.ndarray],
+    *,
+    partition=None,
+    native_data: PowerSpectrum | None = None,
 ) -> xr.DataTree:
     """Store compact coefficients and explicit grids for scalar power fits."""
     from dataclasses import asdict
+
+    native_data = data if native_data is None else native_data
 
     posterior = {}
     for name, value in samples.items():
@@ -571,8 +576,8 @@ def pack_power_result(
             ),
             "knots_time": (("time_knot",), spline.time.knots),
             "knots_frequency": (("frequency_knot",), spline.frequency.knots),
-            "grid_time": (("time",), spline.time.grid),
-            "grid_frequency": (("frequency",), spline.frequency.grid),
+            "grid_time": (("time",), native_data.time),
+            "grid_frequency": (("frequency",), native_data.frequency),
         },
         attrs={
             "degree_time": spline.time.degree,
@@ -593,32 +598,41 @@ def pack_power_result(
             },
         },
     )
-    idata = xr.DataTree.from_dict(
-        {
-            "/": xr.Dataset(
-                attrs={
-                    **asdict(config),
-                    "likelihood": "power_whittle",
-                    "units": data.units,
-                }
-            ),
-            "posterior": xr.Dataset(
-                posterior,
-                coords={
-                    "chain": np.arange(config.num_chains),
-                    "draw": np.arange(config.n_samples),
-                },
-            ),
-            "observed_data": observed,
-            "power_basis": basis,
-            "sample_stats": xr.Dataset(
-                {
-                    name: (("chain", "draw"), np.asarray(value))
-                    for name, value in stats.items()
-                }
-            ),
-        }
-    )
+    groups = {
+        "/": xr.Dataset(
+            attrs={
+                **asdict(config),
+                "likelihood": "power_whittle",
+                "units": data.units,
+            }
+        ),
+        "posterior": xr.Dataset(
+            posterior,
+            coords={
+                "chain": np.arange(config.num_chains),
+                "draw": np.arange(config.n_samples),
+            },
+        ),
+        "observed_data": observed,
+        "power_basis": basis,
+        "sample_stats": xr.Dataset(
+            {
+                name: (("chain", "draw"), np.asarray(value))
+                for name, value in stats.items()
+            }
+        ),
+    }
+    if partition is not None:
+        groups["power_partition"] = xr.Dataset(
+            {
+                "time_starts": (("time_block",), partition.time_starts),
+                "frequency_starts": (
+                    ("frequency_block",), partition.frequency_starts
+                ),
+            },
+            attrs={"coordinate_rule": "mean of native centers"},
+        )
+    idata = xr.DataTree.from_dict(groups)
     return idata
 
 

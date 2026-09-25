@@ -19,6 +19,9 @@ High-Level Pipeline
    :members:
    :undoc-members:
 
+.. autoclass:: log_psplines.config.PowerSplineConfig
+   :members:
+
 Data Containers
 ---------------
 
@@ -30,6 +33,30 @@ Data Containers
 
 .. autoclass:: log_psplines.data.EmpiricalPSD
    :members:
+
+.. autoclass:: log_psplines.data.PowerSpectrum
+   :members:
+
+.. autoclass:: log_psplines.data.ScatteredPowerSpectrum
+   :members:
+
+Time-Varying Preprocessing
+--------------------------
+
+.. autofunction:: log_psplines.preprocessing.wdm.wdm_periodogram
+
+.. autofunction:: log_psplines.preprocessing.moving_periodogram.moving_periodogram
+
+.. autofunction:: log_psplines.preprocessing.moving_periodogram.scattered_moving_periodogram
+
+.. autoclass:: log_psplines.preprocessing.power_partition.PowerPartition
+   :members:
+
+.. autofunction:: log_psplines.preprocessing.power_partition.mask_power
+
+.. autofunction:: log_psplines.preprocessing.power_partition.select_power_partition
+
+.. autofunction:: log_psplines.preprocessing.power_partition.coarse_grain_power
 
 Spline Models
 -------------
@@ -65,13 +92,6 @@ Coarse Graining
 .. autofunction:: log_psplines.preprocessing.coarse_grain.compute_binning_structure
 
 .. autofunction:: log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft
-
-
-Result objects
---------------
-
-.. autoclass:: log_psplines.results.PSDResult
-   :members:
 
 
 ArviZ Helpers

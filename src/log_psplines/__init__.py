@@ -17,6 +17,12 @@ from .preprocessing.moving_periodogram import (
     moving_periodogram,
     scattered_moving_periodogram,
 )
+from .preprocessing.power_partition import (
+    PowerPartition,
+    coarse_grain_power,
+    mask_power,
+    select_power_partition,
+)
 
 __all__ = [
     "fit",
@@ -33,4 +39,8 @@ __all__ = [
     "ScatteredPowerSpectrum",
     "moving_periodogram",
     "scattered_moving_periodogram",
+    "PowerPartition",
+    "coarse_grain_power",
+    "mask_power",
+    "select_power_partition",
 ]

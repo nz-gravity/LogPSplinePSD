@@ -5,6 +5,7 @@ chapters:
   - file: examples/univar-example.ipynb
   - file: examples/multivariate-example.ipynb
   - file: examples/timevarying-example.ipynb
+  - file: wdm-power.rst
   - file: conventions.rst
   - file: api.rst
   - file: development.md

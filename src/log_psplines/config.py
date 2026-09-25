@@ -110,19 +110,13 @@ Output and Evidence
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 import numpy as np
 
 from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
-TruePSDInput = Union[
-    None,
-    np.ndarray,
-    tuple[np.ndarray, np.ndarray],
-    list,
-    dict,
-]
+TruePSDInput = None | np.ndarray | tuple[np.ndarray, np.ndarray] | list | dict
 FrequencyBand = tuple[float, float]
 
 
@@ -192,13 +186,11 @@ __all__ = ["PipelineConfig", "PowerSplineConfig"]
 class PowerSplineConfig:
     """WDM power/count prior and NUTS settings, separate from Wishart priors.
 
-    ``phi_time`` and ``phi_freq`` posterior sites contain log precisions.
-    Gamma parameters use the shape/rate convention of the source model.
+    ``sigma_time`` and ``sigma_freq`` have HalfNormal priors. The smoothing
+    precisions are derived as ``phi = sigma**-2``.
     """
 
-    alpha_phi: float = 2.0
-    beta_phi: float = 1.0
-    phi_log_base_scale: float = 1.0
+    roughness_scale: float = 10.0
     null_precision: float = 1e-4
     ridge_eps: float = 1e-6
     init_penalty_time: float = 0.05
@@ -214,9 +206,7 @@ class PowerSplineConfig:
 
     def __post_init__(self) -> None:
         for name in (
-            "alpha_phi",
-            "beta_phi",
-            "phi_log_base_scale",
+            "roughness_scale",
             "null_precision",
             "ridge_eps",
         ):

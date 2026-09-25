@@ -377,7 +377,14 @@ class PSDResult:
         for prefix, dataset in groups:
             if dataset is None:
                 continue
-            for name, var in dataset.data_vars.items():
+            stored_group = dataset
+            if prefix == "observed":
+                rename = {
+                    name: f"observed_{name}"
+                    for name in set(dataset.dims) | set(dataset.coords)
+                }
+                stored_group = dataset.rename(rename)
+            for name, var in stored_group.data_vars.items():
                 data_vars[f"{prefix}__{name}"] = var
         if self.vi_spectrum is not None:
             data_vars["vi_spectral_density"] = self.vi_spectrum
@@ -404,9 +411,17 @@ class PSDResult:
             names = [name for name in stored.data_vars if name.startswith(marker)]
             if not names:
                 return None
-            return xr.Dataset(
+            dataset = xr.Dataset(
                 {name[len(marker):]: stored[name] for name in names}
             )
+            if prefix == "observed":
+                rename = {
+                    name: name.removeprefix("observed_")
+                    for name in set(dataset.dims) | set(dataset.coords)
+                    if name.startswith("observed_")
+                }
+                dataset = dataset.rename(rename)
+            return dataset
 
         posterior = group("posterior")
         if posterior is None:

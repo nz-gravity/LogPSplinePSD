@@ -1,10 +1,8 @@
 from log_psplines.inference.initialisation import fit_design_weights
 from log_psplines.inference.initialisation import prepare_components
-from log_psplines.arviz_utils.reconstruction import reconstruct_psd_matrix, compute_psd_quantiles
+from log_psplines.models.reconstruction import reconstruct_psd_matrix, compute_psd_quantiles
 from log_psplines.preprocessing.periodogram import compute_wishart, empirical_spectrum
 from log_psplines.plotting.basis import plot_spline_basis
-from log_psplines.arviz_utils.spline_storage import to_storage_payload
-from log_psplines.arviz_utils.spline_storage import from_storage_dataset
 from log_psplines.inference.initialisation import build_component
 import numpy as np
 import pytest
@@ -73,44 +71,16 @@ def _simple_fft() -> WishartData:
     )
 
 
-def test_log_pspline_storage_round_trip_and_validation(tmp_path) -> None:
+def test_log_pspline_evaluation_and_validation(tmp_path) -> None:
     model = _simple_log_pspline()
-    payload, coords = to_storage_payload(model,
-        prefix="diag_0", include_linear_operators=True
-    )
-    ds = xr.Dataset(
-        {
-            "degree": xr.DataArray(model.degree),
-            "diffMatrixOrder": xr.DataArray(model.diffMatrixOrder),
-            "N": xr.DataArray(model.n),
-            **{
-                key: xr.DataArray(value, dims=dims)
-                for key, (dims, value) in payload.items()
-            },
-        },
-        coords=coords,
-    )
-
-    loaded = from_storage_dataset(ds, prefix="diag_0")
-    np.testing.assert_allclose(loaded.knots, model.knots)
-    np.testing.assert_allclose(loaded.grid_points, model.grid_points)
-    np.testing.assert_allclose(
-        np.asarray(loaded.basis), np.asarray(model.basis)
-    )
-    np.testing.assert_allclose(
-        np.asarray(loaded.penalty_matrix), np.asarray(model.penalty_matrix)
-    )
-
     values = model(np.ones(model.n_basis))
     np.testing.assert_allclose(
         values, build_spline(model.basis, np.ones(model.n_basis))
     )
 
-    plot_spline_basis(model,outdir=str(tmp_path))
+    plot_spline_basis(model, outdir=str(tmp_path))
     assert (tmp_path / "basis_plot.png").exists()
 
-    with pytest.raises(KeyError, match="Missing required spline key"):
-        from_storage_dataset({})
     with pytest.raises(ValueError, match="weights length"):
         build_component(
             degree=1,
@@ -127,7 +97,6 @@ def test_log_pspline_storage_round_trip_and_validation(tmp_path) -> None:
             n=4,
             log_target=np.ones(3),
         )
-
 
 def test_multivar_fft_timeseries_and_conversion_helpers() -> None:
     fft = _simple_fft()

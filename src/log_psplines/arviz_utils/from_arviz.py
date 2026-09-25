@@ -11,7 +11,7 @@ import xarray as xr
 from log_psplines.arviz_utils._datatree import (
     require_dataset as _require_dataset,
 )
-from log_psplines.arviz_utils.reconstruction import reconstruct_psd_matrix
+from log_psplines.models.reconstruction import reconstruct_psd_matrix
 from log_psplines.arviz_utils.spline_storage import from_storage_dataset
 from log_psplines.arviz_utils.to_arviz import (
     _compute_prior_predictive_multivar,

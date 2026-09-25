@@ -11,7 +11,7 @@ import numpy as np
 import xarray as xr
 from xarray import DataArray, Dataset
 
-from log_psplines.arviz_utils.reconstruction import compute_psd_quantiles
+from log_psplines.models.reconstruction import compute_psd_quantiles
 from log_psplines.arviz_utils.spline_storage import to_storage_payload
 from log_psplines.data import WishartData
 

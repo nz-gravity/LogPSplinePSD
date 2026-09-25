@@ -302,16 +302,19 @@ class PSDResult:
         config: "PowerSplineConfig",
         log_likelihood: xr.Dataset | None = None,
     ) -> "PSDResult":
-        result = cls.from_power(
+        return cls(
             posterior=posterior,
             sample_stats=sample_stats,
-            data=data,
-            spline=spline,
-            config=config,
+            spectrum=_power_spectrum(posterior, spline),
+            metadata={
+                **asdict(config),
+                "data_type": "power",
+                "likelihood": "power_whittle",
+                "units": data.units,
+            },
             log_likelihood=log_likelihood,
+            observed_data=_observed_scattered(data),
         )
-        result.observed_data = _observed_scattered(data)
-        return result
 
     @property
     def frequency(self) -> np.ndarray:

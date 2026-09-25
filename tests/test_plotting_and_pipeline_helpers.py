@@ -117,46 +117,34 @@ def test_plotting_base_quantiles_and_confidence_intervals() -> None:
     assert config.fontsize == 9
 
 
-def test_extract_plotting_data_and_vi_loss_plot(monkeypatch, tmp_path) -> None:
-    import log_psplines.arviz_utils as au
+def test_extract_plotting_data_and_vi_loss_plot(tmp_path) -> None:
+    from log_psplines.results import PSDResult
 
-    spectral_density = np.ones((1, 2, 1, 1, 3), dtype=np.complex128)
-    psd_ds = xr.Dataset(
+    posterior = xr.Dataset(
         {
-            "spectral_density": xr.DataArray(
-                spectral_density,
-                dims=("chain", "draw", "channel", "channel_aux", "frequency"),
+            "weights": (
+                ("chain", "draw", "coefficient"),
+                np.ones((1, 2, 3)),
             )
-        },
-        coords={"frequency": np.asarray([0.1, 0.2, 0.3])},
-    )
-
-    monkeypatch.setattr(
-        au, "get_weights", lambda *args, **kwargs: np.ones((2, 3))
-    )
-    monkeypatch.setattr(au, "get_psd_dataset", lambda *args, **kwargs: psd_ds)
-    monkeypatch.setattr(
-        au,
-        "get_multivar_prior_psd_quantiles",
-        lambda _: {
-            "percentile": np.asarray([5.0, 50.0, 95.0]),
-            "spectral_density": np.ones((3, 3, 1, 1), dtype=np.complex128),
-        },
-    )
-    idata = xr.DataTree()
-    idata.attrs.update(
-        {
-            "tau": 0.5,
-            "design_psd": np.ones((3, 1, 1)),
-            "true_psd": np.ones(3),
-            "frequencies": np.asarray([1.0, 2.0, 3.0]),
         }
     )
-    data = extract_plotting_data(idata, weights_key=0)
+    spectrum = xr.DataArray(
+        np.ones((1, 2, 3, 1, 1), dtype=np.complex128),
+        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
+        coords={
+            "frequency": np.asarray([0.1, 0.2, 0.3]),
+            "channel": [0],
+            "channel_aux": [0],
+        },
+    )
+    result = PSDResult(
+        posterior=posterior,
+        spectrum=spectrum,
+        metadata={"true_psd": np.ones(3)},
+    )
+    data = extract_plotting_data(result)
     assert data["weights"].shape == (2, 3)
     assert "posterior_psd_matrix_quantiles" in data
-    assert "vi_psd_matrix_quantiles" in data
-    assert "prior_psd_matrix_quantiles" in data
     assert data["frequencies"].shape == (3,)
 
     assert _normalize_vi_losses([]) is None

@@ -74,7 +74,7 @@ def _get_panel_knots_from_idata(
     fallback_knots = None
     fallback_grid = None
 
-    if idata is None:
+    if idata is None or hasattr(idata, "spectrum"):
         return (
             diag_knots,
             diag_grids,
@@ -257,40 +257,25 @@ def _quantiles_to_ci_dict(
     return ci_dict
 
 
-def _extract_empirical_psd_from_idata(idata) -> EmpiricalPSD | None:
-    """
-    Extract empirical PSD from multivariate idata for plotting.
-
-    For multivariate data, the structure is different from univariate.
-    This function handles the case where data is stored as separate
-    frequency, channel, and FFT components.
-    """
+def _extract_empirical_psd_from_idata(source) -> EmpiricalPSD | None:
+    """Extract empirical spectral data from a PSDResult."""
     try:
-        # Check if we have the multivariate data structure
-        if "observed_data" in idata:
-            obs_data = idata["observed_data"]
-
-            # Prefer directly stored periodogram (already coarse-grained)
-            if "periodogram" in obs_data:
-                periodogram = obs_data["periodogram"]
-                freq = periodogram.coords["freq"].values
-                channels = periodogram.coords["channels"].values
-                psd_matrix = periodogram.values
-                coherence = _get_coherence(psd_matrix)
-                return EmpiricalPSD(
-                    freq=freq,
-                    psd=psd_matrix,
-                    coherence=coherence,
-                    channels=channels,
-                )
-
+        obs_data = getattr(source, "observed_data", None)
+        if obs_data is None or "periodogram" not in obs_data:
+            return None
+        periodogram = obs_data["periodogram"]
+        freq = periodogram.coords["frequency"].values
+        channels = periodogram.coords["channel"].values
+        psd_matrix = periodogram.values
+        return EmpiricalPSD(
+            freq=freq,
+            psd=psd_matrix,
+            coherence=_get_coherence(psd_matrix),
+            channels=channels,
+        )
+    except Exception as exc:
+        logger.warning(f"Could not extract empirical PSD: {exc}")
         return None
-
-    except Exception as e:
-        # If extraction fails, return None and let the plotting function handle it
-        logger.warning(f"Could not extract empirical PSD from idata: {e}")
-        return None
-
 
 def _panel_text_label(
     i: int,

@@ -94,77 +94,64 @@ def _as_matrix_quantiles(
 
 
 def extract_plotting_data(
-    idata, weights_key: int | None = None
+    result, weights_key: int | None = None
 ) -> dict[str, Any]:
-    """
-    Extract common plotting data from inference data object.
-
-    Args:
-        idata: ArviZ InferenceData object
-        weights_key: Key for weights in posterior (optional)
-
-    Returns:
-        Dictionary containing extracted data
-    """
-    from log_psplines.arviz_utils import (
-        get_multivar_prior_psd_quantiles,
-        get_psd_dataset,
-        get_weights,
-    )
-
+    """Extract plotting inputs from a PSDResult."""
     data: dict[str, Any] = {}
 
-    try:
-        if isinstance(weights_key, int):
-            data["weights"] = get_weights(idata, weights_key)
-        else:
-            data["weights"] = get_weights(idata)
-    except (KeyError, AttributeError):
-        data["weights"] = None
-
-    attrs = idata.attrs or {}
-    try:
-        psd_ds = get_psd_dataset(idata, source="best")
-    except (KeyError, TypeError, ValueError, StopIteration):
-        psd_ds = None
-
-    if psd_ds is not None:
-        quantiles = _quantiles_from_standard_psd_dataset(psd_ds)
-        data["frequencies"] = np.asarray(quantiles["freq"], dtype=float)
-        data["posterior_psd_matrix_quantiles"] = _as_matrix_quantiles(
-            quantiles
+    posterior = result.posterior
+    if "weights" in posterior:
+        weights = posterior["weights"].values
+    else:
+        name = next(
+            (
+                str(key)
+                for key in posterior.data_vars
+                if str(key).startswith("weights_delta_")
+            ),
+            None,
         )
+        weights = None if name is None else posterior[name].values
+    if weights is not None:
+        weights = np.asarray(weights).reshape(-1, *np.asarray(weights).shape[2:])
+        if isinstance(weights_key, int):
+            weights = weights[::weights_key]
+    data["weights"] = weights
 
-    try:
-        vi_psd_ds = get_psd_dataset(idata, source="vi")
-    except (KeyError, TypeError, ValueError, StopIteration):
-        vi_psd_ds = None
-    if vi_psd_ds is not None:
-        vi_quantiles = _quantiles_from_standard_psd_dataset(vi_psd_ds)
-        data["vi_psd_matrix_quantiles"] = _as_matrix_quantiles(vi_quantiles)
-
-    if attrs.get("tau") is not None and attrs.get("design_psd") is not None:
-        prior_quantiles = get_multivar_prior_psd_quantiles(idata)
-        data["prior_psd_matrix_quantiles"] = {
-            "percentile": np.asarray(
-                prior_quantiles["percentile"], dtype=float
-            ),
-            "spectral_density": np.asarray(
-                prior_quantiles["spectral_density"], dtype=np.complex128
-            ),
-            "coherence": None,
+    q = result.quantiles((5.0, 50.0, 95.0))
+    if "time" not in q.dims:
+        q = q.transpose(
+            "percentile", "frequency", "channel", "channel_aux"
+        )
+        coh = np.asarray(result.coherence)
+        coh = coh.reshape(-1, *coh.shape[2:])
+        coh_q = np.percentile(coh, [5.0, 50.0, 95.0], axis=0)
+        data["frequencies"] = result.frequency
+        data["posterior_psd_matrix_quantiles"] = {
+            "percentile": np.asarray([5.0, 50.0, 95.0]),
+            "spectral_density": np.asarray(q.values),
+            "coherence": coh_q,
         }
 
-    # Extract true PSD if available
-    if "true_psd" in attrs:
-        data["true_psd"] = attrs["true_psd"]
+    if result.vi_spectrum is not None and result.time is None:
+        values = np.asarray(result.vi_spectrum)
+        flat = values.reshape(-1, *values.shape[2:])
+        vi_q = np.percentile(flat.real, [5, 50, 95], axis=0) + 1j * np.percentile(
+            flat.imag, [5, 50, 95], axis=0
+        )
+        vi_coh = np.asarray(
+            __import__("log_psplines.models.matrix", fromlist=["SpectralMatrix"])
+            .SpectralMatrix.coherence(values)
+        ).reshape(-1, *values.shape[2:])
+        data["vi_psd_matrix_quantiles"] = {
+            "percentile": np.asarray([5.0, 50.0, 95.0]),
+            "spectral_density": vi_q,
+            "coherence": np.percentile(vi_coh, [5, 50, 95], axis=0),
+        }
 
-    # Extract frequencies if available
-    if "frequencies" in attrs:
-        data["frequencies"] = attrs["frequencies"]
-
+    if "true_psd" in result.metadata:
+        data["true_psd"] = result.metadata["true_psd"]
     return data
-
 
 def compute_confidence_intervals(
     samples: np.ndarray,

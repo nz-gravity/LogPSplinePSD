@@ -8,7 +8,7 @@ import numpy as np
 from numpyro import handlers
 
 from log_psplines import make_pipeline
-from log_psplines.arviz_utils.reconstruction import reconstruct_psd_matrix
+from log_psplines.models.reconstruction import reconstruct_psd_matrix
 from log_psplines.config import PipelineConfig
 from log_psplines.data import TimeSeries
 from log_psplines.inference.initialisation import build_component
@@ -55,7 +55,7 @@ def stationary_values():
             logs, theta, theta / 3
         )
         result = pipeline.run()
-        for name, arr in result.idata["posterior"].dataset.data_vars.items():
+        for name, arr in result.posterior.data_vars.items():
             values[f"posterior_{channels}_{name}"] = np.asarray(arr)
     return values
 

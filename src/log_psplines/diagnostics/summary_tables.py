@@ -10,8 +10,13 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from log_psplines.arviz_utils._datatree import require_dataset as _require_dataset
-from log_psplines.arviz_utils.from_arviz import get_psd_dataset
+def _require_dataset(tree, group: str):
+    node = tree[group]
+    dataset = getattr(node, "dataset", node)
+    if dataset is None:
+        raise KeyError(group)
+    return dataset
+
 from log_psplines.diagnostics._factors import factor_idatas, vi_factor_idatas
 from log_psplines.diagnostics._utils import (
     compute_ci_coverage_multivar,
@@ -38,27 +43,23 @@ def _resolve_truth(
     return None if value is None else np.asarray(value)
 
 
-def _truth_metrics_from_idata(
-    idata: xr.DataTree,
+def _truth_metrics_from_result(
+    result,
     true_psd: Any = None,
-    *,
-    psd_source: str = "best",
 ) -> dict[str, float]:
-    truth = _resolve_truth(idata, true_psd)
+    truth = None if true_psd is None else np.asarray(true_psd)
     if truth is None:
+        value = result.metadata.get("true_psd")
+        truth = None if value is None else np.asarray(value)
+    if truth is None or result.time is not None:
         return {}
 
-    psd_ds = get_psd_dataset(idata, source=psd_source)
-    freqs_raw = np.asarray(psd_ds.coords["frequency"].values, dtype=float)
+    freqs_raw = result.frequency
     freq_idx = interior_frequency_slice(freqs_raw.size)
     freqs = freqs_raw[freq_idx]
-    spectral_density = np.asarray(psd_ds["spectral_density"].values)
-
-    n_channels = int(spectral_density.shape[2])
-    samples = spectral_density.reshape(
-        -1, n_channels, n_channels, spectral_density.shape[-1]
-    )
-    samples = np.moveaxis(samples[..., freq_idx], -1, 1)
+    spectral_density = np.asarray(result.spectral_density)
+    samples = spectral_density.reshape(-1, *spectral_density.shape[2:])
+    samples = samples[:, freq_idx]
     q05, q50, q95 = np.percentile(samples.real, [5.0, 50.0, 95.0], axis=0)
     truth_arr = np.asarray(truth)
     if truth_arr.ndim == 1:
@@ -73,7 +74,6 @@ def _truth_metrics_from_idata(
             )
         ),
     }
-
 
 def _truth_metrics_from_mapping(source: Mapping[str, Any]) -> dict[str, float]:
     metrics = {}
@@ -98,12 +98,8 @@ def _shared_truth_metrics(
     *,
     psd_source: str = "best",
 ) -> dict[str, float]:
-    if isinstance(source, xr.DataTree):
-        return _truth_metrics_from_idata(
-            source,
-            true_psd=true_psd,
-            psd_source=psd_source,
-        )
+    if hasattr(source, "spectrum") and hasattr(source, "metadata"):
+        return _truth_metrics_from_result(source, true_psd=true_psd)
     if isinstance(source, Mapping):
         return _truth_metrics_from_mapping(source)
     return {}
@@ -185,17 +181,18 @@ def build_nuts_summary_table(
     """Return one NUTS diagnostics row per factor."""
 
     rows: list[dict[str, Any]] = []
-    shared_truth_metrics = (
-        _shared_truth_metrics(
-            idata_or_factors,
-            true_psd=true_psd,
-            psd_source="posterior",
-        )
-        if isinstance(idata_or_factors, xr.DataTree)
-        else {}
+    shared_truth_metrics = _shared_truth_metrics(
+        idata_or_factors,
+        true_psd=true_psd,
+        psd_source="posterior",
+    )
+    diagnostic_source = (
+        idata_or_factors.to_arviz()
+        if hasattr(idata_or_factors, "to_arviz")
+        else idata_or_factors
     )
 
-    for factor, idata in factor_idatas(idata_or_factors).items():
+    for factor, idata in factor_idatas(diagnostic_source).items():
         summary = azs.summary(idata)
         row = {
             "factor": factor,

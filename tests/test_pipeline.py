@@ -8,11 +8,7 @@ import pytest
 import xarray as xr
 
 from log_psplines import make_pipeline
-from log_psplines.arviz_utils.to_arviz import _init_values_to_dataset
-from log_psplines.arviz_utils import (
-    get_multivar_vi_psd_quantiles,
-    get_psd_dataset,
-)
+from log_psplines.results import _values_to_dataset
 from log_psplines.data import WishartData, TimeSeries
 from log_psplines.config import PipelineConfig
 from log_psplines.pipeline import (
@@ -61,12 +57,13 @@ def _fast_config(**extra) -> PipelineConfig:
 
 
 def test_vi_init_values_dataset_uses_variable_specific_dims():
-    ds = _init_values_to_dataset(
+    ds = _values_to_dataset(
         {
             "delta_0": np.zeros(3),
             "weights_delta_0": np.zeros(51),
             "weights_theta_re_1_0": np.zeros((3, 51)),
-        }
+        },
+        values_are_draws=False,
     )
 
     assert ds["delta_0"].dims == ("chain", "draw", "delta_0_dim_0")
@@ -161,12 +158,11 @@ def test_pipeline_p1_only_vi(p1_data):
     assert result.vi.losses is not None
     assert result.vi.losses.shape[0] > 0
     assert result.vi.guide_name is not None
-    assert isinstance(result.idata, xr.DataTree)
-    assert "posterior" in result.idata.children
+    assert isinstance(result.posterior, xr.Dataset)
     assert "weights_delta_0" in result.vi.init_values
     assert result.vi.samples is not None
     assert (
-        result.idata["posterior"].dataset["weights_delta_0"].sizes["draw"]
+        result.posterior["weights_delta_0"].sizes["draw"]
         == config.vi_posterior_draws
     )
 
@@ -185,14 +181,13 @@ def test_pipeline_multivar_only_vi(multivar_data):
     assert result.vi.losses.shape[0] > 0
     assert result.vi.losses_per_block is not None
     assert len(result.vi.losses_per_block) == multivar_data.p
-    posterior = result.idata.children.get("posterior")
-    assert posterior is not None
+    posterior = result.posterior
     # All per-channel weight sites should be present in VI means
     assert "weights_delta_0" in result.vi.init_values
     assert "weights_delta_1" in result.vi.init_values
-    vi_stats = result.idata["vi_sample_stats"].dataset
-    assert "losses_per_block" in vi_stats
-    vi_posterior = result.idata["vi_posterior"].dataset
+    assert result.vi.losses_per_block is not None
+    vi_posterior = result.vi_posterior
+    assert vi_posterior is not None
     assert (
         vi_posterior["weights_delta_0"].sizes["draw"]
         == config.vi_posterior_draws
@@ -206,10 +201,18 @@ def test_pipeline_multivar_vi_reconstructs_and_plots_coherence(multivar_data):
     config = _fast_config(method="vi", vi_posterior_draws=8)
     result = make_pipeline(multivar_data, config).run()
 
-    quantiles = get_multivar_vi_psd_quantiles(result.idata, n_keep=4)
-    freq = np.asarray(quantiles["freq"], dtype=float)
-    psd = np.asarray(quantiles["spectral_density"], dtype=np.complex128)
-    coherence = np.asarray(quantiles["coherence"], dtype=float)
+    quantiles = result.quantiles((5.0, 50.0, 95.0))
+    freq = result.frequency
+    psd = np.asarray(
+        quantiles.transpose(
+            "percentile", "frequency", "channel", "channel_aux"
+        )
+    )
+    coherence = np.percentile(
+        result.coherence.reshape(-1, *result.coherence.shape[2:]),
+        [5.0, 50.0, 95.0],
+        axis=0,
+    )
 
     assert psd.shape[:2] == (3, freq.size)
     assert psd.shape[2:] == (multivar_data.p, multivar_data.p)
@@ -232,7 +235,7 @@ def test_pipeline_multivar_vi_reconstructs_and_plots_coherence(multivar_data):
 
     fig, axes = plot_psd_matrix(
         PSDMatrixPlotSpec(
-            idata=result.idata,
+            idata=result,
             save=False,
             close=False,
             show_coherence=True,
@@ -257,19 +260,18 @@ def test_pipeline_p1_nuts(p1_data):
     assert isinstance(result, PSDResult)
     # Default method="nuts" never runs VI.
     assert result.vi is None
-    assert isinstance(result.idata, xr.DataTree)
-    posterior = result.idata.children.get("posterior")
-    assert posterior is not None
-    ds = posterior.dataset
+    ds = result.posterior
     assert "weights_delta_0" in ds
     # Correct number of NUTS draws
     assert ds["weights_delta_0"].sizes["draw"] == config.n_samples
-    stats = result.idata["sample_stats"].dataset
+    stats = result.sample_stats
+    assert stats is not None
     assert "acceptance_rate_channel_0" in stats
-    psd_ds = get_psd_dataset(result.idata, source="posterior")
-    spectral_density = psd_ds["spectral_density"].values
-    assert spectral_density.shape[:4] == (1, config.n_samples, 1, 1)
-    median = np.median(np.real(spectral_density[:, :, 0, 0, :]), axis=(0, 1))
+    spectral_density = result.spectral_density
+    assert spectral_density.shape == (
+        1, config.n_samples, len(result.frequency), 1, 1
+    )
+    median = np.median(np.real(spectral_density[..., 0, 0]), axis=(0, 1))
     assert np.all(np.isfinite(median))
     assert np.all(median > 0.0)
 
@@ -286,17 +288,15 @@ def test_pipeline_multivar_nuts(multivar_data):
     assert isinstance(result, PSDResult)
     # Default method="nuts" never runs VI.
     assert result.vi is None
-    assert isinstance(result.idata, xr.DataTree)
-    posterior = result.idata.children.get("posterior")
-    assert posterior is not None
-    ds = posterior.dataset
+    ds = result.posterior
     assert "weights_delta_0" in ds
     assert "weights_delta_1" in ds
     assert ds["weights_delta_0"].sizes["draw"] == config.n_samples
-    stats = result.idata["sample_stats"].dataset
+    stats = result.sample_stats
+    assert stats is not None
     assert "acceptance_rate_channel_0" in stats
     assert "acceptance_rate_channel_1" in stats
-    assert result.idata.attrs["factorized"] is True
+    assert result.metadata["data_type"] == "multivariate"
 
 
 # ---------------------------------------------------------------------------
@@ -319,10 +319,7 @@ def test_pipeline_multivar_vi_save_records_truth_metrics(
 ):
     config = _fast_config(method="vi")
     result = make_pipeline(multivar_data, config).run()
-    freq = np.asarray(
-        result.idata["observed_data"].dataset["periodogram"].coords["freq"],
-        dtype=float,
-    )
+    freq = result.frequency
     p = int(multivar_data.p)
     true_psd = np.tile(np.eye(p, dtype=np.complex128), (freq.size, 1, 1))
 
@@ -332,10 +329,6 @@ def test_pipeline_multivar_vi_save_records_truth_metrics(
     for col in ("riae", "l2", "coverage"):
         values = pd.to_numeric(vi_summary[col], errors="coerce").to_numpy()
         assert np.all(np.isfinite(values))
-    vi_stats = result.idata["vi_sample_stats"].attrs
-    assert np.isfinite(float(vi_stats["riae"]))
-    assert np.isfinite(float(vi_stats["l2"]))
-    assert np.isfinite(float(vi_stats["coverage"]))
 
 
 def test_posterior_predictive_save_overlays_vi_when_available(
@@ -359,9 +352,20 @@ def test_posterior_predictive_save_overlays_vi_when_available(
         runtime=0.0,
         samples={"weights_delta_0": np.zeros((3, 2))},
     )
+    posterior = xr.Dataset(
+        {"weights_delta_0": (("chain", "draw", "k"), np.zeros((1, 3, 2)))}
+    )
+    spectrum = xr.DataArray(
+        np.ones((1, 3, 4, 1, 1), dtype=complex),
+        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
+        coords={"frequency": np.arange(4), "channel": [0], "channel_aux": [0]},
+    )
     result = PSDResult(
+        posterior=posterior,
+        spectrum=spectrum,
+        sample_stats=xr.Dataset({"diverging": (("chain", "draw"), np.zeros((1, 3)))}),
         vi=vi,
-        idata=xr.DataTree(children={"sample_stats": xr.DataTree()}),
+        vi_spectrum=spectrum,
     )
 
     from log_psplines.plotting.results import plot_posterior_spectrum
@@ -395,9 +399,18 @@ def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
         runtime=0.0,
         samples={"weights_delta_0": np.zeros((3, 2))},
     )
+    posterior = xr.Dataset(
+        {"weights_delta_0": (("chain", "draw", "k"), np.zeros((1, 3, 2)))}
+    )
+    spectrum = xr.DataArray(
+        np.ones((1, 3, 4, 1, 1), dtype=complex),
+        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
+        coords={"frequency": np.arange(4), "channel": [0], "channel_aux": [0]},
+    )
     result = PSDResult(
+        posterior=posterior,
+        spectrum=spectrum,
         vi=vi,
-        idata=xr.DataTree(),
     )
 
     from log_psplines.plotting.results import plot_posterior_spectrum

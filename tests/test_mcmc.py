@@ -225,13 +225,13 @@ def test_multivar_lnz_sums_factor_results(monkeypatch) -> None:
 
 def _check_stats_are_finite(outdir) -> None:
     nuts_stats_pd = pd.read_csv(f"{outdir}/diagnostics/nuts_summary.csv")
-    for key in (
-        "rhat_max",
-        "step_size",
-        "max_treedepth_hits",
-    ):
+    for key in ("step_size", "max_treedepth_hits"):
         assert key in nuts_stats_pd.columns
-        assert np.isfinite(pd.to_numeric(nuts_stats_pd[key], errors="coerce")).any()
+        assert np.isfinite(
+            pd.to_numeric(nuts_stats_pd[key], errors="coerce")
+        ).any()
+    # R-hat is undefined for a single chain and may legitimately be NaN.
+    assert "rhat_max" in nuts_stats_pd.columns
 
 def _check_for_files(expected_files, outdir):
     missing_files = []

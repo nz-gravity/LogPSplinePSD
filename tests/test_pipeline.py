@@ -62,7 +62,8 @@ def test_vi_init_values_dataset_uses_variable_specific_dims():
             "delta_0": np.zeros(3),
             "weights_delta_0": np.zeros(51),
             "weights_theta_re_1_0": np.zeros((3, 51)),
-        }
+        },
+        values_are_draws=False,
     )
 
     assert ds["delta_0"].dims == ("chain", "draw", "delta_0_dim_0")

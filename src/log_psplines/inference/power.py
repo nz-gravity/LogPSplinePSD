@@ -434,12 +434,15 @@ def _run_power_nuts(
 
 
 def _collect_power_samples(
-    mcmc, pair: dict[str, np.ndarray], config: PowerSplineConfig
-) -> dict[str, np.ndarray]:
-    """Reshape NUTS draws into eigen-coefficients and rotate to ``weights``."""
+    result, pair: dict[str, np.ndarray], config: PowerSplineConfig
+):
+    """Rotate sampled eigen-coefficients to spline weights."""
+    import xarray as xr
+
+    posterior = result.posterior.copy()
     samples = {
-        key: np.asarray(value)
-        for key, value in mcmc.get_samples(group_by_chain=True).items()
+        name: np.asarray(var.values)
+        for name, var in posterior.data_vars.items()
     }
     coefficients = samples["s"].reshape(
         *samples["s"].shape[:2], len(pair["lam_time"]), len(pair["lam_freq"])
@@ -459,14 +462,24 @@ def _collect_power_samples(
             )
         )(samples["phi_time"], samples["phi_freq"])
         coefficients = coefficients * np.asarray(scale)
-    samples["weights"] = np.einsum(
+
+    weights = np.einsum(
         "ia,cdab,jb->cdij",
         pair["U_time"],
         coefficients,
         pair["U_freq"],
         optimize=True,
     )
-    return samples
+    posterior["weights"] = xr.DataArray(
+        weights,
+        dims=(
+            "chain",
+            "draw",
+            "time_coefficient",
+            "frequency_coefficient",
+        ),
+    )
+    return posterior
 
 
 def fit_power_spline(
@@ -474,21 +487,19 @@ def fit_power_spline(
     spline: LogPSpline,
     config: PowerSplineConfig,
 ) -> PSDResult:
-    """Run NUTS and return the common PSDResult with compact coefficients."""
-    from log_psplines.arviz_utils.to_arviz import pack_power_result
+    """Run NUTS and return a native PSDResult."""
     from log_psplines.results import PSDResult
 
     model, init, pair = prepare_power_model(data, spline, config)
-    mcmc = _run_power_nuts(model, init, config)
-    samples = _collect_power_samples(mcmc, pair, config)
-    return PSDResult(
-        pack_power_result(
-            data,
-            spline,
-            config,
-            samples,
-            mcmc.get_extra_fields(group_by_chain=True),
-        )
+    result = _run_power_nuts(model, init, config)
+    posterior = _collect_power_samples(result, pair, config)
+    return PSDResult.from_power(
+        posterior=posterior,
+        sample_stats=result.sample_stats,
+        data=data,
+        spline=spline,
+        config=config,
+        log_likelihood=result.log_likelihood,
     )
 
 
@@ -497,22 +508,17 @@ def fit_scattered_power_spline(
     spline: LogPSpline,
     config: PowerSplineConfig,
 ) -> PSDResult:
-    """Run NUTS on scattered (u, omega) ordinates; no pooled grid is built."""
-    from log_psplines.arviz_utils.to_arviz import (
-        pack_scattered_power_result,
-    )
+    """Run NUTS on scattered time-frequency ordinates."""
     from log_psplines.results import PSDResult
 
     model, init, pair = prepare_scattered_power_model(data, spline, config)
-    mcmc = _run_power_nuts(model, init, config)
-    samples = _collect_power_samples(mcmc, pair, config)
-    return PSDResult(
-        pack_scattered_power_result(
-            data,
-            spline,
-            config,
-            samples,
-            mcmc.get_extra_fields(group_by_chain=True),
-        )
+    result = _run_power_nuts(model, init, config)
+    posterior = _collect_power_samples(result, pair, config)
+    return PSDResult.from_scattered_power(
+        posterior=posterior,
+        sample_stats=result.sample_stats,
+        data=data,
+        spline=spline,
+        config=config,
+        log_likelihood=result.log_likelihood,
     )
-

@@ -86,12 +86,12 @@ def run_nuts(
     log_likelihood = {
         name: value
         for name, value in samples.items()
-        if str(name).startswith("log_likelihood_block_")
+        if str(name).startswith("log_likelihood")
     }
     posterior = {
         name: value
         for name, value in samples.items()
-        if not str(name).startswith("log_likelihood_block_")
+        if not str(name).startswith("log_likelihood")
     }
     stats = dict(mcmc.get_extra_fields(group_by_chain=True))
     if "potential_energy" in stats and "lp" not in stats:

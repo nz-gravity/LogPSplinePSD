@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>LogPSplinePSD &#8212; LogPSplinePSD</title>
+    <title>Time-varying WDM power fits &#8212; LogPSplinePSD</title>
   
   
   
@@ -60,14 +60,13 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
-    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'intro';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'wdm-power';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="icon" href="_static/favicon.png"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="One-dimensional log-P-spline PSD model" href="examples/univar-example.html" />
+    <link rel="next" title="Conventions" href="conventions.html" />
+    <link rel="prev" title="Time-varying PSD estimation" href="examples/timevarying-example.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -155,10 +154,6 @@
   
 
   
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
 </div>
 
     </header>
@@ -168,8 +163,6 @@
     <div class="bd-container__inner bd-page-width">
       
       
-      
-        
       
       <dialog id="pst-primary-sidebar-modal"></dialog>
       <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
@@ -190,7 +183,7 @@
     
   
 
-<a class="navbar-brand logo" href="#">
+<a class="navbar-brand logo" href="intro.html">
   
   
   
@@ -215,11 +208,11 @@
 </button></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <ul class="nav bd-sidenav">
+        <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">One-dimensional log-P-spline PSD model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate PSD estimation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD estimation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="wdm-power.html">Time-varying WDM power fits</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Time-varying WDM power fits</a></li>
 <li class="toctree-l1"><a class="reference internal" href="conventions.html">Conventions</a></li>
 
 
@@ -302,7 +295,7 @@
       
       
       
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fintro.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fwdm-power.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -332,7 +325,7 @@
       
       
       
-      <li><a href="_sources/intro.rst" target="_blank"
+      <li><a href="_sources/wdm-power.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -395,9 +388,7 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</button>
+
 </div></div>
       
     </div>
@@ -408,21 +399,11 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>LogPSplinePSD</h1>
+    <h1>Time-varying WDM power fits</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#install">Install</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-start">Where To Start</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
-</ul>
-            </nav>
         </div>
     </div>
 </div>
@@ -432,50 +413,76 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="logpsplinepsd">
-<h1>LogPSplinePSD<a class="headerlink" href="#logpsplinepsd" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">LogPSplinePSD</span></code> estimates power spectral densities (PSDs) with Bayesian
-log-P-splines. It is built around multichannel frequency-domain inference:
-time series are converted into Wishart sufficient statistics, smooth spline
-models are fitted with NumPyro/JAX. Scalar time-varying inference is also
-available for WDM and moving-periodogram powers.</p>
-<video autoplay muted loop playsinline preload="metadata">
-   <source src="logpspline-hero.webm" type="video/webm">
-</video><section id="install">
-<h2>Install<a class="headerlink" href="#install" title="Link to this heading">#</a></h2>
-<p>For package use outside the repository:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>LogPSplinePSD
+  <section id="time-varying-wdm-power-fits">
+<h1>Time-varying WDM power fits<a class="headerlink" href="#time-varying-wdm-power-fits" title="Link to this heading">#</a></h1>
+<p>The package accepts prepared arrays for each scalar channel. A/E construction,
+gap tapering, and WDM guard masks are the caller’s responsibility. Fit A and E
+independently. No LISA data format or LISA software is required.</p>
+<p><code class="docutils literal notranslate"><span class="pre">power[t,</span> <span class="pre">f]</span></code> is a sum of squared real WDM coefficients in <strong>coefficient
+variance</strong> units. <code class="docutils literal notranslate"><span class="pre">counts[t,</span> <span class="pre">f]</span></code> is the number of retained real components
+represented by that sum. A native WDM coefficient has count 1. Excluded cells
+have both power and count zero. The optional <code class="docutils literal notranslate"><span class="pre">wdm_periodogram</span></code> helper creates
+native powers from a uniformly sampled single-channel <code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code>.
+If the target is the paper’s one-sided PSD per Hz, multiply every native
+coefficient square by <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">dt</span> <span class="pre">/</span> <span class="pre">N</span></code> (where <code class="docutils literal notranslate"><span class="pre">N</span></code> is the WDM frequency
+resolution parameter) before constructing <code class="docutils literal notranslate"><span class="pre">PowerSpectrum</span></code>, and label the
+units accordingly. Apply that conversion once; the likelihood does not rescale
+input power.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LogPSpline</span><span class="p">,</span> <span class="n">PowerSpectrum</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">,</span> <span class="n">SplineBasis</span><span class="p">,</span>
+    <span class="n">fit</span><span class="p">,</span> <span class="n">mask_power</span><span class="p">,</span> <span class="n">select_power_partition</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># The caller has already prepared one channel and supplied a boolean</span>
+<span class="c1"># WDM-cell mask. The arrays have shapes (time, frequency).</span>
+<span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"prepared_a.npz"</span><span class="p">)</span> <span class="k">as</span> <span class="n">arrays</span><span class="p">:</span>
+    <span class="n">native</span> <span class="o">=</span> <span class="n">PowerSpectrum</span><span class="p">(</span>
+        <span class="n">arrays</span><span class="p">[</span><span class="s2">"power"</span><span class="p">],</span> <span class="n">arrays</span><span class="p">[</span><span class="s2">"counts"</span><span class="p">],</span>
+        <span class="n">arrays</span><span class="p">[</span><span class="s2">"frequency"</span><span class="p">],</span> <span class="n">arrays</span><span class="p">[</span><span class="s2">"time"</span><span class="p">],</span>
+        <span class="n">units</span><span class="o">=</span><span class="s2">"WDM coefficient variance"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">retained</span> <span class="o">=</span> <span class="n">mask_power</span><span class="p">(</span><span class="n">native</span><span class="p">,</span> <span class="n">arrays</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">bool</span><span class="p">))</span>
+    <span class="n">pilot</span> <span class="o">=</span> <span class="n">arrays</span><span class="p">[</span><span class="s2">"training_pilot_log_psd"</span><span class="p">]</span>
+
+<span class="c1"># The pilot selects boundaries only; the likelihood uses retained.power.</span>
+<span class="n">partition</span> <span class="o">=</span> <span class="n">select_power_partition</span><span class="p">(</span>
+    <span class="n">pilot</span><span class="p">,</span> <span class="n">retained</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">counts</span><span class="o">=</span><span class="n">retained</span><span class="o">.</span><span class="n">counts</span><span class="p">,</span>
+    <span class="n">time_bin</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">max_frequency_bin</span><span class="o">=</span><span class="mi">24</span><span class="p">,</span> <span class="n">max_log_range</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">LogPSpline</span><span class="p">(</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span>
+        <span class="n">retained</span><span class="o">.</span><span class="n">frequency</span> <span class="o">/</span> <span class="n">retained</span><span class="o">.</span><span class="n">frequency</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+        <span class="n">n_interior_knots</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">time</span><span class="o">=</span><span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">retained</span><span class="o">.</span><span class="n">time</span> <span class="o">-</span> <span class="n">retained</span><span class="o">.</span><span class="n">time</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="o">/</span> <span class="p">(</span><span class="n">retained</span><span class="o">.</span><span class="n">time</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">retained</span><span class="o">.</span><span class="n">time</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+        <span class="n">n_interior_knots</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span>
+    <span class="n">retained</span><span class="p">,</span>
+    <span class="n">PowerSplineConfig</span><span class="p">(</span><span class="n">roughness_scale</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">partition</span><span class="o">=</span><span class="n">partition</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">result</span><span class="o">.</span><span class="n">to_netcdf</span><span class="p">(</span><span class="s2">"a_fit.nc"</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Use the project virtual environment during development:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
-python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.[dev]'</span>
-</pre></div>
-</div>
-</section>
-<section id="where-to-start">
-<h2>Where To Start<a class="headerlink" href="#where-to-start" title="Link to this heading">#</a></h2>
-<p>Follow the pages in this order:</p>
-<ol class="arabic simple">
-<li><p><a class="reference internal" href="examples/univar-example.html"><span class="doc">One-dimensional log-P-spline PSD model</span></a> runs a univariate analysis.</p></li>
-<li><p><a class="reference internal" href="examples/multivariate-example.html"><span class="doc">Multivariate PSD estimation</span></a> introduces spectral matrices.</p></li>
-<li><p><a class="reference internal" href="examples/timevarying-example.html"><span class="doc">Time-varying PSD estimation</span></a> fits scalar time-varying spectra.</p></li>
-<li><p><a class="reference internal" href="wdm-power.html"><span class="doc">Time-varying WDM power fits</span></a> shows array-based WDM likelihood compression.</p></li>
-<li><p><a class="reference internal" href="conventions.html"><span class="doc">Conventions</span></a> explains units and spectral conventions.</p></li>
-<li><p><a class="reference internal" href="development.html"><span class="doc">Development Guide</span></a> gives implementation notes, followed by the <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a>
-reference.</p></li>
-</ol>
-</section>
-<section id="references">
-<h2>References<a class="headerlink" href="#references" title="Link to this heading">#</a></h2>
-<p id="eilers1996">Eilers, P. H. C., &amp; Marx, B. D. (1996). <em>Flexible smoothing with B-splines and
-penalties</em>. Statistical Science, 11(2), 89-121.
-<a class="reference external" href="https://doi.org/10.1214/ss/1038425655">DOI:10.1214/ss/1038425655</a>.</p>
-<p id="maturanarussel2021">Maturana-Russel, J., &amp; Meyer, R. (2021). <em>P-spline spectral density estimation
-with a discrete penalty</em>. <a class="reference external" href="https://arxiv.org/abs/1905.01832">arXiv:1905.01832</a>.</p>
-</section>
-<div class="toctree-wrapper compound">
-</div>
+<p>The example knot count is deliberately small. Paper-scale analyses can supply
+frozen nonuniform frequency knots through <code class="docutils literal notranslate"><span class="pre">SplineBasis.from_grid</span></code> with
+<code class="docutils literal notranslate"><span class="pre">interior_knots=...</span></code>. Knot placement and
+likelihood partitioning are separate choices. A paper-style pilot uses 32
+training-only time profiles, a 31-channel frequency median, and the partition
+settings shown above. Store or generate that pilot outside the likelihood.</p>
+<p>The coarse likelihood evaluates one smooth PSD value per rectangular block.
+Its summed power and exact count match the native data under the assumption
+that the PSD is effectively constant inside each block. Check narrow features
+and posterior coverage against uncompressed fits before using larger bins.
+The result stores both the coarse observed statistics and partition starts;
+<code class="docutils literal notranslate"><span class="pre">result.psd</span></code> is reconstructed on the native time/frequency grid. The
+diagonal WDM likelihood is a locally stationary composite approximation.</p>
 </section>
 
     <script type="text/x-thebe-config">
@@ -508,12 +515,21 @@ with a discrete penalty</em>. <a class="reference external" href="https://arxiv.
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
+    <a class="left-prev"
+       href="examples/timevarying-example.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Time-varying PSD estimation</p>
+      </div>
+    </a>
     <a class="right-next"
-       href="examples/univar-example.html"
+       href="conventions.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">One-dimensional log-P-spline PSD model</p>
+        <p class="prev-next-title">Conventions</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -523,25 +539,6 @@ with a discrete penalty</em>. <a class="reference external" href="https://arxiv.
             </div>
             
             
-              
-                <dialog id="pst-secondary-sidebar-modal"></dialog>
-                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item"><div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#install">Install</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-start">Where To Start</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
-</ul>
-  </nav></div>
-
-</div></div>
               
             
           </div>

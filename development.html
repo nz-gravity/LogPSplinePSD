@@ -215,6 +215,7 @@
 <li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">One-dimensional log-P-spline PSD model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate PSD estimation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD estimation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wdm-power.html">Time-varying WDM power fits</a></li>
 <li class="toctree-l1"><a class="reference internal" href="conventions.html">Conventions</a></li>
 
 
@@ -588,8 +589,9 @@ scalar storage helper still rejects time bases; TV fit storage uses the common
 result’s explicit <code class="docutils literal notranslate"><span class="pre">power_basis</span></code> group instead. Existing stationary plotting
 helpers remain stationary; <code class="docutils literal notranslate"><span class="pre">PSDResult.save()</span></code> renders a surface for TV fits.</p>
 <p>The historical stationary prior and VI/blocked-NUTS path are unchanged.
-Multivariate TV inference, moving-periodogram adapters and TV VI remain future
-work. See <a class="reference internal" href="#time-varying-psd.md"><span class="xref myst">the time-varying PSD notes</span></a> for conventions and LS2 checks.</p>
+Multivariate TV inference and TV VI remain future work. The
+<a class="reference internal" href="examples/timevarying-example.html"><span class="std std-doc">time-varying example</span></a> demonstrates the WDM
+and moving-periodogram adapters.</p>
 </section>
 <section id="migration">
 <h2>Migration<a class="headerlink" href="#migration" title="Link to this heading">#</a></h2>
@@ -631,8 +633,8 @@ operators for clamped bases. Old stationary files retain historical defaults.</p
 <code class="docutils literal notranslate"><span class="pre">components.compute_design_weights(S)</span></code> becomes
 <code class="docutils literal notranslate"><span class="pre">inference.initialisation.fit_design_weights(components,</span> <span class="pre">S)</span></code>.</p></li>
 </ul>
-<p>The cleanup did not transfer moving-periodogram preprocessing or implement
-multivariate TV inference. Keep those additions separate from changes to priors.</p>
+<p>Moving-periodogram preprocessing and scattered-coordinate scalar inference are
+available. Multivariate TV inference remains future work.</p>
 </section>
 </section>
 

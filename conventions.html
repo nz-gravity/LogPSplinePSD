@@ -68,7 +68,7 @@
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="API Reference" href="api.html" />
-    <link rel="prev" title="Time-varying PSD estimation" href="examples/timevarying-example.html" />
+    <link rel="prev" title="Time-varying WDM power fits" href="wdm-power.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -218,6 +218,7 @@
 <li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">One-dimensional log-P-spline PSD model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate PSD estimation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD estimation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wdm-power.html">Time-varying WDM power fits</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Conventions</a></li>
 
 
@@ -531,8 +532,9 @@ u^{(k)}_\nu = \sqrt{\lambda^{(k)}_\nu}\, v^{(k)}_\nu,\]</div>
 </section>
 <section id="coarse-graining-conventions">
 <h2>Coarse-graining conventions<a class="headerlink" href="#coarse-graining-conventions" title="Link to this heading">#</a></h2>
-<p>We “coarse-grain” the Fourier frequencies by dividing them into <span class="math notranslate nohighlight">\(N_c\)</span> subsequent disjoint subsets
-<span class="math notranslate nohighlight">\(J_h\)</span> (each containing an odd number <span class="math notranslate nohighlight">\(N_h\)</span> of frequencies):</p>
+<p>We “coarse-grain” the Fourier frequencies by dividing them into <span class="math notranslate nohighlight">\(N_c\)</span>
+consecutive disjoint subsets <span class="math notranslate nohighlight">\(J_h\)</span>, each containing <span class="math notranslate nohighlight">\(N_h\)</span>
+frequencies:</p>
 <div class="math notranslate nohighlight">
 \[\{f_1, \ldots, f_N\} = \bigcup_{h=1}^{N_c} J_h.\]</div>
 <p>Let <span class="math notranslate nohighlight">\(\bar{f}_h\)</span> denote the midpoint Fourier frequency of interval <span class="math notranslate nohighlight">\(J_h\)</span>, and define the
@@ -612,8 +614,7 @@ non-JIT code paths.</p></li>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">log_psplines.pipeline</span></code></dt><dd><p>Canonical high-level <code class="docutils literal notranslate"><span class="pre">fit()</span></code> entry point plus orchestration helpers.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.pipeline</span></code></dt><dd><p>Pipeline construction, preprocessing, VI, NUTS, saving, and evidence
-estimation.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.inference</span></code></dt><dd><p>Model preparation, VI, NUTS, and evidence estimation.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">log_psplines.data</span></code></dt><dd><p>Time-domain and frequency-domain containers.</p>
 </dd>
@@ -710,8 +711,7 @@ spectral structure being estimated.</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>See <span class="xref std std-doc">coarse_grain</span> for the mathematical details and implementation
-constraints.</p>
+<p>See <a class="reference internal" href="#coarse-graining-conventions">Coarse-graining conventions</a> above for the mathematical details.</p>
 </section>
 </section>
 
@@ -746,12 +746,12 @@ constraints.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="examples/timevarying-example.html"
+       href="wdm-power.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Time-varying PSD estimation</p>
+        <p class="prev-next-title">Time-varying WDM power fits</p>
       </div>
     </a>
     <a class="right-next"

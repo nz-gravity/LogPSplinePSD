@@ -211,6 +211,7 @@
 <li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">One-dimensional log-P-spline PSD model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate PSD estimation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD estimation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wdm-power.html">Time-varying WDM power fits</a></li>
 <li class="toctree-l1"><a class="reference internal" href="conventions.html">Conventions</a></li>
 
 
@@ -436,6 +437,8 @@
 </li>
       <li><a href="api.html#log_psplines.config.PipelineConfig.coarse_grain_config">coarse_grain_config (log_psplines.config.PipelineConfig attribute)</a>
 </li>
+      <li><a href="api.html#log_psplines.preprocessing.power_partition.coarse_grain_power">coarse_grain_power() (in module log_psplines.preprocessing.power_partition)</a>
+</li>
       <li><a href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig">CoarseGrainConfig (class in log_psplines.preprocessing.coarse_grain)</a>
 </li>
       <li><a href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec">CoarseGrainSpec (class in log_psplines.preprocessing.coarse_grain)</a>
@@ -550,6 +553,8 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.pipeline.make_pipeline">make_pipeline() (in module log_psplines.pipeline)</a>
 </li>
+      <li><a href="api.html#log_psplines.preprocessing.power_partition.mask_power">mask_power() (in module log_psplines.preprocessing.power_partition)</a>
+</li>
       <li><a href="api.html#log_psplines.config.PipelineConfig.max_tree_depth">max_tree_depth (log_psplines.config.PipelineConfig attribute)</a>
 </li>
   </ul></td>
@@ -557,6 +562,8 @@
       <li><a href="api.html#log_psplines.config.PipelineConfig.max_tree_depth_by_channel">max_tree_depth_by_channel (log_psplines.config.PipelineConfig attribute)</a>
 </li>
       <li><a href="api.html#log_psplines.config.PipelineConfig.method">method (log_psplines.config.PipelineConfig attribute)</a>
+</li>
+      <li><a href="api.html#log_psplines.preprocessing.moving_periodogram.moving_periodogram">moving_periodogram() (in module log_psplines.preprocessing.moving_periodogram)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -600,8 +607,14 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.config.PipelineConfig">PipelineConfig (class in log_psplines.config)</a>
 </li>
+      <li><a href="api.html#log_psplines.preprocessing.power_partition.PowerPartition">PowerPartition (class in log_psplines.preprocessing.power_partition)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#log_psplines.data.PowerSpectrum">PowerSpectrum (class in log_psplines.data)</a>
+</li>
+      <li><a href="api.html#log_psplines.config.PowerSplineConfig">PowerSplineConfig (class in log_psplines.config)</a>
+</li>
       <li><a href="api.html#id0">PSDResult (class in log_psplines.results)</a>, <a href="api.html#log_psplines.results.PSDResult">[1]</a>
 </li>
   </ul></td>
@@ -628,10 +641,16 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#id5">save() (log_psplines.results.PSDResult method)</a>, <a href="api.html#log_psplines.results.PSDResult.save">[1]</a>
 </li>
-      <li><a href="api.html#log_psplines.inference.components.SpectralComponents">SpectralComponents (class in log_psplines.inference.components)</a>
+      <li><a href="api.html#log_psplines.preprocessing.moving_periodogram.scattered_moving_periodogram">scattered_moving_periodogram() (in module log_psplines.preprocessing.moving_periodogram)</a>
+</li>
+      <li><a href="api.html#log_psplines.data.ScatteredPowerSpectrum">ScatteredPowerSpectrum (class in log_psplines.data)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#log_psplines.preprocessing.power_partition.select_power_partition">select_power_partition() (in module log_psplines.preprocessing.power_partition)</a>
+</li>
+      <li><a href="api.html#log_psplines.inference.components.SpectralComponents">SpectralComponents (class in log_psplines.inference.components)</a>
+</li>
       <li><a href="api.html#log_psplines.models.matrix.SpectralMatrix">SpectralMatrix (class in log_psplines.models.matrix)</a>
 </li>
       <li><a href="api.html#log_psplines.basis.SplineBasis">SplineBasis (class in log_psplines.basis)</a>
@@ -700,6 +719,8 @@
 <h2 id="W">W</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#log_psplines.preprocessing.wdm.wdm_periodogram">wdm_periodogram() (in module log_psplines.preprocessing.wdm)</a>
+</li>
       <li><a href="api.html#log_psplines.config.PipelineConfig.welch_noverlap">welch_noverlap (log_psplines.config.PipelineConfig attribute)</a>
 </li>
       <li><a href="api.html#log_psplines.config.PipelineConfig.welch_nperseg">welch_nperseg (log_psplines.config.PipelineConfig attribute)</a>

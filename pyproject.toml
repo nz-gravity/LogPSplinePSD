@@ -169,9 +169,6 @@ module = [
     "log_psplines.samplers.multivar.multivar_blocked_nuts",
     "log_psplines.inference.initialisation",
     "log_psplines.inference.components",
-    "log_psplines.arviz_utils.rhat",
-    "log_psplines.arviz_utils.from_arviz",
-    "log_psplines.arviz_utils.to_arviz",
     "log_psplines.benchmark.runtime_benchmark",
 ]
 disable_error_code = ["import-untyped", "import-not-found"]

@@ -31,7 +31,21 @@ def test_tv_result_has_the_same_public_spectral_accessor():
             data, spline, config, {"weights": np.zeros((1, 2, 4, 4))}, {}
         )
     )
-    dataset = get_psd_dataset(result.idata)
+    # PSDResult is now the public/native result boundary. The legacy DataTree
+    # is retained only while the old packers are removed.
+    assert result.posterior["weights"].shape == (1, 2, 4, 4)
+    assert result.sample_stats is not None
+    assert result.spectrum.dims == (
+        "chain",
+        "draw",
+        "time",
+        "frequency",
+        "channel",
+        "channel_aux",
+    )
+    assert "posterior" in result.to_arviz().children
+
+    dataset = get_psd_dataset(result._tree)
     assert dataset.spectral_density.dims == (
         "chain",
         "draw",
@@ -52,15 +66,15 @@ def test_tv_result_has_the_same_public_spectral_accessor():
         get_weights,
     )
 
-    assert get_weights(result.idata).shape == (2, 4, 4)
+    assert get_weights(result._tree).shape == (2, 4, 4)
     quantiles = get_multivar_posterior_psd_quantiles(
-        result.idata, compute_coherence=False
+        result._tree, compute_coherence=False
     )
     assert quantiles["spectral_density"].shape == (3, 4, 5, 1, 1)
     assert quantiles["coherence"] is None
     np.testing.assert_array_equal(quantiles["time"], time)
     # A broken selected result must not quietly fall through to another source.
-    del result.idata["posterior"]["weights"]
+    del result._tree["posterior"]["weights"]
     with pytest.raises(KeyError, match="weights"):
         get_psd_dataset(result.idata)
 

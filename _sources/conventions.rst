@@ -126,7 +126,7 @@ The multivariate pipeline follows a fixed sequence of transformations:
    config controls only binning parameters (``Nc``/``Nh``).
 4. **Inference stages** – VI and NUTS stages consume the (possibly coarse)
    Wishart stats and spline models.
-5. **ArviZ conversion** – ``wishart_u_to_psd`` populates
+5. **Result construction** – ``wishart_u_to_psd`` populates
    ``observed_data['periodogram']`` using the canonical normalisation.
 6. **Plotting** – visualisers consume the precomputed posterior quantiles and
    empirical PSD without re-deriving spectra.
@@ -171,8 +171,8 @@ Implementation Map
 ``log_psplines.preprocessing``
    Frequency selection, Wishart preprocessing, and coarse graining.
 
-``log_psplines.arviz_utils``
-   Loading, saving, and extracting posterior spectral summaries.
+``log_psplines.results``
+   Native posterior samples, reconstructed spectra, persistence, and summaries.
 
 ``log_psplines.diagnostics`` and ``log_psplines.plotting``
    Convergence checks, error metrics, and visual summaries.

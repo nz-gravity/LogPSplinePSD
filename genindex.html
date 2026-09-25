@@ -381,6 +381,7 @@
  | <a href="#N"><strong>N</strong></a>
  | <a href="#O"><strong>O</strong></a>
  | <a href="#P"><strong>P</strong></a>
+ | <a href="#Q"><strong>Q</strong></a>
  | <a href="#R"><strong>R</strong></a>
  | <a href="#S"><strong>S</strong></a>
  | <a href="#T"><strong>T</strong></a>
@@ -495,13 +496,15 @@
 </li>
       <li><a href="api.html#log_psplines.pipeline.fit">fit() (in module log_psplines.pipeline)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.config.PipelineConfig.fmax">fmax (log_psplines.config.PipelineConfig attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.config.PipelineConfig.fmin">fmin (log_psplines.config.PipelineConfig attribute)</a>
 </li>
       <li><a href="api.html#log_psplines.basis.SplineBasis.from_grid">from_grid() (log_psplines.basis.SplineBasis class method)</a>
+</li>
+      <li><a href="api.html#id3">from_netcdf() (log_psplines.results.PSDResult class method)</a>, <a href="api.html#log_psplines.results.PSDResult.from_netcdf">[1]</a>
 </li>
   </ul></td>
 </tr></table>
@@ -511,17 +514,9 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.inference.components.SpectralComponents.get_all_bases_and_penalties">get_all_bases_and_penalties() (log_psplines.inference.components.SpectralComponents method)</a>
 </li>
-      <li><a href="api.html#log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles">get_multivar_posterior_psd_quantiles() (in module log_psplines.arviz_utils)</a>
-</li>
-      <li><a href="api.html#log_psplines.arviz_utils.get_multivar_vi_psd_quantiles">get_multivar_vi_psd_quantiles() (in module log_psplines.arviz_utils)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#log_psplines.arviz_utils.get_psd_dataset">get_psd_dataset() (in module log_psplines.arviz_utils)</a>
-</li>
       <li><a href="api.html#log_psplines.inference.components.SpectralComponents.get_theta_model">get_theta_model() (log_psplines.inference.components.SpectralComponents method)</a>
-</li>
-      <li><a href="api.html#log_psplines.arviz_utils.get_weights">get_weights() (in module log_psplines.arviz_utils)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -595,10 +590,6 @@
 <h2 id="O">O</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#log_psplines.arviz_utils.open_inference_data">open_inference_data() (in module log_psplines.arviz_utils)</a>
-</li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.config.PipelineConfig.outdir">outdir (log_psplines.config.PipelineConfig attribute)</a>
 </li>
   </ul></td>
@@ -611,9 +602,15 @@
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#id5">psd (log_psplines.results.PSDResult property)</a>, <a href="api.html#log_psplines.results.PSDResult.psd">[1]</a>
-</li>
       <li><a href="api.html#id0">PSDResult (class in log_psplines.results)</a>, <a href="api.html#log_psplines.results.PSDResult">[1]</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="Q">Q</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#id4">quantiles() (log_psplines.results.PSDResult method)</a>, <a href="api.html#log_psplines.results.PSDResult.quantiles">[1]</a>
 </li>
   </ul></td>
 </tr></table>
@@ -629,14 +626,12 @@
 <h2 id="S">S</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#log_psplines.arviz_utils.save_inference_data">save_inference_data() (in module log_psplines.arviz_utils)</a>
+      <li><a href="api.html#id5">save() (log_psplines.results.PSDResult method)</a>, <a href="api.html#log_psplines.results.PSDResult.save">[1]</a>
 </li>
-      <li><a href="api.html#id6">spectral_density (log_psplines.results.PSDResult property)</a>, <a href="api.html#log_psplines.results.PSDResult.spectral_density">[1]</a>
+      <li><a href="api.html#log_psplines.inference.components.SpectralComponents">SpectralComponents (class in log_psplines.inference.components)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#log_psplines.inference.components.SpectralComponents">SpectralComponents (class in log_psplines.inference.components)</a>
-</li>
       <li><a href="api.html#log_psplines.models.matrix.SpectralMatrix">SpectralMatrix (class in log_psplines.models.matrix)</a>
 </li>
       <li><a href="api.html#log_psplines.basis.SplineBasis">SplineBasis (class in log_psplines.basis)</a>
@@ -653,10 +648,16 @@
 </li>
       <li><a href="api.html#log_psplines.inference.components.SpectralComponents.theta_pairs">theta_pairs (log_psplines.inference.components.SpectralComponents property)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.data.TimeSeries">TimeSeries (class in log_psplines.data)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#log_psplines.diagnostics.to_arviz">to_arviz() (in module log_psplines.diagnostics)</a>
+
+      <ul>
+        <li><a href="api.html#id6">(log_psplines.results.PSDResult method)</a>, <a href="api.html#log_psplines.results.PSDResult.to_arviz">[1]</a>
+</li>
+      </ul></li>
       <li><a href="api.html#id7">to_netcdf() (log_psplines.results.PSDResult method)</a>, <a href="api.html#log_psplines.results.PSDResult.to_netcdf">[1]</a>
 </li>
       <li><a href="api.html#log_psplines.inference.components.SpectralComponents.total_components">total_components (log_psplines.inference.components.SpectralComponents property)</a>

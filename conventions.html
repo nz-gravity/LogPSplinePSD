@@ -583,7 +583,7 @@ bin the member count <span class="math notranslate nohighlight">\(N_h\)</span> f
 config controls only binning parameters (<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p></li>
 <li><p><strong>Inference stages</strong> – VI and NUTS stages consume the (possibly coarse)
 Wishart stats and spline models.</p></li>
-<li><p><strong>ArviZ conversion</strong> – <code class="docutils literal notranslate"><span class="pre">wishart_u_to_psd</span></code> populates
+<li><p><strong>Result construction</strong> – <code class="docutils literal notranslate"><span class="pre">wishart_u_to_psd</span></code> populates
 <code class="docutils literal notranslate"><span class="pre">observed_data['periodogram']</span></code> using the canonical normalisation.</p></li>
 <li><p><strong>Plotting</strong> – visualisers consume the precomputed posterior quantiles and
 empirical PSD without re-deriving spectra.</p></li>
@@ -622,7 +622,7 @@ multivariate PSD reconstruction.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">log_psplines.preprocessing</span></code></dt><dd><p>Frequency selection, Wishart preprocessing, and coarse graining.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.arviz_utils</span></code></dt><dd><p>Loading, saving, and extracting posterior spectral summaries.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.results</span></code></dt><dd><p>Native posterior samples, reconstructed spectra, persistence, and summaries.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">log_psplines.diagnostics</span></code> and <code class="docutils literal notranslate"><span class="pre">log_psplines.plotting</span></code></dt><dd><p>Convergence checks, error metrics, and visual summaries.</p>
 </dd>

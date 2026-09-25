@@ -74,17 +74,7 @@ Result objects
    :members:
 
 
-ArviZ Helpers
--------------
+Diagnostics
+-----------
 
-.. autofunction:: log_psplines.arviz_utils.open_inference_data
-
-.. autofunction:: log_psplines.arviz_utils.save_inference_data
-
-.. autofunction:: log_psplines.arviz_utils.get_psd_dataset
-
-.. autofunction:: log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles
-
-.. autofunction:: log_psplines.arviz_utils.get_multivar_vi_psd_quantiles
-
-.. autofunction:: log_psplines.arviz_utils.get_weights
+.. autofunction:: log_psplines.diagnostics.to_arviz

@@ -554,8 +554,8 @@ VI, warm starts, per-channel tuning and blocked NUTS. Evidence remains an
 optional inference operation in <code class="docutils literal notranslate"><span class="pre">inference/evidence.py</span></code>. The blocked stages
 have no generic base class and accept only the arguments they use.
 Stationary and power fitting share <code class="docutils literal notranslate"><span class="pre">inference.nuts.run_nuts</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">results.py</span></code> and <code class="docutils literal notranslate"><span class="pre">arviz_utils/</span></code>: <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>, storage, posterior reconstruction,
-quantiles and ArviZ interoperability. <code class="docutils literal notranslate"><span class="pre">.idata</span></code> exposes the original DataTree.
+<li><p><code class="docutils literal notranslate"><span class="pre">results.py</span></code>: <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>, native storage, posterior reconstruction,
+quantiles and diagnostics interoperability. <code class="docutils literal notranslate"><span class="pre">to_arviz()</span></code> is diagnostics-only.
 Existing ArviZ variable names and coordinates are preserved. Result properties
 reorder axes to put matrix dimensions last and restore physical units.</p></li>
 </ul>
@@ -565,7 +565,7 @@ spectral draws. It does not recreate live NumPyro optimizers or stage objects.
 reporting errors propagate. Spectrum plots are named <code class="docutils literal notranslate"><span class="pre">posterior_spectrum.png</span></code>;
 there is no fallback that substitutes a trace plot. <code class="docutils literal notranslate"><span class="pre">to_netcdf(path)</span></code> only stores
 data. Figure creation lives in <code class="docutils literal notranslate"><span class="pre">plotting/results.py</span></code>, diagnostic table writing
-in <code class="docutils literal notranslate"><span class="pre">diagnostics/report.py</span></code>, and result packing in <code class="docutils literal notranslate"><span class="pre">arviz_utils/to_arviz.py</span></code>.</p>
+in <code class="docutils literal notranslate"><span class="pre">diagnostics/report.py</span></code>, with native result construction in <code class="docutils literal notranslate"><span class="pre">results.py</span></code>.</p>
 </section>
 <section id="time-dependence-shared-scalar-models">
 <h2>Time dependence: shared scalar models<a class="headerlink" href="#time-dependence-shared-scalar-models" title="Link to this heading">#</a></h2>
@@ -601,7 +601,7 @@ work. See <a class="reference internal" href="#time-varying-psd.md"><span class=
 Initial weight fitting lives in <code class="docutils literal notranslate"><span class="pre">inference.initialisation</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">MultivariateLogPSplines</span></code> is replaced by prepared <code class="docutils literal notranslate"><span class="pre">SpectralComponents</span></code>
 for inference and the independent <code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code> for matrix algebra.</p></li>
-<li><p>Model storage functions live in <code class="docutils literal notranslate"><span class="pre">arviz_utils.spline_storage</span></code>, and basis
+<li><p>Results store reconstructed spectra directly, and basis
 plotting in <code class="docutils literal notranslate"><span class="pre">plotting.basis.plot_spline_basis</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code> is in <code class="docutils literal notranslate"><span class="pre">config.py</span></code>; <code class="docutils literal notranslate"><span class="pre">PipelineResult</span></code> becomes <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>.</p></li>
 <li><p>Old <code class="docutils literal notranslate"><span class="pre">pipeline/</span></code>, <code class="docutils literal notranslate"><span class="pre">psplines/</span></code> and <code class="docutils literal notranslate"><span class="pre">datatypes/</span></code> modules are removed rather
@@ -612,10 +612,9 @@ entry point, with <code class="docutils literal notranslate"><span class="pre">m
 <section id="explicit-contracts-after-the-cleanup">
 <h2>Explicit contracts after the cleanup<a class="headerlink" href="#explicit-contracts-after-the-cleanup" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">get_psd_dataset(result.idata)</span></code> handles both stationary and scalar TV fits.
-Its labeled axes are <code class="docutils literal notranslate"><span class="pre">(chain,</span> <span class="pre">draw,</span> <span class="pre">channel,</span> <span class="pre">channel_aux,</span> <span class="pre">[time,]</span> <span class="pre">frequency)</span></code>.
-<code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code> moves the matrix axes to the end. Missing sample
-groups may be skipped; corrupt selected groups raise their original error.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PSDResult.spectrum</span></code> handles both stationary and scalar TV fits.
+Its labeled axes are <code class="docutils literal notranslate"><span class="pre">(chain,</span> <span class="pre">draw,</span> <span class="pre">[time,]</span> <span class="pre">frequency,</span> <span class="pre">channel,</span> <span class="pre">channel_aux)</span></code>.
+<code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code> exposes the same values as a NumPy array.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">PipelineConfig.chain_method</span></code> reaches NumPyro. The unused <code class="docutils literal notranslate"><span class="pre">design_from_vi</span></code>
 and <code class="docutils literal notranslate"><span class="pre">design_from_vi_tau</span></code> options have been removed. This does not remove the
 separate low-level design-weight fitting function.</p></li>

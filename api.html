@@ -417,8 +417,10 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#high-level-pipeline">High-Level Pipeline</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.pipeline.fit"><code class="docutils literal notranslate"><span class="pre">fit()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult"><code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.psd"><code class="docutils literal notranslate"><span class="pre">PSDResult.psd</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.spectral_density"><code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.from_netcdf"><code class="docutils literal notranslate"><span class="pre">PSDResult.from_netcdf()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.quantiles"><code class="docutils literal notranslate"><span class="pre">PSDResult.quantiles()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.save"><code class="docutils literal notranslate"><span class="pre">PSDResult.save()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.to_arviz"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_arviz()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.to_netcdf"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_netcdf()</span></code></a></li>
 </ul>
 </li>
@@ -528,20 +530,17 @@
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#result-objects">Result objects</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id0"><code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id5"><code class="docutils literal notranslate"><span class="pre">PSDResult.psd</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id6"><code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id3"><code class="docutils literal notranslate"><span class="pre">PSDResult.from_netcdf()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id4"><code class="docutils literal notranslate"><span class="pre">PSDResult.quantiles()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id5"><code class="docutils literal notranslate"><span class="pre">PSDResult.save()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id6"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_arviz()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id7"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_netcdf()</span></code></a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arviz-helpers">ArviZ Helpers</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.open_inference_data"><code class="docutils literal notranslate"><span class="pre">open_inference_data()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.save_inference_data"><code class="docutils literal notranslate"><span class="pre">save_inference_data()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_psd_dataset"><code class="docutils literal notranslate"><span class="pre">get_psd_dataset()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">get_multivar_posterior_psd_quantiles()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_multivar_vi_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">get_multivar_vi_psd_quantiles()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_weights"><code class="docutils literal notranslate"><span class="pre">get_weights()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics">Diagnostics</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.to_arviz"><code class="docutils literal notranslate"><span class="pre">to_arviz()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -566,34 +565,40 @@ stable user surface.</p>
 <dt class="sig sig-object py" id="log_psplines.pipeline.fit">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.pipeline.</span></span><span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#id0" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></span><a class="headerlink" href="#log_psplines.pipeline.fit" title="Link to this definition">#</a></dt>
 <dd><p>Fit stationary Wishart data or scalar time-frequency powers.</p>
-<p>PowerSpectrum requires an explicit LogPSpline and PowerSplineConfig.
-Its NUTS path uses the WDM prior; the stationary VI/blocked path retains
-its historical prior and configuration. ScatteredPowerSpectrum uses the
-same prior but evaluates log S(u, omega) directly at each ordinate,
-without pooling onto a rectangular time/frequency grid.</p>
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="log_psplines.results.PSDResult">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.results.</span></span><span class="sig-name descname"><span class="pre">PSDResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">StageResult</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.results.PSDResult" title="Link to this definition">#</a></dt>
-<dd><p>Outputs from InferencePipeline.run().</p>
-<dl class="py property">
-<dt class="sig sig-object py" id="log_psplines.results.PSDResult.psd">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">psd</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#log_psplines.results.PSDResult.psd" title="Link to this definition">#</a></dt>
-<dd><p>Auto spectra (chain, draw, F) for C=1, (…, F, C) otherwise.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.results.</span></span><span class="sig-name descname"><span class="pre">PSDResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior:</span> <span class="pre">xr.Dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spectrum:</span> <span class="pre">xr.DataArray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_stats:</span> <span class="pre">xr.Dataset</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata:</span> <span class="pre">dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Any]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi:</span> <span class="pre">StageResult</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi_posterior:</span> <span class="pre">xr.Dataset</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi_spectrum:</span> <span class="pre">xr.DataArray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_likelihood:</span> <span class="pre">xr.Dataset</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observed_data:</span> <span class="pre">xr.Dataset</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.results.PSDResult" title="Link to this definition">#</a></dt>
+<dd><p>Posterior samples and reconstructed spectrum returned by fit.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.results.PSDResult.from_netcdf">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_netcdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#id0" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></span><a class="headerlink" href="#log_psplines.results.PSDResult.from_netcdf" title="Link to this definition">#</a></dt>
+<dd><p>Load a native result written by to_netcdf.</p>
 </dd></dl>
 
-<dl class="py property">
-<dt class="sig sig-object py" id="log_psplines.results.PSDResult.spectral_density">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">spectral_density</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#log_psplines.results.PSDResult.spectral_density" title="Link to this definition">#</a></dt>
-<dd><p>Posterior draws (chain, draw, F, C, C), in original data units.</p>
-<p>A time grid inserts T before F. TV scalar results use C=1.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.results.PSDResult.quantiles">
+<span class="sig-name descname"><span class="pre">quantiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(5.0,</span> <span class="pre">50.0,</span> <span class="pre">95.0)</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataArray</span></span></span><a class="headerlink" href="#log_psplines.results.PSDResult.quantiles" title="Link to this definition">#</a></dt>
+<dd><p>Posterior spectral quantiles over chain and draw.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.results.PSDResult.save">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_psd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#log_psplines.results.PSDResult.save" title="Link to this definition">#</a></dt>
+<dd><p>Save fitted samples, plots and diagnostics.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="log_psplines.results.PSDResult.to_arviz">
+<span class="sig-name descname"><span class="pre">to_arviz</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.results.PSDResult.to_arviz" title="Link to this definition">#</a></dt>
+<dd><p>Return a minimal ArviZ view for sampling diagnostics.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="log_psplines.results.PSDResult.to_netcdf">
 <span class="sig-name descname"><span class="pre">to_netcdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#log_psplines.results.PSDResult.to_netcdf" title="Link to this definition">#</a></dt>
-<dd><p>Save posterior, basis and metadata without rendering plots.</p>
+<dd><p>Save the native result representation to one NetCDF file.</p>
 </dd></dl>
 
 </dd></dl>
@@ -601,25 +606,7 @@ without pooling onto a rectangular time/frequency grid.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="log_psplines.pipeline.make_pipeline">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.pipeline.</span></span><span class="sig-name descname"><span class="pre">make_pipeline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.config.PipelineConfig" title="log_psplines.config.PipelineConfig"><span class="pre">PipelineConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">InferencePipeline</span></span></span><a class="headerlink" href="#log_psplines.pipeline.make_pipeline" title="Link to this definition">#</a></dt>
-<dd><p>Build an InferencePipeline from data and config.</p>
-<section id="parameters">
-<h3>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h3>
-<dl class="simple">
-<dt>data:</dt><dd><p>Time-domain <code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code> (including <code class="docutils literal notranslate"><span class="pre">y.shape</span> <span class="pre">==</span> <span class="pre">(n,)</span></code>)
-or pre-processed <code class="docutils literal notranslate"><span class="pre">WishartData</span></code>.</p>
-</dd>
-<dt>config:</dt><dd><p>Pipeline configuration.  Defaults to <code class="xref py py-class docutils literal notranslate"><span class="pre">PipelineConfig</span></code> with all
-default values.</p>
-</dd>
-</dl>
-</section>
-<section id="returns">
-<h3>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h3>
-<dl class="simple">
-<dt>InferencePipeline</dt><dd><p>Ready-to-run pipeline.  Call <code class="docutils literal notranslate"><span class="pre">.run()</span></code> to execute it.</p>
-</dd>
-</dl>
-</section>
+<dd><p>Build an InferencePipeline from time-domain or Wishart data.</p>
 </dd></dl>
 
 <dl class="py class">
@@ -1022,8 +1009,8 @@ frequency axis: ordinate <code class="docutils literal notranslate"><span class=
 - T is lower triangular with -theta terms (separate P-splines for real/imaginary parts)</p>
 <p>This enables flexible modeling of both auto-spectra and cross-spectra while
 ensuring positive definiteness of the estimated PSD matrix.</p>
-<section id="id1">
-<h3>Parameters<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
+<section id="parameters">
+<h3>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h3>
 <dl class="simple">
 <dt>degree<span class="classifier">int</span></dt><dd><p>Polynomial degree of B-spline basis functions</p>
 </dd>
@@ -1046,8 +1033,8 @@ ensuring positive definiteness of the estimated PSD matrix.</p>
 <dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents.get_all_bases_and_penalties">
 <span class="sig-name descname"><span class="pre">get_all_bases_and_penalties</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents.get_all_bases_and_penalties" title="Link to this definition">#</a></dt>
 <dd><p>Get basis and penalty matrices for all components (for NumPyro model).</p>
-<section id="id2">
-<h4>Returns<a class="headerlink" href="#id2" title="Link to this heading">#</a></h4>
+<section id="returns">
+<h4>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h4>
 <dl class="simple">
 <dt>Tuple[List[jnp.ndarray], List[jnp.ndarray]]</dt><dd><p>Lists of basis and penalty matrices for all components</p>
 </dd>
@@ -1135,8 +1122,8 @@ consecutive bins J_h, each of constant size Nh (odd).</p>
 </ul>
 </dd>
 </dl>
-<section id="id3">
-<h3>Notes<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
+<section id="id1">
+<h3>Notes<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
 <p>This spec describes consecutive, full-band bins on the retained grid:
 no gaps, no overlaps, and no per-bin sorting.</p>
 </section>
@@ -1163,8 +1150,8 @@ For even Nh, the lower-middle Fourier frequency is used.</p>
 <dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">apply_coarse_grain_multivar_fft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fft</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><span class="pre">CoarseGrainSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="Link to this definition">#</a></dt>
 <dd><p>Coarse-grain a WishartData using equal-sized bins.</p>
-<section id="id4">
-<h3>Notes<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
+<section id="id2">
+<h3>Notes<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
 <ul class="simple">
 <li><p>Y(f_k) is the Wishart matrix built from block FFTs (second-order). We
 form Y_bar by summing Y(f_k) across bins and then re-factorize to obtain
@@ -1178,97 +1165,47 @@ the coarse-grid U factors used by the likelihood.</p></li>
 <h2>Result objects<a class="headerlink" href="#result-objects" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="id0">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.results.</span></span><span class="sig-name descname"><span class="pre">PSDResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">StageResult</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#id0" title="Link to this definition">#</a></dt>
-<dd><p>Outputs from InferencePipeline.run().</p>
-<dl class="py property">
-<dt class="sig sig-object py" id="id5">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">psd</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#id5" title="Link to this definition">#</a></dt>
-<dd><p>Auto spectra (chain, draw, F) for C=1, (…, F, C) otherwise.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.results.</span></span><span class="sig-name descname"><span class="pre">PSDResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">posterior:</span> <span class="pre">xr.Dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spectrum:</span> <span class="pre">xr.DataArray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_stats:</span> <span class="pre">xr.Dataset</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata:</span> <span class="pre">dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Any]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi:</span> <span class="pre">StageResult</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi_posterior:</span> <span class="pre">xr.Dataset</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vi_spectrum:</span> <span class="pre">xr.DataArray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_likelihood:</span> <span class="pre">xr.Dataset</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observed_data:</span> <span class="pre">xr.Dataset</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#id0" title="Link to this definition">#</a></dt>
+<dd><p>Posterior samples and reconstructed spectrum returned by fit.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="id3">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_netcdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#id0" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></span><a class="headerlink" href="#id3" title="Link to this definition">#</a></dt>
+<dd><p>Load a native result written by to_netcdf.</p>
 </dd></dl>
 
-<dl class="py property">
+<dl class="py method">
+<dt class="sig sig-object py" id="id4">
+<span class="sig-name descname"><span class="pre">quantiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(5.0,</span> <span class="pre">50.0,</span> <span class="pre">95.0)</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataArray</span></span></span><a class="headerlink" href="#id4" title="Link to this definition">#</a></dt>
+<dd><p>Posterior spectral quantiles over chain and draw.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="id5">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_psd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#id5" title="Link to this definition">#</a></dt>
+<dd><p>Save fitted samples, plots and diagnostics.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="id6">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">spectral_density</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#id6" title="Link to this definition">#</a></dt>
-<dd><p>Posterior draws (chain, draw, F, C, C), in original data units.</p>
-<p>A time grid inserts T before F. TV scalar results use C=1.</p>
+<span class="sig-name descname"><span class="pre">to_arviz</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#id6" title="Link to this definition">#</a></dt>
+<dd><p>Return a minimal ArviZ view for sampling diagnostics.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="id7">
 <span class="sig-name descname"><span class="pre">to_netcdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#id7" title="Link to this definition">#</a></dt>
-<dd><p>Save posterior, basis and metadata without rendering plots.</p>
+<dd><p>Save the native result representation to one NetCDF file.</p>
 </dd></dl>
 
 </dd></dl>
 
 </section>
-<section id="arviz-helpers">
-<h2>ArviZ Helpers<a class="headerlink" href="#arviz-helpers" title="Link to this heading">#</a></h2>
+<section id="diagnostics">
+<h2>Diagnostics<a class="headerlink" href="#diagnostics" title="Link to this heading">#</a></h2>
 <dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.arviz_utils.open_inference_data">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">open_inference_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'h5netcdf'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataTree</span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.open_inference_data" title="Link to this definition">#</a></dt>
-<dd><p>Load inference data saved by <code class="docutils literal notranslate"><span class="pre">save_inference_data</span></code>.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.arviz_utils.save_inference_data">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">save_inference_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'h5netcdf'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.save_inference_data" title="Link to this definition">#</a></dt>
-<dd><p>Save inference data using the canonical grouped NetCDF layout.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.arviz_utils.get_psd_dataset">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">get_psd_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'best'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'posterior'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'vi'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'prior'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'primary'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'best'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dataset</span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.get_psd_dataset" title="Link to this definition">#</a></dt>
-<dd><p>Return standardized PSD/CSD draws for the requested source.</p>
-<p>Supported <code class="docutils literal notranslate"><span class="pre">source</span></code> values:
-- <code class="docutils literal notranslate"><span class="pre">&quot;best&quot;</span></code>: first available among posterior, VI, then prior.
-- <code class="docutils literal notranslate"><span class="pre">&quot;posterior&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;primary&quot;</span></code>: MCMC posterior draws.
-- <code class="docutils literal notranslate"><span class="pre">&quot;vi&quot;</span></code>: VI posterior draws.
-- <code class="docutils literal notranslate"><span class="pre">&quot;prior&quot;</span></code>: prior-like draws if present.</p>
-<p>Returned datasets contain:
-- <code class="docutils literal notranslate"><span class="pre">spectral_density</span></code>: complex, dims <code class="docutils literal notranslate"><span class="pre">(chain,</span> <span class="pre">draw,</span> <span class="pre">channel,</span> <span class="pre">channel_aux,</span> <span class="pre">frequency)</span></code>
-- <code class="docutils literal notranslate"><span class="pre">coherence</span></code>: real, with the same dimensions.</p>
-<p>Time-frequency results insert <code class="docutils literal notranslate"><span class="pre">time</span></code> immediately before <code class="docutils literal notranslate"><span class="pre">frequency</span></code>.
-Source selection only skips absent groups; malformed data raises an error.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">get_multivar_posterior_psd_quantiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_keep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(5.0,</span> <span class="pre">50.0,</span> <span class="pre">95.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_coherence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles" title="Link to this definition">#</a></dt>
-<dd><p>Return multivariate PSD/coherence quantiles reconstructed from posterior draws.</p>
-<p>Returned arrays follow the plotting/diagnostics layout:
-- <code class="docutils literal notranslate"><span class="pre">percentile</span></code>: <code class="docutils literal notranslate"><span class="pre">(Q,)</span></code>
-- <code class="docutils literal notranslate"><span class="pre">freq</span></code>: <code class="docutils literal notranslate"><span class="pre">(F,)</span></code>
-- <code class="docutils literal notranslate"><span class="pre">spectral_density</span></code>: <code class="docutils literal notranslate"><span class="pre">(Q,</span> <span class="pre">F,</span> <span class="pre">p,</span> <span class="pre">p)</span></code> complex
-- <code class="docutils literal notranslate"><span class="pre">coherence</span></code>: <code class="docutils literal notranslate"><span class="pre">(Q,</span> <span class="pre">F,</span> <span class="pre">p,</span> <span class="pre">p)</span></code> or <code class="docutils literal notranslate"><span class="pre">None</span></code></p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.arviz_utils.get_multivar_vi_psd_quantiles">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">get_multivar_vi_psd_quantiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_keep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(5.0,</span> <span class="pre">50.0,</span> <span class="pre">95.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_coherence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.get_multivar_vi_psd_quantiles" title="Link to this definition">#</a></dt>
-<dd><p>Return multivariate VI PSD/coherence quantiles reconstructed lazily.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.arviz_utils.get_weights">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.arviz_utils.</span></span><span class="sig-name descname"><span class="pre">get_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataTree</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#log_psplines.arviz_utils.get_weights" title="Link to this definition">#</a></dt>
-<dd><p>Extract weight samples from the canonical posterior group.</p>
-<section id="id8">
-<h3>Parameters<a class="headerlink" href="#id8" title="Link to this heading">#</a></h3>
-<dl class="simple">
-<dt>idata<span class="classifier">xr.DataTree</span></dt><dd><p>DataTree containing posterior weight samples</p>
-</dd>
-<dt>thin<span class="classifier">int</span></dt><dd><p>Thinning factor</p>
-</dd>
-</dl>
-</section>
-<section id="id9">
-<h3>Returns<a class="headerlink" href="#id9" title="Link to this heading">#</a></h3>
-<dl class="simple">
-<dt>jnp.ndarray</dt><dd><p>Weight samples: (samples, Kf) or (samples, Kt, Kf).</p>
-</dd>
-</dl>
-</section>
+<dt class="sig sig-object py" id="log_psplines.diagnostics.to_arviz">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.diagnostics.</span></span><span class="sig-name descname"><span class="pre">to_arviz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.diagnostics.to_arviz" title="Link to this definition">#</a></dt>
+<dd><p>Build a minimal ArviZ-compatible diagnostics view of a PSDResult.</p>
 </dd></dl>
 
 </section>
@@ -1343,8 +1280,10 @@ Source selection only skips absent groups; malformed data raises an error.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#high-level-pipeline">High-Level Pipeline</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.pipeline.fit"><code class="docutils literal notranslate"><span class="pre">fit()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult"><code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.psd"><code class="docutils literal notranslate"><span class="pre">PSDResult.psd</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.spectral_density"><code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.from_netcdf"><code class="docutils literal notranslate"><span class="pre">PSDResult.from_netcdf()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.quantiles"><code class="docutils literal notranslate"><span class="pre">PSDResult.quantiles()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.save"><code class="docutils literal notranslate"><span class="pre">PSDResult.save()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.to_arviz"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_arviz()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.results.PSDResult.to_netcdf"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_netcdf()</span></code></a></li>
 </ul>
 </li>
@@ -1454,20 +1393,17 @@ Source selection only skips absent groups; malformed data raises an error.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#result-objects">Result objects</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id0"><code class="docutils literal notranslate"><span class="pre">PSDResult</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id5"><code class="docutils literal notranslate"><span class="pre">PSDResult.psd</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id6"><code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id3"><code class="docutils literal notranslate"><span class="pre">PSDResult.from_netcdf()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id4"><code class="docutils literal notranslate"><span class="pre">PSDResult.quantiles()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id5"><code class="docutils literal notranslate"><span class="pre">PSDResult.save()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id6"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_arviz()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#id7"><code class="docutils literal notranslate"><span class="pre">PSDResult.to_netcdf()</span></code></a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arviz-helpers">ArviZ Helpers</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.open_inference_data"><code class="docutils literal notranslate"><span class="pre">open_inference_data()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.save_inference_data"><code class="docutils literal notranslate"><span class="pre">save_inference_data()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_psd_dataset"><code class="docutils literal notranslate"><span class="pre">get_psd_dataset()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">get_multivar_posterior_psd_quantiles()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_multivar_vi_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">get_multivar_vi_psd_quantiles()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.arviz_utils.get_weights"><code class="docutils literal notranslate"><span class="pre">get_weights()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics">Diagnostics</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.to_arviz"><code class="docutils literal notranslate"><span class="pre">to_arviz()</span></code></a></li>
 </ul>
 </li>
 </ul>

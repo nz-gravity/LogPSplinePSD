@@ -120,8 +120,8 @@ It lives in the same file, rather than a separate factory module.
   optional inference operation in `inference/evidence.py`. The blocked stages
   have no generic base class and accept only the arguments they use.
   Stationary and power fitting share `inference.nuts.run_nuts`.
-- `results.py` and `arviz_utils/`: `PSDResult`, storage, posterior reconstruction,
-  quantiles and ArviZ interoperability. `.idata` exposes the original DataTree.
+- `results.py`: `PSDResult`, native storage, posterior reconstruction,
+  quantiles and diagnostics interoperability. `to_arviz()` is diagnostics-only.
   Existing ArviZ variable names and coordinates are preserved. Result properties
   reorder axes to put matrix dimensions last and restore physical units.
 
@@ -131,7 +131,7 @@ spectral draws. It does not recreate live NumPyro optimizers or stage objects.
 reporting errors propagate. Spectrum plots are named `posterior_spectrum.png`;
 there is no fallback that substitutes a trace plot. `to_netcdf(path)` only stores
 data. Figure creation lives in `plotting/results.py`, diagnostic table writing
-in `diagnostics/report.py`, and result packing in `arviz_utils/to_arviz.py`.
+in `diagnostics/report.py`, with native result construction in `results.py`.
 
 ## Time dependence: shared scalar models
 
@@ -170,7 +170,7 @@ work. See [the time-varying PSD notes](time-varying-psd.md) for conventions and 
   Initial weight fitting lives in `inference.initialisation`.
 - `MultivariateLogPSplines` is replaced by prepared `SpectralComponents`
   for inference and the independent `SpectralMatrix` for matrix algebra.
-- Model storage functions live in `arviz_utils.spline_storage`, and basis
+- Results store reconstructed spectra directly, and basis
   plotting in `plotting.basis.plot_spline_basis`.
 - `PipelineConfig` is in `config.py`; `PipelineResult` becomes `PSDResult`.
 - Old `pipeline/`, `psplines/` and `datatypes/` modules are removed rather
@@ -179,10 +179,9 @@ work. See [the time-varying PSD notes](time-varying-psd.md) for conventions and 
 
 ## Explicit contracts after the cleanup
 
-- `get_psd_dataset(result.idata)` handles both stationary and scalar TV fits.
-  Its labeled axes are `(chain, draw, channel, channel_aux, [time,] frequency)`.
-  `PSDResult.spectral_density` moves the matrix axes to the end. Missing sample
-  groups may be skipped; corrupt selected groups raise their original error.
+- `PSDResult.spectrum` handles both stationary and scalar TV fits.
+  Its labeled axes are `(chain, draw, [time,] frequency, channel, channel_aux)`.
+  `PSDResult.spectral_density` exposes the same values as a NumPy array.
 - `PipelineConfig.chain_method` reaches NumPyro. The unused `design_from_vi`
   and `design_from_vi_tau` options have been removed. This does not remove the
   separate low-level design-weight fitting function.

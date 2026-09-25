@@ -172,6 +172,19 @@ def _observed_power(data: "PowerSpectrum") -> xr.Dataset:
     )
 
 
+def _observed_scattered(data) -> xr.Dataset:
+    return xr.Dataset(
+        {
+            "power": (("ordinate",), np.asarray(data.power)),
+            "counts": (("ordinate",), np.asarray(data.counts)),
+            "time": (("ordinate",), np.asarray(data.time)),
+            "frequency": (("ordinate",), np.asarray(data.frequency)),
+        },
+        coords={"ordinate": np.arange(np.asarray(data.power).size)},
+        attrs={"units": data.units},
+    )
+
+
 def _netcdf_safe(value: Any) -> Any:
     if value is None:
         return None
@@ -277,6 +290,28 @@ class PSDResult:
             log_likelihood=log_likelihood,
             observed_data=_observed_power(data),
         )
+
+    @classmethod
+    def from_scattered_power(
+        cls,
+        *,
+        posterior: xr.Dataset,
+        sample_stats: xr.Dataset | None,
+        data,
+        spline: "LogPSpline",
+        config: "PowerSplineConfig",
+        log_likelihood: xr.Dataset | None = None,
+    ) -> "PSDResult":
+        result = cls.from_power(
+            posterior=posterior,
+            sample_stats=sample_stats,
+            data=data,
+            spline=spline,
+            config=config,
+            log_likelihood=log_likelihood,
+        )
+        result.observed_data = _observed_scattered(data)
+        return result
 
     @property
     def frequency(self) -> np.ndarray:

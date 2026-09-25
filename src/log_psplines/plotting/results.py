@@ -36,7 +36,9 @@ def plot_posterior_spectrum(
         )
         plt.close(fig)
         return
-    overlay_vi = result.vi_spectrum is not None
+    overlay_vi = (
+        result.vi_spectrum is not None and result.sample_stats is not None
+    )
     plot_psd_matrix(
         PSDMatrixPlotSpec(
             idata=result,

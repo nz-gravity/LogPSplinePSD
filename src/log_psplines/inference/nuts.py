@@ -93,7 +93,16 @@ def run_nuts(
         for name, value in samples.items()
         if not str(name).startswith("log_likelihood")
     }
-    stats = dict(mcmc.get_extra_fields(group_by_chain=True))
+    raw_stats = dict(mcmc.get_extra_fields(group_by_chain=True))
+    stat_names = {
+        "accept_prob": "acceptance_rate",
+        "num_steps": "n_steps",
+        "adapt_state.step_size": "step_size",
+    }
+    stats = {
+        stat_names.get(str(name), str(name)): value
+        for name, value in raw_stats.items()
+    }
     if "potential_energy" in stats and "lp" not in stats:
         stats["lp"] = -np.asarray(stats["potential_energy"])
 

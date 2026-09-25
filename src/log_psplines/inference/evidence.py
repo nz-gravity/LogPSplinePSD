@@ -497,7 +497,7 @@ def _evaluate_lnz_task(
 
 def estimate_pipeline_lnz(
     *,
-    idata: xr.DataTree,
+    posterior: xr.Dataset,
     data: WishartData,
     model_kwargs: dict[str, Any],
     outdir: str | None,
@@ -505,10 +505,6 @@ def estimate_pipeline_lnz(
     verbose: bool = False,
 ) -> MorphZEvidenceResult:
     """Compute MorphZ lnZ from pipeline posterior samples."""
-    posterior = idata["posterior"].dataset
-    if posterior is None:
-        raise ValueError("idata.posterior is required for lnZ computation.")
-
     n_channels = int(model_kwargs["n_channels"])
     factor_results: list[MorphZEvidenceResult] = []
     for channel_index in range(n_channels):
@@ -676,7 +672,7 @@ def _pointwise_multivar_log_likelihood(
 
 def compute_pointwise_lnl(
     *,
-    idata: xr.DataTree,
+    posterior: xr.Dataset,
     data: WishartData,
     model_kwargs: dict[str, Any],
 ) -> xr.Dataset:
@@ -686,12 +682,6 @@ def compute_pointwise_lnl(
     fits, the dataset includes a total ``log_likelihood`` variable plus
     per-channel diagnostics.
     """
-    posterior = idata["posterior"].dataset
-    if posterior is None:
-        raise ValueError(
-            "idata.posterior is required to compute pointwise log-likelihood."
-        )
-
     return _pointwise_multivar_log_likelihood(posterior, data, model_kwargs)
 
 

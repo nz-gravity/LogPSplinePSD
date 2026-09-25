@@ -1,265 +1,162 @@
-"""Fitted spectra, posterior access and persistence.
+"""Fitted spectra, posterior samples, diagnostics and persistence.
 
+``PSDResult`` is the public result object returned by :func:`log_psplines.fit`.
+It owns the posterior samples, sampler statistics and reconstructed spectrum.
+ArviZ is deliberately kept at the diagnostics boundary: call
+:meth:`PSDResult.to_arviz` when an ArviZ object is useful for R-hat, ESS,
+trace or energy diagnostics.
 
-Understanding ``PSDResult``
-============================
-
-``fit(data, config)`` returns a ``PSDResult``. It keeps the posterior samples,
-the frequency grid, and convenient reconstructed spectral quantities together.
-
-Core properties
----------------
-
-``result.frequency``
-   The retained positive-frequency grid in Hz. DC is removed by preprocessing.
-
-``result.psd``
-   Auto-spectral posterior draws. For a univariate stationary fit, the shape is
-   ``(chain, draw, frequency)``. For a multivariate fit, channel dimensions are
-   appended after frequency.
-
-``result.spectral_density``
-   Reconstructed spectral-matrix draws with shape
-   ``(chain, draw, frequency, channel, channel_aux)``. Time-varying scalar fits
-   add a ``time`` axis before ``frequency``.
-
-``result.coherence``
-   Coherence reconstructed from the spectral matrix. It is available for
-   multivariate fits.
-
-``result.posterior``
-   The posterior as an ``xarray.Dataset``. Use this when you need named
-   coordinates or model parameters rather than reconstructed spectra.
-
-Save and reload
----------------
-
-Use ``to_netcdf`` when you only need the inference data:
-
-.. code-block:: python
-
-   result.to_netcdf("runs/example/inference_data.nc")
-
-Use ``save`` to write inference data, summary tables, plots, and diagnostics:
-
-.. code-block:: python
-
-   result.save("runs/example")
-
-Reload a saved inference result with:
-
-.. code-block:: python
-
-   from log_psplines import PSDResult
-
-   result = PSDResult.from_netcdf("runs/example/inference_data.nc")
-
-For the files written by ``save`` and the checks to perform before interpreting
-an analysis, see below
-
-
-
-Outputs and Diagnostics
-=======================
-
-Return Value
-------------
-
-``fit(...).idata`` returns an ``xarray.DataTree``. Important groups include:
-
-``posterior``
-   NUTS posterior samples for spline weights and model parameters.
-
-``sample_stats``
-   Per-channel sampler diagnostics such as acceptance rate, step size, tree
-   depth, and log probability.
-
-``observed_data``
-   Frequency grid and empirical PSD-like data derived from the Wishart
-   statistics.
-
-``vi_posterior`` and ``vi_sample_stats``
-   VI draws, losses, and warm-start diagnostics when VI is enabled.
-
-``prior_predictive`` and ``posterior_predictive``
-   Reconstructed spectral quantities used by plotting and diagnostics when
-   available.
-
-Saved Files
------------
-
-When ``PipelineConfig(outdir=...)`` is set, the pipeline writes:
-
-``inference_data.nc``
-   NetCDF serialisation of the returned ``DataTree``.
-
-``posterior_spectrum.png``
-   PSD matrix summary or scalar time-frequency surface.
-
-``diagnostics/vi_summary.csv``
-   VI convergence and loss summary.
-
-``diagnostics/nuts_summary.csv``
-   NUTS diagnostics and, when a truth PSD is supplied, error metrics.
-
-``diagnostics/vi_loss.png``
-   VI loss trace.
-
-``diagnostics/traces.png`` and ``diagnostics/energy.png``
-   Standard MCMC trace and energy diagnostics.
-
-Some files are conditional. For example, preprocessing eigenvalue plots are
-written for multivariate frequency-domain inputs when an output directory is
-available.
-
-Loading Results
----------------
-
-.. code-block:: python
-
-   from log_psplines.arviz_utils import open_inference_data
-
-   idata = open_inference_data("runs/example/inference_data.nc")
-
-Extracting PSD Summaries
-------------------------
-
-.. code-block:: python
-
-   from log_psplines.arviz_utils import (
-       get_multivar_posterior_psd_quantiles,
-       get_psd_dataset,
-   )
-
-   psd_draws = get_psd_dataset(idata, source="posterior")
-   q = get_multivar_posterior_psd_quantiles(idata)
-
-``get_psd_dataset`` returns posterior draws when available. Quantile helpers
-return compact arrays suitable for plotting and reporting.
-
-Diagnostics Checklist
----------------------
-
-- Check that posterior PSD diagonals are positive.
-- For multivariate runs, check Hermitian symmetry and positive definiteness of
-  reconstructed spectral matrices.
-- Check coherence lies in ``[0, 1]``.
-- Inspect NUTS divergences, tree-depth hits, and effective sample size.
-- Compare VI and NUTS posterior summaries when using VI warm starts.
-- If ``true_psd`` was supplied, review RIAE, L2, and coverage metrics in the
-  saved summaries.
-
-Reporting contracts
--------------------
-
-``get_psd_dataset(result.idata)`` reconstructs stationary and time-frequency
-results using named dimensions. Time-frequency results add a ``time`` axis
-before ``frequency``. ``PSDResult.spectral_density`` places channel axes last.
-
-VI pointwise log likelihoods are currently unavailable. No zero-filled
-``vi_log_likelihood`` group is written, and derived LOO metrics are unavailable.
-
-Saving writes ``inference_data.nc`` before rendering. Unexpected plotting or
-reporting failures raise an error; no substitute figure is saved under the
-requested figure's filename.
-
-
-
+The private DataTree payload is retained temporarily for backwards
+compatibility while the old result-packing code is removed.
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+import warnings
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import xarray as xr
 
 from log_psplines.arviz_utils._datatree import (
+    open_inference_data as _open_inference_data,
+    require_dataset as _require_dataset,
     save_inference_data as _save_inference_data,
 )
+from log_psplines.arviz_utils.from_arviz import get_psd_dataset
 from log_psplines.arviz_utils.to_arviz import _losses_per_block_array
 from log_psplines.inference.vi import StageResult
 
 
-@dataclass
+@dataclass(init=False)
 class PSDResult:
-    """Outputs from InferencePipeline.run()."""
+    """Result of a LogPSplinePSD fit.
 
-    idata: xr.DataTree
+    The stable public interface is ``posterior``, ``sample_stats``,
+    ``spectrum``, ``spectral_density``, ``psd``, ``coherence``,
+    ``frequency`` and optional ``time``.
+
+    Parameters
+    ----------
+    idata:
+        Legacy internal DataTree produced by the current inference packers.
+        It is immediately converted to native xarray result fields. This
+        argument is transitional and will disappear once the packers are
+        replaced.
+    vi:
+        Optional VI diagnostics.
+    """
+
+    _tree: xr.DataTree = field(repr=False)
     vi: StageResult | None = None
-    time: np.ndarray | None = None
+    posterior: xr.Dataset = field(init=False)
+    sample_stats: xr.Dataset | None = field(init=False)
+    spectrum: xr.DataArray = field(init=False)
+    metadata: dict = field(init=False)
 
-    def __post_init__(self) -> None:
-        if "power_basis" in self.idata.children:
-            from log_psplines.arviz_utils._datatree import require_dataset
+    def __init__(
+        self,
+        idata: xr.DataTree,
+        vi: StageResult | None = None,
+    ) -> None:
+        self._tree = idata
+        self.vi = vi
+        self.posterior = self._load_posterior()
+        self.sample_stats = self._load_optional_dataset("sample_stats")
+        self.spectrum = self._load_spectrum()
+        self.metadata = dict(idata.attrs)
 
-            self.time = require_dataset(self.idata, "power_basis")[
-                "grid_time"
-            ].values
+    def _load_posterior(self) -> xr.Dataset:
+        """Return the fitted posterior as a native xarray Dataset."""
+        for group in ("posterior", "vi_posterior"):
+            try:
+                return _require_dataset(self._tree, group)
+            except (KeyError, TypeError):
+                continue
+        raise KeyError("Fit result does not contain posterior samples.")
+
+    def _load_optional_dataset(self, group: str) -> xr.Dataset | None:
+        try:
+            return _require_dataset(self._tree, group)
+        except (KeyError, TypeError):
+            return None
+
+    def _load_spectrum(self) -> xr.DataArray:
+        """Reconstruct the spectrum once at result construction time."""
+        dataset = get_psd_dataset(self._tree)
+        axes = ["chain", "draw"]
+        if "time" in dataset["spectral_density"].dims:
+            axes.append("time")
+        axes.extend(["frequency", "channel", "channel_aux"])
+        return dataset["spectral_density"].transpose(*axes)
 
     @property
-    def posterior(self) -> xr.Dataset:
-        from log_psplines.arviz_utils.from_arviz import get_sample_dataset
+    def idata(self) -> xr.DataTree:
+        """Legacy DataTree view.
 
-        return get_sample_dataset(self.idata)
-
-    @property
-    def metadata(self) -> dict:
-        return dict(self.idata.attrs)
+        Deprecated
+        ----------
+        Use the native ``PSDResult`` fields instead. ArviZ-specific work should
+        use :meth:`to_arviz`.
+        """
+        warnings.warn(
+            "PSDResult.idata is deprecated; use result.posterior, "
+            "result.sample_stats, result.spectrum, or result.to_arviz().",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._tree
 
     @property
     def frequency(self) -> np.ndarray:
-        from log_psplines.arviz_utils.from_arviz import (
-            _get_multivar_frequency_grid,
-        )
+        """Reconstruction frequency grid."""
+        return np.asarray(self.spectrum.coords["frequency"].values, dtype=float)
 
-        if "power_basis" in self.idata.children:
-            from log_psplines.arviz_utils._datatree import require_dataset
-
-            return require_dataset(self.idata, "power_basis")[
-                "grid_frequency"
-            ].values
-        return _get_multivar_frequency_grid(self.idata)
+    @property
+    def time(self) -> np.ndarray | None:
+        """Reconstruction time grid for time-varying fits."""
+        if "time" not in self.spectrum.coords:
+            return None
+        return np.asarray(self.spectrum.coords["time"].values, dtype=float)
 
     @property
     def spectral_density(self) -> np.ndarray:
-        """Posterior draws (chain, draw, F, C, C), in original data units.
-
-        A time grid inserts T before F. TV scalar results use C=1.
-        """
-        from log_psplines.arviz_utils.from_arviz import get_psd_dataset
-
-        dataset = get_psd_dataset(self.idata)
-        axes = ("chain", "draw")
-        if "time" in dataset.dims:
-            axes += ("time",)
-        return dataset.spectral_density.transpose(
-            *axes, "frequency", "channel", "channel_aux"
-        ).values
+        """Posterior spectral matrices with channel axes last."""
+        return np.asarray(self.spectrum.values)
 
     @property
     def psd(self) -> np.ndarray:
-        """Auto spectra (chain, draw, F) for C=1, (..., F, C) otherwise."""
+        """Auto spectra; scalar fits drop the singleton channel axis."""
         diagonal = np.diagonal(self.spectral_density, axis1=-2, axis2=-1).real
         return diagonal[..., 0] if diagonal.shape[-1] == 1 else diagonal
 
     @property
     def coherence(self) -> np.ndarray:
+        """Magnitude-squared coherence for the reconstructed spectrum."""
         from log_psplines.models.matrix import SpectralMatrix
 
         return SpectralMatrix.coherence(self.spectral_density)
 
+    def to_arviz(self):
+        """Return an ArviZ InferenceData view for sampling diagnostics."""
+        from log_psplines.diagnostics.arviz import to_arviz
+
+        return to_arviz(self)
+
     def to_netcdf(self, path: str | Path) -> None:
-        """Save posterior, basis and metadata without rendering plots."""
-        _save_inference_data(self.idata, path)
+        """Save the fit payload to NetCDF.
+
+        Storage still uses the transitional DataTree layout so existing result
+        files remain readable during the cleanup.
+        """
+        _save_inference_data(self._tree, path)
 
     @classmethod
-    def from_netcdf(cls, path: str | Path) -> PSDResult:
-        from log_psplines.arviz_utils._datatree import open_inference_data
-
-        return cls(idata=open_inference_data(path))
+    def from_netcdf(cls, path: str | Path) -> "PSDResult":
+        """Load a result written by :meth:`to_netcdf`."""
+        return cls(_open_inference_data(path))
 
     def save(
         self,
@@ -267,6 +164,7 @@ class PSDResult:
         *,
         true_psd: np.ndarray | None = None,
     ) -> None:
+        """Save the fit plus standard plots and diagnostic tables."""
         os.makedirs(outdir, exist_ok=True)
         from log_psplines.diagnostics.report import save_summary_tables
         from log_psplines.plotting.results import (
@@ -274,16 +172,12 @@ class PSDResult:
             plot_result_diagnostics,
         )
 
-        # Preserve fitted data even if a requested diagnostic or plot fails.
+        # Write once before rendering so fitted samples survive plot failures.
         self.to_netcdf(Path(outdir) / "inference_data.nc")
         save_summary_tables(self, outdir, true_psd=true_psd)
         plot_posterior_spectrum(self, outdir, true_psd=true_psd)
         plot_result_diagnostics(self, outdir)
-        _save_inference_data(
-            self.idata,
-            os.path.join(outdir, "inference_data.nc"),
-            engine="h5netcdf",
-        )
+
         if self.vi is not None and self.vi.losses is not None:
             np.save(
                 os.path.join(outdir, "vi_losses.npy"),

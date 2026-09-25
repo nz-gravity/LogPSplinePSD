@@ -1,4 +1,4 @@
-"""Write available fit summaries without fabricating missing diagnostics."""
+"""Write fit summaries without coupling the result model to ArviZ."""
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from .summary_tables import build_nuts_summary_table, build_vi_summary_table
+from .summary_tables import (
+    _truth_metrics_from_result,
+    build_nuts_summary_table,
+    build_vi_summary_table,
+)
 
 if TYPE_CHECKING:
     from log_psplines.results import PSDResult
@@ -24,37 +28,26 @@ def save_summary_tables(
     *,
     true_psd: np.ndarray | None = None,
 ) -> None:
-    """Persist computed metrics; absent likelihoods leave LOO unavailable."""
+    """Persist available VI/NUTS diagnostics."""
     directory = Path(outdir) / "diagnostics"
     directory.mkdir(parents=True, exist_ok=True)
-    if result.time is not None:
-        stats = result.idata["sample_stats"]
-        pd.DataFrame(
-            [
-                {
-                    "divergences": int(stats["diverging"].sum()),
-                    "mean_accept_prob": float(stats["accept_prob"].mean()),
-                    "max_tree_depth_hits": int(
-                        (
-                            stats["num_steps"]
-                            >= 2 ** int(result.metadata["max_tree_depth"]) - 1
-                        ).sum()
-                    ),
-                }
-            ]
-        ).to_csv(directory / "nuts_summary.csv", index=False)
-        return
     summary_row = {}
+
     if result.vi is not None:
-        table = build_vi_summary_table(result.idata, true_psd=true_psd)
+        vi_input = {"losses": np.asarray(result.vi.losses)}
+        if result.vi.losses_per_block is not None:
+            vi_input["losses_per_block"] = result.vi.losses_per_block
+        table = build_vi_summary_table(vi_input)
+        truth = _truth_metrics_from_result(result, true_psd=true_psd)
+        for name, value in truth.items():
+            table[name] = value
         table.to_csv(directory / "vi_summary.csv", index=False)
         for column in ("pareto_k_max", "riae", "l2", "coverage", "final_elbo"):
             if column in table:
-                value = _median_numeric(table[column])
-                summary_row[f"vi_{column}"] = value
-                result.idata["vi_sample_stats"].attrs[column] = value
-    if "sample_stats" in result.idata.children:
-        table = build_nuts_summary_table(result.idata, true_psd=true_psd)
+                summary_row[f"vi_{column}"] = _median_numeric(table[column])
+
+    if result.sample_stats is not None:
+        table = build_nuts_summary_table(result, true_psd=true_psd)
         table.to_csv(directory / "nuts_summary.csv", index=False)
         for column in (
             "divergences",
@@ -68,9 +61,8 @@ def save_summary_tables(
             "ess_tail_min",
         ):
             if column in table:
-                value = _median_numeric(table[column])
-                summary_row[f"nuts_{column}"] = value
-                result.idata["sample_stats"].attrs[column] = value
+                summary_row[f"nuts_{column}"] = _median_numeric(table[column])
+
     if summary_row:
         pd.DataFrame([summary_row]).to_csv(
             directory / "diagnostics.csv", index=False

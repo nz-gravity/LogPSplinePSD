@@ -9,7 +9,13 @@ from typing import Any
 import xarray as xr
 from arviz_base import from_dict
 
-from log_psplines.arviz_utils._datatree import require_dataset as _require_dataset
+def _require_dataset(tree, group: str):
+    node = tree[group]
+    dataset = getattr(node, "dataset", node)
+    if dataset is None:
+        raise KeyError(group)
+    return dataset
+
 
 _POSTERIOR_BLOCK_PATTERNS = (
     re.compile(r"^(?:weights_delta|phi|delta)_(\d+)$"),

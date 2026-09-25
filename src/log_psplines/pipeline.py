@@ -1,14 +1,9 @@
-"""InferencePipeline and PSDResult."""
+"""High-level fitting pipeline."""
 
 from __future__ import annotations
 
 import jax
-import xarray as xr
 
-from log_psplines.arviz_utils.to_arviz import (
-    _vi_result_to_idata,
-    pack_stationary_result,
-)
 from log_psplines.config import PipelineConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.inference.components import SpectralComponents
@@ -21,16 +16,13 @@ from log_psplines.inference.nuts import FactorizedMultivarNUTSStage
 from log_psplines.inference.vi import FactorizedMultivarVIStage
 from log_psplines.preprocessing.checks import _save_preprocessing_plot
 from log_psplines.preprocessing.spectral import preprocess_to_freq_domain
-from log_psplines.results import PSDResult
+from log_psplines.results import PSDResult, _values_to_dataset
 
 from .logger import logger
 
 
 class InferencePipeline:
-    """Runs either a standalone VI fit or a standalone NUTS fit.
-
-    ``config.method`` selects the stage; VI never seeds NUTS initial values.
-    """
+    """Run either standalone VI or standalone NUTS."""
 
     def __init__(
         self,
@@ -49,26 +41,24 @@ class InferencePipeline:
         self.nuts_stage = nuts_stage
 
     def _attach_lnz_metadata(
-        self, idata: xr.DataTree, *, eta: float
-    ) -> xr.DataTree:
-        """Compute optional lnZ and store summary attrs on ``idata``."""
+        self, result: PSDResult, *, eta: float
+    ) -> PSDResult:
         if not bool(self.config.compute_lnz):
-            return idata
-
+            return result
         try:
-            lnz_model_kwargs = dict(self.full_model_kwargs)
-            lnz_model_kwargs["eta"] = float(eta)
-            result = estimate_pipeline_lnz(
-                idata=idata,
+            kwargs = dict(self.full_model_kwargs)
+            kwargs["eta"] = float(eta)
+            evidence = estimate_pipeline_lnz(
+                posterior=result.posterior,
                 data=self.data,
-                model_kwargs=lnz_model_kwargs,
+                model_kwargs=kwargs,
                 outdir=self.config.outdir,
                 extra_kwargs=self.config.extra_kwargs,
                 verbose=self.config.verbose,
             )
         except Exception as exc:
             logger.warning(f"Could not compute lnZ: {exc}", exc_info=True)
-            idata.attrs.update(
+            result.metadata.update(
                 {
                     "lnz": float("nan"),
                     "lnz_err": float("nan"),
@@ -78,45 +68,25 @@ class InferencePipeline:
                     "lnz_method": "morphZ",
                 }
             )
-            return idata
+            return result
 
-        idata.attrs.update(
+        result.metadata.update(
             {
-                "lnz": float(result.lnz),
-                "lnz_err": float(result.lnz_err),
-                "lnz_valid": bool(result.is_valid),
-                "lnz_n_estimations": int(result.n_estimations),
-                "lnz_nonconverged_count": int(result.nonconverged_count),
+                "lnz": float(evidence.lnz),
+                "lnz_err": float(evidence.lnz_err),
+                "lnz_valid": bool(evidence.is_valid),
+                "lnz_n_estimations": int(evidence.n_estimations),
+                "lnz_nonconverged_count": int(evidence.nonconverged_count),
                 "lnz_method": "morphZ",
             }
         )
-        for factor_index, factor_result in enumerate(result.factor_results):
-            idata.attrs[f"lnz_factor_{factor_index}"] = float(
-                factor_result.lnz
-            )
-            idata.attrs[f"lnz_err_factor_{factor_index}"] = float(
-                factor_result.lnz_err
-            )
-            idata.attrs[f"lnz_valid_factor_{factor_index}"] = bool(
-                factor_result.is_valid
-            )
-        return idata
-
-    def _attach_pointwise_log_likelihood(
-        self, idata: xr.DataTree
-    ) -> xr.DataTree:
-        """Attach per-frequency pointwise log-likelihood draws for PSIS-LOO."""
-        log_likelihood = compute_pointwise_lnl(
-            idata=idata,
-            data=self.data,
-            model_kwargs=self.full_model_kwargs,
-        )
-
-        idata["log_likelihood"] = xr.DataTree(dataset=log_likelihood)
-        return idata
+        for index, factor in enumerate(evidence.factor_results):
+            result.metadata[f"lnz_factor_{index}"] = float(factor.lnz)
+            result.metadata[f"lnz_err_factor_{index}"] = float(factor.lnz_err)
+            result.metadata[f"lnz_valid_factor_{index}"] = bool(factor.is_valid)
+        return result
 
     def run(self) -> PSDResult:
-        """Execute the pipeline and return a PSDResult."""
         rng = (
             jax.random.PRNGKey(self.config.rng_key)
             if isinstance(self.config.rng_key, int)
@@ -136,71 +106,62 @@ class InferencePipeline:
                     else self.config.vi_progress_bar
                 ),
             )
-            idata = _vi_result_to_idata(vi)
-            idata = pack_stationary_result(
-                idata,
-                self.data,
-                self.spline_model,
-                self.config,
-                self.config.eta,
-                vi,
+            values = vi.samples if vi.samples is not None else vi.init_values
+            posterior = _values_to_dataset(
+                values, values_are_draws=vi.samples is not None
             )
-            return PSDResult(vi=vi, idata=idata)
+            if posterior is None:
+                raise RuntimeError("VI produced no posterior values")
+            return PSDResult.from_stationary(
+                posterior=posterior,
+                sample_stats=None,
+                data=self.data,
+                spline_model=self.spline_model,
+                config=self.config,
+                vi=vi,
+                sampling_eta=self.config.eta,
+            )
 
         assert self.nuts_stage is not None
         logger.info(f"Spline model: {self.spline_model}")
-
         rng, key = jax.random.split(rng)
-        idata = self.nuts_stage.run(
+        mcmc = self.nuts_stage.run(
             self.full_model_kwargs,
             init_values=None,
             rng_key=key,
             verbose=self.config.verbose,
         )
-        idata = pack_stationary_result(
-            idata,
-            self.data,
-            self.spline_model,
-            self.config,
-            self.nuts_stage.eta,
-            None,
+        log_likelihood = compute_pointwise_lnl(
+            posterior=mcmc.posterior,
+            data=self.data,
+            model_kwargs=self.full_model_kwargs,
         )
-        idata = self._attach_pointwise_log_likelihood(idata)
-        idata = self._attach_lnz_metadata(idata, eta=self.nuts_stage.eta)
-        return PSDResult(vi=None, idata=idata)
+        result = PSDResult.from_stationary(
+            posterior=mcmc.posterior,
+            sample_stats=mcmc.sample_stats,
+            data=self.data,
+            spline_model=self.spline_model,
+            config=self.config,
+            vi=None,
+            log_likelihood=log_likelihood,
+            sampling_eta=self.nuts_stage.eta,
+        )
+        return self._attach_lnz_metadata(result, eta=self.nuts_stage.eta)
 
 
 def make_pipeline(
     data,
     config: PipelineConfig | None = None,
 ) -> InferencePipeline:
-    """Build an InferencePipeline from data and config.
-
-    Parameters
-    ----------
-    data:
-        Time-domain ``TimeSeries`` (including ``y.shape == (n,)``)
-        or pre-processed ``WishartData``.
-    config:
-        Pipeline configuration.  Defaults to :class:`PipelineConfig` with all
-        default values.
-
-    Returns
-    -------
-    InferencePipeline
-        Ready-to-run pipeline.  Call ``.run()`` to execute it.
-    """
+    """Build an InferencePipeline from time-domain or Wishart data."""
     if config is None:
         config = PipelineConfig()
 
     if not isinstance(data, WishartData):
         data = preprocess_to_freq_domain(data, config)
 
-    full_kwargs, spline_model = prepare_model(
-        data,
-        config,
-    )
-    if isinstance(data, WishartData) and config.outdir is not None:
+    full_kwargs, spline_model = prepare_model(data, config)
+    if config.outdir is not None:
         _save_preprocessing_plot(data, config, spline_model=spline_model)
 
     eta = float(config.eta)
@@ -231,7 +192,6 @@ def make_pipeline(
         if config.method == "nuts"
         else None
     )
-
     return InferencePipeline(
         full_model_kwargs=full_kwargs,
         data=data,
@@ -271,9 +231,7 @@ def fit(data, config=None, *, model=None, partition=None) -> PSDResult:
             )
         config = PowerSplineConfig() if config is None else config
         if not isinstance(config, PowerSplineConfig):
-            raise TypeError(
-                f"{type(data).__name__} requires PowerSplineConfig"
-            )
+            raise TypeError(f"{type(data).__name__} requires PowerSplineConfig")
         if isinstance(data, ScatteredPowerSpectrum):
             if partition is not None:
                 raise ValueError(
@@ -287,6 +245,7 @@ def fit(data, config=None, *, model=None, partition=None) -> PSDResult:
         raise ValueError(
             "explicit model requires PowerSpectrum or ScatteredPowerSpectrum"
         )
+
     pipeline = make_pipeline(data, config)
     result = pipeline.run()
     if pipeline.config.outdir is not None:

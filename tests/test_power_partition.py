@@ -151,12 +151,19 @@ def test_short_partition_fit_and_roundtrip(gapped, tmp_path):
         )
         assert result.psd.shape == (1, 2, 8, 8)
         assert np.isfinite(result.psd).all()
-        assert "power_partition" in result.idata.children
-        assert "native_time" not in result.idata["power_partition"].ds
-        assert "native_frequency" not in result.idata["power_partition"].ds
+        np.testing.assert_array_equal(
+            result.metadata["partition_time_starts"], partition.time_starts
+        )
+        np.testing.assert_array_equal(
+            result.metadata["partition_frequency_starts"],
+            partition.frequency_starts,
+        )
         path = tmp_path / "fit.nc"
         result.to_netcdf(path)
         restored = PSDResult.from_netcdf(path)
         np.testing.assert_allclose(restored.psd, result.psd)
         np.testing.assert_array_equal(restored.time, time)
         np.testing.assert_array_equal(restored.frequency, freq)
+        np.testing.assert_array_equal(
+            restored.metadata["partition_time_starts"], partition.time_starts
+        )

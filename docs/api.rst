@@ -94,17 +94,14 @@ Coarse Graining
 .. autofunction:: log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft
 
 
-ArviZ Helpers
--------------
+Result objects
+--------------
 
-.. autofunction:: log_psplines.arviz_utils.open_inference_data
+.. autoclass:: log_psplines.results.PSDResult
+   :members:
 
-.. autofunction:: log_psplines.arviz_utils.save_inference_data
 
-.. autofunction:: log_psplines.arviz_utils.get_psd_dataset
+Diagnostics
+-----------
 
-.. autofunction:: log_psplines.arviz_utils.get_multivar_posterior_psd_quantiles
-
-.. autofunction:: log_psplines.arviz_utils.get_multivar_vi_psd_quantiles
-
-.. autofunction:: log_psplines.arviz_utils.get_weights
+.. autofunction:: log_psplines.diagnostics.to_arviz

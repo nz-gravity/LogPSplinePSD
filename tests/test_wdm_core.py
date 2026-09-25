@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 
 from log_psplines import LogPSpline, SpectralMatrix, SplineBasis
-from log_psplines.arviz_utils.spline_storage import to_storage_payload
 from log_psplines.basis.penalty import eigen_prior_scale, whiten_penalty_pair
 from log_psplines.likelihoods.whittle import (
     power_whittle_log_likelihood,
@@ -59,8 +58,6 @@ def test_surface_likelihood_and_gradient_match_wdm(reference):
         model(jnp.zeros(weights.shape[::-1]))
     with pytest.raises(ValueError, match="shape"):
         LogPSpline(model.frequency, time=model.time, weights=jnp.zeros(5))
-    with pytest.raises(NotImplementedError, match="storage"):
-        to_storage_payload(model)
 
 
 def test_tensor_prior_matches_wdm_and_kronecker_precision(reference):

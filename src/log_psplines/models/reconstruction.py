@@ -1,4 +1,4 @@
-"""Memory-bounded posterior spectral matrix and coherence reconstruction."""
+"""Memory-bounded spectral matrix reconstruction utilities."""
 
 from collections.abc import Sequence
 

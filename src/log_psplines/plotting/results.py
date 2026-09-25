@@ -36,12 +36,10 @@ def plot_posterior_spectrum(
         )
         plt.close(fig)
         return
-    overlay_vi = (
-        result.vi is not None and "sample_stats" in result.idata.children
-    )
+    overlay_vi = result.vi_spectrum is not None
     plot_psd_matrix(
         PSDMatrixPlotSpec(
-            idata=result.idata,
+            idata=result,
             true_psd=true_psd,
             outdir=str(outdir),
             filename="posterior_spectrum.png",
@@ -67,12 +65,13 @@ def plot_result_diagnostics(result: "PSDResult", outdir: str | Path) -> None:
             guide_name=result.vi.guide_name,
             outfile=str(outdir / "vi_loss.png"),
         )
-    if "sample_stats" in result.idata.children and result.time is None:
+    if result.sample_stats is not None and result.time is None:
+        idata = result.to_arviz()
         azp.plot_trace_dist(
-            result.idata, compact=True, backend="matplotlib"
+            idata, compact=True, backend="matplotlib"
         ).savefig(outdir / "traces.png", dpi=150, bbox_inches="tight")
         plt.close("all")
-        plot_energy(result.idata).savefig(
+        plot_energy(idata).savefig(
             outdir / "energy.png", dpi=150, bbox_inches="tight"
         )
         plt.close("all")

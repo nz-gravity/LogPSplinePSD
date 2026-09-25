@@ -4,20 +4,19 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import xarray as xr
 
 from log_psplines import (
     LogPSpline,
+    PipelineConfig,
     PowerSpectrum,
     PowerSplineConfig,
+    PSDResult,
     SplineBasis,
 )
-from log_psplines.arviz_utils.from_arviz import get_psd_dataset
-from log_psplines.arviz_utils.to_arviz import pack_power_result
-from log_psplines.config import PipelineConfig
-from log_psplines.results import PSDResult
 
 
-def test_tv_result_has_the_same_public_spectral_accessor():
+def test_tv_result_has_native_spectral_accessor():
     frequency = np.linspace(0.1, 1, 5)
     time = np.linspace(0, 1, 4)
     spline = LogPSpline(
@@ -25,16 +24,22 @@ def test_tv_result_has_the_same_public_spectral_accessor():
         time=SplineBasis.from_grid(time, 0),
     )
     data = PowerSpectrum(np.ones((4, 5)), 1, frequency, time)
-    config = PowerSplineConfig(n_samples=2)
-    result = PSDResult(
-        pack_power_result(
-            data, spline, config, {"weights": np.zeros((1, 2, 4, 4))}, {}
-        )
+    posterior = xr.Dataset(
+        {
+            "weights": (
+                ("chain", "draw", "time_coefficient", "frequency_coefficient"),
+                np.zeros((1, 2, 4, 4)),
+            )
+        }
     )
-    # PSDResult is now the public/native result boundary. The legacy DataTree
-    # is retained only while the old packers are removed.
+    result = PSDResult.from_power(
+        posterior=posterior,
+        sample_stats=xr.Dataset(),
+        data=data,
+        spline=spline,
+        config=PowerSplineConfig(n_samples=2),
+    )
     assert result.posterior["weights"].shape == (1, 2, 4, 4)
-    assert result.sample_stats is not None
     assert result.spectrum.dims == (
         "chain",
         "draw",
@@ -43,40 +48,9 @@ def test_tv_result_has_the_same_public_spectral_accessor():
         "channel",
         "channel_aux",
     )
+    assert result.spectral_density.shape == (1, 2, 4, 5, 1, 1)
+    np.testing.assert_array_equal(result.coherence, 1)
     assert "posterior" in result.to_arviz().children
-
-    dataset = get_psd_dataset(result._tree)
-    assert dataset.spectral_density.dims == (
-        "chain",
-        "draw",
-        "channel",
-        "channel_aux",
-        "time",
-        "frequency",
-    )
-    np.testing.assert_array_equal(
-        dataset.spectral_density.transpose(
-            "chain", "draw", "time", "frequency", "channel", "channel_aux"
-        ),
-        result.spectral_density,
-    )
-    np.testing.assert_array_equal(dataset.coherence, 1)
-    from log_psplines.arviz_utils.from_arviz import (
-        get_multivar_posterior_psd_quantiles,
-        get_weights,
-    )
-
-    assert get_weights(result._tree).shape == (2, 4, 4)
-    quantiles = get_multivar_posterior_psd_quantiles(
-        result._tree, compute_coherence=False
-    )
-    assert quantiles["spectral_density"].shape == (3, 4, 5, 1, 1)
-    assert quantiles["coherence"] is None
-    np.testing.assert_array_equal(quantiles["time"], time)
-    # A broken selected result must not quietly fall through to another source.
-    del result._tree["posterior"]["weights"]
-    with pytest.raises(KeyError, match="weights"):
-        get_psd_dataset(result._tree)
 
 
 def test_public_api_has_a_single_canonical_entry_point():
@@ -133,6 +107,12 @@ def test_chain_method_reaches_numpyro(monkeypatch):
         def run(self, *args, **kwargs):
             pass
 
+        def get_samples(self, group_by_chain=True):
+            return {}
+
+        def get_extra_fields(self, group_by_chain=True):
+            return {}
+
     monkeypatch.setattr(nuts, "MCMC", CaptureMCMC)
     nuts.run_nuts(
         lambda: None,
@@ -144,50 +124,22 @@ def test_chain_method_reaches_numpyro(monkeypatch):
     assert captured["chain_method"] == "sequential"
 
 
-def test_basis_conventions_survive_storage():
-    import xarray as xr
-
-    from log_psplines.arviz_utils.spline_storage import (
-        from_storage_dataset,
-        to_storage_payload,
-    )
-
-    for basis in (
-        SplineBasis.from_grid(np.linspace(0, 1, 8), 2),
-        SplineBasis.from_knots(np.linspace(0, 1, 8), np.linspace(0, 1, 4)),
-        SplineBasis.from_knots(
-            np.linspace(0, 1, 8),
-            np.linspace(0, 1, 4),
-            normalization="trace",
-            ridge=0,
-        ),
-    ):
-        model = LogPSpline(basis)
-        payload, coords = to_storage_payload(model)
-        dataset = xr.Dataset(payload, coords=coords)
-        restored = from_storage_dataset(dataset, degree=3, diffMatrixOrder=2)
-        for name in (
-            "penalty_normalization",
-            "penalty_ridge",
-            "knot_convention",
-        ):
-            assert getattr(restored.frequency, name) == getattr(basis, name)
-        np.testing.assert_allclose(restored.basis, model.basis)
-        np.testing.assert_allclose(
-            restored.penalty_matrix, model.penalty_matrix
-        )
-
-
 def test_plot_failures_are_not_disguised(monkeypatch, tmp_path):
-    import xarray as xr
-
-    from log_psplines import PSDResult
     from log_psplines.plotting import results
+
+    result = PSDResult(
+        posterior=xr.Dataset({"x": (("chain", "draw"), np.zeros((1, 1)))}),
+        spectrum=xr.DataArray(
+            np.ones((1, 1, 2, 1, 1), dtype=complex),
+            dims=("chain", "draw", "frequency", "channel", "channel_aux"),
+            coords={"frequency": [1.0, 2.0], "channel": [0], "channel_aux": [0]},
+        ),
+    )
 
     def broken_plot(*args, **kwargs):
         raise RuntimeError("deliberate plotting error")
 
     monkeypatch.setattr(results, "plot_psd_matrix", broken_plot)
     with pytest.raises(RuntimeError, match="deliberate"):
-        results.plot_posterior_spectrum(PSDResult(xr.DataTree()), tmp_path)
+        results.plot_posterior_spectrum(result, tmp_path)
     assert not (tmp_path / "posterior_spectrum.png").exists()

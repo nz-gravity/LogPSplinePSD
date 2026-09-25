@@ -268,9 +268,8 @@ class FactorizedMultivarNUTSStage:
             stats = _suffix(result.sample_stats, channel_index)
             if stats is not None:
                 stats_parts.append(stats)
-            ll = _suffix(result.log_likelihood, channel_index)
-            if ll is not None:
-                log_likelihood_parts.append(ll)
+            if result.log_likelihood is not None:
+                log_likelihood_parts.append(result.log_likelihood)
 
         return MCMCResult(
             posterior=xr.merge(posterior_parts),

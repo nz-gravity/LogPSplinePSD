@@ -76,7 +76,7 @@ def test_tv_result_has_the_same_public_spectral_accessor():
     # A broken selected result must not quietly fall through to another source.
     del result._tree["posterior"]["weights"]
     with pytest.raises(KeyError, match="weights"):
-        get_psd_dataset(result.idata)
+        get_psd_dataset(result._tree)
 
 
 def test_public_api_has_a_single_canonical_entry_point():

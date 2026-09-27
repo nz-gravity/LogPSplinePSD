@@ -22,7 +22,6 @@ from log_psplines.inference.components import (
 )
 from log_psplines.inference.initialisation import (
     build_component,
-    fit_design_weights,
     prepare_components,
 )
 from log_psplines.models.reconstruction import (
@@ -264,7 +263,7 @@ def test_multivar_utils_interpolation_scaling_and_cholesky_errors() -> None:
         psd_to_cholesky_components(psd, cholesky_jitter=-1.0)
 
 
-def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> (
+def test_multivariate_model_registry_and_psd_reconstruction() -> (
     None
 ):
     model = _simple_multivar_model()
@@ -280,21 +279,7 @@ def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> 
     bases, penalties = model.get_all_bases_and_penalties()
     assert len(bases) == len(penalties) == 4
 
-    design_psd = np.zeros((model.N, model.p, model.p), dtype=np.complex128)
-    for idx in range(model.N):
-        design_psd[idx] = np.asarray(
-            [[2.0 + 0.1 * idx, 0.1 + 0.05j], [0.1 - 0.05j, 1.5 + 0.1 * idx]]
-        )
-    weights = fit_design_weights(model, design_psd)
-    assert set(weights) == {
-        "delta_0",
-        "delta_1",
-        "theta_re_1_0",
-        "theta_im_1_0",
-    }
-
     n_draws = 3
-    model.diagonal_models[0].n_basis
     log_delta_sq = np.zeros((n_draws, model.N, model.p))
     theta_re = np.zeros((n_draws, model.N, model.n_theta))
     theta_im = np.zeros_like(theta_re)
@@ -320,8 +305,6 @@ def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> 
         model.theta_pair_from_index(99)
     with pytest.raises(ValueError, match="Invalid theta pair"):
         model.theta_index(0, 1)
-    with pytest.raises(ValueError, match="design_psd"):
-        fit_design_weights(model, np.eye(2)[None])
     with pytest.raises(ValueError, match="j must be"):
         MultivarComponentKey("delta", -1)
     with pytest.raises(ValueError, match="delta components"):

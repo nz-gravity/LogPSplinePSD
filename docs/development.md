@@ -83,132 +83,42 @@ LOG_PSPLINES_RUNTIME_TYPECHECK=0 .venv/bin/python -m pytest tests/test_runtime_t
 
 # PSD architecture
 
-The public entry point is `fit(data, config) -> PSDResult`:
+`fit()` returns one `PSDResult` for either inference method. Its `posterior`
+and `spectrum` are the fitted draws and reconstructed spectral density.
+`result.vi` holds VI loss and guide diagnostics when `method="vi"`.
+`result.to_arviz()` provides an ArviZ view for sampling diagnostics.
 
-```python
-import numpy as np
-from log_psplines import TimeSeries, PipelineConfig, fit
+The stationary path is `TimeSeries` -> `WishartData` -> `prepare_model()` ->
+blocked channel NUTS or VI -> `reconstruct_stationary_spectrum()` ->
+`PSDResult`. `PipelineConfig` controls this path. The Cholesky channel
+models in `inference/model.py` share the Wishart likelihood, while
+`inference/initialisation.py` prepares scalar spline components.
+`PipelineConfig.analytical_psd` supplies an optional reference spectral
+matrix for density-based knot placement. It does not center the coefficient
+prior.
 
-series = TimeSeries(data=np.random.default_rng(7).normal(size=(256, 2)))
-result = fit(
-    series,
-    PipelineConfig(n_knots=6, vi_steps=200, n_warmup=100, n_samples=200),
-)
-frequency = result.frequency
-spectral_draws = result.spectral_density  # (chain, draw, F, C, C)
-auto_spectra = result.psd
-coherence = result.coherence
-result.to_netcdf("inference_data.nc")
-```
+The scalar time-varying path is transform -> `PowerData` -> `fit_power()` ->
+`PSDResult`, configured by `PowerSplineConfig` and an explicit `LogPSpline`.
+`PowerData` accepts two coordinate geometries:
 
-These short example chains illustrate the interface, not convergence.
+- Rectangular grid: `power (T, F)`, `time (T,)`, `frequency (F,)`.
+  WDM preprocessing is one possible producer. Model evaluation uses
+  `Bt @ W @ Bf.T`.
+- Paired ordinates: `power (P,)`, `time (P,)`, `frequency (P,)`.
+  A moving periodogram is one possible producer. Model evaluation uses a
+  paired contraction at each observed coordinate.
 
-## Code navigation
+`PowerData` always has time coordinates. Stationary fits use `WishartData`.
+A `PowerPartition` can pool rectangular powers for the likelihood while the
+result remains on the original grid. Both coordinate geometries share the
+power likelihood and tensor P-spline prior.
 
-`pipeline.py` runs preprocessing, model preparation, VI or blocked NUTS,
-reconstruction, and optional output saving through `fit()`.
+`SplineBasis` and `LogPSpline` construct the scalar model. `SpectralComponents`
+groups stationary Cholesky components; `SpectralMatrix` reconstructs positive
+definite matrices. `models/reconstruction.py` owns stationary reconstruction
+and chunked PSD quantiles. `results.py` stores labeled posterior, spectrum,
+sampler statistics and observed data. NetCDF saves these native values;
+`diagnostics/` builds per-channel ArviZ views when needed. `plotting/` renders
+spectra and diagnostics from `PSDResult`.
 
-- `basis/splines.py`: `SplineBasis`, B-spline construction and normalized
-  integrated-derivative penalties. No data preparation, plotting or NumPyro.
-- `models/spectrum.py`: `LogPSpline(frequency, time=None)` and scalar evaluation.
-- `models/matrix.py`: `SpectralMatrix(C)`, with modified-Cholesky construction
-  `S = inv(T) D inv(T)^H`, `T[j,l] = -theta[j,l]`, `D = diag(exp(log_variance))`.
-- `likelihoods/`: pure JAX Whittle and channel-factor Wishart likelihoods.
-  The latter sums to the full matrix likelihood and reduces to the former
-  for one channel. Both omit data-only constants.
-- `data/`: `TimeSeries.data` always has shape `(N, C)`. `WishartData` retains
-  replicate counts, duration, window bandwidth and scaling metadata.
-- `preprocessing/`: FFT/Wishart construction, masking, coarse
-  graining and knot selection. `compute_fft`, `compute_wishart` and
-  `empirical_spectrum` are functions in `preprocessing/periodogram.py`.
-- `inference/components.py`: one collection of scalar models for diagonal,
-  real off-diagonal and imaginary off-diagonal components. The duplicate
-  component registry has been removed. Observation-driven preparation lives
-  in `inference.initialisation.prepare_components`; the collection has no
-  constructor that reads data or fits coefficients.
-- `inference/model.py`: NumPyro priors, scalar evaluation, likelihood calls
-  and channel model arguments. `vi.py` and `nuts.py` run independent fits for
-  each Cholesky channel; NUTS retains per-channel tuning. Evidence remains an
-  optional inference operation in `inference/evidence.py`.
-  Stationary and power fitting share `inference.nuts.run_nuts`.
-- `results.py`: `PSDResult`, native storage, posterior reconstruction,
-  quantiles and diagnostics interoperability. `to_arviz()` is diagnostics-only.
-  Existing ArviZ variable names and coordinates are preserved. Result properties
-  reorder axes to put matrix dimensions last and restore physical units.
-
-`PSDResult.from_netcdf(path)` reloads posterior/model metadata and reconstructs
-spectral draws. It does not recreate live NumPyro optimizers or stage objects.
-`save(outdir)` writes data first, then summaries and diagnostic plots. Unexpected
-reporting errors propagate. Spectrum plots are named `posterior_spectrum.png`;
-there is no fallback that substitutes a trace plot. `to_netcdf(path)` only stores
-data. Figure creation lives in `plotting/results.py`, diagnostic table writing
-in `diagnostics/report.py`, with native result construction in `results.py`.
-
-## Time dependence: shared scalar models
-
-A stationary scalar component accepts weights `(Kf,)` and returns `(F,)`.
-A time basis accepts weights `(Kt, Kf)` and evaluates
-`Bt @ weights @ Bf.T`, returning `(T, F)`. This evaluator uses an optimized
-tensor contraction and does not require a dense Kronecker basis. There is no
-separate time-varying class.
-
-`SpectralMatrix` accepts scalar values with any leading dimensions. Inputs
-`(..., C)` and `(..., C*(C-1)//2)` produce `(..., C, C)`. This includes both
-`(F, C, C)` and a future `(T, F, C, C)` without changing matrix algebra.
-Posterior sample axes use the same rule. It does not define temporal priors.
-
-`fit(PowerData, PowerSplineConfig, model=LogPSpline(...))` now samples
-scalar time-frequency surfaces with the package's WDM tensor prior. It calls
-`inference/power.py` directly. The optional `preprocessing/wdm.py` adapter
-produces powers/counts; inference has no transform dependency.
-
-`PSDResult.time` contains the time grid for these fits. Coefficients and both
-bases are stored for reconstruction and NetCDF round trips. The old standalone
-scalar storage helper still rejects time bases; TV fit storage uses the common
-result's explicit `power_basis` group instead. Existing stationary plotting
-helpers remain stationary; `PSDResult.save()` renders a surface for TV fits.
-
-The historical stationary prior and VI/blocked-NUTS path are unchanged.
-Multivariate TV inference and TV VI remain future work. The
-[time-varying example](examples/timevarying-example.ipynb) demonstrates the WDM
-and moving-periodogram adapters.
-
-## Migration
-
-- `MultivariateTimeseries(y=...)` becomes `TimeSeries(data=...)`.
-- `MultivarFFT` becomes `WishartData`; FFT/statistic construction moves to
-  `preprocessing.periodogram` (TimeSeries convenience methods remain).
-- `LogPSplines` becomes `LogPSpline(SplineBasis.from_knots(...))`.
-  Initial weight fitting lives in `inference.initialisation`.
-- `MultivariateLogPSplines` is replaced by prepared `SpectralComponents`
-  for inference and the independent `SpectralMatrix` for matrix algebra.
-- Results store reconstructed spectra directly, and basis
-  plotting in `plotting.basis.plot_spline_basis`.
-- `PipelineConfig` is in `config.py`; `PipelineResult` becomes `PSDResult`.
-- Old `pipeline/`, `psplines/` and `datatypes/` modules are removed rather
-  than retained as aliases. The canonical public API is the single `fit()`
-  entry point.
-
-## Explicit contracts after the cleanup
-
-- `PSDResult.spectrum` handles both stationary and scalar TV fits.
-  Its labeled axes are `(chain, draw, [time,] frequency, channel, channel_aux)`.
-  `PSDResult.spectral_density` exposes the same values as a NumPy array.
-- `PipelineConfig.chain_method` reaches NumPyro. The unused `design_from_vi`
-  and `design_from_vi_tau` options have been removed. This does not remove the
-  separate low-level design-weight fitting function.
-- VI pointwise likelihoods are not currently computed. Their group is absent,
-  so LOO metrics stay unavailable instead of being computed from zero arrays.
-- `SplineBasis` records `penalty_normalization`, `penalty_ridge` and
-  `knot_convention`. Constructor keywords `normalization` and `ridge` expose
-  these choices. Historical defaults are unchanged: `from_knots` uses max
-  normalization, ridge 1e-6 and breakpoints; `from_grid` uses trace normalization,
-  no ridge and clamped knots. Storage records the choices and preserves exact
-  operators for clamped bases. Old stationary files retain historical defaults.
-- `SpectralComponents.from_multivar_fft(...)` becomes
-  `inference.initialisation.prepare_components(...)`.
-  `components.compute_design_weights(S)` becomes
-  `inference.initialisation.fit_design_weights(components, S)`.
-
-Moving-periodogram preprocessing and scattered-coordinate scalar inference are
-available. Multivariate TV inference remains future work.
+Multivariate time-varying inference is not yet implemented.

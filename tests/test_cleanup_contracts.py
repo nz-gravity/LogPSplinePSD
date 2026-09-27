@@ -125,13 +125,12 @@ def test_plot_failures_are_not_disguised(monkeypatch, tmp_path):
 def test_power_data_geometry_and_observed_storage():
     from log_psplines.results import observed_power_data
 
-    stationary = PowerData([1.0, 2.0], 1, [0.1, 0.2])
+    with pytest.raises(ValueError, match="time coordinates"):
+        PowerData([1.0, 2.0], 1, [0.1, 0.2])
     rectangular = PowerData(np.ones((2, 2)), 1, [0.1, 0.2], [0.0, 1.0])
     scattered = PowerData([1.0, 2.0], 1, [0.1, 0.2], [0.0, 1.0])
-    assert stationary.is_grid and not stationary.is_scattered
     assert rectangular.is_grid and not rectangular.is_scattered
     assert scattered.is_scattered and not scattered.is_grid
-    assert observed_power_data(stationary)["power"].dims == ("frequency",)
     assert observed_power_data(rectangular)["power"].dims == (
         "time",
         "frequency",

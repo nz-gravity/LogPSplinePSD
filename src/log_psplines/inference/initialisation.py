@@ -2,10 +2,8 @@
 
 from collections.abc import Mapping
 
-import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
 
 from log_psplines.basis.splines import SplineBasis
 from log_psplines.data import WishartData
@@ -24,7 +22,7 @@ _MULTIVAR_ALLOWED_KNOT_METHODS = ("uniform", "log", "density")
 _MULTIVAR_KNOT_FAMILY_KEYS = ("delta", "theta_re", "theta_im")
 
 
-def _least_squares_weight_initialiser(
+def init_weights(
     log_pdgrm: jnp.ndarray,
     log_psplines: "LogPSpline",
 ) -> jnp.ndarray:
@@ -43,65 +41,6 @@ def _least_squares_weight_initialiser(
     return jnp.linalg.solve(system, rhs)
 
 
-def init_weights(
-    log_pdgrm: jnp.ndarray,
-    log_psplines: "LogPSpline",
-    init_weights: jnp.ndarray | None = None,
-    num_steps: int = 5000,
-) -> jnp.ndarray:
-    """
-    Optimize spline weights by directly minimizing the MSE between
-    log periodogram and log model.
-
-    Parameters
-    ----------
-    log_pdgrm : jnp.ndarray
-        Log of the periodogram values
-    log_psplines : LogPSpline
-        The log P-splines model object
-    init_weights : jnp.ndarray, optional
-        Initial weights to refine. If None, starts from a stabilized least-
-        squares spline fit to the observed log spectrum before refinement.
-    num_steps : int, default=5000
-        Number of optimization steps used to refine the initial weights.
-
-    Returns
-    -------
-    jnp.ndarray
-        Optimized weights
-    """
-    if init_weights is None:
-        init_weights = _least_squares_weight_initialiser(
-            log_pdgrm, log_psplines
-        )
-
-    if num_steps <= 0:
-        return jnp.asarray(init_weights)
-
-    optimizer = optax.adam(learning_rate=1e-2)
-    opt_state = optimizer.init(init_weights)
-
-    @jax.jit
-    def compute_loss(weights: jnp.ndarray) -> jnp.ndarray:
-        """Compute MSE loss between log periodogram and log model"""
-        return jnp.mean((log_pdgrm - log_psplines(weights)) ** 2)
-
-    def step(i, state):
-        """Single optimization step"""
-        weights, opt_state = state
-        loss, grads = jax.value_and_grad(compute_loss)(weights)
-        updates, opt_state = optimizer.update(grads, opt_state)
-        weights = optax.apply_updates(weights, updates)
-        return (weights, opt_state)
-
-    # Run optimization loop
-    init_state = (init_weights, opt_state)
-    final_state = jax.lax.fori_loop(0, num_steps, step, init_state)
-    final_weights, _ = final_state
-
-    return final_weights
-
-
 def build_component(
     *,
     degree: int,
@@ -113,7 +52,6 @@ def build_component(
     weights: jnp.ndarray | None = None,
     grid_points: jnp.ndarray | None = None,
     log_target: jnp.ndarray | None = None,
-    init_num_steps: int = 5000,
 ) -> LogPSpline:
     """Prepare a scalar component, optionally fitting its initial weights."""
     frequency = SplineBasis.create(
@@ -130,9 +68,7 @@ def build_component(
         target = jnp.asarray(log_target)
         if target.ndim != 1 or target.shape[0] != n:
             raise ValueError("log_target must be 1-D with length n")
-        model.weights = init_weights(
-            target, model, init_weights=model.weights, num_steps=init_num_steps
-        )
+        model.weights = init_weights(target, model)
     return model
 
 
@@ -211,7 +147,6 @@ def _build_pspline_from_log_target(
         n=n_freq,
         grid_points=np.asarray(grid_points, dtype=np.float64),
         log_target=np.asarray(log_target, dtype=np.float64),
-        init_num_steps=5000,
     )
 
 
@@ -221,7 +156,7 @@ def prepare_components(
     degree: int = 3,
     diffMatrixOrder: int = 2,
     knot_kwargs: dict[str, object] | None = None,
-    analytical_psd: np.ndarray | None = None,
+    analytical_psd: np.ndarray | tuple[np.ndarray, np.ndarray] | None = None,
 ) -> "SpectralComponents":
     """
     Prepare stationary scalar components from Wishart observations.
@@ -248,7 +183,7 @@ def prepare_components(
         computed from the Cholesky parameterization of the channel-space
         Wishart matrix.
     analytical_psd : np.ndarray or tuple, optional
-        Known analytical PSD matrix (e.g. from a transfer function model).
+        Reference PSD matrix (for example, an analytical transfer function).
         Either an ``(N, p, p)`` array already on the FFT frequency grid,
         or a ``(freq_ana, S_ana)`` tuple that will be interpolated to the
         FFT grid automatically. When provided, the Cholesky components of
@@ -492,83 +427,3 @@ def prepare_components(
         offdiag_im_models=offdiag_im_models,
         component_scores=component_scores,
     )
-
-
-def fit_design_weights(
-    components: SpectralComponents,
-    design_psd: np.ndarray,
-) -> dict[str, jnp.ndarray]:
-    """Fit component weights to a design spectrum of shape (N, C, C).
-
-    Parameters
-    ----------
-    design_psd:
-        Complex design matrix on the
-        model's frequency grid (after any coarse-graining).
-
-    Returns
-    -------
-    dict
-        Keys ``'delta_{j}'``, ``'theta_re_{j}_{column}'``, and
-        ``'theta_im_{j}_{column}'`` mapping to fitted weight arrays.  The dict
-        covers every model component so each lookup in the sampler is
-        well-defined.
-    """
-    design_psd = np.asarray(design_psd)
-    if design_psd.shape != (components.N, components.p, components.p):
-        raise ValueError(
-            f"design_psd must have shape "
-            f"({components.N}, {components.p}, {components.p}), "
-            f"got {design_psd.shape}"
-        )
-
-    # Lower Cholesky: S = L L^H, L lower-triangular with real positive diagonal
-    L = np.linalg.cholesky(design_psd)  # (N, p, p)
-
-    design_weights: dict[str, jnp.ndarray] = {}
-
-    # Diagonal components: log δ_j(f)² = 2 log L_{jj}(f)
-    for j in range(components.p):
-        diag_model = components.diagonal_models[j]
-        log_delta_sq = 2.0 * np.log(np.abs(L[:, j, j]))  # (N,)
-        design_weights[f"delta_{j}"] = init_weights(
-            jnp.asarray(log_delta_sq), diag_model
-        )
-
-    # Off-diagonal components: theta = -T, with T = sqrt(D) @ inv(L).
-    # Unit lower-triangular T^{-1} = L / diag(L), so T = (T^{-1})^{-1}.
-    if components.n_theta > 0:
-        # Normalize each column of L to form unit triangular inv(T).
-        diag_L = np.abs(
-            L[..., np.arange(components.p), np.arange(components.p)]
-        )  # (N, p)
-        T_inv = (
-            L / diag_L[:, np.newaxis, :]
-        )  # (N, p, p), unit lower triangular
-
-        # Invert unit lower-triangular matrix at each frequency via scipy
-        import scipy.linalg  # local import to keep top-level imports light
-
-        T = np.stack(
-            [
-                scipy.linalg.solve_triangular(
-                    T_inv[f], np.eye(components.p), lower=True
-                )
-                for f in range(components.N)
-            ]
-        )  # (N, p, p)
-
-        for j in range(1, components.p):
-            for column in range(j):
-                # theta_{j,column} = -T_{j,column} (complex)
-                theta_jl = -T[:, j, column]  # (N,) complex
-                re_model = components.get_theta_model("re", j, column)
-                im_model = components.get_theta_model("im", j, column)
-                design_weights[f"theta_re_{j}_{column}"] = init_weights(
-                    jnp.asarray(theta_jl.real), re_model
-                )
-                design_weights[f"theta_im_{j}_{column}"] = init_weights(
-                    jnp.asarray(theta_jl.imag), im_model
-                )
-
-    return design_weights

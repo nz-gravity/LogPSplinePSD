@@ -119,7 +119,6 @@ def test_closed_form_weight_initialiser_returns_finite_p1_weights(mock_fft):
     ls_weights = init_weights(
         jnp.log(jnp.asarray(empirical)),
         diag_model,
-        num_steps=0,
     )
 
     assert ls_weights.shape == diag_model.weights.shape

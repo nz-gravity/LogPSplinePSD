@@ -36,9 +36,6 @@ def plot_posterior_spectrum(
         )
         plt.close(fig)
         return
-    overlay_vi = (
-        result.vi_spectrum is not None and result.sample_stats is not None
-    )
     plot_psd_matrix(
         PSDMatrixPlotSpec(
             result=result,
@@ -47,9 +44,6 @@ def plot_posterior_spectrum(
             filename="posterior_spectrum.png",
             save=True,
             close=True,
-            overlay_vi=overlay_vi,
-            label="NUTS 90% CI" if overlay_vi else None,
-            vi_label="VI 90% CI",
         )
     )
 
@@ -59,12 +53,8 @@ def plot_result_diagnostics(result: "PSDResult", outdir: str | Path) -> None:
     outdir = Path(outdir) / "diagnostics"
     outdir.mkdir(parents=True, exist_ok=True)
     if result.vi is not None and result.vi.losses is not None:
-        losses = {"losses": np.asarray(result.vi.losses)}
-        if result.vi.losses_per_block is not None:
-            losses["losses_per_block"] = result.vi.losses_per_block
         plot_vi_loss(
-            losses,
-            guide_name=result.vi.guide_name,
+            result.vi,
             outfile=str(outdir / "vi_loss.png"),
         )
     if result.sample_stats is not None and result.time is None:
@@ -73,7 +63,7 @@ def plot_result_diagnostics(result: "PSDResult", outdir: str | Path) -> None:
             diagnostics, compact=True, backend="matplotlib"
         ).savefig(outdir / "traces.png", dpi=150, bbox_inches="tight")
         plt.close("all")
-        plot_energy(diagnostics).savefig(
+        plot_energy(result).savefig(
             outdir / "energy.png", dpi=150, bbox_inches="tight"
         )
         plt.close("all")

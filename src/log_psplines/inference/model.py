@@ -53,8 +53,6 @@ def channel_model_kwargs(
         "duration": model_kwargs["duration"],
         "Nb": model_kwargs["Nb"],
         "Nh": model_kwargs["Nh"],
-        "design_weights": model_kwargs.get("design_weights"),
-        "tau": model_kwargs.get("tau"),
         "enbw": model_kwargs.get("enbw", 1.0),
         "eta": model_kwargs.get("eta", 1.0),
     }
@@ -70,8 +68,6 @@ def _sample_pspline_block(
     alpha_delta: float,
     beta_delta: float,
     factor_name: str | None = None,
-    w_design: jnp.ndarray | None = None,
-    tau: float | None = None,
 ) -> dict[str, Any]:
     """Draw hierarchical Gamma-Normal P-spline weights and record log priors."""
     log_delta_base = dist.Normal(0.0, 1.0)
@@ -102,11 +98,8 @@ def _sample_pspline_block(
     base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
     weights = numpyro.sample(weights_name, base_normal)
 
-    residual = weights if w_design is None else weights - w_design
-    wPw = jnp.dot(residual, jnp.dot(penalty_matrix, residual))
+    wPw = jnp.dot(weights, jnp.dot(penalty_matrix, weights))
     log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-    if tau is not None and w_design is not None:
-        log_prior_w += -0.5 * jnp.sum(residual**2) / tau**2
     base_log_prob = base_normal.log_prob(weights)
 
     if factor_name is None:
@@ -146,14 +139,11 @@ def _blocked_channel_model(
     duration: float,
     Nb: int,
     Nh: int,
-    design_weights: dict | None = None,
-    tau: float | None = None,
     enbw: float = 1.0,
     eta: float = 1.0,
 ) -> None:
     """NumPyro model for a single blocked multivariate Cholesky channel."""
     channel_label = f"{channel_index}"
-    _dw = design_weights or {}
 
     # --- Spline model for log(δ²_{jh}) ---
     # Sample P-spline weights and evaluate: log_delta_sq[h] = log(δ²_{jh})
@@ -168,8 +158,6 @@ def _blocked_channel_model(
         beta_phi=beta_phi,
         alpha_delta=alpha_delta,
         beta_delta=beta_delta,
-        w_design=_dw.get(f"delta_{channel_index}"),
-        tau=tau,
     )
     # log_delta_sq[h] = B_h @ w  →  log(δ²_{jh}), shape (n_coarse_bins,)
     log_delta_sq = build_spline(basis_delta, delta_block["weights"])
@@ -199,8 +187,6 @@ def _blocked_channel_model(
                 beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
-                w_design=_dw.get(f"theta_re_{channel_index}_{theta_idx}"),
-                tau=tau,
             )
             # Re(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
             theta_re_components.append(
@@ -219,8 +205,6 @@ def _blocked_channel_model(
                 beta_phi=beta_phi_theta,
                 alpha_delta=alpha_delta,
                 beta_delta=beta_delta,
-                w_design=_dw.get(f"theta_im_{channel_index}_{theta_idx}"),
-                tau=tau,
             )
             # Im(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
             theta_im_components.append(
@@ -329,7 +313,5 @@ def prepare_model(
         "Nb": int(data.Nb),
         "Nh": int(data.Nh),
         "enbw": float(getattr(data, "enbw", 1.0)),
-        "design_weights": None,
-        "tau": None,
     }
     return kwargs, spline

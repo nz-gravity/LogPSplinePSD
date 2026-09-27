@@ -170,32 +170,42 @@ def test_pipeline_preprocessing_check_wrappers(tmp_path) -> None:
     _save_preprocessing_plot(no_raw, config)
 
 
-def _factor_tree() -> xr.DataTree:
+def _diagnostic_result():
+    from log_psplines.inference.vi import VIResult
+    from log_psplines.results import PSDResult
+
     posterior = xr.Dataset(
         {
             "weights_delta_0": xr.DataArray(
-                np.ones((1, 4, 2)),
-                dims=("chain", "draw", "weights_dim"),
+                np.ones((1, 4, 2)), dims=("chain", "draw", "weights_dim")
             )
         }
     )
-    sample_stats = xr.Dataset(
+    stats = xr.Dataset(
         {
-            "diverging": xr.DataArray([[0, 1, 0, 1]], dims=("chain", "draw")),
-            "tree_depth": xr.DataArray([[2, 3, 5, 5]], dims=("chain", "draw")),
-            "step_size": xr.DataArray(
-                [[0.1, 0.2, 0.2, 0.3]], dims=("chain", "draw")
-            ),
+            "diverging_channel_0": (("chain", "draw"), [[0, 1, 0, 1]]),
+            "tree_depth_channel_0": (("chain", "draw"), [[2, 3, 5, 5]]),
+            "step_size_channel_0": (("chain", "draw"), [[0.1, 0.2, 0.2, 0.3]]),
         }
     )
-    tree = xr.DataTree(
-        children={
-            "posterior": xr.DataTree(dataset=posterior),
-            "sample_stats": xr.DataTree(dataset=sample_stats),
-        }
+    spectrum = xr.DataArray(
+        np.ones((1, 4, 4, 1, 1), dtype=complex),
+        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
+        coords={"frequency": np.linspace(0.1, 0.4, 4)},
     )
-    tree.attrs["max_tree_depth"] = 5
-    return tree
+    vi = VIResult(
+        posterior,
+        np.asarray([5.0, 4.0, 3.0]),
+        "diag",
+        [np.asarray([5.0, 4.0, 3.0])],
+    )
+    return PSDResult(
+        posterior,
+        spectrum,
+        sample_stats=stats,
+        metadata={"max_tree_depth": 5},
+        vi=vi,
+    )
 
 
 def test_summary_table_helpers_and_builders(monkeypatch) -> None:
@@ -210,10 +220,9 @@ def test_summary_table_helpers_and_builders(monkeypatch) -> None:
             }
         ),
     )
-
-    table = st.build_nuts_summary_table({"1": _factor_tree()})
-    row = table.iloc[0]
-    assert row["factor"] == "1"
+    result = _diagnostic_result()
+    row = st.build_nuts_summary_table(result).iloc[0]
+    assert row["factor"] == "0"
     assert row["divergences"] == 2
     assert row["max_treedepth_hits"] == 2
     assert row["step_size"] == pytest.approx(0.2)
@@ -222,36 +231,9 @@ def test_summary_table_helpers_and_builders(monkeypatch) -> None:
     assert row["ess_tail_min"] == pytest.approx(60.0)
     assert row["n_draws"] == 4
 
-    assert np.isnan(
-        st._summary_reduction(pd.DataFrame({"x": [np.nan]}), "x", "max")
-    )
-    with pytest.raises(ValueError, match="Unsupported reducer"):
-        st._summary_reduction(pd.DataFrame({"x": [1.0]}), "x", "mean")
-
-    mapping_table = st.build_vi_summary_table(
-        {
-            "losses_per_block": np.asarray([[5.0, 4.0, 3.0], [6.0, 5.5, 5.0]]),
-            "pareto_k_per_block": np.asarray([0.4, 0.9]),
-            "riae": 0.1,
-            "l2": 0.2,
-            "coverage": 0.3,
-        },
-        elbo_window=2,
-    )
-    assert list(mapping_table["factor"]) == ["0", "1"]
-    assert mapping_table.loc[0, "final_elbo"] == pytest.approx(3.0)
-    assert mapping_table.loc[
-        0, "elbo_improvement_last_window"
-    ] == pytest.approx(1.0)
-    assert mapping_table.loc[1, "pareto_k_max"] == pytest.approx(0.9)
-    assert bool(mapping_table.loc[1, "loo_warning"]) is True
-    assert mapping_table.loc[0, "riae"] == pytest.approx(0.1)
-
-    single = st.build_vi_summary_table(
-        {"losses": [3.0], "pareto_k": [np.nan]}, elbo_window=5
-    )
-    assert single.loc[0, "factor"] == "0"
-    assert np.isnan(single.loc[0, "elbo_improvement_last_window"])
-
-    with pytest.raises(TypeError, match="Expected"):
-        st._split_vi_inputs(object())
+    vi_row = st.build_vi_summary_table(result, elbo_window=2).iloc[0]
+    assert vi_row["factor"] == "0"
+    assert vi_row["final_elbo"] == pytest.approx(3.0)
+    assert vi_row["elbo_improvement_last_window"] == pytest.approx(1.0)
+    assert "pareto_k_max" not in vi_row
+    assert vi_row["n_draws"] == 4

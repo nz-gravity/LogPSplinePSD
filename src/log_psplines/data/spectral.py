@@ -255,8 +255,7 @@ class PowerData:
 
     Grid powers have shape (T, F), with increasing axis coordinates and
     ``power.shape=(T, F)``. Scattered powers have shape (P,), paired time and
-    frequency coordinates of shape (P,). A stationary
-    frequency grid has shape (F,) and no time coordinate. Values are component
+    frequency coordinates of shape (P,). Values are component
     variances, not automatically PSD per Hz.
     """
 
@@ -272,9 +271,11 @@ class PowerData:
         time = (
             None if self.time is None else np.asarray(self.time, dtype=float)
         )
+        if time is None:
+            raise ValueError("PowerData requires time coordinates")
         if power.ndim not in (1, 2) or power.size == 0:
             raise ValueError("power must be non-empty and 1-D or 2-D")
-        scattered = power.ndim == 1 and time is not None
+        scattered = power.ndim == 1
         if scattered:
             if time.shape != power.shape or frequency.shape != power.shape:
                 raise ValueError(
@@ -291,11 +292,7 @@ class PowerData:
                     raise ValueError(
                         "spectral grids must be finite and increasing"
                     )
-            expected = (
-                (len(frequency),)
-                if time is None
-                else (len(time), len(frequency))
-            )
+            expected = (len(time), len(frequency))
             if power.shape != expected:
                 raise ValueError(f"power must have shape {expected}")
         counts = np.broadcast_to(
@@ -326,9 +323,9 @@ class PowerData:
     @property
     def is_grid(self) -> bool:
         """Whether coordinates form independent grid axes."""
-        return self.time is None or self.power.ndim == 2
+        return self.power.ndim == 2
 
     @property
     def is_scattered(self) -> bool:
         """Whether powers use paired time-frequency coordinates."""
-        return self.time is not None and self.power.ndim == 1
+        return self.power.ndim == 1

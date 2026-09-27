@@ -109,7 +109,6 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
         )
         posterior = vi.posterior
         sample_stats = None
-        vi_posterior = posterior
         log_likelihood = None
     else:
         logger.info(f"Spline model: {spline_model}")
@@ -136,12 +135,6 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
         posterior = mcmc.posterior
         sample_stats = mcmc.sample_stats
         vi = None
-        vi_posterior = None
-    vi_spectrum = (
-        reconstruct_stationary_spectrum(vi_posterior, spline_model, data)
-        if vi_posterior is not None
-        else None
-    )
     result = PSDResult(
         posterior=posterior,
         sample_stats=sample_stats,
@@ -162,8 +155,6 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
             "compute_lnz": config.compute_lnz,
         },
         vi=vi,
-        vi_posterior=vi_posterior,
-        vi_spectrum=vi_spectrum,
         log_likelihood=log_likelihood,
         observed_data=observed_wishart_data(data),
     )

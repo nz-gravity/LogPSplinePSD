@@ -1,95 +1,44 @@
-"""Small NUTS plotting helpers built around ArviZ plots."""
+"""Energy diagnostics for blocked stationary NUTS channels."""
 
 from __future__ import annotations
 
 import io
+from typing import TYPE_CHECKING
 
 import arviz_plots as azp
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
-import xarray as xr
 
-from log_psplines.diagnostics._factors import factor_idatas
+from log_psplines.diagnostics.summary_tables import channel_idata
 
-
-def _has_per_channel_stats(idata: xr.DataTree) -> bool:
-    """Return True only if sample_stats has explicit per-channel fields."""
-    try:
-        ss = idata["sample_stats"].dataset
-        if ss is None:
-            return False
-        return any("_channel_" in str(name) for name in ss.data_vars)
-    except (KeyError, AttributeError):
-        return False
+if TYPE_CHECKING:
+    from log_psplines.results import PSDResult
 
 
-def plot_energy(posteriors: xr.DataTree | dict[str, xr.DataTree]):
-    """Energy diagnostic plot.
-
-    For a joint NUTS run (univariate or multivariate joint model): delegates
-    directly to azp.plot_energy on the full idata.
-
-    For blocked multivariate NUTS (per-channel sample_stats present): plots
-    per-factor energy diagnostics stacked vertically, one panel per channel.
-    """
-    # If caller already provides a pre-split dict, use it directly.
-    if isinstance(posteriors, dict):
-        factors = posteriors
-        use_per_channel = True
-    else:
-        use_per_channel = _has_per_channel_stats(posteriors)
-        if use_per_channel:
-            try:
-                factors = factor_idatas(posteriors)
-            except Exception:
-                use_per_channel = False
-
-    if not use_per_channel:
-        # Single joint NUTS trajectory — standard ArviZ plot.
-        dt = posteriors
-        try:
-            return azp.plot_energy(dt, backend="matplotlib")
-        except Exception:
-            if isinstance(dt, xr.DataTree) and "sample_stats" in dt.children:
-                return azp.plot_energy(
-                    dt["sample_stats"], backend="matplotlib"
-                )
-            raise
-
-    # Blocked multivariate: render each factor's plot as an image and stack.
+def plot_energy(result: PSDResult) -> plt.Figure:
+    """Plot one energy panel for each blocked Cholesky channel."""
+    if result.sample_stats is None:
+        raise ValueError("Energy diagnostics require sample_stats")
     images = []
-    for factor_name in sorted(factors):
-        factor_dt = factors[factor_name]
-        try:
-            pc = azp.plot_energy(factor_dt, backend="matplotlib")
-        except Exception:
-            if (
-                isinstance(factor_dt, xr.DataTree)
-                and "sample_stats" in factor_dt.children
-            ):
-                pc = azp.plot_energy(
-                    factor_dt["sample_stats"], backend="matplotlib"
-                )
-            else:
-                continue
-        fig = pc.viz["figure"].item()
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
-        buf.seek(0)
-        images.append((factor_name, mpimg.imread(buf)))
-        plt.close(fig)
+    for channel in range(int(result.spectrum.sizes["channel"])):
+        plot = azp.plot_energy(
+            channel_idata(result, channel), backend="matplotlib"
+        )
+        figure = plot.viz["figure"].item()
+        buffer = io.BytesIO()
+        figure.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
+        buffer.seek(0)
+        images.append(mpimg.imread(buffer))
+        plt.close(figure)
 
-    if not images:
-        # Fallback: joint plot on the original idata
-        return azp.plot_energy(posteriors, backend="matplotlib")
-
-    p = len(images)
-    combined_fig, axes = plt.subplots(p, 1, figsize=(12, 5 * p))
-    if p == 1:
+    combined, axes = plt.subplots(
+        len(images), 1, figsize=(12, 5 * len(images))
+    )
+    if len(images) == 1:
         axes = [axes]
-    for ax, (factor_name, img) in zip(axes, images, strict=False):
-        ax.imshow(img)
-        ax.axis("off")
-        ax.set_title(f"Channel {factor_name}", pad=6)
-    combined_fig.tight_layout()
-    return combined_fig
+    for channel, (axis, image) in enumerate(zip(axes, images, strict=True)):
+        axis.imshow(image)
+        axis.axis("off")
+        axis.set_title(f"Channel {channel}", pad=6)
+    combined.tight_layout()
+    return combined

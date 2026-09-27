@@ -95,7 +95,6 @@ def test_mcmc_multivar(outdir):
         atol=1e-8,
     ), "PSD should be Hermitian."
 
-    assert result.vi_posterior is None
     _check_stats_are_finite(outdir_str)
 
     ## Check that all expected output files are present

@@ -1,16 +1,15 @@
-"""Minimal per-factor diagnostics summary tables."""
+"""Per-channel diagnostics for native fitted results."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import arviz_stats as azs
 import numpy as np
 import pandas as pd
 import xarray as xr
+from arviz_base import from_dict
 
-from log_psplines.diagnostics._factors import factor_idatas, vi_factor_idatas
 from log_psplines.diagnostics._utils import (
     compute_ci_coverage_multivar,
     compute_matrix_l2,
@@ -18,35 +17,12 @@ from log_psplines.diagnostics._utils import (
     interior_frequency_slice,
 )
 
-
-def _require_dataset(tree, group: str):
-    node = tree[group]
-    dataset = getattr(node, "dataset", node)
-    if dataset is None:
-        raise KeyError(group)
-    return dataset
-
-
-def _is_arviz_loo_source(source: Any) -> bool:
-    return hasattr(source, "posterior") and hasattr(source, "log_likelihood")
-
-
-def _resolve_truth(
-    source: xr.DataTree | Mapping[str, Any], true_psd: Any = None
-) -> np.ndarray | None:
-    if true_psd is not None:
-        return np.asarray(true_psd)
-    if isinstance(source, xr.DataTree):
-        attrs = getattr(source, "attrs", {}) or {}
-        value = attrs.get("true_psd")
-        return None if value is None else np.asarray(value)
-    value = source.get("true_psd")
-    return None if value is None else np.asarray(value)
+if TYPE_CHECKING:
+    from log_psplines.results import PSDResult
 
 
 def _truth_metrics_from_result(
-    result,
-    true_psd: Any = None,
+    result: PSDResult, true_psd: Any = None
 ) -> dict[str, float]:
     truth = None if true_psd is None else np.asarray(true_psd)
     if truth is None:
@@ -58,9 +34,8 @@ def _truth_metrics_from_result(
     freqs_raw = result.frequency
     freq_idx = interior_frequency_slice(freqs_raw.size)
     freqs = freqs_raw[freq_idx]
-    spectral_density = np.asarray(result.spectral_density)
-    samples = spectral_density.reshape(-1, *spectral_density.shape[2:])
-    samples = samples[:, freq_idx]
+    samples = np.asarray(result.spectral_density)
+    samples = samples.reshape(-1, *samples.shape[2:])[:, freq_idx]
     q05, q50, q95 = np.percentile(samples.real, [5.0, 50.0, 95.0], axis=0)
     truth_arr = np.asarray(truth)
     if truth_arr.ndim == 1:
@@ -77,95 +52,97 @@ def _truth_metrics_from_result(
     }
 
 
-def _truth_metrics_from_mapping(source: Mapping[str, Any]) -> dict[str, float]:
-    metrics = {}
-    for src_key, out_key in (
-        ("riae", "riae"),
-        ("riae_matrix", "riae"),
-        ("l2", "l2"),
-        ("l2_matrix", "l2"),
-        ("coverage", "coverage"),
-        ("ci_coverage", "coverage"),
-    ):
-        value = source.get(src_key)
-        if value is None:
-            continue
-        metrics[out_key] = float(value)
-    return metrics
+def _channel_posterior(result: PSDResult, channel: int) -> xr.Dataset:
+    """Select the current blocked Cholesky latent variables for one channel."""
+    scalar_names = {
+        f"delta_{channel}",
+        f"phi_delta_{channel}",
+        f"weights_delta_{channel}",
+    }
+    theta_prefixes = tuple(
+        f"{prefix}_{channel}_"
+        for prefix in (
+            "delta_theta_re",
+            "phi_theta_re",
+            "weights_theta_re",
+            "delta_theta_im",
+            "phi_theta_im",
+            "weights_theta_im",
+        )
+    )
+    return result.posterior[
+        [
+            name
+            for name in result.posterior.data_vars
+            if name in scalar_names or name.startswith(theta_prefixes)
+        ]
+    ]
 
 
-def _shared_truth_metrics(
-    source: xr.DataTree | Mapping[str, Any] | Sequence[Any],
-    true_psd: Any = None,
-    *,
-    psd_source: str = "best",
-) -> dict[str, float]:
-    if hasattr(source, "spectrum") and hasattr(source, "metadata"):
-        return _truth_metrics_from_result(source, true_psd=true_psd)
-    if isinstance(source, Mapping):
-        return _truth_metrics_from_mapping(source)
-    return {}
+def channel_idata(result: PSDResult, channel: int) -> xr.DataTree:
+    """Build the ArviZ view for one blocked stationary NUTS channel."""
+    posterior = _channel_posterior(result, channel)
+    if not posterior.data_vars:
+        raise ValueError(f"No posterior variables for channel {channel}")
+    groups: dict[str, xr.Dataset] = {"posterior": posterior}
+    if result.sample_stats is not None:
+        suffix = f"_channel_{channel}"
+        stats = {
+            name.removesuffix(suffix): var
+            for name, var in result.sample_stats.data_vars.items()
+            if name.endswith(suffix)
+        }
+        if stats:
+            groups["sample_stats"] = xr.Dataset(stats)
+    if result.log_likelihood is not None:
+        name = f"log_likelihood_block_{channel}"
+        if name in result.log_likelihood:
+            groups["log_likelihood"] = xr.Dataset(
+                {"log_likelihood": result.log_likelihood[name]}
+            )
+    attrs = dict(result.metadata)
+    depths = attrs.get("max_tree_depth_by_channel")
+    if depths is not None:
+        attrs["max_tree_depth"] = int(depths[channel])
+    idata = from_dict(groups)
+    idata.attrs.update(attrs)
+    return idata
 
 
 def _sample_stats_array(idata: xr.DataTree, name: str) -> np.ndarray:
-    try:
-        sample_stats = _require_dataset(idata, "sample_stats")
-    except (KeyError, TypeError):
+    if "sample_stats" not in idata.children:
         return np.array([], dtype=float)
-    if name not in sample_stats:
+    dataset = idata["sample_stats"].dataset
+    if dataset is None or name not in dataset:
         return np.array([], dtype=float)
-    return np.asarray(sample_stats[name].values, dtype=float).reshape(-1)
+    return np.asarray(dataset[name].values, dtype=float).reshape(-1)
 
 
 def _tree_depth_hits(idata: xr.DataTree) -> int:
-    attrs = getattr(idata, "attrs", {}) or {}
-    max_tree_depth = attrs.get("max_tree_depth")
+    max_tree_depth = idata.attrs.get("max_tree_depth")
     if max_tree_depth is None:
         return 0
-
     max_tree_depth = int(max_tree_depth)
     tree_depth = _sample_stats_array(idata, "tree_depth")
     tree_depth = tree_depth[np.isfinite(tree_depth)]
     if tree_depth.size:
         return int(np.sum(tree_depth >= max_tree_depth))
-
     n_steps = _sample_stats_array(idata, "n_steps")
     n_steps = n_steps[np.isfinite(n_steps)]
-    if n_steps.size == 0:
-        return 0
     return int(np.sum(n_steps >= 2**max_tree_depth))
-
-
-def _step_size(idata: xr.DataTree) -> float:
-    step_size = _sample_stats_array(idata, "step_size")
-    step_size = step_size[np.isfinite(step_size)]
-    return float(np.median(step_size)) if step_size.size else np.nan
-
-
-def _n_draws(idata: xr.DataTree, *, group: str = "posterior") -> int:
-    try:
-        dataset = _require_dataset(idata, group)
-    except (KeyError, TypeError):
-        return 0
-    n_chains = int(dataset.sizes.get("chain", 0))
-    n_draws = int(dataset.sizes.get("draw", 0))
-    return n_chains * n_draws
 
 
 def _summary_reduction(
     summary: pd.DataFrame, column: str, reducer: str
 ) -> float:
-    """Safely reduce an ArviZ summary column to a finite scalar."""
     if column not in summary:
         return np.nan
-
     values = pd.to_numeric(summary[column], errors="coerce").to_numpy(
         dtype=float
     )
     finite = values[np.isfinite(values)]
-    if finite.size == 0:
+    if not finite.size:
         return np.nan
-
     if reducer == "max":
         return float(np.max(finite))
     if reducer == "min":
@@ -174,218 +151,73 @@ def _summary_reduction(
 
 
 def build_nuts_summary_table(
-    idata_or_factors: (
-        xr.DataTree | Mapping[str, xr.DataTree] | Sequence[xr.DataTree]
-    ),
-    *,
-    true_psd: Any = None,
+    result: PSDResult, *, true_psd: Any = None
 ) -> pd.DataFrame:
-    """Return one NUTS diagnostics row per factor."""
-
+    """Return one NUTS diagnostics row per blocked channel."""
+    if result.sample_stats is None:
+        raise ValueError("NUTS diagnostics require sample_stats")
     rows: list[dict[str, Any]] = []
-    shared_truth_metrics = _shared_truth_metrics(
-        idata_or_factors,
-        true_psd=true_psd,
-        psd_source="posterior",
+    truth = _truth_metrics_from_result(result, true_psd)
+    n_channels = (
+        1 if result.time is not None else int(result.spectrum.sizes["channel"])
     )
-    diagnostic_source = (
-        idata_or_factors.to_arviz()
-        if hasattr(idata_or_factors, "to_arviz")
-        else idata_or_factors
-    )
-
-    for factor, idata in factor_idatas(diagnostic_source).items():
+    for channel in range(n_channels):
+        # Scalar power fits have one unsuffixed NUTS trajectory. Stationary
+        # fits use one trajectory per blocked Cholesky channel.
+        idata = (
+            result.to_arviz()
+            if result.time is not None
+            else channel_idata(result, channel)
+        )
         summary = azs.summary(idata)
+        step_size = _sample_stats_array(idata, "step_size")
+        step_size = step_size[np.isfinite(step_size)]
         row = {
-            "factor": factor,
+            "factor": str(channel),
             "divergences": int(
-                np.sum(_sample_stats_array(idata, "diverging") > 0.0)
+                np.sum(_sample_stats_array(idata, "diverging") > 0)
             ),
             "max_treedepth_hits": _tree_depth_hits(idata),
-            "step_size": _step_size(idata),
+            "step_size": float(np.median(step_size))
+            if step_size.size
+            else np.nan,
             "rhat_max": _summary_reduction(summary, "r_hat", "max"),
             "ess_bulk_min": _summary_reduction(summary, "ess_bulk", "min"),
             "ess_tail_min": _summary_reduction(summary, "ess_tail", "min"),
-            "n_draws": _n_draws(idata),
+            "n_draws": int(result.posterior.sizes.get("chain", 0))
+            * int(result.posterior.sizes.get("draw", 0)),
             "riae": np.nan,
             "l2": np.nan,
             "coverage": np.nan,
         }
-        row.update(shared_truth_metrics)
+        row.update(truth)
         rows.append(row)
-
-    return pd.DataFrame(rows).sort_values("factor").reset_index(drop=True)
-
-
-def _extract_losses(source: xr.DataTree | Mapping[str, Any]) -> np.ndarray:
-    if isinstance(source, xr.DataTree):
-        try:
-            vi_sample_stats = _require_dataset(source, "vi_sample_stats")
-        except (KeyError, TypeError):
-            vi_sample_stats = None
-        if vi_sample_stats is None or "losses" not in vi_sample_stats:
-            return np.array([], dtype=float)
-        return np.asarray(
-            vi_sample_stats["losses"].values, dtype=float
-        ).reshape(-1)
-
-    losses = source.get("losses")
-    if losses is None:
-        return np.array([], dtype=float)
-    return np.asarray(losses, dtype=float).reshape(-1)
-
-
-def _extract_pareto_k_from_data(
-    source: Any,
-) -> tuple[np.ndarray, bool]:
-    if _is_arviz_loo_source(source):
-        try:
-            loo_result = azs.loo(source, pointwise=True)
-        except Exception:
-            return np.array([], dtype=float), False
-        pareto_k = np.asarray(loo_result.pareto_k.values, dtype=float).reshape(
-            -1
-        )
-        return pareto_k, bool(getattr(loo_result, "warning", False))
-
-    if "pareto_k" in source and source["pareto_k"] is not None:
-        pareto_k = np.asarray(source["pareto_k"], dtype=float).reshape(-1)
-        good_k = source.get("good_k", source.get("pareto_k_good_k", 0.7))
-        if good_k is None or not np.isfinite(float(good_k)):
-            good_k = 0.7
-        warning = bool(
-            source.get(
-                "warning",
-                source.get(
-                    "loo_warning",
-                    np.any(np.isfinite(pareto_k) & (pareto_k > float(good_k))),
-                ),
-            )
-        )
-        return pareto_k, warning
-
-    return np.array([], dtype=float), False
-
-
-def _split_vi_inputs(
-    vi_or_factors: (
-        xr.DataTree | Mapping[str, Any] | Sequence[Any] | Mapping[str, Any]
-    ),
-) -> dict[str, Any]:
-    if isinstance(vi_or_factors, xr.DataTree):
-        return vi_factor_idatas(vi_or_factors)
-
-    if isinstance(vi_or_factors, Sequence):
-        return {str(idx): value for idx, value in enumerate(vi_or_factors)}
-
-    if not isinstance(vi_or_factors, Mapping):
-        raise TypeError(
-            "Expected a DataTree, factor mapping, sequence, or diagnostics mapping."
-        )
-
-    if any(
-        isinstance(value, (xr.DataTree, Mapping))
-        or _is_arviz_loo_source(value)
-        for value in vi_or_factors.values()
-    ):
-        sample_value = next(iter(vi_or_factors.values()), None)
-        if isinstance(
-            sample_value, (xr.DataTree, Mapping)
-        ) or _is_arviz_loo_source(sample_value):
-            return {str(key): value for key, value in vi_or_factors.items()}
-
-    losses_per_block = vi_or_factors.get("losses_per_block")
-    pareto_k_per_block = vi_or_factors.get("pareto_k_per_block")
-    if losses_per_block is None and pareto_k_per_block is None:
-        return {"0": vi_or_factors}
-
-    block_count = 0
-    if losses_per_block is not None:
-        block_count = max(
-            block_count, int(np.asarray(losses_per_block).shape[0])
-        )
-    if pareto_k_per_block is not None:
-        block_count = max(
-            block_count,
-            int(np.asarray(pareto_k_per_block).reshape(-1).shape[0]),
-        )
-
-    split: dict[str, Mapping[str, Any]] = {}
-    shared_items = {
-        str(key): value
-        for key, value in vi_or_factors.items()
-        if key not in {"losses_per_block", "pareto_k_per_block"}
-    }
-    for idx in range(block_count):
-        item: dict[str, Any] = dict(shared_items)
-        if losses_per_block is not None:
-            item["losses"] = np.asarray(losses_per_block)[idx]
-        if pareto_k_per_block is not None:
-            item["pareto_k"] = np.asarray(pareto_k_per_block).reshape(-1)[
-                idx : idx + 1
-            ]
-        split[str(idx)] = item
-    return split
+    return pd.DataFrame(rows)
 
 
 def build_vi_summary_table(
-    vi_or_factors: (
-        xr.DataTree | Mapping[str, Any] | Sequence[Any] | Mapping[str, Any]
-    ),
-    *,
-    elbo_window: int = 50,
-    true_psd: Any = None,
+    result: PSDResult, *, elbo_window: int = 50, true_psd: Any = None
 ) -> pd.DataFrame:
-    """Return one VI diagnostics row per factor."""
-
+    """Return ELBO diagnostics from the fitted VI result."""
+    if result.vi is None:
+        raise ValueError("VI diagnostics require result.vi")
+    traces = result.vi.losses_per_block
+    if traces is None:
+        traces = [result.vi.losses]
+    truth = _truth_metrics_from_result(result, true_psd)
     rows: list[dict[str, Any]] = []
-    split_inputs = _split_vi_inputs(vi_or_factors)
-    shared_truth_metrics = _shared_truth_metrics(
-        vi_or_factors,
-        true_psd=true_psd,
-        psd_source="vi",
-    )
-
-    for factor, source in split_inputs.items():
-        losses = _extract_losses(source)
-        final_elbo = float(losses[-1]) if losses.size else np.nan
-        window = min(max(int(elbo_window), 1), int(losses.size))
-        if window > 1:
-            elbo_improvement = float(losses[-window] - losses[-1])
-        else:
-            elbo_improvement = np.nan
-
-        pareto_k, loo_warning = _extract_pareto_k_from_data(source)
-        pareto_k = pareto_k[np.isfinite(pareto_k)]
-
+    for index, trace in enumerate(traces):
+        losses = np.asarray(trace, dtype=float).reshape(-1)
+        window = min(max(int(elbo_window), 1), losses.size)
         row = {
-            "factor": factor,
-            "final_elbo": final_elbo,
-            "elbo_improvement_last_window": elbo_improvement,
-            "pareto_k_max": (
-                float(np.max(pareto_k)) if pareto_k.size else np.nan
+            "factor": str(index),
+            "final_elbo": float(losses[-1]) if losses.size else np.nan,
+            "elbo_improvement_last_window": (
+                float(losses[-window] - losses[-1]) if window > 1 else np.nan
             ),
-            "pareto_k_median": (
-                float(np.median(pareto_k)) if pareto_k.size else np.nan
-            ),
-            "loo_warning": bool(loo_warning),
-            "n_draws": (
-                _n_draws(source, group="vi_posterior")
-                if isinstance(source, xr.DataTree)
-                else (
-                    int(source.posterior.sizes.get("chain", 0))
-                    * int(source.posterior.sizes.get("draw", 0))
-                    if _is_arviz_loo_source(source)
-                    else 0
-                )
-            ),
+            "n_draws": int(result.posterior.sizes.get("chain", 0))
+            * int(result.posterior.sizes.get("draw", 0)),
         }
-        row.update(shared_truth_metrics)
-        row.update(
-            _truth_metrics_from_mapping(source)
-            if isinstance(source, Mapping)
-            else {}
-        )
+        row.update(truth)
         rows.append(row)
-
-    return pd.DataFrame(rows).sort_values("factor").reset_index(drop=True)
+    return pd.DataFrame(rows)

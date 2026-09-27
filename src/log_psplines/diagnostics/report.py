@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 
 from .summary_tables import (
-    _truth_metrics_from_result,
     build_nuts_summary_table,
     build_vi_summary_table,
 )
@@ -34,15 +33,9 @@ def save_summary_tables(
     summary_row = {}
 
     if result.vi is not None:
-        vi_input = {"losses": np.asarray(result.vi.losses)}
-        if result.vi.losses_per_block is not None:
-            vi_input["losses_per_block"] = result.vi.losses_per_block
-        table = build_vi_summary_table(vi_input)
-        truth = _truth_metrics_from_result(result, true_psd=true_psd)
-        for name, value in truth.items():
-            table[name] = value
+        table = build_vi_summary_table(result, true_psd=true_psd)
         table.to_csv(directory / "vi_summary.csv", index=False)
-        for column in ("pareto_k_max", "riae", "l2", "coverage", "final_elbo"):
+        for column in ("riae", "l2", "coverage", "final_elbo"):
             if column in table:
                 summary_row[f"vi_{column}"] = _median_numeric(table[column])
 

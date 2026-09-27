@@ -126,8 +126,7 @@ def test_pipeline_multivar_only_vi(multivar_data):
     assert "weights_delta_0" in result.vi.posterior
     assert "weights_delta_1" in result.vi.posterior
     assert result.vi.losses_per_block is not None
-    vi_posterior = result.vi_posterior
-    assert vi_posterior is not None
+    vi_posterior = result.posterior
     assert (
         vi_posterior["weights_delta_0"].sizes["draw"]
         == config.vi_posterior_draws
@@ -254,6 +253,12 @@ def test_pipeline_result_save(tmp_path, p1_data):
 
     assert (tmp_path / "inference_data.nc").exists()
     assert (tmp_path / "vi_losses.npy").exists()
+    stored = xr.load_dataset(tmp_path / "inference_data.nc", engine="h5netcdf")
+    assert "posterior__weights_delta_0" in stored
+    assert "spectral_density" in stored
+    assert not any(name.startswith("vi_") for name in stored.data_vars)
+    restored = PSDResult.from_netcdf(tmp_path / "inference_data.nc")
+    np.testing.assert_array_equal(restored.spectral_density, result.spectral_density)
 
 
 def test_pipeline_multivar_vi_save_records_truth_metrics(
@@ -272,54 +277,6 @@ def test_pipeline_multivar_vi_save_records_truth_metrics(
     for col in ("riae", "l2", "coverage"):
         values = pd.to_numeric(vi_summary[col], errors="coerce").to_numpy()
         assert np.all(np.isfinite(values))
-
-
-def test_posterior_predictive_save_overlays_vi_when_available(
-    tmp_path,
-    monkeypatch,
-):
-    captured = {}
-
-    def _fake_plot_psd_matrix(spec):
-        captured["spec"] = spec
-
-    monkeypatch.setattr(
-        "log_psplines.plotting.results.plot_psd_matrix",
-        _fake_plot_psd_matrix,
-    )
-    vi = VIResult(
-        posterior=xr.Dataset(
-            {"weights_delta_0": (("chain", "draw", "k"), np.zeros((1, 3, 2)))}
-        ),
-        losses=np.asarray([1.0]),
-        guide_name="diag",
-    )
-    posterior = xr.Dataset(
-        {"weights_delta_0": (("chain", "draw", "k"), np.zeros((1, 3, 2)))}
-    )
-    spectrum = xr.DataArray(
-        np.ones((1, 3, 4, 1, 1), dtype=complex),
-        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
-        coords={"frequency": np.arange(4), "channel": [0], "channel_aux": [0]},
-    )
-    result = PSDResult(
-        posterior=posterior,
-        spectrum=spectrum,
-        sample_stats=xr.Dataset(
-            {"diverging": (("chain", "draw"), np.zeros((1, 3)))}
-        ),
-        vi=vi,
-        vi_spectrum=spectrum,
-    )
-
-    from log_psplines.plotting.results import plot_posterior_spectrum
-
-    plot_posterior_spectrum(result, tmp_path)
-
-    spec = captured["spec"]
-    assert spec.overlay_vi is True
-    assert spec.label == "NUTS 90% CI"
-    assert spec.vi_label == "VI 90% CI"
 
 
 def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
@@ -361,5 +318,4 @@ def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
     plot_posterior_spectrum(result, tmp_path)
 
     spec = captured["spec"]
-    assert spec.overlay_vi is False
     assert spec.label is None

@@ -4,18 +4,13 @@ import pytest
 
 from log_psplines.config import PipelineConfig
 from log_psplines.data import TimeSeries, WishartData
+from log_psplines.inference.vi import VIResult
 from log_psplines.plotting.base import (
     PlotConfig,
     compute_confidence_intervals,
     setup_plot_style,
 )
-from log_psplines.plotting.vi import (
-    _compute_shift_value,
-    _min_loss,
-    _normalize_loss_components,
-    _normalize_vi_losses,
-    plot_vi_loss,
-)
+from log_psplines.plotting.vi import plot_vi_loss
 from log_psplines.preprocessing.spectral import (
     _unpack_true_psd,
     align_true_psd_to_freq,
@@ -91,31 +86,14 @@ def test_plotting_base_confidence_intervals() -> None:
 
 
 def test_vi_loss_plot(tmp_path) -> None:
-    assert _normalize_vi_losses([]) is None
-    assert set(
-        _normalize_vi_losses({"losses_per_block": [[3, 2], [4, 1]]})
-    ) == {
-        "Factor 0",
-        "Factor 1",
-    }
-    assert set(_normalize_vi_losses({"a": [3, 2], "b": []})) == {"a"}
-    assert set(_normalize_loss_components({"x": [1, 2], "empty": []})) == {"x"}
-    assert _min_loss({"a": np.asarray([])}) is None
-    assert _compute_shift_value(np.asarray([0.0])) == pytest.approx(-1.0)
-
-    fig = plot_vi_loss(
-        {"losses": [5.0, 4.0, 3.0]},
-        guide_name="guide",
-        loss_components={
-            "recon": np.asarray([4.5, 3.5, 2.5]),
-            "short": np.asarray([1.0]),
-        },
+    vi = VIResult(
+        posterior=None, losses=np.asarray([5.0, 4.0, 3.0]),
+        guide_name="diag", losses_per_block=None,
     )
+    fig = plot_vi_loss(vi)
     assert fig is not None
     fig.canvas.draw()
     plt.close(fig)
-
     out = tmp_path / "vi.png"
-    assert plot_vi_loss([3.0, 2.0, 1.0], outfile=str(out)) is None
+    assert plot_vi_loss(vi, outfile=str(out)) is None
     assert out.exists()
-    assert plot_vi_loss([]) is None

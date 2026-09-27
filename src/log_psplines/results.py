@@ -38,10 +38,11 @@ def observed_wishart_data(data: WishartData) -> xr.Dataset:
 def observed_power_data(data: PowerData) -> xr.Dataset:
     """Store grid or scattered powers with their native coordinates."""
     if data.is_grid:
-        dims = ("frequency",) if data.time is None else ("time", "frequency")
-        coords = {"frequency": np.asarray(data.frequency)}
-        if data.time is not None:
-            coords["time"] = np.asarray(data.time)
+        dims = ("time", "frequency")
+        coords = {
+            "frequency": np.asarray(data.frequency),
+            "time": np.asarray(data.time),
+        }
         return xr.Dataset(
             {
                 "power": (dims, np.asarray(data.power)),
@@ -86,8 +87,6 @@ class PSDResult:
     sample_stats: xr.Dataset | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     vi: VIResult | None = None
-    vi_posterior: xr.Dataset | None = None
-    vi_spectrum: xr.DataArray | None = None
     log_likelihood: xr.Dataset | None = None
     observed_data: xr.Dataset | None = None
 
@@ -149,7 +148,6 @@ class PSDResult:
         groups = (
             ("posterior", self.posterior),
             ("sample_stats", self.sample_stats),
-            ("vi_posterior", self.vi_posterior),
             ("log_likelihood", self.log_likelihood),
             ("observed", self.observed_data),
         )
@@ -165,8 +163,6 @@ class PSDResult:
                 stored_group = dataset.rename(rename)
             for name, var in stored_group.data_vars.items():
                 data_vars[f"{prefix}__{name}"] = var
-        if self.vi_spectrum is not None:
-            data_vars["vi_spectral_density"] = self.vi_spectrum
         attrs = {
             key: safe
             for key, value in self.metadata.items()
@@ -212,8 +208,6 @@ class PSDResult:
             sample_stats=group("sample_stats"),
             spectrum=stored["spectral_density"],
             metadata=dict(stored.attrs),
-            vi_posterior=group("vi_posterior"),
-            vi_spectrum=stored.get("vi_spectral_density"),
             log_likelihood=group("log_likelihood"),
             observed_data=group("observed"),
         )

@@ -44,10 +44,6 @@ class PSDMatrixPlotSpec:
     ax: np.ndarray | plt.Axes | None = None
     save: bool = True
     close: bool | None = None
-    overlay_vi: bool = False
-    vi_color: str = "tab:orange"
-    vi_label: str = "VI median"
-    vi_alpha: float = 0.2
     freq_range: tuple[float, float] | None = None
     excluded_bands: tuple[tuple[float, float], ...] = ()
     psd_scale: (
@@ -212,7 +208,6 @@ def _render_panel(
     spec: PSDMatrixPlotSpec,
     frequency: np.ndarray,
     posterior: np.ndarray,
-    vi: np.ndarray | None,
     empirical: EmpiricalPSD | None,
     truth: np.ndarray | None,
     scale: np.ndarray,
@@ -238,11 +233,7 @@ def _render_panel(
         frequency,
         curves,
         color=spec.model_color,
-        label=(
-            spec.label or ("Posterior median" if vi is not None else "Median")
-        )
-        if i == j == 0
-        else None,
+        label=(spec.label or "Median") if i == j == 0 else None,
     )
     if truth is not None:
         truth_values = _truth_curve(truth, kind, i, j)
@@ -255,19 +246,6 @@ def _render_panel(
             lw=1.6,
             label="Analytical" if i == j == 0 else None,
             zorder=6,
-        )
-    if vi is not None:
-        vi_curves = _spectral_quantiles(vi, kind, i, j)
-        if kind != "coherence":
-            vi_curves = vi_curves * scale
-        _plot_band(
-            ax,
-            frequency,
-            vi_curves,
-            color=spec.vi_color,
-            label=spec.vi_label if i == j == 0 else None,
-            alpha=spec.vi_alpha,
-            style="--",
         )
     if i == j == 0 and spec.knot_frequencies is not None:
         transform = blended_transform_factory(ax.transData, ax.transAxes)
@@ -317,16 +295,6 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec) -> tuple[plt.Figure, np.ndarray]:
     channels = posterior.shape[-1]
     if posterior.shape[-2] != channels:
         raise ValueError("spectrum matrix must be square")
-    vi = None
-    if spec.overlay_vi and result.vi_spectrum is not None:
-        if (
-            result.vi_spectrum.dims != expected
-            or result.vi_spectrum.shape[2:] != posterior.shape[2:]
-        ):
-            raise ValueError(
-                "VI spectrum must match posterior spectral dimensions"
-            )
-        vi = np.asarray(result.vi_spectrum.values)
     scale = _resolve_scale(spec, frequency)
     truth = None
     if spec.true_psd is not None:
@@ -375,7 +343,6 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec) -> tuple[plt.Figure, np.ndarray]:
                 spec,
                 frequency,
                 posterior,
-                vi,
                 empirical,
                 truth,
                 scale,

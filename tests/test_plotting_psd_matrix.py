@@ -11,7 +11,7 @@ from log_psplines.results import PSDResult
 
 
 def _result(
-    channels: int = 2, *, vi: bool = False, observed: bool = False
+    channels: int = 2, *, observed: bool = False
 ) -> PSDResult:
     frequency = np.linspace(0.1, 0.9, 7)
     draws = np.empty((1, 4, frequency.size, channels, channels), dtype=complex)
@@ -51,14 +51,13 @@ def _result(
     return PSDResult(
         posterior=xr.Dataset(),
         spectrum=spectrum,
-        vi_spectrum=spectrum * 1.05 if vi else None,
         observed_data=empirical,
     )
 
 
 @pytest.mark.parametrize("mode", ["coherence", "magnitude", "components"])
-def test_multivariate_modes_and_overlays(mode, tmp_path) -> None:
-    result = _result(vi=True, observed=True)
+def test_multivariate_modes_and_reference_curves(mode, tmp_path) -> None:
+    result = _result(observed=True)
     filename = f"{mode}.png"
     fig, axes = plot_psd_matrix(
         PSDMatrixPlotSpec(
@@ -66,7 +65,6 @@ def test_multivariate_modes_and_overlays(mode, tmp_path) -> None:
             show_coherence=mode == "coherence",
             show_csd_magnitude=mode == "magnitude",
             true_psd=result.spectrum.values[0, 0],
-            overlay_vi=True,
             knot_frequencies=np.array([0.2, 0.4]),
             excluded_bands=((0.3, 0.4),),
             channel_labels=["x", "y"],
@@ -77,7 +75,7 @@ def test_multivariate_modes_and_overlays(mode, tmp_path) -> None:
     )
     assert axes.shape == (2, 2)
     assert (tmp_path / filename).exists()
-    assert len(axes[0, 0].lines) >= 4  # posterior, empirical, truth, VI
+    assert len(axes[0, 0].lines) >= 3  # posterior, empirical, truth
     if mode == "components":
         # Upper imaginary panel follows the stored Hermitian orientation.
         np.testing.assert_allclose(axes[0, 1].lines[0].get_ydata(), 0.05)

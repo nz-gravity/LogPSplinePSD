@@ -146,7 +146,8 @@ class PipelineConfig:
     degree: int = 3
     diffMatrixOrder: int = 2
     knot_kwargs: dict[str, Any] = field(default_factory=dict)
-    analytical_psd: np.ndarray | None = None
+    # Optional reference spectrum for density-based knot placement only.
+    analytical_psd: np.ndarray | tuple[np.ndarray, np.ndarray] | None = None
     true_psd: TruePSDInput = None
     fmin: float | None = None
     fmax: float | None = None

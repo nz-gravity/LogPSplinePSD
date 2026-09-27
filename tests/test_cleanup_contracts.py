@@ -8,7 +8,6 @@ from log_psplines import (
     LogPSpline,
     PipelineConfig,
     PowerData,
-    PowerSplineConfig,
     PSDResult,
     SplineBasis,
 )
@@ -30,12 +29,14 @@ def test_tv_result_has_native_spectral_accessor():
             )
         }
     )
-    result = PSDResult.from_power(
+    from log_psplines.models.reconstruction import reconstruct_power_spectrum
+
+    result = PSDResult(
         posterior=posterior,
         sample_stats=xr.Dataset(),
-        data=data,
-        spline=spline,
-        config=PowerSplineConfig(n_samples=2),
+        spectrum=reconstruct_power_spectrum(
+            posterior, spline, time=data.time, frequency=data.frequency
+        ),
     )
     assert result.posterior["weights"].shape == (1, 2, 4, 4)
     assert result.spectrum.dims == (
@@ -104,7 +105,11 @@ def test_plot_failures_are_not_disguised(monkeypatch, tmp_path):
         spectrum=xr.DataArray(
             np.ones((1, 1, 2, 1, 1), dtype=complex),
             dims=("chain", "draw", "frequency", "channel", "channel_aux"),
-            coords={"frequency": [1.0, 2.0], "channel": [0], "channel_aux": [0]},
+            coords={
+                "frequency": [1.0, 2.0],
+                "channel": [0],
+                "channel_aux": [0],
+            },
         ),
     )
 
@@ -115,3 +120,20 @@ def test_plot_failures_are_not_disguised(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="deliberate"):
         results.plot_posterior_spectrum(result, tmp_path)
     assert not (tmp_path / "posterior_spectrum.png").exists()
+
+
+def test_power_data_geometry_and_observed_storage():
+    from log_psplines.results import observed_power_data
+
+    stationary = PowerData([1.0, 2.0], 1, [0.1, 0.2])
+    rectangular = PowerData(np.ones((2, 2)), 1, [0.1, 0.2], [0.0, 1.0])
+    scattered = PowerData([1.0, 2.0], 1, [0.1, 0.2], [0.0, 1.0])
+    assert stationary.is_grid and not stationary.is_scattered
+    assert rectangular.is_grid and not rectangular.is_scattered
+    assert scattered.is_scattered and not scattered.is_grid
+    assert observed_power_data(stationary)["power"].dims == ("frequency",)
+    assert observed_power_data(rectangular)["power"].dims == (
+        "time",
+        "frequency",
+    )
+    assert observed_power_data(scattered)["power"].dims == ("ordinate",)

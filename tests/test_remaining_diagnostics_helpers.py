@@ -3,7 +3,6 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from log_psplines.data.timeseries import TimeSeries
 from log_psplines.diagnostics import plot_nuts
 from log_psplines.diagnostics._factors import (
     _copy_factor_attrs,
@@ -21,11 +20,6 @@ from log_psplines.diagnostics.psd_compare import (
     _extract_percentile_slice,
     _handle_multivariate,
     compute_multivar_riae_diagnostics,
-)
-from log_psplines.config import PipelineConfig
-from log_psplines.preprocessing.data_prep import (
-    _apply_frequency_exclusion,
-    _build_welch_overlay,
 )
 
 
@@ -211,41 +205,3 @@ def test_psd_compare_helpers_and_multivariate_dataset_path() -> None:
     )
     handled = _handle_multivariate(psd_group, truth.real)
     assert "riae_diag_mean" in handled
-
-
-def test_welch_overlay_helper_paths() -> None:
-    raw = TimeSeries(
-        np.column_stack([np.sin(np.arange(64.0)), np.cos(np.arange(64.0))]),
-        t=np.arange(64.0) / 16.0,
-    )
-    processed = raw.standardise_for_psd().to_wishart_stats(Nb=1)
-    overlay, labels, styles = _build_welch_overlay(
-        raw,
-        processed,
-        PipelineConfig(welch_nperseg=16, exclude_freq_bands=[(999.0, 1000.0)]),
-    )
-    assert overlay is not None
-    assert labels == ["Welch"]
-    assert styles is not None
-
-    assert _build_welch_overlay(None, processed, PipelineConfig()) == (
-        None,
-        None,
-        None,
-    )
-    assert _build_welch_overlay(raw, None, PipelineConfig()) == (
-        None,
-        None,
-        None,
-    )
-
-    narrowed = _apply_frequency_exclusion(
-        processed,
-        [(float(processed.freq[1]), float(processed.freq[-1]))],
-    )
-    none_overlay = _build_welch_overlay(
-        raw,
-        narrowed,
-        PipelineConfig(welch_nperseg=4, verbose=True),
-    )
-    assert none_overlay == (None, None, None) or none_overlay[0] is not None

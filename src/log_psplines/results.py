@@ -8,150 +8,19 @@ xarray objects. Convert to ArviZ only when sampling diagnostics are required.
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import jax.numpy as jnp
 import numpy as np
 import xarray as xr
 
-from log_psplines.models.reconstruction import reconstruct_psd_matrix
-
 if TYPE_CHECKING:
-    from log_psplines.config import PipelineConfig, PowerSplineConfig
     from log_psplines.data.spectral import PowerData, WishartData
-    from log_psplines.inference.components import SpectralComponents
     from log_psplines.inference.vi import FactorizedVIResult
-    from log_psplines.models.spectrum import LogPSpline
 
 
-def _values_to_dataset(
-    values: dict[str, Any] | None,
-    *,
-    values_are_draws: bool = True,
-) -> xr.Dataset | None:
-    if not values:
-        return None
-    data_vars = {}
-    for name, value in values.items():
-        array = np.asarray(value)
-        if values_are_draws:
-            if array.ndim == 0:
-                raise ValueError(f"Samples for '{name}' require a draw axis")
-            array = array[None, ...]
-        else:
-            array = array[None, None, ...]
-        tail = tuple(f"{name}_dim_{i}" for i in range(array.ndim - 2))
-        data_vars[name] = xr.DataArray(
-            array, dims=("chain", "draw", *tail)
-        )
-    return xr.Dataset(data_vars)
-
-
-def _flatten(array: np.ndarray) -> np.ndarray:
-    arr = np.asarray(array)
-    return arr.reshape((-1,) + arr.shape[2:])
-
-
-def _batch_spline_eval(basis: np.ndarray, weights: np.ndarray) -> np.ndarray:
-    return np.einsum("fk,sk->sf", np.asarray(basis), np.asarray(weights))
-
-
-def _stationary_spectrum(
-    posterior: xr.Dataset,
-    spline_model: "SpectralComponents",
-    data: "WishartData",
-) -> xr.DataArray:
-    """Reconstruct stationary spectral matrices directly from posterior draws."""
-    n_chain = int(posterior.sizes["chain"])
-    n_draw = int(posterior.sizes["draw"])
-    n_sample = n_chain * n_draw
-
-    log_delta = []
-    for j in range(int(data.p)):
-        weights = _flatten(posterior[f"weights_delta_{j}"].values)
-        log_delta.append(
-            _batch_spline_eval(spline_model.diagonal_models[j].basis, weights)
-        )
-    log_delta_sq = np.stack(log_delta, axis=-1)
-
-    n_theta = int(spline_model.n_theta)
-    theta_re = np.zeros((n_sample, int(data.N), n_theta))
-    theta_im = np.zeros_like(theta_re)
-    for theta_idx, (j, l) in enumerate(spline_model.theta_pairs):
-        for part, target in (("re", theta_re), ("im", theta_im)):
-            name = f"weights_theta_{part}_{j}_{l}"
-            if name not in posterior:
-                continue
-            weights = _flatten(posterior[name].values)
-            model = spline_model.get_theta_model(part, j, l)
-            target[..., theta_idx] = _batch_spline_eval(model.basis, weights)
-
-    spectrum = reconstruct_psd_matrix(
-        jnp.asarray(log_delta_sq),
-        jnp.asarray(theta_re),
-        jnp.asarray(theta_im),
-        n_samples_max=n_sample,
-    ).reshape(n_chain, n_draw, int(data.N), int(data.p), int(data.p))
-
-    if data.channel_stds is not None:
-        scale = np.outer(data.channel_stds, data.channel_stds)
-        spectrum = spectrum * scale[None, None, None, :, :]
-
-    return xr.DataArray(
-        np.asarray(spectrum, dtype=np.complex128),
-        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
-        coords={
-            "chain": np.arange(n_chain),
-            "draw": np.arange(n_draw),
-            "frequency": np.asarray(data.freq, dtype=float),
-            "channel": np.arange(int(data.p)),
-            "channel_aux": np.arange(int(data.p)),
-        },
-        name="spectral_density",
-    )
-
-
-def _power_spectrum(
-    posterior: xr.Dataset,
-    spline: "LogPSpline",
-    *,
-    time: np.ndarray | None = None,
-    frequency: np.ndarray | None = None,
-) -> xr.DataArray:
-    """Reconstruct a scalar time-frequency spectrum from coefficient draws."""
-    if spline.time is None:
-        raise ValueError("Power results require a time basis")
-    log_psd = np.einsum(
-        "ti,cdij,fj->cdtf",
-        np.asarray(spline.time.basis),
-        np.asarray(posterior["weights"].values),
-        np.asarray(spline.basis),
-        optimize=True,
-    )
-    spectrum = np.exp(log_psd)[..., None, None]
-    return xr.DataArray(
-        spectrum.astype(np.complex128),
-        dims=("chain", "draw", "time", "frequency", "channel", "channel_aux"),
-        coords={
-            "chain": posterior.coords["chain"],
-            "draw": posterior.coords["draw"],
-            "time": np.asarray(
-                spline.time.grid if time is None else time, dtype=float
-            ),
-            "frequency": np.asarray(
-                spline.frequency.grid if frequency is None else frequency,
-                dtype=float,
-            ),
-            "channel": [0],
-            "channel_aux": [0],
-        },
-        name="spectral_density",
-    )
-
-
-def _observed_wishart(data: "WishartData") -> xr.Dataset:
+def observed_wishart_data(data: WishartData) -> xr.Dataset:
     variables = {}
     coords = {
         "frequency": np.asarray(data.freq, dtype=float),
@@ -166,21 +35,21 @@ def _observed_wishart(data: "WishartData") -> xr.Dataset:
     return xr.Dataset(variables, coords=coords)
 
 
-def _observed_power(data: "PowerData") -> xr.Dataset:
-    return xr.Dataset(
-        {
-            "power": (("time", "frequency"), np.asarray(data.power)),
-            "counts": (("time", "frequency"), np.asarray(data.counts)),
-        },
-        coords={
-            "time": np.asarray(data.time),
-            "frequency": np.asarray(data.frequency),
-        },
-        attrs={"units": data.units},
-    )
-
-
-def _observed_scattered(data) -> xr.Dataset:
+def observed_power_data(data: PowerData) -> xr.Dataset:
+    """Store grid or scattered powers with their native coordinates."""
+    if data.is_grid:
+        dims = ("frequency",) if data.time is None else ("time", "frequency")
+        coords = {"frequency": np.asarray(data.frequency)}
+        if data.time is not None:
+            coords["time"] = np.asarray(data.time)
+        return xr.Dataset(
+            {
+                "power": (dims, np.asarray(data.power)),
+                "counts": (dims, np.asarray(data.counts)),
+            },
+            coords=coords,
+            attrs={"units": data.units},
+        )
     return xr.Dataset(
         {
             "power": (("ordinate",), np.asarray(data.power)),
@@ -188,7 +57,7 @@ def _observed_scattered(data) -> xr.Dataset:
             "time": (("ordinate",), np.asarray(data.time)),
             "frequency": (("ordinate",), np.asarray(data.frequency)),
         },
-        coords={"ordinate": np.arange(np.asarray(data.power).size)},
+        coords={"ordinate": np.arange(data.power.size)},
         attrs={"units": data.units},
     )
 
@@ -216,104 +85,17 @@ class PSDResult:
     spectrum: xr.DataArray
     sample_stats: xr.Dataset | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    vi: "FactorizedVIResult | None" = None
+    vi: FactorizedVIResult | None = None
     vi_posterior: xr.Dataset | None = None
     vi_spectrum: xr.DataArray | None = None
     log_likelihood: xr.Dataset | None = None
     observed_data: xr.Dataset | None = None
 
-    @classmethod
-    def from_stationary(
-        cls,
-        *,
-        posterior: xr.Dataset,
-        sample_stats: xr.Dataset | None,
-        data: "WishartData",
-        spline_model: "SpectralComponents",
-        config: "PipelineConfig",
-        vi: "FactorizedVIResult | None" = None,
-        log_likelihood: xr.Dataset | None = None,
-        sampling_eta: float | None = None,
-    ) -> "PSDResult":
-        vi_posterior = None
-        vi_spectrum = None
-        if vi is not None:
-            values = vi.samples if vi.samples is not None else vi.init_values
-            vi_posterior = _values_to_dataset(
-                values, values_are_draws=vi.samples is not None
-            )
-            if vi_posterior is not None:
-                vi_spectrum = _stationary_spectrum(
-                    vi_posterior, spline_model, data
-                )
-
-        metadata = {
-            "data_type": "multivariate",
-            "scaling_factor": float(data.scaling_factor or 1.0),
-            "channel_stds": (
-                None
-                if data.channel_stds is None
-                else np.asarray(data.channel_stds)
-            ),
-            "max_tree_depth": int(config.max_tree_depth),
-            "eta": float(config.eta),
-            "sampling_eta": float(
-                config.eta if sampling_eta is None else sampling_eta
-            ),
-            "compute_lnz": bool(config.compute_lnz),
-        }
-        return cls(
-            posterior=posterior,
-            sample_stats=sample_stats,
-            spectrum=_stationary_spectrum(posterior, spline_model, data),
-            metadata=metadata,
-            vi=vi,
-            vi_posterior=vi_posterior,
-            vi_spectrum=vi_spectrum,
-            log_likelihood=log_likelihood,
-            observed_data=_observed_wishart(data),
-        )
-
-    @classmethod
-    def from_power(
-        cls,
-        *,
-        posterior: xr.Dataset,
-        sample_stats: xr.Dataset | None,
-        data: "PowerData",
-        spline: "LogPSpline",
-        config: "PowerSplineConfig",
-        log_likelihood: xr.Dataset | None = None,
-        native_data: "PowerData | None" = None,
-    ) -> "PSDResult":
-        output_data = data if native_data is None else native_data
-        return cls(
-            posterior=posterior,
-            sample_stats=sample_stats,
-            spectrum=_power_spectrum(
-                posterior,
-                spline,
-                time=output_data.time if output_data.is_grid else None,
-                frequency=(
-                    output_data.frequency if output_data.is_grid else None
-                ),
-            ),
-            metadata={
-                **asdict(config),
-                "data_type": "power",
-                "likelihood": "power_whittle",
-                "units": output_data.units,
-            },
-            log_likelihood=log_likelihood,
-            observed_data=(
-                _observed_power(data) if data.is_grid
-                else _observed_scattered(data)
-            ),
-        )
-
     @property
     def frequency(self) -> np.ndarray:
-        return np.asarray(self.spectrum.coords["frequency"].values, dtype=float)
+        return np.asarray(
+            self.spectrum.coords["frequency"].values, dtype=float
+        )
 
     @property
     def time(self) -> np.ndarray | None:
@@ -333,6 +115,7 @@ class PSDResult:
     @property
     def coherence(self) -> np.ndarray:
         from log_psplines.models.matrix import SpectralMatrix
+
         return SpectralMatrix.coherence(self.spectral_density)
 
     def quantiles(
@@ -356,6 +139,7 @@ class PSDResult:
     def to_arviz(self):
         """Return a minimal ArviZ view for sampling diagnostics."""
         from log_psplines.diagnostics.arviz import to_arviz
+
         return to_arviz(self)
 
     def _storage_dataset(self) -> xr.Dataset:
@@ -397,17 +181,19 @@ class PSDResult:
         )
 
     @classmethod
-    def from_netcdf(cls, path: str | Path) -> "PSDResult":
+    def from_netcdf(cls, path: str | Path) -> PSDResult:
         """Load a native result written by to_netcdf."""
         stored = xr.load_dataset(Path(path), engine="h5netcdf")
 
         def group(prefix: str) -> xr.Dataset | None:
             marker = f"{prefix}__"
-            names = [name for name in stored.data_vars if name.startswith(marker)]
+            names = [
+                name for name in stored.data_vars if name.startswith(marker)
+            ]
             if not names:
                 return None
             dataset = xr.Dataset(
-                {name[len(marker):]: stored[name] for name in names}
+                {name[len(marker) :]: stored[name] for name in names}
             )
             if prefix == "observed":
                 rename = {

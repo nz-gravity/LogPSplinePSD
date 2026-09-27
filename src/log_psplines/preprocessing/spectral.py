@@ -6,37 +6,114 @@ This module converts input data to the frequency-domain objects consumed by
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 
 from log_psplines._jaxtypes import Complex, Float
 from log_psplines._typecheck import runtime_typecheck
+from log_psplines.config import PipelineConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.data.spectral_utils import _interp_frequency_indexed_array
-from ..logger import logger
-from log_psplines.preprocessing.data_prep import (
-    _apply_frequency_exclusion,
-    _coarse_grain_processed_data,
-    _normalize_coarse_grain_config,
-    _normalize_excluded_frequency_bands,
-    _prepare_processed_data,
+from log_psplines.data.timeseries import TimeSeries
+from log_psplines.preprocessing.coarse_grain import (
+    CoarseGrainConfig,
+    apply_coarse_grain_multivar_fft,
+    compute_binning_structure,
 )
-from log_psplines.config import PipelineConfig
 
-FrequencyData = WishartData
+from ..logger import logger
 
 
-def preprocess_to_freq_domain(data, config: PipelineConfig) -> FrequencyData:
-    """Convert time-domain data to frequency-domain inference data."""
-    freq_data, _, _ = _prepare_processed_data(data, config)
+def preprocess_to_freq_domain(
+    data: TimeSeries, config: PipelineConfig
+) -> WishartData:
+    """Standardize, form Wishart data, bin, and exclude frequencies."""
+    if not isinstance(data, TimeSeries):
+        data = TimeSeries(data=np.asarray(data.data), t=np.asarray(data.t))
+    processed = data.standardise_for_psd().to_wishart_stats(
+        Nb=config.Nb,
+        fmin=config.fmin,
+        fmax=config.fmax,
+        window=config.wishart_window,
+        detrend=config.wishart_detrend,
+        wishart_floor_fraction=config.wishart_floor_fraction,
+    )
+    if config.verbose:
+        logger.info(
+            f"Standardized data: scale ~{processed.scaling_factor:.2e}"
+        )
 
-    cg_config = _normalize_coarse_grain_config(config.coarse_grain_config)
-    freq_data, _ = _coarse_grain_processed_data(freq_data, cg_config, None)
-    assert freq_data is not None, "Coarse graining removed all input data."
+    coarse_config = config.coarse_grain_config
+    if coarse_config is None:
+        coarse_config = CoarseGrainConfig()
+    elif isinstance(coarse_config, dict):
+        coarse_config = CoarseGrainConfig(**coarse_config)
+    if coarse_config.enabled:
+        spec = compute_binning_structure(
+            processed.freq, Nc=coarse_config.Nc, Nh=coarse_config.Nh
+        )
+        processed = apply_coarse_grain_multivar_fft(processed, spec)
+        kept_percent = 100.0 / float(spec.Nh)
+        logger.info(
+            f"Coarse-grained multivariate FFT: {spec} "
+            f"(kept {kept_percent:.1f}%, "
+            f"decimated {100.0 - kept_percent:.1f}%)."
+        )
 
-    excl_bands = _normalize_excluded_frequency_bands(config.exclude_freq_bands)
-    freq_data = _apply_frequency_exclusion(freq_data, excl_bands)
+    bands = _normalize_excluded_frequency_bands(config.exclude_freq_bands)
+    if bands:
+        mask = np.ones(processed.freq.shape, dtype=bool)
+        for low, high in bands:
+            mask &= ~((processed.freq >= low) & (processed.freq <= high))
+        n_excluded = int((~mask).sum())
+        if n_excluded:
+            if not np.any(mask):
+                raise ValueError(
+                    "Frequency masking removed all inference bins."
+                )
+            logger.info(
+                f"Null-band excision: removing {n_excluded} bins across "
+                f"{len(bands)} band(s). "
+                f"{int(np.count_nonzero(mask))} bins retained."
+            )
+            processed = processed.apply_mask(mask)
+    return processed
 
-    return freq_data
+
+def _normalize_excluded_frequency_bands(
+    bands: Sequence[tuple[float, float]] | None,
+) -> tuple[tuple[float, float], ...]:
+    """Return sorted, merged excluded frequency bands."""
+    if bands is None:
+        return ()
+
+    cleaned: list[tuple[float, float]] = []
+    for band in bands:
+        if len(band) != 2:
+            raise ValueError(
+                "Each excluded frequency band must be a length-2 tuple."
+            )
+        low = float(band[0])
+        high = float(band[1])
+        if not np.isfinite(low) or not np.isfinite(high):
+            raise ValueError("Excluded frequency bands must be finite.")
+        if high < low:
+            low, high = high, low
+        cleaned.append((low, high))
+
+    if not cleaned:
+        return ()
+
+    cleaned.sort(key=lambda item: item[0])
+    merged: list[tuple[float, float]] = [cleaned[0]]
+    for low, high in cleaned[1:]:
+        prev_low, prev_high = merged[-1]
+        if low <= prev_high:
+            merged[-1] = (prev_low, max(prev_high, high))
+        else:
+            merged.append((low, high))
+    return tuple(merged)
 
 
 def _unpack_true_psd(
@@ -75,7 +152,7 @@ def _interp_psd_array(
 
 
 def align_true_psd_to_freq(
-    true_psd, data: FrequencyData | None
+    true_psd, data: WishartData | None
 ) -> np.ndarray | None:
     """Align an optional true PSD to the frequency grid of processed data."""
     if true_psd is None:
@@ -106,7 +183,6 @@ def align_true_psd_to_freq(
 
 
 __all__ = [
-    "FrequencyData",
     "align_true_psd_to_freq",
     "preprocess_to_freq_domain",
 ]

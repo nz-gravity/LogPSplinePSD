@@ -8,7 +8,9 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
+import xarray as xr
 from numpyro.infer import SVI, Trace_ELBO
 from numpyro.infer.autoguide import (
     AutoBNAFNormal,
@@ -23,6 +25,28 @@ from log_psplines.inference.nuts import (
     _channel_model_kwargs,
     _init_values_for_channel,
 )
+
+
+def _values_to_dataset(
+    values: dict[str, Any] | None,
+    *,
+    values_are_draws: bool = True,
+) -> xr.Dataset | None:
+    if not values:
+        return None
+    data_vars = {}
+    for name, value in values.items():
+        array = np.asarray(value)
+        if values_are_draws:
+            if array.ndim == 0:
+                raise ValueError(f"Samples for '{name}' require a draw axis")
+            array = array[None, ...]
+        else:
+            array = array[None, None, ...]
+        tail = tuple(f"{name}_dim_{i}" for i in range(array.ndim - 2))
+        data_vars[name] = xr.DataArray(array, dims=("chain", "draw", *tail))
+    return xr.Dataset(data_vars)
+
 
 GuideSpecifier = Any  # Accept strings or callables provided by the caller.
 

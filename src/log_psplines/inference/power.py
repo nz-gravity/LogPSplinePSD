@@ -7,7 +7,7 @@ No WDM package is required for fitting already prepared powers.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import asdict, replace
 from typing import TYPE_CHECKING
 
 import jax
@@ -21,6 +21,7 @@ from log_psplines.config import PowerSplineConfig
 from log_psplines.data.spectral import PowerData
 from log_psplines.inference.nuts import run_nuts
 from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
+from log_psplines.models.reconstruction import reconstruct_power_spectrum
 from log_psplines.models.spectrum import LogPSpline
 
 if TYPE_CHECKING:
@@ -268,7 +269,10 @@ def prepare_power_model(
 
         def evaluate(coefficients):
             return jnp.einsum(
-                "pi,ij,pj->p", bt_eigen, coefficients, bf_eigen,
+                "pi,ij,pj->p",
+                bt_eigen,
+                coefficients,
+                bf_eigen,
                 optimize="optimal",
             )
 
@@ -276,7 +280,11 @@ def prepare_power_model(
         phi_time = _sample_precision("sigma_time", config)
         phi_freq = _sample_precision("sigma_freq", config)
         scale = eigen_prior_scale(
-            phi_time, phi_freq, lam_t, lam_f, null,
+            phi_time,
+            phi_freq,
+            lam_t,
+            lam_f,
+            null,
             null_precision=config.null_precision,
             ridge_eps=config.ridge_eps,
         )
@@ -290,8 +298,10 @@ def prepare_power_model(
         numpyro.factor("whittle", log_like)
 
     mean_power = np.divide(
-        data.power, data.counts,
-        out=np.zeros_like(data.power), where=data.counts > 0,
+        data.power,
+        data.counts,
+        out=np.zeros_like(data.power),
+        where=data.counts > 0,
     )
     if data.is_grid:
         if np.any(data.counts == 0):
@@ -318,9 +328,7 @@ def prepare_power_model(
     return model, whitened_init_values(pls, pair, config), pair
 
 
-def _run_power_nuts(
-    model: Callable, init: dict, config: PowerSplineConfig
-):
+def _run_power_nuts(model: Callable, init: dict, config: PowerSplineConfig):
     return run_nuts(
         model,
         rng_key=jax.random.PRNGKey(config.seed),
@@ -400,7 +408,7 @@ def fit_power(
 ) -> PSDResult:
     """Fit grid or scattered powers using the same likelihood and prior."""
     from log_psplines.preprocessing.power_partition import coarse_grain_power
-    from log_psplines.results import PSDResult
+    from log_psplines.results import PSDResult, observed_power_data
 
     if partition is not None and not data.is_grid:
         raise ValueError("partition requires rectangular PowerData")
@@ -438,14 +446,23 @@ def fit_power(
     model, init, pair = prepare_power_model(fit_data, fit_spline, config)
     result = _run_power_nuts(model, init, config)
     posterior = _collect_power_samples(result, pair, config)
-    fitted = PSDResult.from_power(
+    fitted = PSDResult(
         posterior=posterior,
         sample_stats=result.sample_stats,
-        data=fit_data,
-        spline=spline,
-        config=config,
+        spectrum=reconstruct_power_spectrum(
+            posterior,
+            spline,
+            time=data.time if data.is_grid else None,
+            frequency=data.frequency if data.is_grid else None,
+        ),
+        metadata={
+            **asdict(config),
+            "data_type": "power",
+            "likelihood": "power_whittle",
+            "units": data.units,
+        },
         log_likelihood=result.log_likelihood,
-        native_data=data,
+        observed_data=observed_power_data(fit_data),
     )
     if partition is not None:
         fitted.metadata["partition_time_starts"] = np.asarray(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import jax
+import numpy as np
 
 from log_psplines.config import PipelineConfig, PowerSplineConfig
 from log_psplines.data.spectral import (
@@ -16,13 +17,14 @@ from log_psplines.inference.evidence import (
 from log_psplines.inference.model import prepare_model
 from log_psplines.inference.nuts import run_factorized_nuts
 from log_psplines.inference.power import fit_power
-from log_psplines.inference.vi import run_factorized_vi
+from log_psplines.inference.vi import _values_to_dataset, run_factorized_vi
+from log_psplines.models.reconstruction import reconstruct_stationary_spectrum
 from log_psplines.preprocessing.checks import _save_preprocessing_plot
 from log_psplines.preprocessing.spectral import (
     align_true_psd_to_freq,
     preprocess_to_freq_domain,
 )
-from log_psplines.results import PSDResult, _values_to_dataset
+from log_psplines.results import PSDResult, observed_wishart_data
 
 from .logger import logger
 
@@ -111,15 +113,9 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
         )
         if posterior is None:
             raise RuntimeError("VI produced no posterior values")
-        result = PSDResult.from_stationary(
-            posterior=posterior,
-            sample_stats=None,
-            data=data,
-            spline_model=spline_model,
-            config=config,
-            vi=vi,
-            sampling_eta=config.eta,
-        )
+        sample_stats = None
+        vi_posterior = posterior
+        log_likelihood = None
     else:
         logger.info(f"Spline model: {spline_model}")
         mcmc = run_factorized_nuts(
@@ -142,15 +138,41 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
             data=data,
             model_kwargs=model_kwargs,
         )
-        result = PSDResult.from_stationary(
-            posterior=mcmc.posterior,
-            sample_stats=mcmc.sample_stats,
-            data=data,
-            spline_model=spline_model,
-            config=config,
-            log_likelihood=log_likelihood,
-            sampling_eta=float(config.eta),
-        )
+        posterior = mcmc.posterior
+        sample_stats = mcmc.sample_stats
+        vi = None
+        vi_posterior = None
+    vi_spectrum = (
+        reconstruct_stationary_spectrum(vi_posterior, spline_model, data)
+        if vi_posterior is not None
+        else None
+    )
+    result = PSDResult(
+        posterior=posterior,
+        sample_stats=sample_stats,
+        spectrum=reconstruct_stationary_spectrum(
+            posterior, spline_model, data
+        ),
+        metadata={
+            "data_type": "multivariate",
+            "scaling_factor": float(data.scaling_factor or 1.0),
+            "channel_stds": (
+                None
+                if data.channel_stds is None
+                else np.asarray(data.channel_stds)
+            ),
+            "max_tree_depth": int(config.max_tree_depth),
+            "eta": float(config.eta),
+            "sampling_eta": float(config.eta),
+            "compute_lnz": bool(config.compute_lnz),
+        },
+        vi=vi,
+        vi_posterior=vi_posterior,
+        vi_spectrum=vi_spectrum,
+        log_likelihood=log_likelihood,
+        observed_data=observed_wishart_data(data),
+    )
+    if config.method != "vi":
         _attach_lnz_metadata(
             result,
             data=data,

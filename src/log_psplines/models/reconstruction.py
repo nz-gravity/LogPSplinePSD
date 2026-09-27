@@ -1,11 +1,18 @@
 """Memory-bounded spectral matrix reconstruction utilities."""
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
 import numpy as np
+import xarray as xr
 
 from log_psplines.models.matrix import SpectralMatrix
+
+if TYPE_CHECKING:
+    from log_psplines.data.spectral import WishartData
+    from log_psplines.inference.components import SpectralComponents
+    from log_psplines.models.spectrum import LogPSpline
 
 
 def _psd_chunk_iterator(
@@ -191,3 +198,107 @@ def compute_psd_quantiles(
             coherence_percentiles[:, start:end] = coh_q
 
     return psd_percentiles, psd_imag_percentiles, coherence_percentiles
+
+
+def _flatten(array: np.ndarray) -> np.ndarray:
+    arr = np.asarray(array)
+    return arr.reshape((-1,) + arr.shape[2:])
+
+
+def _batch_spline_eval(basis: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    return np.einsum("fk,sk->sf", np.asarray(basis), np.asarray(weights))
+
+
+def reconstruct_stationary_spectrum(
+    posterior: xr.Dataset,
+    spline_model: "SpectralComponents",
+    data: "WishartData",
+) -> xr.DataArray:
+    """Reconstruct stationary spectral matrices from posterior draws."""
+    n_chain = int(posterior.sizes["chain"])
+    n_draw = int(posterior.sizes["draw"])
+    n_sample = n_chain * n_draw
+
+    log_delta = []
+    for j in range(int(data.p)):
+        weights = _flatten(posterior[f"weights_delta_{j}"].values)
+        log_delta.append(
+            _batch_spline_eval(spline_model.diagonal_models[j].basis, weights)
+        )
+    log_delta_sq = np.stack(log_delta, axis=-1)
+
+    n_theta = int(spline_model.n_theta)
+    theta_re = np.zeros((n_sample, int(data.N), n_theta))
+    theta_im = np.zeros_like(theta_re)
+    for theta_idx, (j, previous_channel) in enumerate(
+        spline_model.theta_pairs
+    ):
+        for part, target in (("re", theta_re), ("im", theta_im)):
+            name = f"weights_theta_{part}_{j}_{previous_channel}"
+            if name not in posterior:
+                continue
+            weights = _flatten(posterior[name].values)
+            model = spline_model.get_theta_model(part, j, previous_channel)
+            target[..., theta_idx] = _batch_spline_eval(model.basis, weights)
+
+    spectrum = reconstruct_psd_matrix(
+        jnp.asarray(log_delta_sq),
+        jnp.asarray(theta_re),
+        jnp.asarray(theta_im),
+        n_samples_max=n_sample,
+    ).reshape(n_chain, n_draw, int(data.N), int(data.p), int(data.p))
+
+    if data.channel_stds is not None:
+        scale = np.outer(data.channel_stds, data.channel_stds)
+        spectrum = spectrum * scale[None, None, None, :, :]
+
+    return xr.DataArray(
+        np.asarray(spectrum, dtype=np.complex128),
+        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
+        coords={
+            "chain": np.arange(n_chain),
+            "draw": np.arange(n_draw),
+            "frequency": np.asarray(data.freq, dtype=float),
+            "channel": np.arange(int(data.p)),
+            "channel_aux": np.arange(int(data.p)),
+        },
+        name="spectral_density",
+    )
+
+
+def reconstruct_power_spectrum(
+    posterior: xr.Dataset,
+    spline: "LogPSpline",
+    *,
+    time: np.ndarray | None = None,
+    frequency: np.ndarray | None = None,
+) -> xr.DataArray:
+    """Reconstruct a scalar time-frequency spectrum from coefficient draws."""
+    if spline.time is None:
+        raise ValueError("Power results require a time basis")
+    log_psd = np.einsum(
+        "ti,cdij,fj->cdtf",
+        np.asarray(spline.time.basis),
+        np.asarray(posterior["weights"].values),
+        np.asarray(spline.basis),
+        optimize=True,
+    )
+    spectrum = np.exp(log_psd)[..., None, None]
+    return xr.DataArray(
+        spectrum.astype(np.complex128),
+        dims=("chain", "draw", "time", "frequency", "channel", "channel_aux"),
+        coords={
+            "chain": posterior.coords["chain"],
+            "draw": posterior.coords["draw"],
+            "time": np.asarray(
+                spline.time.grid if time is None else time, dtype=float
+            ),
+            "frequency": np.asarray(
+                spline.frequency.grid if frequency is None else frequency,
+                dtype=float,
+            ),
+            "channel": [0],
+            "channel_aux": [0],
+        },
+        name="spectral_density",
+    )

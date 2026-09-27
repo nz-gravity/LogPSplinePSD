@@ -8,12 +8,11 @@ import pytest
 import xarray as xr
 
 from log_psplines import fit
-from log_psplines.results import _values_to_dataset
-from log_psplines.data import WishartData, TimeSeries
 from log_psplines.config import PipelineConfig
-from log_psplines.results import PSDResult
-from log_psplines.inference.vi import FactorizedVIResult
+from log_psplines.data import TimeSeries, WishartData
+from log_psplines.inference.vi import FactorizedVIResult, _values_to_dataset
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
+from log_psplines.results import PSDResult
 
 # ---------------------------------------------------------------------------
 # Fixtures

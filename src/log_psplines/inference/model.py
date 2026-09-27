@@ -216,66 +216,6 @@ def _blocked_channel_model(
     )
 
 
-def _joint_multivar_model(
-    u_re: jnp.ndarray,
-    u_im: jnp.ndarray,
-    n_channels: int,
-    bases_delta: list,
-    penalties_delta: list,
-    bases_theta_re: list,
-    penalties_theta_re: list,
-    bases_theta_im: list,
-    penalties_theta_im: list,
-    alpha_phi: float,
-    beta_phi: float,
-    alpha_phi_theta: float,
-    beta_phi_theta: float,
-    alpha_delta: float,
-    beta_delta: float,
-    duration: float,
-    Nb: int,
-    Nh: int,
-    enbw: float,
-    eta: float = 1.0,
-    design_weights=None,
-    tau=None,
-) -> None:
-    """Joint NumPyro model that calls _blocked_channel_model for every channel.
-
-    All channels are sampled in a single NumPyro model context, making it
-    usable for joint-density evaluation. Production
-    code uses factorized NUTS which runs independent
-    per-channel chains.
-    """
-    for j in range(n_channels):
-        _blocked_channel_model(
-            channel_index=j,
-            u_re_channel=u_re[:, j, :],
-            u_im_channel=u_im[:, j, :],
-            u_re_prev=u_re[:, :j, :],
-            u_im_prev=u_im[:, :j, :],
-            basis_delta=bases_delta[j],
-            penalty_delta=penalties_delta[j],
-            basis_theta_re_by_component=tuple(bases_theta_re[j]),
-            penalty_theta_re_by_component=tuple(penalties_theta_re[j]),
-            basis_theta_im_by_component=tuple(bases_theta_im[j]),
-            penalty_theta_im_by_component=tuple(penalties_theta_im[j]),
-            alpha_phi=alpha_phi,
-            beta_phi=beta_phi,
-            alpha_phi_theta=alpha_phi_theta,
-            beta_phi_theta=beta_phi_theta,
-            alpha_delta=alpha_delta,
-            beta_delta=beta_delta,
-            duration=duration,
-            Nb=Nb,
-            Nh=Nh,
-            design_weights=design_weights,
-            tau=tau,
-            enbw=enbw,
-            eta=eta,
-        )
-
-
 def prepare_model(
     data: WishartData,
     config: PipelineConfig,
@@ -306,9 +246,9 @@ def prepare_model(
     penalties_theta_im: list[list] = []
     for j in range(p):
         br, pr, bi, pi = [], [], [], []
-        for l in range(j):
-            m_re = spline.get_theta_model("re", j, l)
-            m_im = spline.get_theta_model("im", j, l)
+        for previous_channel in range(j):
+            m_re = spline.get_theta_model("re", j, previous_channel)
+            m_im = spline.get_theta_model("im", j, previous_channel)
             br.append(jnp.asarray(m_re.basis, dtype=jnp.float32))
             pr.append(jnp.asarray(m_re.penalty_matrix))
             bi.append(jnp.asarray(m_im.basis, dtype=jnp.float32))

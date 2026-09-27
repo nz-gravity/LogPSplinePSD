@@ -4,10 +4,13 @@ from pathlib import Path
 
 import numpy as np
 
-from log_psplines.data.spectral import WishartData
-from ..logger import logger
 from log_psplines.config import PipelineConfig
-from log_psplines.preprocessing.data_prep import _normalize_excluded_frequency_bands
+from log_psplines.data.spectral import WishartData
+from log_psplines.preprocessing.spectral import (
+    _normalize_excluded_frequency_bands,
+)
+
+from ..logger import logger
 
 
 def _run_preprocessing_checks(
@@ -61,7 +64,7 @@ def _run_preprocessing_checks(
                 if summaries is None:
                     msg = (
                         f"Eigenvalue separation {key}: "
-                        f"frac(>{warn_threshold:.2f})={frac*100:.1f}%"
+                        f"frac(>{warn_threshold:.2f})={frac * 100:.1f}%"
                     )
                 else:
                     msg = f"Eigenvalue separation {summaries[key]}"

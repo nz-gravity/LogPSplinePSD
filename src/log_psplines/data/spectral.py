@@ -168,19 +168,13 @@ class WishartData:
             enbw=self.enbw,
         )
 
-    def filter_frequency_mask(self, mask: np.ndarray) -> "WishartData":
-        """Alias for :meth:`apply_mask` for compatibility with newer callers."""
-        return self.apply_mask(mask)
-
     def cut(self, fmin: float, fmax: float) -> "WishartData":
         """Return a new WishartData within frequency range [fmin, fmax]."""
         if fmax < fmin:
             raise ValueError(
                 f"Invalid frequency bounds supplied: fmin={fmin}, fmax={fmax}."
             )
-        return self.filter_frequency_mask(
-            (self.freq >= fmin) & (self.freq <= fmax)
-        )
+        return self.apply_mask((self.freq >= fmin) & (self.freq <= fmax))
 
     def exclude_frequency_bands(
         self,
@@ -196,7 +190,7 @@ class WishartData:
             if high_f < low_f:
                 low_f, high_f = high_f, low_f
             mask &= ~((self.freq >= low_f) & (self.freq <= high_f))
-        return self.filter_frequency_mask(mask)
+        return self.apply_mask(mask)
 
     def __repr__(self):
         return f"WishartData(N={self.N}, p={self.p})"
@@ -260,8 +254,8 @@ class PowerData:
     """Summed component powers and counts on a grid or at paired points.
 
     Grid powers have shape (T, F), with increasing axis coordinates and
-    ``grid_shape=(T, F)``. Scattered powers have shape (P,), paired time and
-    frequency coordinates of shape (P,), and ``grid_shape=None``. A stationary
+    ``power.shape=(T, F)``. Scattered powers have shape (P,), paired time and
+    frequency coordinates of shape (P,). A stationary
     frequency grid has shape (F,) and no time coordinate. Values are component
     variances, not automatically PSD per Hz.
     """
@@ -271,7 +265,6 @@ class PowerData:
     frequency: np.ndarray
     time: np.ndarray | None = None
     units: str = "coefficient variance"
-    grid_shape: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
         power = np.asarray(self.power, dtype=float)
@@ -287,9 +280,6 @@ class PowerData:
                 raise ValueError(
                     "scattered power, time and frequency must share shape"
                 )
-            if self.grid_shape is not None:
-                raise ValueError("scattered power cannot have grid_shape")
-            grid_shape = None
         else:
             for grid in (frequency, time):
                 if grid is not None and (
@@ -308,12 +298,6 @@ class PowerData:
             )
             if power.shape != expected:
                 raise ValueError(f"power must have shape {expected}")
-            if (
-                self.grid_shape is not None
-                and tuple(self.grid_shape) != expected
-            ):
-                raise ValueError(f"grid_shape must be {expected}")
-            grid_shape = expected
         counts = np.broadcast_to(
             np.asarray(self.counts, dtype=float), power.shape
         ).copy()
@@ -332,12 +316,19 @@ class PowerData:
         if scattered and np.any(counts <= 0):
             raise ValueError("scattered counts must be strictly positive")
         for name, value in (
-            ("power", power), ("counts", counts), ("frequency", frequency),
-            ("time", time), ("grid_shape", grid_shape),
+            ("power", power),
+            ("counts", counts),
+            ("frequency", frequency),
+            ("time", time),
         ):
             object.__setattr__(self, name, value)
 
     @property
     def is_grid(self) -> bool:
         """Whether coordinates form independent grid axes."""
-        return self.grid_shape is not None
+        return self.time is None or self.power.ndim == 2
+
+    @property
+    def is_scattered(self) -> bool:
+        """Whether powers use paired time-frequency coordinates."""
+        return self.time is not None and self.power.ndim == 1

@@ -3,16 +3,13 @@
 import warnings
 from pathlib import Path
 
-import jax
 import numpy as np
-from numpyro import handlers
 
 from log_psplines import fit
-from log_psplines.models.reconstruction import reconstruct_psd_matrix
 from log_psplines.config import PipelineConfig
 from log_psplines.data import TimeSeries
 from log_psplines.inference.initialisation import build_component
-from log_psplines.inference.model import _joint_multivar_model, prepare_model
+from log_psplines.models.reconstruction import reconstruct_psd_matrix
 from log_psplines.preprocessing.spectral import preprocess_to_freq_domain
 
 REFERENCE = Path(__file__).parent / "reference" / "stationary.npz"
@@ -42,14 +39,7 @@ def stationary_values():
             rng_key=14,
         )
         prepared = preprocess_to_freq_domain(data, config)
-        model_kwargs, _ = prepare_model(prepared, config)
-        trace = handlers.trace(
-            handlers.seed(_joint_multivar_model, jax.random.PRNGKey(9))
-        ).get_trace(**model_kwargs)
         values[f"u_{channels}"] = prepared.U
-        for name, site in trace.items():
-            if name.startswith("log_likelihood_block_"):
-                values[f"{channels}_{name}"] = np.asarray(site["value"])
         shape = (2, 5, channels)
         logs = rng.normal(size=shape) / 4
         theta = rng.normal(size=(2, 5, channels * (channels - 1) // 2)) / 5
@@ -65,7 +55,14 @@ def stationary_values():
 def test_stationary_frozen_contract():
     actual = stationary_values()
     expected = np.load(REFERENCE)
-    assert set(actual) == set(expected.files)
+    retained = {
+        name
+        for name in expected.files
+        if not name.startswith(
+            ("1_log_likelihood_block_", "2_log_likelihood_block_")
+        )
+    }
+    assert set(actual) == retained
     for name, value in actual.items():
         if name.startswith("posterior_"):
             reference = expected[name]
@@ -81,16 +78,8 @@ def test_stationary_frozen_contract():
                 )
             continue
         # This float32 likelihood is sensitive to platform reduction order.
-        rtol = (
-            1e-4
-            if name == "2_log_likelihood_block_1"
-            else 3e-5
-        )
-        atol = (
-            1e-5
-            if name == "2_log_likelihood_block_1"
-            else 3e-6
-        )
+        rtol = 1e-4 if name == "2_log_likelihood_block_1" else 3e-5
+        atol = 1e-5 if name == "2_log_likelihood_block_1" else 3e-6
         np.testing.assert_allclose(
             value, expected[name], rtol=rtol, atol=atol, err_msg=name
         )

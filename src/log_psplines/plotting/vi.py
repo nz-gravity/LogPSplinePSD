@@ -8,11 +8,6 @@ from typing import Any, Optional, cast
 import matplotlib.pyplot as plt
 import numpy as np
 
-from log_psplines.plotting.base import setup_plot_style
-
-# Setup consistent styling for VI plots
-setup_plot_style()
-
 
 def _as_loss_array(values: Any) -> np.ndarray:
     """Convert a loss-like object into a flat float64 array."""

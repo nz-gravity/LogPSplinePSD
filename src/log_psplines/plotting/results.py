@@ -41,7 +41,7 @@ def plot_posterior_spectrum(
     )
     plot_psd_matrix(
         PSDMatrixPlotSpec(
-            idata=result,
+            result=result,
             true_psd=true_psd,
             outdir=str(outdir),
             filename="posterior_spectrum.png",
@@ -68,12 +68,12 @@ def plot_result_diagnostics(result: "PSDResult", outdir: str | Path) -> None:
             outfile=str(outdir / "vi_loss.png"),
         )
     if result.sample_stats is not None and result.time is None:
-        idata = result.to_arviz()
+        diagnostics = result.to_arviz()
         azp.plot_trace_dist(
-            idata, compact=True, backend="matplotlib"
+            diagnostics, compact=True, backend="matplotlib"
         ).savefig(outdir / "traces.png", dpi=150, bbox_inches="tight")
         plt.close("all")
-        plot_energy(idata).savefig(
+        plot_energy(diagnostics).savefig(
             outdir / "energy.png", dpi=150, bbox_inches="tight"
         )
         plt.close("all")

@@ -32,20 +32,18 @@ def _plot_p1_spline(
     model = np.exp(
         np.asarray(spline_model.diagonal_models[0](), dtype=np.float64)
     )
-    spec = PSDMatrixPlotSpec(
-        freq=freq,
-        ci_dict={
-            "psd": {(0, 0): (model, model, model)},
-            "coh": {},
-            "re": {},
-            "im": {},
-            "mag": {},
-        },
-        empirical_psd=fft.empirical_psd,
-        save=False,
-        close=False,
-        show_knots=False,
+    import xarray as xr
+    from log_psplines.results import PSDResult
+
+    result = PSDResult(
+        posterior=xr.Dataset(),
+        spectrum=xr.DataArray(
+            model[None, None, :, None, None].astype(complex),
+            dims=("chain", "draw", "frequency", "channel", "channel_aux"),
+            coords={"frequency": freq, "channel": [0], "channel_aux": [0]},
+        ),
     )
+    spec = PSDMatrixPlotSpec(result=result, save=False, close=False)
     return plot_psd_matrix(spec)
 
 

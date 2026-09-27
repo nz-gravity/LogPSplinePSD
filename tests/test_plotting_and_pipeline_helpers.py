@@ -1,21 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-import xarray as xr
 
-from log_psplines.data import WishartData, TimeSeries
 from log_psplines.config import PipelineConfig
-from log_psplines.preprocessing.spectral import (
-    _unpack_true_psd,
-    align_true_psd_to_freq,
-    preprocess_to_freq_domain,
-)
+from log_psplines.data import TimeSeries, WishartData
 from log_psplines.plotting.base import (
     PlotConfig,
-    _as_matrix_quantiles,
-    _quantiles_from_standard_psd_dataset,
     compute_confidence_intervals,
-    extract_plotting_data,
     setup_plot_style,
 )
 from log_psplines.plotting.vi import (
@@ -24,6 +15,11 @@ from log_psplines.plotting.vi import (
     _normalize_loss_components,
     _normalize_vi_losses,
     plot_vi_loss,
+)
+from log_psplines.preprocessing.spectral import (
+    _unpack_true_psd,
+    align_true_psd_to_freq,
+    preprocess_to_freq_domain,
 )
 
 
@@ -77,30 +73,7 @@ def test_pipeline_preprocessing_alignment() -> None:
     assert processed.N > 0
 
 
-def test_plotting_base_quantiles_and_confidence_intervals() -> None:
-    spectral_density = np.ones((2, 3, 2, 2, 4), dtype=np.complex128)
-    spectral_density[..., 0, 1, :] = 0.2 + 0.1j
-    spectral_density[..., 1, 0, :] = 0.2 - 0.1j
-    coherence = np.clip(np.abs(spectral_density) ** 2, 0.0, 1.0).real
-    ds = xr.Dataset(
-        {
-            "spectral_density": xr.DataArray(
-                spectral_density,
-                dims=("chain", "draw", "channel", "channel_aux", "frequency"),
-            ),
-            "coherence": xr.DataArray(
-                coherence,
-                dims=("chain", "draw", "channel", "channel_aux", "frequency"),
-            ),
-        },
-        coords={"frequency": np.linspace(0.1, 0.4, 4)},
-    )
-
-    quantiles = _quantiles_from_standard_psd_dataset(ds)
-    assert quantiles["spectral_density"].shape == (3, 4, 2, 2)
-    matrix = _as_matrix_quantiles(quantiles)
-    assert matrix["coherence"].shape == (3, 4, 2, 2)
-
+def test_plotting_base_confidence_intervals() -> None:
     lower, median, upper = compute_confidence_intervals(
         np.arange(12.0).reshape(3, 4)
     )
@@ -117,36 +90,7 @@ def test_plotting_base_quantiles_and_confidence_intervals() -> None:
     assert config.fontsize == 9
 
 
-def test_extract_plotting_data_and_vi_loss_plot(tmp_path) -> None:
-    from log_psplines.results import PSDResult
-
-    posterior = xr.Dataset(
-        {
-            "weights": (
-                ("chain", "draw", "coefficient"),
-                np.ones((1, 2, 3)),
-            )
-        }
-    )
-    spectrum = xr.DataArray(
-        np.ones((1, 2, 3, 1, 1), dtype=np.complex128),
-        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
-        coords={
-            "frequency": np.asarray([0.1, 0.2, 0.3]),
-            "channel": [0],
-            "channel_aux": [0],
-        },
-    )
-    result = PSDResult(
-        posterior=posterior,
-        spectrum=spectrum,
-        metadata={"true_psd": np.ones(3)},
-    )
-    data = extract_plotting_data(result)
-    assert data["weights"].shape == (2, 3)
-    assert "posterior_psd_matrix_quantiles" in data
-    assert data["frequencies"].shape == (3,)
-
+def test_vi_loss_plot(tmp_path) -> None:
     assert _normalize_vi_losses([]) is None
     assert set(
         _normalize_vi_losses({"losses_per_block": [[3, 2], [4, 1]]})

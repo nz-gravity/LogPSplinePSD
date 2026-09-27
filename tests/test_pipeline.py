@@ -166,11 +166,10 @@ def test_pipeline_multivar_vi_reconstructs_and_plots_coherence(multivar_data):
 
     fig, axes = plot_psd_matrix(
         PSDMatrixPlotSpec(
-            idata=result,
+            result=result,
             save=False,
             close=False,
             show_coherence=True,
-            show_knots=True,
             channel_labels=["x", "y"],
         )
     )

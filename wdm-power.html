@@ -425,19 +425,19 @@ have both power and count zero. The optional <code class="docutils literal notra
 native powers from a uniformly sampled single-channel <code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code>.
 If the target is the paper’s one-sided PSD per Hz, multiply every native
 coefficient square by <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">dt</span> <span class="pre">/</span> <span class="pre">N</span></code> (where <code class="docutils literal notranslate"><span class="pre">N</span></code> is the WDM frequency
-resolution parameter) before constructing <code class="docutils literal notranslate"><span class="pre">PowerSpectrum</span></code>, and label the
+resolution parameter) before constructing <code class="docutils literal notranslate"><span class="pre">PowerData</span></code>, and label the
 units accordingly. Apply that conversion once; the likelihood does not rescale
 input power.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">LogPSpline</span><span class="p">,</span> <span class="n">PowerSpectrum</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">,</span> <span class="n">SplineBasis</span><span class="p">,</span>
+    <span class="n">LogPSpline</span><span class="p">,</span> <span class="n">PowerData</span><span class="p">,</span> <span class="n">PowerSplineConfig</span><span class="p">,</span> <span class="n">SplineBasis</span><span class="p">,</span>
     <span class="n">fit</span><span class="p">,</span> <span class="n">mask_power</span><span class="p">,</span> <span class="n">select_power_partition</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="c1"># The caller has already prepared one channel and supplied a boolean</span>
 <span class="c1"># WDM-cell mask. The arrays have shapes (time, frequency).</span>
 <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"prepared_a.npz"</span><span class="p">)</span> <span class="k">as</span> <span class="n">arrays</span><span class="p">:</span>
-    <span class="n">native</span> <span class="o">=</span> <span class="n">PowerSpectrum</span><span class="p">(</span>
+    <span class="n">native</span> <span class="o">=</span> <span class="n">PowerData</span><span class="p">(</span>
         <span class="n">arrays</span><span class="p">[</span><span class="s2">"power"</span><span class="p">],</span> <span class="n">arrays</span><span class="p">[</span><span class="s2">"counts"</span><span class="p">],</span>
         <span class="n">arrays</span><span class="p">[</span><span class="s2">"frequency"</span><span class="p">],</span> <span class="n">arrays</span><span class="p">[</span><span class="s2">"time"</span><span class="p">],</span>
         <span class="n">units</span><span class="o">=</span><span class="s2">"WDM coefficient variance"</span><span class="p">,</span>

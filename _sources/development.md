@@ -91,10 +91,8 @@ These short example chains illustrate the interface, not convergence.
 
 ## Code navigation
 
-`pipeline.py` prepares stationary observations and scalar components, then runs
-coarse VI (when requested), full VI and blocked NUTS. `make_pipeline` remains
-available for inspecting the prepared calculation before calling `.run()`.
-It lives in the same file, rather than a separate factory module.
+`pipeline.py` runs preprocessing, model preparation, VI or blocked NUTS,
+reconstruction, and optional output saving through `fit()`.
 
 - `basis/splines.py`: `SplineBasis`, B-spline construction and normalized
   integrated-derivative penalties. No data preparation, plotting or NumPyro.
@@ -146,7 +144,7 @@ separate time-varying class.
 `(F, C, C)` and a future `(T, F, C, C)` without changing matrix algebra.
 Posterior sample axes use the same rule. It does not define temporal priors.
 
-`fit(PowerSpectrum, PowerSplineConfig, model=LogPSpline(...))` now samples
+`fit(PowerData, PowerSplineConfig, model=LogPSpline(...))` now samples
 scalar time-frequency surfaces with the package's WDM tensor prior. It calls
 `inference/power.py` directly. The optional `preprocessing/wdm.py` adapter
 produces powers/counts; inference has no transform dependency.
@@ -176,7 +174,7 @@ and moving-periodogram adapters.
 - `PipelineConfig` is in `config.py`; `PipelineResult` becomes `PSDResult`.
 - Old `pipeline/`, `psplines/` and `datatypes/` modules are removed rather
   than retained as aliases. The canonical public API is the single `fit()`
-  entry point, with `make_pipeline()` available for explicit orchestration.
+  entry point.
 
 ## Explicit contracts after the cleanup
 

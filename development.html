@@ -526,10 +526,8 @@ disable runtime enforcement with:</p>
 <p>These short example chains illustrate the interface, not convergence.</p>
 <section id="code-navigation">
 <h2>Code navigation<a class="headerlink" href="#code-navigation" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">pipeline.py</span></code> prepares stationary observations and scalar components, then runs
-coarse VI (when requested), full VI and blocked NUTS. <code class="docutils literal notranslate"><span class="pre">make_pipeline</span></code> remains
-available for inspecting the prepared calculation before calling <code class="docutils literal notranslate"><span class="pre">.run()</span></code>.
-It lives in the same file, rather than a separate factory module.</p>
+<p><code class="docutils literal notranslate"><span class="pre">pipeline.py</span></code> runs preprocessing, model preparation, VI or blocked NUTS,
+reconstruction, and optional output saving through <code class="docutils literal notranslate"><span class="pre">fit()</span></code>.</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">basis/splines.py</span></code>: <code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code>, B-spline construction and normalized
 integrated-derivative penalties. No data preparation, plotting or NumPyro.</p></li>
@@ -579,7 +577,7 @@ separate time-varying class.</p>
 <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C)</span></code> and <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C*(C-1)//2)</span></code> produce <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C,</span> <span class="pre">C)</span></code>. This includes both
 <code class="docutils literal notranslate"><span class="pre">(F,</span> <span class="pre">C,</span> <span class="pre">C)</span></code> and a future <code class="docutils literal notranslate"><span class="pre">(T,</span> <span class="pre">F,</span> <span class="pre">C,</span> <span class="pre">C)</span></code> without changing matrix algebra.
 Posterior sample axes use the same rule. It does not define temporal priors.</p>
-<p><code class="docutils literal notranslate"><span class="pre">fit(PowerSpectrum,</span> <span class="pre">PowerSplineConfig,</span> <span class="pre">model=LogPSpline(...))</span></code> now samples
+<p><code class="docutils literal notranslate"><span class="pre">fit(PowerData,</span> <span class="pre">PowerSplineConfig,</span> <span class="pre">model=LogPSpline(...))</span></code> now samples
 scalar time-frequency surfaces with the package’s WDM tensor prior. It calls
 <code class="docutils literal notranslate"><span class="pre">inference/power.py</span></code> directly. The optional <code class="docutils literal notranslate"><span class="pre">preprocessing/wdm.py</span></code> adapter
 produces powers/counts; inference has no transform dependency.</p>
@@ -608,7 +606,7 @@ plotting in <code class="docutils literal notranslate"><span class="pre">plottin
 <li><p><code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code> is in <code class="docutils literal notranslate"><span class="pre">config.py</span></code>; <code class="docutils literal notranslate"><span class="pre">PipelineResult</span></code> becomes <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>.</p></li>
 <li><p>Old <code class="docutils literal notranslate"><span class="pre">pipeline/</span></code>, <code class="docutils literal notranslate"><span class="pre">psplines/</span></code> and <code class="docutils literal notranslate"><span class="pre">datatypes/</span></code> modules are removed rather
 than retained as aliases. The canonical public API is the single <code class="docutils literal notranslate"><span class="pre">fit()</span></code>
-entry point, with <code class="docutils literal notranslate"><span class="pre">make_pipeline()</span></code> available for explicit orchestration.</p></li>
+entry point.</p></li>
 </ul>
 </section>
 <section id="explicit-contracts-after-the-cleanup">

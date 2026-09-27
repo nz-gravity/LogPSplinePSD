@@ -13,8 +13,6 @@ High-Level Pipeline
 .. autoclass:: log_psplines.results.PSDResult
    :members:
 
-.. autofunction:: log_psplines.pipeline.make_pipeline
-
 .. autoclass:: log_psplines.config.PipelineConfig
    :members:
    :undoc-members:
@@ -34,10 +32,7 @@ Data Containers
 .. autoclass:: log_psplines.data.EmpiricalPSD
    :members:
 
-.. autoclass:: log_psplines.data.PowerSpectrum
-   :members:
-
-.. autoclass:: log_psplines.data.ScatteredPowerSpectrum
+.. autoclass:: log_psplines.data.PowerData
    :members:
 
 Time-Varying Preprocessing

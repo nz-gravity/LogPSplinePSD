@@ -12,7 +12,7 @@ have both power and count zero. The optional ``wdm_periodogram`` helper creates
 native powers from a uniformly sampled single-channel ``TimeSeries``.
 If the target is the paper's one-sided PSD per Hz, multiply every native
 coefficient square by ``2 * dt / N`` (where ``N`` is the WDM frequency
-resolution parameter) before constructing ``PowerSpectrum``, and label the
+resolution parameter) before constructing ``PowerData``, and label the
 units accordingly. Apply that conversion once; the likelihood does not rescale
 input power.
 
@@ -20,14 +20,14 @@ input power.
 
    import numpy as np
    from log_psplines import (
-       LogPSpline, PowerSpectrum, PowerSplineConfig, SplineBasis,
+       LogPSpline, PowerData, PowerSplineConfig, SplineBasis,
        fit, mask_power, select_power_partition,
    )
 
    # The caller has already prepared one channel and supplied a boolean
    # WDM-cell mask. The arrays have shapes (time, frequency).
    with np.load("prepared_a.npz") as arrays:
-       native = PowerSpectrum(
+       native = PowerData(
            arrays["power"], arrays["counts"],
            arrays["frequency"], arrays["time"],
            units="WDM coefficient variance",

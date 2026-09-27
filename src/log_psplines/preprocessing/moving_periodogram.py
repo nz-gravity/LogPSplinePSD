@@ -70,9 +70,7 @@ def tang_moving_periodogram(
     freq_index = np.tile(np.arange(m), n_blocks)
 
     selected = windows[starts]
-    coeff = np.einsum(
-        "pn,pn->p", selected, phase.T[freq_index], optimize=True
-    )
+    coeff = np.einsum("pn,pn->p", selected, phase.T[freq_index], optimize=True)
     coeff /= np.sqrt(2.0 * np.pi * (2 * m + 1))
     centres = starts + m + 1
     return {

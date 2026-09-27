@@ -214,13 +214,11 @@ class LS2Data:
         omega = 2.0 * np.pi * freq_grid / self.fs
 
         psd = self.sigma**2 * (
-            1.0
-            + b[:, None] ** 2
-            + 2.0 * b[:, None] * np.cos(omega[None, :])
+            1.0 + b[:, None] ** 2 + 2.0 * b[:, None] * np.cos(omega[None, :])
         )
 
         return psd
-    
+
     def plot(
         self,
         *,

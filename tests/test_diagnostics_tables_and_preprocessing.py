@@ -1,9 +1,9 @@
-from log_psplines.inference.initialisation import build_component
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
+from log_psplines.config import PipelineConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.diagnostics import summary_tables as st
 from log_psplines.diagnostics.preprocessing import (
@@ -15,13 +15,13 @@ from log_psplines.diagnostics.preprocessing import (
     save_eigenvalue_separation_plot,
     worst_ratio_frequencies,
 )
-from log_psplines.config import PipelineConfig
+from log_psplines.inference.components import SpectralComponents
+from log_psplines.inference.initialisation import build_component
+from log_psplines.models.spectrum import LogPSpline
 from log_psplines.preprocessing.checks import (
     _run_preprocessing_checks,
     _save_preprocessing_plot,
 )
-from log_psplines.inference.components import SpectralComponents
-from log_psplines.models.spectrum import LogPSpline
 
 
 def _psd_stack(n: int = 6, p: int = 2) -> np.ndarray:

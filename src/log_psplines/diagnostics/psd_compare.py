@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional
-
 import numpy as np
 from scipy.integrate import simpson
 
@@ -40,13 +38,13 @@ def _compute_multivar_diagnostics_from_arrays(
     estimate_psd: np.ndarray,
     true_psd_real: np.ndarray,
     freqs: np.ndarray,
-    posterior_psd_quantiles: Optional[np.ndarray] = None,
-) -> Dict[str, object]:
+    posterior_psd_quantiles: np.ndarray | None = None,
+) -> dict[str, object]:
     estimate_psd = np.asarray(estimate_psd)
     true_psd_real = np.asarray(true_psd_real)
     freqs = np.asarray(freqs, dtype=np.float64)
 
-    diagnostics: Dict[str, object] = {}
+    diagnostics: dict[str, object] = {}
     coverage_interval = [5.0, 95.0]
     coverage_level = 0.90
 
@@ -92,7 +90,7 @@ def _compute_multivar_diagnostics_from_arrays(
     freq_quantiles = np.quantile(freqs, [0.0, 0.25, 0.5, 0.75, 1.0])
     freq_edges = np.unique(freq_quantiles)
     riae_bands = []
-    for start, end in zip(freq_edges[:-1], freq_edges[1:]):
+    for start, end in zip(freq_edges[:-1], freq_edges[1:], strict=False):
         mask = (freqs >= start) & (freqs <= end)
         if np.count_nonzero(mask) < 2 or end <= start:
             continue
@@ -149,7 +147,7 @@ def _compute_multivar_diagnostics_from_arrays(
 
 def _handle_multivariate(
     psd_group, true_psd_real: np.ndarray
-) -> Dict[str, object]:
+) -> dict[str, object]:
     """Compute multivariate diagnostics from percentile-indexed PSD datasets."""
     freq = np.asarray(psd_group["freq"].values, dtype=np.float64)
     psd_real = np.asarray(
@@ -197,8 +195,8 @@ def compute_multivar_riae_diagnostics(
     vi_psd: np.ndarray,
     true_psd_real: np.ndarray,
     freqs: np.ndarray,
-    psd_quantiles: Optional[Dict[str, np.ndarray]] = None,
-) -> Dict[str, object]:
+    psd_quantiles: dict[str, np.ndarray] | None = None,
+) -> dict[str, object]:
     """Legacy multivariate diagnostics used by VI adapters."""
     freq_idx = interior_frequency_slice(np.asarray(freqs).size)
     freqs = np.asarray(freqs)[freq_idx]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -189,7 +189,7 @@ def plot_vi_loss(
     losses: Any,
     guide_name: str | None = None,
     outfile: str | None = None,
-    loss_components: Optional[dict[str, np.ndarray]] = None,
+    loss_components: dict[str, np.ndarray] | None = None,
 ) -> plt.Figure | None:
     """Plot the ELBO trace recorded during SVI optimization.
 

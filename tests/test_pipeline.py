@@ -10,7 +10,7 @@ import xarray as xr
 from log_psplines import fit
 from log_psplines.config import PipelineConfig
 from log_psplines.data import TimeSeries, WishartData
-from log_psplines.inference.vi import FactorizedVIResult, _values_to_dataset
+from log_psplines.inference.vi import VIResult, _values_to_dataset
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 from log_psplines.results import PSDResult
 
@@ -51,7 +51,7 @@ def _fast_config(**extra) -> PipelineConfig:
     return PipelineConfig(**defaults)
 
 
-def test_vi_init_values_dataset_uses_variable_specific_dims():
+def test_vi_posterior_dataset_uses_variable_specific_dims():
     ds = _values_to_dataset(
         {
             "delta_0": np.zeros(3),
@@ -90,12 +90,22 @@ def test_pipeline_p1_only_vi(p1_data):
     assert result.vi.losses.shape[0] > 0
     assert result.vi.guide_name is not None
     assert isinstance(result.posterior, xr.Dataset)
-    assert "weights_delta_0" in result.vi.init_values
-    assert result.vi.samples is not None
+    assert "weights_delta_0" in result.vi.posterior
     assert (
         result.posterior["weights_delta_0"].sizes["draw"]
         == config.vi_posterior_draws
     )
+
+
+def test_vi_without_posterior_sampling_returns_guide_median(p1_data):
+    result = fit(
+        p1_data,
+        _fast_config(method="vi", vi_posterior_draws=0),
+    )
+    assert result.vi is not None
+    assert result.vi.posterior.sizes["draw"] == 1
+    assert result.posterior.sizes["draw"] == 1
+    assert np.isfinite(result.psd).all()
 
 
 # ---------------------------------------------------------------------------
@@ -112,9 +122,9 @@ def test_pipeline_multivar_only_vi(multivar_data):
     assert result.vi.losses.shape[0] > 0
     assert result.vi.losses_per_block is not None
     assert len(result.vi.losses_per_block) == multivar_data.p
-    # All per-channel weight sites should be present in VI means
-    assert "weights_delta_0" in result.vi.init_values
-    assert "weights_delta_1" in result.vi.init_values
+    # Every Cholesky channel contributes posterior sites.
+    assert "weights_delta_0" in result.vi.posterior
+    assert "weights_delta_1" in result.vi.posterior
     assert result.vi.losses_per_block is not None
     vi_posterior = result.vi_posterior
     assert vi_posterior is not None
@@ -198,7 +208,11 @@ def test_pipeline_p1_nuts(p1_data):
     assert "acceptance_rate_channel_0" in stats
     spectral_density = result.spectral_density
     assert spectral_density.shape == (
-        1, config.n_samples, len(result.frequency), 1, 1
+        1,
+        config.n_samples,
+        len(result.frequency),
+        1,
+        1,
     )
     median = np.median(np.real(spectral_density[..., 0, 0]), axis=(0, 1))
     assert np.all(np.isfinite(median))
@@ -273,13 +287,12 @@ def test_posterior_predictive_save_overlays_vi_when_available(
         "log_psplines.plotting.results.plot_psd_matrix",
         _fake_plot_psd_matrix,
     )
-    vi = FactorizedVIResult(
-        init_values={"weights_delta_0": np.zeros(2)},
+    vi = VIResult(
+        posterior=xr.Dataset(
+            {"weights_delta_0": (("chain", "draw", "k"), np.zeros((1, 3, 2)))}
+        ),
         losses=np.asarray([1.0]),
-        khat=None,
         guide_name="diag",
-        runtime=0.0,
-        samples={"weights_delta_0": np.zeros((3, 2))},
     )
     posterior = xr.Dataset(
         {"weights_delta_0": (("chain", "draw", "k"), np.zeros((1, 3, 2)))}
@@ -292,7 +305,9 @@ def test_posterior_predictive_save_overlays_vi_when_available(
     result = PSDResult(
         posterior=posterior,
         spectrum=spectrum,
-        sample_stats=xr.Dataset({"diverging": (("chain", "draw"), np.zeros((1, 3)))}),
+        sample_stats=xr.Dataset(
+            {"diverging": (("chain", "draw"), np.zeros((1, 3)))}
+        ),
         vi=vi,
         vi_spectrum=spectrum,
     )
@@ -320,13 +335,12 @@ def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
         "log_psplines.plotting.results.plot_psd_matrix",
         _fake_plot_psd_matrix,
     )
-    vi = FactorizedVIResult(
-        init_values={"weights_delta_0": np.zeros(2)},
+    vi = VIResult(
+        posterior=xr.Dataset(
+            {"weights_delta_0": (("chain", "draw", "k"), np.zeros((1, 3, 2)))}
+        ),
         losses=np.asarray([1.0]),
-        khat=None,
         guide_name="diag",
-        runtime=0.0,
-        samples={"weights_delta_0": np.zeros((3, 2))},
     )
     posterior = xr.Dataset(
         {"weights_delta_0": (("chain", "draw", "k"), np.zeros((1, 3, 2)))}

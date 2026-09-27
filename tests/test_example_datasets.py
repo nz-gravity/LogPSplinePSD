@@ -1,7 +1,7 @@
 import numpy as np
 
-from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.example_datasets.ls2_data import LS2Data
+from log_psplines.example_datasets.varma_data import VARMAData
 
 
 def test_varma_ar_p1(outdir):
@@ -59,8 +59,6 @@ def test_varma_validity_flags():
     assert non_stationary.empirical_stationarity_metrics is not None
     assert non_stationary.var_companion_spectral_radius is not None
     assert non_stationary.var_companion_spectral_radius >= 1.0
-
-
 
 
 def test_ls2_data(outdir):

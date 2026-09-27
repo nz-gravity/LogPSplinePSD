@@ -18,8 +18,10 @@ import xarray as xr
 from numpyro.infer.util import log_density
 
 from log_psplines.data.spectral import WishartData
-from log_psplines.inference.model import _blocked_channel_model
-from log_psplines.inference.nuts import _channel_model_kwargs
+from log_psplines.inference.model import (
+    _blocked_channel_model,
+    channel_model_kwargs,
+)
 
 from ..logger import logger
 
@@ -205,11 +207,11 @@ def _default_lnz_kwargs(
     posterior_dim: int,
     data: WishartData,
     outdir: str | None,
-    extra_kwargs: dict[str, Any] | None,
+    lnz_kwargs: dict[str, Any] | None,
     verbose: bool,
 ) -> dict[str, Any]:
     """Build default MorphZ kwargs for one evidence estimation task."""
-    lnz_kwargs = dict((extra_kwargs or {}).get("lnz_kwargs", {}))
+    lnz_kwargs = dict(lnz_kwargs or {})
     # After whitening the samples have identity covariance, so:
     # - thin=1: use all samples for the most accurate whitening transform
     # - morph_type="indep": optimal for whitened (approximately i.i.d.) samples
@@ -454,7 +456,7 @@ def _evaluate_lnz_task(
     log_post_fn: Callable[[np.ndarray], float],
     data: WishartData,
     outdir: str | None,
-    extra_kwargs: dict[str, Any] | None,
+    lnz_kwargs: dict[str, Any] | None,
     verbose: bool,
     factor_index: int | None = None,
 ) -> MorphZEvidenceResult:
@@ -466,7 +468,7 @@ def _evaluate_lnz_task(
         posterior_dim=posterior_dim,
         data=data,
         outdir=outdir,
-        extra_kwargs=extra_kwargs,
+        lnz_kwargs=lnz_kwargs,
         verbose=verbose,
     )
     factor_msg = (
@@ -501,7 +503,7 @@ def estimate_pipeline_lnz(
     data: WishartData,
     model_kwargs: dict[str, Any],
     outdir: str | None,
-    extra_kwargs: dict[str, Any] | None = None,
+    lnz_kwargs: dict[str, Any] | None = None,
     verbose: bool = False,
 ) -> MorphZEvidenceResult:
     """Compute MorphZ lnZ from pipeline posterior samples."""
@@ -511,7 +513,7 @@ def estimate_pipeline_lnz(
         post_samples, log_post, log_post_fn = _build_log_posterior(
             posterior,
             model_fn=_blocked_channel_model,
-            model_kwargs=_channel_model_kwargs(model_kwargs, channel_index),
+            model_kwargs=channel_model_kwargs(model_kwargs, channel_index),
             param_names=_posterior_param_names(
                 posterior, channel_index=channel_index
             ),
@@ -526,7 +528,7 @@ def estimate_pipeline_lnz(
                 log_post_fn=log_post_fn,
                 data=data,
                 outdir=outdir,
-                extra_kwargs=extra_kwargs,
+                lnz_kwargs=lnz_kwargs,
                 verbose=verbose,
                 factor_index=channel_index,
             )

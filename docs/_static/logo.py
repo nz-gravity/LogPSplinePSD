@@ -19,21 +19,20 @@ logo_pspline_psd.svg
 
 from pathlib import Path
 
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.textpath import TextPath
+import numpy as np
 from matplotlib.font_manager import FontProperties
-
+from matplotlib.textpath import TextPath
 
 # ---------------------------
 # Style / palette
 # ---------------------------
 BLACK = "#000000"
 ORANGE = "#ff8c1a"
-NOISE = "#d9cfc2"      # faint noisy periodogram
-FIT = "#e8c59e"        # smooth fitted PSD
-MARKER = "#c99595"     # optional soft pink markers
-BG = (1, 1, 1, 0)      # fully transparent
+NOISE = "#d9cfc2"  # faint noisy periodogram
+FIT = "#e8c59e"  # smooth fitted PSD
+MARKER = "#c99595"  # optional soft pink markers
+BG = (1, 1, 1, 0)  # fully transparent
 
 FONT_FAMILY = "DejaVu Sans"
 FONT_WEIGHT = "bold"
@@ -88,7 +87,9 @@ def make_noisy_periodogram(x, fit, rng, n_lines=140):
 # ---------------------------
 # Text helpers
 # ---------------------------
-def text_width_axes(fig, ax, text, fontsize, family=FONT_FAMILY, weight=FONT_WEIGHT):
+def text_width_axes(
+    fig, ax, text, fontsize, family=FONT_FAMILY, weight=FONT_WEIGHT
+):
     """
     Estimate text width in axes coordinates using TextPath.
     """
@@ -119,9 +120,12 @@ def add_wordmark(ax, fig):
 
     for txt, color in parts:
         ax.text(
-            x, y0, txt,
+            x,
+            y0,
+            txt,
             transform=ax.transAxes,
-            ha="left", va="center",
+            ha="left",
+            va="center",
             fontsize=fs_main,
             fontweight=FONT_WEIGHT,
             fontfamily=FONT_FAMILY,
@@ -132,9 +136,12 @@ def add_wordmark(ax, fig):
 
     # Sub-label
     ax.text(
-        x0, 0.38, "PSD",
+        x0,
+        0.38,
+        "PSD",
         transform=ax.transAxes,
-        ha="left", va="center",
+        ha="left",
+        va="center",
         fontsize=fs_sub,
         fontweight=FONT_WEIGHT,
         fontfamily=FONT_FAMILY,
@@ -182,7 +189,9 @@ def make_logo(outbase="logo_pspline_psd", seed=4):
 
     # Draw faint noisy background
     ax.vlines(
-        xs_plot, y_bot, y_top,
+        xs_plot,
+        y_bot,
+        y_top,
         color=NOISE,
         linewidth=2.3,
         alpha=0.70,
@@ -192,7 +201,8 @@ def make_logo(outbase="logo_pspline_psd", seed=4):
 
     # Smooth fitted curve
     ax.plot(
-        x_plot, y_fit,
+        x_plot,
+        y_fit,
         color=FIT,
         linewidth=6.0,
         alpha=0.95,
@@ -204,7 +214,8 @@ def make_logo(outbase="logo_pspline_psd", seed=4):
     marker_x = np.array([0.17, 0.30, 0.58, 0.77, 0.90])
     marker_y = np.interp(marker_x, x_plot, y_fit)
     ax.scatter(
-        marker_x, marker_y,
+        marker_x,
+        marker_y,
         s=110,
         color=MARKER,
         edgecolor=NOISE,

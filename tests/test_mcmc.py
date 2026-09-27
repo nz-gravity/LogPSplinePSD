@@ -75,7 +75,9 @@ def test_mcmc_multivar(outdir):
     result = PSDResult.from_netcdf(
         os.path.join(outdir_str, "inference_data.nc")
     )
-    np.testing.assert_allclose(result.spectral_density, result_orig.spectral_density)
+    np.testing.assert_allclose(
+        result.spectral_density, result_orig.spectral_density
+    )
 
     freq = result.frequency
     assert np.allclose(freq, expected_freq)
@@ -153,6 +155,7 @@ def _check_stats_are_finite(outdir) -> None:
         ).any()
     # R-hat is undefined for a single chain and may legitimately be NaN.
     assert "rhat_max" in nuts_stats_pd.columns
+
 
 def _check_for_files(expected_files, outdir):
     missing_files = []
@@ -261,8 +264,7 @@ def _run_multivar_mcmc(outdir):
         verbose=True,
         outdir=outdir,
         compute_lnz=False,
-        extra_kwargs={
-            "lnz_kwargs": {
+        lnz_kwargs={
                 "morph_type": "pair",
                 "n_resamples": 64,
                 "n_estimations": 1,
@@ -270,7 +272,6 @@ def _run_multivar_mcmc(outdir):
                 "max_iter": 200,
                 "tol": 1e-2,
                 "verbose": True,
-            }
         },
     )
     result = fit(data=ts_run, config=config)

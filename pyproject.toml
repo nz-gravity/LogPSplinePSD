@@ -60,7 +60,7 @@ dev = [
     "ruff",
     "mypy",
     "jupyter-book<2.0",
-    "pre-commit",
+    "prek",
     "GitPython",
     "vulture"
 ]

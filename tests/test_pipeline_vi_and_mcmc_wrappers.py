@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 import log_psplines.inference.vi as vi_module
@@ -39,12 +38,10 @@ def test_resolve_guide_string_variants(monkeypatch, specifier, expected_name):
     guide, guide_name = vi_module.resolve_guide(
         specifier,
         _model,
-        init_values={"x": np.asarray([1.0])},
     )
 
     assert isinstance(guide, _DummyGuide)
     assert guide.model is _model
-    assert "init_loc_fn" in guide.kwargs
     assert guide_name == expected_name
     if specifier.startswith("lowrank"):
         expected_rank = 2 if specifier.endswith(":2") else 10

@@ -9,6 +9,3 @@ ffmpeg \
   -b:v 0 \
   -an \
   logpspline-hero.webm
-
-
-  

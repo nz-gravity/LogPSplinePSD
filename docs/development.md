@@ -43,6 +43,18 @@ The built HTML documentation will be in `docs/_build/html/`.
 .venv/bin/python -m pytest tests/
 ```
 
+## Git Hooks
+
+Install the development dependencies, then install prek's Git hooks:
+
+```bash
+uv sync --all-extras --dev
+uv run prek install
+```
+
+Run hooks on staged files with `uv run prek run`, or on the whole repository
+with `uv run prek run --all-files`.
+
 ## Typechecking (Jaxtyping + Beartype)
 
 Install dev extras so `jaxtyping` and `beartype` are available:
@@ -104,7 +116,7 @@ reconstruction, and optional output saving through `fit()`.
   for one channel. Both omit data-only constants.
 - `data/`: `TimeSeries.data` always has shape `(N, C)`. `WishartData` retains
   replicate counts, duration, window bandwidth and scaling metadata.
-- `preprocessing/`: FFT/Wishart and Welch construction, masking, coarse
+- `preprocessing/`: FFT/Wishart construction, masking, coarse
   graining and knot selection. `compute_fft`, `compute_wishart` and
   `empirical_spectrum` are functions in `preprocessing/periodogram.py`.
 - `inference/components.py`: one collection of scalar models for diagonal,
@@ -113,10 +125,9 @@ reconstruction, and optional output saving through `fit()`.
   in `inference.initialisation.prepare_components`; the collection has no
   constructor that reads data or fits coefficients.
 - `inference/model.py`: NumPyro priors, scalar evaluation, likelihood calls
-  and preparation of model arguments. `vi.py` and `nuts.py` retain factorized
-  VI, warm starts, per-channel tuning and blocked NUTS. Evidence remains an
-  optional inference operation in `inference/evidence.py`. The blocked stages
-  have no generic base class and accept only the arguments they use.
+  and channel model arguments. `vi.py` and `nuts.py` run independent fits for
+  each Cholesky channel; NUTS retains per-channel tuning. Evidence remains an
+  optional inference operation in `inference/evidence.py`.
   Stationary and power fitting share `inference.nuts.run_nuts`.
 - `results.py`: `PSDResult`, native storage, posterior reconstruction,
   quantiles and diagnostics interoperability. `to_arviz()` is diagnostics-only.

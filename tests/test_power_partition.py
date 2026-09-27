@@ -8,8 +8,8 @@ from numpyro.infer.util import log_density
 
 from log_psplines import (
     LogPSpline,
-    PowerPartition,
     PowerData,
+    PowerPartition,
     PowerSplineConfig,
     PSDResult,
     SplineBasis,
@@ -23,7 +23,7 @@ from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
 
 
 def test_masked_pooling_conserves_power_and_counts():
-    time = np.array([0., 1., 2., 7., 8.])
+    time = np.array([0.0, 1.0, 2.0, 7.0, 8.0])
     freq = np.array([0.1, 0.2, 0.3, 0.4])
     power = np.arange(1, 21, dtype=float).reshape(5, 4)
     counts = np.ones_like(power)
@@ -38,25 +38,29 @@ def test_masked_pooling_conserves_power_and_counts():
     np.testing.assert_allclose(coarse.counts.sum(), native.counts.sum())
     assert np.all(coarse.counts[2] == 0)
     assert np.all(coarse.power[2] == 0)
-    np.testing.assert_allclose(coarse.time, [0.5, 2., 7., 8.])
+    np.testing.assert_allclose(coarse.time, [0.5, 2.0, 7.0, 8.0])
     np.testing.assert_allclose(coarse.frequency, [0.15, 0.35])
     assert coarse.counts[0, 0] == 5
 
 
 def test_pilot_only_sets_boundaries_and_gap_splits():
-    time = np.array([0., 1., 2., 10., 11.])
-    pilot = np.array([[0., 0.01, 2., 2.01]])
+    time = np.array([0.0, 1.0, 2.0, 10.0, 11.0])
+    pilot = np.array([[0.0, 0.01, 2.0, 2.01]])
     counts = np.ones((5, 4))
     counts[2, :] = 0
     partition = select_power_partition(
-        pilot, time, counts=counts, time_bin=4,
-        max_frequency_bin=4, max_log_range=0.25,
+        pilot,
+        time,
+        counts=counts,
+        time_bin=4,
+        max_frequency_bin=4,
+        max_log_range=0.25,
     )
     np.testing.assert_array_equal(partition.frequency_starts, [0, 2])
     np.testing.assert_array_equal(partition.time_starts, [0, 2, 3])
-    raw = np.arange(1, 21., dtype=float).reshape(5, 4)
+    raw = np.arange(1, 21.0, dtype=float).reshape(5, 4)
     raw[2, :] = 0
-    data = PowerData(raw, counts, np.arange(1., 5.), time)
+    data = PowerData(raw, counts, np.arange(1.0, 5.0), time)
     pooled = coarse_grain_power(data, partition)
     assert pooled.power[0, 0] == raw[:2, :2].sum()
     with pytest.raises(ValueError, match="time_starts"):
@@ -64,11 +68,11 @@ def test_pilot_only_sets_boundaries_and_gap_splits():
 
 
 def test_block_constant_likelihood_identity():
-    power = np.array([[1., 2.], [3., 0.]])
-    counts = np.array([[1., 2.], [1., 0.]])
-    data = PowerData(power, counts, [1., 2.], [0., 1.])
+    power = np.array([[1.0, 2.0], [3.0, 0.0]])
+    counts = np.array([[1.0, 2.0], [1.0, 0.0]])
+    data = PowerData(power, counts, [1.0, 2.0], [0.0, 1.0])
     pooled = coarse_grain_power(data, PowerPartition([0], [0]))
-    log_s = np.log(3.)
+    log_s = np.log(3.0)
     native_ll = power_whittle_log_likelihood(
         power, counts, np.full_like(power, log_s)
     )
@@ -91,9 +95,7 @@ def test_block_constant_likelihood_identity():
 
 def test_explicit_interior_knots():
     grid = np.linspace(0, 1, 12)
-    basis = SplineBasis.from_grid(
-        grid, interior_knots=np.array([0.2, 0.8])
-    )
+    basis = SplineBasis.from_grid(grid, interior_knots=np.array([0.2, 0.8]))
     np.testing.assert_allclose(basis.knots[4:6], [0.2, 0.8])
     with pytest.raises(ValueError, match="interior_knots"):
         SplineBasis.from_grid(grid, interior_knots=[0.8, 0.2])
@@ -105,19 +107,22 @@ def test_explicit_interior_knots():
 
 def test_halfnormal_prior_log_density():
     with jax.enable_x64(True):
-        data = PowerData(np.ones((4, 5)), 1, np.arange(1., 6.),
-                             np.arange(4.))
-        spline = LogPSpline(SplineBasis.from_grid(data.frequency, 1),
-                            SplineBasis.from_grid(data.time, 1))
-        config = PowerSplineConfig(roughness_scale=3.)
+        data = PowerData(
+            np.ones((4, 5)), 1, np.arange(1.0, 6.0), np.arange(4.0)
+        )
+        spline = LogPSpline(
+            SplineBasis.from_grid(data.frequency, 1),
+            SplineBasis.from_grid(data.time, 1),
+        )
+        config = PowerSplineConfig(roughness_scale=3.0)
         model, init, _ = prepare_power_model(data, spline, config)
         from numpyro import handlers
+
         # Both roughness scales are sampled directly from HalfNormal priors.
         trace = handlers.trace(handlers.seed(model, rng_seed=0)).get_trace()
         for axis in ("time", "freq"):
             sigma = np.asarray(trace[f"sigma_{axis}"]["value"])
-            expected = (np.log(np.sqrt(2 / np.pi) / 3)
-                        - sigma**2 / 18)
+            expected = np.log(np.sqrt(2 / np.pi) / 3) - sigma**2 / 18
             np.testing.assert_allclose(
                 trace[f"sigma_{axis}"]["fn"].log_prob(sigma), expected
             )
@@ -137,17 +142,24 @@ def test_short_partition_fit_and_roundtrip(gapped, tmp_path):
         data = PowerData(power, counts, freq, time)
         pilot = np.zeros((2, 8))
         partition = select_power_partition(
-            pilot, time, counts=counts, time_bin=2,
-            max_frequency_bin=2, max_log_range=0.25,
+            pilot,
+            time,
+            counts=counts,
+            time_bin=2,
+            max_frequency_bin=2,
+            max_log_range=0.25,
         )
         spline = LogPSpline(
             SplineBasis.from_grid(freq / freq[-1], 1),
             SplineBasis.from_grid(time / time[-1], 1),
         )
         result = fit(
-            data, PowerSplineConfig(n_warmup=2, n_samples=2,
-                                    progress_bar=False, max_tree_depth=3),
-            model=spline, partition=partition,
+            data,
+            PowerSplineConfig(
+                n_warmup=2, n_samples=2, progress_bar=False, max_tree_depth=3
+            ),
+            model=spline,
+            partition=partition,
         )
         assert result.psd.shape == (1, 2, 8, 8)
         assert np.isfinite(result.psd).all()

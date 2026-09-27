@@ -7,11 +7,15 @@ from dataclasses import dataclass
 from typing import Any
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 import xarray as xr
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
+
+from log_psplines.inference.model import (
+    _blocked_channel_model,
+    channel_model_kwargs,
+)
 
 
 @dataclass
@@ -60,7 +64,7 @@ def run_nuts(
     chain_method: str | None = None,
     progress_bar: bool = False,
     extra_fields: tuple[str, ...] = (),
-) -> MCMC:
+) -> MCMCResult:
     """Execute NumPyro NUTS and return native samples/statistics."""
     kernel_options = dict(
         target_accept_prob=target_accept_prob,
@@ -123,73 +127,6 @@ def run_nuts(
     )
 
 
-def _channel_model_kwargs(
-    model_kwargs: dict[str, Any],
-    channel_index: int,
-) -> dict[str, Any]:
-    """Extract kwargs for one multivariate Cholesky likelihood factor."""
-    j = int(channel_index)
-    return {
-        "channel_index": j,
-        "u_re_channel": model_kwargs["u_re"][:, j, :],
-        "u_im_channel": model_kwargs["u_im"][:, j, :],
-        "u_re_prev": model_kwargs["u_re"][:, :j, :],
-        "u_im_prev": model_kwargs["u_im_prev"][:, :j, :]
-        if "u_im_prev" in model_kwargs
-        else model_kwargs["u_im"][:, :j, :],
-        "basis_delta": model_kwargs["bases_delta"][j],
-        "penalty_delta": model_kwargs["penalties_delta"][j],
-        "basis_theta_re_by_component": tuple(model_kwargs["bases_theta_re"][j]),
-        "penalty_theta_re_by_component": tuple(
-            model_kwargs["penalties_theta_re"][j]
-        ),
-        "basis_theta_im_by_component": tuple(model_kwargs["bases_theta_im"][j]),
-        "penalty_theta_im_by_component": tuple(
-            model_kwargs["penalties_theta_im"][j]
-        ),
-        "alpha_phi": model_kwargs["alpha_phi"],
-        "beta_phi": model_kwargs["beta_phi"],
-        "alpha_phi_theta": model_kwargs["alpha_phi_theta"],
-        "beta_phi_theta": model_kwargs["beta_phi_theta"],
-        "alpha_delta": model_kwargs["alpha_delta"],
-        "beta_delta": model_kwargs["beta_delta"],
-        "duration": model_kwargs["duration"],
-        "Nb": model_kwargs["Nb"],
-        "Nh": model_kwargs["Nh"],
-        "design_weights": model_kwargs.get("design_weights"),
-        "tau": model_kwargs.get("tau"),
-        "enbw": model_kwargs.get("enbw", 1.0),
-        "eta": model_kwargs.get("eta", 1.0),
-    }
-
-
-def _init_values_for_channel(
-    init_values: dict[str, jnp.ndarray] | None,
-    channel_index: int,
-) -> dict[str, jnp.ndarray] | None:
-    """Return VI initial values belonging to one Cholesky channel block."""
-    if not init_values:
-        return None
-    j = int(channel_index)
-    prefixes = (
-        f"delta_{j}",
-        f"phi_delta_{j}",
-        f"weights_delta_{j}",
-        f"delta_theta_re_{j}_",
-        f"phi_theta_re_{j}_",
-        f"weights_theta_re_{j}_",
-        f"delta_theta_im_{j}_",
-        f"phi_theta_im_{j}_",
-        f"weights_theta_im_{j}_",
-    )
-    values = {
-        name: value
-        for name, value in init_values.items()
-        if any(str(name).startswith(prefix) for prefix in prefixes)
-    }
-    return values or None
-
-
 def _suffix(dataset: xr.Dataset | None, channel: int) -> xr.Dataset | None:
     if dataset is None:
         return None
@@ -209,7 +146,7 @@ def _channel_setting(values, default, channel_index):
         return default
 
 
-def run_factorized_nuts(
+def run_multivariate_nuts(
     model_kwargs: dict[str, Any],
     *,
     rng_key: jax.Array,
@@ -223,12 +160,9 @@ def run_factorized_nuts(
     eta: float = 1.0,
     target_accept_prob_by_channel: list[float] | None = None,
     max_tree_depth_by_channel: list[int] | None = None,
-    init_values: dict[str, jnp.ndarray] | None = None,
     verbose: bool = False,
 ) -> MCMCResult:
     """Run one NUTS fit for each multivariate Cholesky factor."""
-    from log_psplines.inference.model import _blocked_channel_model
-
     kwargs = dict(model_kwargs)
     kwargs["eta"] = eta
     n_channels = int(kwargs["n_channels"])
@@ -241,25 +175,32 @@ def run_factorized_nuts(
         result = run_nuts(
             _blocked_channel_model,
             rng_key=keys[channel_index],
-            model_kwargs=_channel_model_kwargs(kwargs, channel_index),
-            init_values=_init_values_for_channel(init_values, channel_index),
+            model_kwargs=channel_model_kwargs(kwargs, channel_index),
             n_warmup=n_warmup,
             n_samples=n_samples,
             num_chains=num_chains,
             dense_mass=dense_mass,
-            target_accept_prob=float(_channel_setting(
-                target_accept_prob_by_channel,
-                target_accept_prob,
-                channel_index,
-            )),
-            max_tree_depth=int(_channel_setting(
-                max_tree_depth_by_channel, max_tree_depth, channel_index
-            )),
+            target_accept_prob=float(
+                _channel_setting(
+                    target_accept_prob_by_channel,
+                    target_accept_prob,
+                    channel_index,
+                )
+            ),
+            max_tree_depth=int(
+                _channel_setting(
+                    max_tree_depth_by_channel, max_tree_depth, channel_index
+                )
+            ),
             chain_method=chain_method,
             progress_bar=verbose,
             extra_fields=(
-                "potential_energy", "energy", "num_steps", "accept_prob",
-                "adapt_state.step_size", "diverging",
+                "potential_energy",
+                "energy",
+                "num_steps",
+                "accept_prob",
+                "adapt_state.step_size",
+                "diverging",
             ),
         )
         posterior_parts.append(result.posterior)
@@ -278,4 +219,4 @@ def run_factorized_nuts(
     )
 
 
-__all__ = ["MCMCResult", "run_nuts", "run_factorized_nuts"]
+__all__ = ["MCMCResult", "run_nuts", "run_multivariate_nuts"]

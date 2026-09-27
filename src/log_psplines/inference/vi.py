@@ -1,10 +1,10 @@
-"""Variational inference and factorized Wishart fitting helpers."""
+"""Variational inference for Cholesky channel models."""
 
 from __future__ import annotations
 
-import time
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -19,11 +19,10 @@ from numpyro.infer.autoguide import (
     AutoLowRankMultivariateNormal,
     AutoMultivariateNormal,
 )
-from numpyro.infer.util import init_to_value
 
-from log_psplines.inference.nuts import (
-    _channel_model_kwargs,
-    _init_values_for_channel,
+from log_psplines.inference.model import (
+    _blocked_channel_model,
+    channel_model_kwargs,
 )
 
 
@@ -48,29 +47,21 @@ def _values_to_dataset(
     return xr.Dataset(data_vars)
 
 
-GuideSpecifier = Any  # Accept strings or callables provided by the caller.
-
-
 @dataclass
 class VIResult:
-    """Container for VI runs used to seed MCMC initial states."""
+    """VI posterior draws and optimization diagnostics."""
 
-    means: Dict[str, jnp.ndarray]
-    scales: Dict[str, jnp.ndarray]
+    posterior: xr.Dataset
     losses: jnp.ndarray
-    params: Dict[str, Any]
     guide_name: str
-    guide: Any
-    latent_samples: Optional[jnp.ndarray] = None
-    samples: Optional[Dict[str, jnp.ndarray]] = None
+    losses_per_block: list[jnp.ndarray] | None = None
+
 
 
 def resolve_guide(
-    guide: GuideSpecifier,
+    guide: str | Callable[..., Any] | None,
     model: Callable[..., Any],
-    *,
-    init_values: Optional[Dict[str, jnp.ndarray]] = None,
-) -> Tuple[Any, str]:
+) -> tuple[Any, str]:
     """Instantiate an autoguide for ``model``.
 
     Parameters
@@ -91,22 +82,13 @@ def resolve_guide(
     if guide is None:
         guide = "diag"
 
-    init_loc_fn = (
-        init_to_value(values=init_values) if init_values is not None else None
-    )
-
     if isinstance(guide, str):
         key = guide.lower()
-        # Only pass init_loc_fn when we have actual init values; passing None
-        # triggers a NumPyro >=0.20.0 error in substitute().
-        loc_kwargs = (
-            {"init_loc_fn": init_loc_fn} if init_loc_fn is not None else {}
-        )
         if key == "diag":
-            return AutoDiagonalNormal(model, **loc_kwargs), "diag"
+            return AutoDiagonalNormal(model), "diag"
         if key == "mvn":
             return (
-                AutoMultivariateNormal(model, **loc_kwargs),
+                AutoMultivariateNormal(model),
                 "mvn",
             )
         if key.startswith("lowrank"):
@@ -115,7 +97,7 @@ def resolve_guide(
             if len(parts) == 2 and parts[1]:
                 rank = int(parts[1])
             guide_instance = AutoLowRankMultivariateNormal(
-                model, rank=rank, **loc_kwargs
+                model, rank=rank
             )
             return guide_instance, f"lowrank:{rank}"
         if key.startswith("flow"):
@@ -126,11 +108,11 @@ def resolve_guide(
             # Use IAF for speed; allow switching to BNAF by prefix.
             if key.startswith("flowbnaf"):
                 guide_instance = AutoBNAFNormal(
-                    model, num_flows=layers, **loc_kwargs
+                    model, num_flows=layers
                 )
                 return guide_instance, f"flowbnaf:{layers}"
             guide_instance = AutoIAFNormal(
-                model, num_flows=layers, **loc_kwargs
+                model, num_flows=layers
             )
             return guide_instance, f"flow:{layers}"
         raise ValueError(f"Unknown VI guide specifier: {guide}")
@@ -148,21 +130,12 @@ def resolve_guide(
     )
 
 
-def _reduce_tree(
-    samples: Mapping[str, jnp.ndarray],
-    reducer: Callable[[jnp.ndarray], jnp.ndarray],
-) -> Dict[str, jnp.ndarray]:
-    return {
-        name: reducer(jnp.asarray(array)) for name, array in samples.items()
-    }
-
-
 def _run_svi_with_early_stop(
     svi: SVI,
     rng_key: jax.Array,
     vi_steps: int,
     model_args: tuple,
-    model_kwargs: Dict[str, Any],
+    model_kwargs: dict[str, Any],
     *,
     progress_bar: bool = False,
     chunk_size: int = 100,
@@ -236,17 +209,12 @@ def fit_vi(
     vi_steps: int,
     optimizer_lr: float,
     model_args: Iterable[Any] = (),
-    model_kwargs: Optional[Mapping[str, Any]] = None,
-    guide: GuideSpecifier = "diag",
+    model_kwargs: Mapping[str, Any] | None = None,
+    guide: str | Callable[..., Any] | None = "diag",
     posterior_draws: int = 256,
     progress_bar: bool = False,
-    init_values: Optional[Dict[str, jnp.ndarray]] = None,
 ) -> VIResult:
-    """Run stochastic variational inference for ``model``.
-
-    Returns posterior means and (sample-based) standard deviations for each
-    latent site. These can be fed to ``init_to_value`` when initialising NUTS.
-    """
+    """Run SVI and return posterior draws with loss diagnostics."""
 
     if model_kwargs is None:
         model_kwargs = {}
@@ -256,9 +224,7 @@ def fit_vi(
     if vi_steps <= 0:
         raise ValueError("vi_steps must be positive")
 
-    guide_obj, guide_name = resolve_guide(
-        guide, model, init_values=init_values
-    )
+    guide_obj, guide_name = resolve_guide(guide, model)
     # Gradient clipping helps avoid NaNs when the ELBO has very steep regions
     # (common for spectral models with exp/log transforms).
     optimizer = optax.chain(
@@ -277,59 +243,27 @@ def fit_vi(
     )
 
     state_key = getattr(final_state, "rng_key", rng_key)
-    if posterior_draws and posterior_draws > 0:
+    if posterior_draws > 0:
         sample_key, _ = jax.random.split(state_key)
         posterior_dist = guide_obj.get_posterior(params)
         latent_samples = posterior_dist.sample(
             sample_key, sample_shape=(posterior_draws,)
         )
-        vi_samples = guide_obj._unpack_and_constrain(latent_samples, params)
-        means = _reduce_tree(vi_samples, lambda value: jnp.mean(value, axis=0))
-        scales = _reduce_tree(vi_samples, lambda value: jnp.std(value, axis=0))
-        samples = {
-            name: jnp.asarray(array) for name, array in vi_samples.items()
-        }
+        samples = guide_obj._unpack_and_constrain(latent_samples, params)
+        posterior = _values_to_dataset(samples)
     else:
-        posterior_sample = guide_obj.median(
-            params, *model_args, **model_kwargs
-        )
-        means = {
-            name: jnp.asarray(value)
-            for name, value in posterior_sample.items()
-        }
-        scales = {name: jnp.zeros_like(array) for name, array in means.items()}
-        samples = None
-        latent_samples = None
-
+        median = guide_obj.median(params)
+        posterior = _values_to_dataset(median, values_are_draws=False)
+    if posterior is None:
+        raise RuntimeError("VI produced no posterior values")
     return VIResult(
-        means=means,
-        scales=scales,
+        posterior=posterior,
         losses=losses,
-        params=params,
         guide_name=guide_name,
-        guide=guide_obj,
-        latent_samples=latent_samples,
-        samples=samples,
     )
 
 
-__all__ = ["GuideSpecifier", "VIResult", "resolve_guide", "fit_vi"]
-
-
-@dataclass
-class FactorizedVIResult:
-    """Combined VI posterior draws and optimization diagnostics."""
-
-    init_values: dict[str, jnp.ndarray] | None
-    losses: jnp.ndarray | None
-    khat: float | None
-    guide_name: str | None
-    runtime: float
-    losses_per_block: list[jnp.ndarray] | None = None
-    samples: dict[str, jnp.ndarray] | None = None
-
-
-def run_factorized_vi(
+def run_multivariate_vi(
     model_kwargs: dict[str, Any],
     *,
     rng_key: jax.Array,
@@ -338,44 +272,32 @@ def run_factorized_vi(
     guide: str = "diag",
     posterior_draws: int = 256,
     eta: float = 1.0,
-    init_values: dict[str, jnp.ndarray] | None = None,
     verbose: bool = False,
-) -> FactorizedVIResult:
-    """Run one VI optimization per multivariate Cholesky factor."""
-    from log_psplines.inference.model import _blocked_channel_model
-
+) -> VIResult:
+    """Run VI for each Cholesky channel and merge posterior draws."""
     kwargs = dict(model_kwargs)
     kwargs["eta"] = eta
     n_channels = int(kwargs["n_channels"])
     keys = jax.random.split(rng_key, n_channels)
 
-    t0 = time.time()
-    merged_means: dict[str, jnp.ndarray] = {}
-    merged_samples: dict[str, jnp.ndarray] = {}
+    posterior_parts: list[xr.Dataset] = []
     losses_per_block: list[jnp.ndarray] = []
     guide_names: list[str] = []
-
     for channel_index in range(n_channels):
-        channel_kwargs = _channel_model_kwargs(kwargs, channel_index)
-        channel_init = _init_values_for_channel(init_values, channel_index)
         result = fit_vi(
             _blocked_channel_model,
             rng_key=keys[channel_index],
             vi_steps=steps,
             optimizer_lr=lr,
-            model_kwargs=channel_kwargs,
+            model_kwargs=channel_model_kwargs(kwargs, channel_index),
             guide=guide,
             posterior_draws=posterior_draws,
             progress_bar=verbose,
-            init_values=channel_init,
         )
-        merged_means.update(result.means)
-        if result.samples is not None:
-            merged_samples.update(result.samples)
-        losses_per_block.append(jnp.asarray(result.losses))
+        posterior_parts.append(result.posterior)
+        losses_per_block.append(result.losses)
         guide_names.append(result.guide_name)
 
-    runtime = time.time() - t0
     nonempty_losses = [
         losses for losses in losses_per_block if int(losses.size) > 0
     ]
@@ -389,18 +311,13 @@ def run_factorized_vi(
         )
     else:
         losses = jnp.asarray([])
-
-    guide_name = (
-        f"factorized:{guide_names[0]}"
-        if len(set(guide_names)) == 1 and guide_names
-        else "factorized"
-    )
-    return FactorizedVIResult(
-        init_values=merged_means,
+    guide_name = guide_names[0] if len(set(guide_names)) == 1 else "mixed"
+    return VIResult(
+        posterior=xr.merge(posterior_parts),
         losses=losses,
-        khat=None,
         guide_name=guide_name,
-        runtime=runtime,
         losses_per_block=losses_per_block,
-        samples=merged_samples or None,
     )
+
+
+__all__ = ["VIResult", "resolve_guide", "fit_vi", "run_multivariate_vi"]

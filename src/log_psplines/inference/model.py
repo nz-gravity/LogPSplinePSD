@@ -1,8 +1,4 @@
-"""Pipeline-owned NumPyro model definitions.
-
-These models are used by the pipeline runtime and intentionally avoid
-dependencies on sampler implementations.
-"""
+"""Modified-Cholesky channel models and model argument preparation."""
 
 from __future__ import annotations
 
@@ -18,6 +14,50 @@ from log_psplines.inference.components import SpectralComponents
 from log_psplines.inference.initialisation import prepare_components
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 from log_psplines.models.spectrum import build_spline
+
+
+def channel_model_kwargs(
+    model_kwargs: dict[str, Any],
+    channel_index: int,
+) -> dict[str, Any]:
+    """Extract kwargs for one multivariate Cholesky likelihood factor."""
+    j = int(channel_index)
+    return {
+        "channel_index": j,
+        "u_re_channel": model_kwargs["u_re"][:, j, :],
+        "u_im_channel": model_kwargs["u_im"][:, j, :],
+        "u_re_prev": model_kwargs["u_re"][:, :j, :],
+        "u_im_prev": model_kwargs["u_im_prev"][:, :j, :]
+        if "u_im_prev" in model_kwargs
+        else model_kwargs["u_im"][:, :j, :],
+        "basis_delta": model_kwargs["bases_delta"][j],
+        "penalty_delta": model_kwargs["penalties_delta"][j],
+        "basis_theta_re_by_component": tuple(
+            model_kwargs["bases_theta_re"][j]
+        ),
+        "penalty_theta_re_by_component": tuple(
+            model_kwargs["penalties_theta_re"][j]
+        ),
+        "basis_theta_im_by_component": tuple(
+            model_kwargs["bases_theta_im"][j]
+        ),
+        "penalty_theta_im_by_component": tuple(
+            model_kwargs["penalties_theta_im"][j]
+        ),
+        "alpha_phi": model_kwargs["alpha_phi"],
+        "beta_phi": model_kwargs["beta_phi"],
+        "alpha_phi_theta": model_kwargs["alpha_phi_theta"],
+        "beta_phi_theta": model_kwargs["beta_phi_theta"],
+        "alpha_delta": model_kwargs["alpha_delta"],
+        "beta_delta": model_kwargs["beta_delta"],
+        "duration": model_kwargs["duration"],
+        "Nb": model_kwargs["Nb"],
+        "Nh": model_kwargs["Nh"],
+        "design_weights": model_kwargs.get("design_weights"),
+        "tau": model_kwargs.get("tau"),
+        "enbw": model_kwargs.get("enbw", 1.0),
+        "eta": model_kwargs.get("eta", 1.0),
+    }
 
 
 def _sample_pspline_block(

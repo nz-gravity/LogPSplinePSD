@@ -85,9 +85,9 @@ class SplineBasis:
                 raise ValueError(
                     "n_interior_knots must be a non-negative integer"
                 )
-            interior = np.linspace(
-                grid[0], grid[-1], n_interior_knots + 2
-            )[1:-1]
+            interior = np.linspace(grid[0], grid[-1], n_interior_knots + 2)[
+                1:-1
+            ]
         else:
             interior = np.asarray(interior_knots, dtype=float)
             if (

@@ -15,9 +15,9 @@ from log_psplines.inference.evidence import (
     estimate_pipeline_lnz,
 )
 from log_psplines.inference.model import prepare_model
-from log_psplines.inference.nuts import run_factorized_nuts
+from log_psplines.inference.nuts import run_multivariate_nuts
 from log_psplines.inference.power import fit_power
-from log_psplines.inference.vi import _values_to_dataset, run_factorized_vi
+from log_psplines.inference.vi import run_multivariate_vi
 from log_psplines.models.reconstruction import reconstruct_stationary_spectrum
 from log_psplines.preprocessing.checks import _save_preprocessing_plot
 from log_psplines.preprocessing.spectral import (
@@ -37,7 +37,7 @@ def _attach_lnz_metadata(
     config: PipelineConfig,
 ) -> None:
     """Add optional evidence diagnostics to a completed stationary fit."""
-    if not bool(config.compute_lnz):
+    if not config.compute_lnz:
         return
     try:
         evidence = estimate_pipeline_lnz(
@@ -45,7 +45,7 @@ def _attach_lnz_metadata(
             data=data,
             model_kwargs=model_kwargs,
             outdir=config.outdir,
-            extra_kwargs=config.extra_kwargs,
+            lnz_kwargs=config.lnz_kwargs,
             verbose=config.verbose,
         )
     except Exception as exc:
@@ -93,7 +93,7 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
     )
     _, key = jax.random.split(rng)
     if config.method == "vi":
-        vi = run_factorized_vi(
+        vi = run_multivariate_vi(
             model_kwargs,
             rng_key=key,
             steps=config.vi_steps,
@@ -107,18 +107,13 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
                 else config.vi_progress_bar
             ),
         )
-        values = vi.samples if vi.samples is not None else vi.init_values
-        posterior = _values_to_dataset(
-            values, values_are_draws=vi.samples is not None
-        )
-        if posterior is None:
-            raise RuntimeError("VI produced no posterior values")
+        posterior = vi.posterior
         sample_stats = None
         vi_posterior = posterior
         log_likelihood = None
     else:
         logger.info(f"Spline model: {spline_model}")
-        mcmc = run_factorized_nuts(
+        mcmc = run_multivariate_nuts(
             model_kwargs,
             rng_key=key,
             n_samples=config.n_samples,
@@ -164,7 +159,7 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
             "max_tree_depth": int(config.max_tree_depth),
             "eta": float(config.eta),
             "sampling_eta": float(config.eta),
-            "compute_lnz": bool(config.compute_lnz),
+            "compute_lnz": config.compute_lnz,
         },
         vi=vi,
         vi_posterior=vi_posterior,

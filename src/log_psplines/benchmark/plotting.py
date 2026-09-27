@@ -1,6 +1,5 @@
 import json
 import os
-from typing import List
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -76,7 +75,7 @@ def plot_runtimes(*args, **kwargs):
     args[0].set_yscale("log")
 
 
-def plot_data_size_results(filepaths: List[str]) -> None:
+def plot_data_size_results(filepaths: list[str]) -> None:
     """Plot data size analysis results."""
 
     fig, axes = plt.subplots(2, 1, sharex=True)
@@ -87,7 +86,7 @@ def plot_data_size_results(filepaths: List[str]) -> None:
             logger.info(f"Data file {filepath} not found")
             continue
 
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             data = json.load(f)
 
         kwgs = _get_kwgs(filepath)
@@ -113,7 +112,7 @@ def plot_data_size_results(filepaths: List[str]) -> None:
     plt.close()
 
 
-def plot_knots_results(filepaths: List[str]) -> None:
+def plot_knots_results(filepaths: list[str]) -> None:
     """Plot knots analysis results."""
 
     fig, axes = plt.subplots(2, 1, sharex=True)
@@ -123,7 +122,7 @@ def plot_knots_results(filepaths: List[str]) -> None:
             logger.info(f"Data file {filepath} not found")
             continue
 
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             data = json.load(f)
 
         kwgs = {
@@ -154,7 +153,7 @@ def _get_kwgs(fname: str):
     }
 
 
-def _add_legend(ax, fnames: List[str]) -> None:
+def _add_legend(ax, fnames: list[str]) -> None:
     """Add legend to the axes."""
 
     patches, labels = [], []

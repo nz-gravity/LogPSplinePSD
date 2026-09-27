@@ -1,4 +1,4 @@
-from typing import Tuple, cast
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,7 +8,7 @@ from matplotlib.figure import Figure
 
 def plot_basis(
     basis: np.ndarray, axes: np.ndarray | None = None, fname=None
-) -> Tuple[Figure, np.ndarray]:
+) -> tuple[Figure, np.ndarray]:
     """Plot the basis functions, and a histogram of the basis values"""
     if axes is None:
         fig, axes = plt.subplots(1, 2, figsize=(6, 4))
@@ -58,7 +58,7 @@ def plot_basis(
 
 def plot_penalty(
     penalty: np.ndarray, ax: plt.Axes | None = None
-) -> Tuple[Figure, plt.Axes]:
+) -> tuple[Figure, plt.Axes]:
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 4))
 

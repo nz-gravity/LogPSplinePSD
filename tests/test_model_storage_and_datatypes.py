@@ -1,17 +1,10 @@
-from log_psplines.inference.initialisation import fit_design_weights
-from log_psplines.inference.initialisation import prepare_components
-from log_psplines.models.reconstruction import reconstruct_psd_matrix, compute_psd_quantiles
-from log_psplines.preprocessing.periodogram import compute_wishart, empirical_spectrum
-from log_psplines.plotting.basis import plot_spline_basis
-from log_psplines.inference.initialisation import build_component
 import numpy as np
 import pytest
-import xarray as xr
 
 from log_psplines.data import (
     EmpiricalPSD,
-    WishartData,
     TimeSeries,
+    WishartData,
 )
 from log_psplines.data.spectral_utils import (
     U_to_Y,
@@ -23,9 +16,25 @@ from log_psplines.data.spectral_utils import (
     u_re_im_to_U,
     wishart_u_to_psd,
 )
-from log_psplines.inference.components import SpectralComponents
-from log_psplines.inference.components import MultivarComponentKey
+from log_psplines.inference.components import (
+    MultivarComponentKey,
+    SpectralComponents,
+)
+from log_psplines.inference.initialisation import (
+    build_component,
+    fit_design_weights,
+    prepare_components,
+)
+from log_psplines.models.reconstruction import (
+    compute_psd_quantiles,
+    reconstruct_psd_matrix,
+)
 from log_psplines.models.spectrum import LogPSpline, build_spline
+from log_psplines.plotting.basis import plot_spline_basis
+from log_psplines.preprocessing.periodogram import (
+    compute_wishart,
+    empirical_spectrum,
+)
 
 
 def _simple_log_pspline(n: int = 6) -> LogPSpline:
@@ -97,6 +106,7 @@ def test_log_pspline_evaluation_and_validation(tmp_path) -> None:
             n=4,
             log_target=np.ones(3),
         )
+
 
 def test_multivar_fft_timeseries_and_conversion_helpers() -> None:
     fft = _simple_fft()

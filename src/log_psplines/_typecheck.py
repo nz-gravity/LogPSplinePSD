@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import importlib
 import os
+from collections.abc import Callable
 from functools import lru_cache, wraps
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 F = TypeVar("F", bound=Callable[..., Any])
 

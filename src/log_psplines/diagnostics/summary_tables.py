@@ -10,12 +10,14 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+
 def _require_dataset(tree, group: str):
     node = tree[group]
     dataset = getattr(node, "dataset", node)
     if dataset is None:
         raise KeyError(group)
     return dataset
+
 
 from log_psplines.diagnostics._factors import factor_idatas, vi_factor_idatas
 from log_psplines.diagnostics._utils import (
@@ -74,6 +76,7 @@ def _truth_metrics_from_result(
             )
         ),
     }
+
 
 def _truth_metrics_from_mapping(source: Mapping[str, Any]) -> dict[str, float]:
     metrics = {}

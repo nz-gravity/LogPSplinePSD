@@ -1,6 +1,3 @@
-from log_psplines.inference.initialisation import prepare_components
-from log_psplines.preprocessing.periodogram import compute_fft
-from log_psplines.plotting.basis import plot_spline_basis
 import os
 import time
 
@@ -10,11 +7,16 @@ import numpy as np
 import pytest
 from scipy.interpolate import BSpline
 
-from log_psplines.data import WishartData, TimeSeries
+from log_psplines.data import TimeSeries, WishartData
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 from log_psplines.inference.components import SpectralComponents
-from log_psplines.inference.initialisation import init_weights
+from log_psplines.inference.initialisation import (
+    init_weights,
+    prepare_components,
+)
+from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
+from log_psplines.plotting.basis import plot_spline_basis
+from log_psplines.preprocessing.periodogram import compute_fft
 
 
 @pytest.fixture
@@ -33,6 +35,7 @@ def _plot_p1_spline(
         np.asarray(spline_model.diagonal_models[0](), dtype=np.float64)
     )
     import xarray as xr
+
     from log_psplines.results import PSDResult
 
     result = PSDResult(
@@ -69,7 +72,7 @@ def test_spline_init(mock_fft: WishartData, outdir):
     # plotting for verification
     fig, axes = _plot_p1_spline(mock_fft, spline_model)
     fig.savefig(f"{out}/test_spline_init.png")
-    plot_spline_basis(diag_model,out)
+    plot_spline_basis(diag_model, out)
 
     assert psd.shape == mock_fft.freq.shape
     assert np.all(np.isfinite(psd))

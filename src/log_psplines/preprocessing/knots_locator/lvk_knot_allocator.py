@@ -1,5 +1,3 @@
-from typing import List, Optional, Tuple
-
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.ndimage import gaussian_filter1d, median_filter
@@ -37,14 +35,14 @@ class LvkKnotAllocator:
         self.min_zero_knots = int(min_zero_knots)
         self.min_peak_knots = int(min_peak_knots)
 
-        self.knots_locations: Optional[np.ndarray] = None  # normalized [0,1]
-        self.threshold: Optional[float] = None
-        self.running_median: Optional[np.ndarray] = None
-        self.is_line_bin: Optional[np.ndarray] = None
-        self.peaks: Optional[np.ndarray] = None
-        self.smoothed_peaks: Optional[np.ndarray] = None
-        self.bin_regions: Optional[List[Tuple[int, int, str]]] = None
-        self.log_power_ratio: Optional[np.ndarray] = None
+        self.knots_locations: np.ndarray | None = None  # normalized [0,1]
+        self.threshold: float | None = None
+        self.running_median: np.ndarray | None = None
+        self.is_line_bin: np.ndarray | None = None
+        self.peaks: np.ndarray | None = None
+        self.smoothed_peaks: np.ndarray | None = None
+        self.bin_regions: list[tuple[int, int, str]] | None = None
+        self.log_power_ratio: np.ndarray | None = None
 
         self._identify_lines()
         self._process_peaks()
@@ -118,7 +116,7 @@ class LvkKnotAllocator:
         out[~band_mask] = 0.0
         return out
 
-    def _find_regions(self, binary_array: np.ndarray) -> List[Tuple[int, int]]:
+    def _find_regions(self, binary_array: np.ndarray) -> list[tuple[int, int]]:
         if len(binary_array) == 0:
             return []
         changes = np.diff(
@@ -129,7 +127,11 @@ class LvkKnotAllocator:
         max_idx = len(binary_array) - 1
         starts = np.clip(starts, 0, max_idx)
         ends = np.clip(ends, 0, max_idx)
-        return [(int(s), int(e)) for s, e in zip(starts, ends) if s <= e]
+        return [
+            (int(s), int(e))
+            for s, e in zip(starts, ends, strict=False)
+            if s <= e
+        ]
 
     def _process_peaks(self) -> None:
         if self.running_median is None or self.threshold is None:
@@ -153,7 +155,7 @@ class LvkKnotAllocator:
             has_peaks = smoothed >= region_thresh
             peak_regions = self._find_regions(has_peaks)
             zero_regions = self._find_regions(~has_peaks & band_mask)
-            all_regions: List[Tuple[int, int, str]] = []
+            all_regions: list[tuple[int, int, str]] = []
             for s, e in peak_regions:
                 all_regions.append((s, e, "peak"))
             for s, e in zero_regions:
@@ -191,7 +193,7 @@ class LvkKnotAllocator:
             self.knots_locations = np.sort(norm)
             return self.knots_locations
 
-        knots_hz: List[float] = []
+        knots_hz: list[float] = []
         N = len(self.freqs)
 
         def snap_to_grid(val: float) -> float:
@@ -331,10 +333,10 @@ class LvkKnotAllocator:
     # --- plotting ---
     def plot_analysis(
         self,
-        figsize: Tuple[float, float] = (12.0, 8.0),
+        figsize: tuple[float, float] = (12.0, 8.0),
         fname: str = "psd_analysis.png",
         xscale: str = "linear",
-    ) -> Tuple[plt.Figure, Tuple[plt.Axes, plt.Axes]]:
+    ) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes]]:
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
 
         if xscale == "log":

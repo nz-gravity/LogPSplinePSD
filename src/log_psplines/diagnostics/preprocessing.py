@@ -382,17 +382,17 @@ def save_eigenvalue_separation_plot(
                 if row == col:
                     y = log_delta_sq[:, row]
                     label = f"LogDelta{row+1}{col+1}"
-                    color = f"tab:blue"
+                    color = "tab:blue"
                 elif row < col:
                     y = np.real(theta[:, col, row])
                     label = f"Re(Theta{row+1}{col+1})"
                     pair_idx = row * (2 * p - row - 1) // 2 + (col - row - 1)
-                    color = f"tab:orange"
+                    color = "tab:orange"
                 else:
                     y = np.imag(theta[:, row, col])
                     label = f"Im(Theta{row+1}{col+1})"
                     pair_idx = col * (2 * p - col - 1) // 2 + (row - col - 1)
-                    color = f"tab:red"
+                    color = "tab:red"
 
                 _shade_excluded_bands(ax, add_label=False)
                 if use_log_x:
@@ -401,7 +401,9 @@ def save_eigenvalue_separation_plot(
                     ax.plot(freq, y, color=color, lw=0.7, alpha=0.45)
 
                 # Overlay the denoised signal the knot allocator uses.
-                from log_psplines.preprocessing.knots_locator import denoise_score
+                from log_psplines.preprocessing.knots_locator import (
+                    denoise_score,
+                )
 
                 y_smooth = denoise_score(y, freq)
                 if use_log_x:

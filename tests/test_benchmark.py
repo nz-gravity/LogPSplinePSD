@@ -3,6 +3,7 @@ from click.testing import CliRunner
 
 from log_psplines.benchmark.cli import main as benchmark_cli
 
+
 @pytest.mark.skip(reason="Long-running benchmark test")
 @pytest.mark.slow
 def test_default_run(outdir):
@@ -37,5 +38,3 @@ def test_default_run(outdir):
 
     assert result.exit_code == 0, "CLI command failed"
     assert "Benchmark complete." in result.output
-
-

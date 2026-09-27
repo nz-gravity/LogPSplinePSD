@@ -3,6 +3,7 @@ import numpy as np
 from numpy.fft import rfft
 
 from log_psplines.data import TimeSeries
+
 from ..logger import logger
 
 

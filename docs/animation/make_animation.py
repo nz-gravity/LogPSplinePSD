@@ -17,13 +17,10 @@ import json
 from pathlib import Path
 
 import numpy as np
-
-from matplotlib import colormaps
-from matplotlib.colors import to_hex
-
 from manim import *
 from manimpango import list_fonts
-
+from matplotlib import colormaps
+from matplotlib.colors import to_hex
 
 # ============================================================
 # Manim setup
@@ -103,6 +100,7 @@ PSD_HEIGHT = 5.35
 # Load states
 # ============================================================
 
+
 def load_states():
     with open(MANIFEST_FILE) as f:
         manifest = json.load(f)
@@ -110,16 +108,9 @@ def load_states():
     states = []
 
     for info in manifest["states"]:
-        data = np.load(
-            CACHE_DIR / info["file"]
-        )
+        data = np.load(CACHE_DIR / info["file"])
 
-        states.append(
-            {
-                key: np.asarray(data[key])
-                for key in data.files
-            }
-        )
+        states.append({key: np.asarray(data[key]) for key in data.files})
 
     return states
 
@@ -131,23 +122,11 @@ STATES = load_states()
 # Global ranges
 # ============================================================
 
-FMIN = min(
-    float(np.min(s["psd_frequency"]))
-    for s in STATES
-)
+FMIN = min(float(np.min(s["psd_frequency"])) for s in STATES)
 
-FMAX = max(
-    float(np.max(s["psd_frequency"]))
-    for s in STATES
-)
+FMAX = max(float(np.max(s["psd_frequency"])) for s in STATES)
 
-WEIGHT_MAX = (
-    1.08
-    * max(
-        float(np.max(s["weight_magnitude"]))
-        for s in STATES
-    )
-)
+WEIGHT_MAX = 1.08 * max(float(np.max(s["weight_magnitude"])) for s in STATES)
 
 all_psd = np.concatenate(
     [
@@ -157,10 +136,7 @@ all_psd = np.concatenate(
     ]
 )
 
-positive_psd = all_psd[
-    np.isfinite(all_psd)
-    & (all_psd > 0)
-]
+positive_psd = all_psd[np.isfinite(all_psd) & (all_psd > 0)]
 
 LOG_Y_MIN = float(
     np.floor(
@@ -189,6 +165,7 @@ LOG_Y_MAX = float(
 # Colors
 # ============================================================
 
+
 def basis_colors(
     n_basis: int,
 ):
@@ -207,17 +184,13 @@ def basis_colors(
         n_basis,
     )
 
-    return [
-        ManimColor(
-            to_hex(cmap(x))
-        )
-        for x in samples
-    ]
+    return [ManimColor(to_hex(cmap(x))) for x in samples]
 
 
 # ============================================================
 # Generic curve helper
 # ============================================================
+
 
 def curve_from_xy(
     axes,
@@ -257,9 +230,7 @@ def curve_from_xy(
 
     curve = VMobject()
 
-    curve.set_points_as_corners(
-        points
-    )
+    curve.set_points_as_corners(points)
 
     curve.set_stroke(
         color=color,
@@ -274,21 +245,16 @@ def curve_from_xy(
 # Basis curves
 # ============================================================
 
+
 def make_basis_group(
     axes,
     state,
 ):
-    x = np.asarray(
-        state["basis_frequency"]
-    )
+    x = np.asarray(state["basis_frequency"])
 
-    basis = np.asarray(
-        state["basis"]
-    )
+    basis = np.asarray(state["basis"])
 
-    n_basis = int(
-        state["n_basis"]
-    )
+    n_basis = int(state["n_basis"])
 
     if len(x) > MAX_BASIS_POINTS:
         idx = np.linspace(
@@ -301,9 +267,7 @@ def make_basis_group(
         x = x[idx]
         basis = basis[idx, :]
 
-    colors = basis_colors(
-        n_basis
-    )
+    colors = basis_colors(n_basis)
 
     linewidth = max(
         1.0,
@@ -312,9 +276,7 @@ def make_basis_group(
 
     curves = VGroup()
 
-    for k in range(
-        n_basis
-    ):
+    for k in range(n_basis):
         curves.add(
             curve_from_xy(
                 axes,
@@ -332,6 +294,7 @@ def make_basis_group(
 # ============================================================
 # Basis matching
 # ============================================================
+
 
 def basis_centres_from_state(
     state,
@@ -361,34 +324,21 @@ def nearest_basis_matching(
         Old basis functions with no matched new curve.
     """
 
-    old_centres = basis_centres_from_state(
-        old_state
-    )
+    old_centres = basis_centres_from_state(old_state)
 
-    new_centres = basis_centres_from_state(
-        new_state
-    )
+    new_centres = basis_centres_from_state(new_state)
 
-    available_new = set(
-        range(
-            len(new_centres)
-        )
-    )
+    available_new = set(range(len(new_centres)))
 
     matches = []
 
-    for old_index, old_centre in enumerate(
-        old_centres
-    ):
+    for old_index, old_centre in enumerate(old_centres):
         if not available_new:
             break
 
         new_index = min(
             available_new,
-            key=lambda j: abs(
-                new_centres[j]
-                - old_centre
-            ),
+            key=lambda j: abs(new_centres[j] - old_centre),
         )
 
         matches.append(
@@ -398,37 +348,15 @@ def nearest_basis_matching(
             )
         )
 
-        available_new.remove(
-            new_index
-        )
+        available_new.remove(new_index)
 
-    matched_old = {
-        old_i
-        for old_i, _
-        in matches
-    }
+    matched_old = {old_i for old_i, _ in matches}
 
-    matched_new = {
-        new_i
-        for _, new_i
-        in matches
-    }
+    matched_new = {new_i for _, new_i in matches}
 
-    old_only = [
-        i
-        for i in range(
-            len(old_centres)
-        )
-        if i not in matched_old
-    ]
+    old_only = [i for i in range(len(old_centres)) if i not in matched_old]
 
-    new_only = [
-        i
-        for i in range(
-            len(new_centres)
-        )
-        if i not in matched_new
-    ]
+    new_only = [i for i in range(len(new_centres)) if i not in matched_new]
 
     return (
         matches,
@@ -449,23 +377,16 @@ def flattened_curve(
 
     flat = curve.copy()
 
-    points = (
-        flat.get_points()
-        .copy()
-    )
+    points = flat.get_points().copy()
 
     baseline_y = axes.c2p(
         FMIN,
         0,
     )[1]
 
-    points[:, 1] = (
-        baseline_y
-    )
+    points[:, 1] = baseline_y
 
-    flat.set_points(
-        points
-    )
+    flat.set_points(points)
 
     return flat
 
@@ -474,21 +395,16 @@ def flattened_curve(
 # Weight bars
 # ============================================================
 
+
 def make_weight_group(
     axes,
     state,
 ):
-    centres = np.asarray(
-        state["basis_centres"]
-    )
+    centres = np.asarray(state["basis_centres"])
 
-    weights = np.asarray(
-        state["weight_magnitude"]
-    )
+    weights = np.asarray(state["weight_magnitude"])
 
-    colors = basis_colors(
-        len(weights)
-    )
+    colors = basis_colors(len(weights))
 
     scene_x = np.array(
         [
@@ -501,16 +417,9 @@ def make_weight_group(
     )
 
     if len(scene_x) > 1:
-        spacing = np.median(
-            np.diff(
-                scene_x
-            )
-        )
+        spacing = np.median(np.diff(scene_x))
 
-        bar_width = (
-            0.65
-            * abs(spacing)
-        )
+        bar_width = 0.65 * abs(spacing)
     else:
         bar_width = 0.20
 
@@ -533,10 +442,7 @@ def make_weight_group(
         )
 
         height = max(
-            float(
-                top[1]
-                - bottom[1]
-            ),
+            float(top[1] - bottom[1]),
             0.008,
         )
 
@@ -551,15 +457,12 @@ def make_weight_group(
         bar.move_to(
             [
                 bottom[0],
-                bottom[1]
-                + height / 2,
+                bottom[1] + height / 2,
                 0,
             ]
         )
 
-        bars.add(
-            bar
-        )
+        bars.add(bar)
 
     return bars
 
@@ -568,21 +471,16 @@ def make_weight_group(
 # Posterior band
 # ============================================================
 
+
 def make_posterior_band(
     axes,
     state,
 ):
-    x = np.asarray(
-        state["psd_frequency"]
-    )
+    x = np.asarray(state["psd_frequency"])
 
-    lo = np.asarray(
-        state["psd_lo"]
-    )
+    lo = np.asarray(state["psd_lo"])
 
-    hi = np.asarray(
-        state["psd_hi"]
-    )
+    hi = np.asarray(state["psd_hi"])
 
     if len(x) > MAX_PSD_POINTS:
         idx = np.linspace(
@@ -646,6 +544,7 @@ def make_posterior_band(
 # Periodogram line
 # ============================================================
 
+
 def make_periodogram(
     axes,
     state,
@@ -657,9 +556,7 @@ def make_periodogram(
     model is fitted to exactly the same dataset.
     """
 
-    x = np.asarray(
-        state["periodogram_frequency"]
-    )
+    x = np.asarray(state["periodogram_frequency"])
 
     y = np.log10(
         np.maximum(
@@ -692,12 +589,7 @@ SUPERSCRIPT = str.maketrans(
 def exponent_label(
     n,
 ):
-    return (
-        "10"
-        + str(n).translate(
-            SUPERSCRIPT
-        )
-    )
+    return "10" + str(n).translate(SUPERSCRIPT)
 
 
 def make_psd_tick_labels(
@@ -726,18 +618,14 @@ def make_psd_tick_labels(
             buff=0.08,
         )
 
-        labels.add(
-            label
-        )
+        labels.add(label)
 
     for exp in range(
         int(LOG_Y_MIN),
         int(LOG_Y_MAX) + 1,
     ):
         label = Text(
-            exponent_label(
-                exp
-            ),
+            exponent_label(exp),
             font=FONT,
             font_size=17,
             color=SUBTLE_TEXT,
@@ -752,9 +640,7 @@ def make_psd_tick_labels(
             buff=0.10,
         )
 
-        labels.add(
-            label
-        )
+        labels.add(label)
 
     return labels
 
@@ -763,10 +649,8 @@ def make_psd_tick_labels(
 # Main scene
 # ============================================================
 
-class LogPSplineHero(
-    Scene
-):
 
+class LogPSplineHero(Scene):
     def construct(
         self,
     ):
@@ -806,13 +690,9 @@ class LogPSplineHero(
         )
 
         # Keep only a subtle baseline.
-        basis_axes.y_axis.set_opacity(
-            0
-        )
+        basis_axes.y_axis.set_opacity(0)
 
-        basis_axes.x_axis.set_opacity(
-            0.25
-        )
+        basis_axes.x_axis.set_opacity(0.25)
 
         basis_title = Text(
             "B-spline basis",
@@ -886,13 +766,9 @@ class LogPSplineHero(
             ]
         )
 
-        weight_axes.y_axis.set_opacity(
-            0
-        )
+        weight_axes.y_axis.set_opacity(0)
 
-        weight_axes.x_axis.set_opacity(
-            0.25
-        )
+        weight_axes.x_axis.set_opacity(0.25)
 
         weight_title = Text(
             "basis weights",
@@ -978,9 +854,7 @@ class LogPSplineHero(
             color=SUBTLE_TEXT,
         )
 
-        y_label.rotate(
-            PI / 2
-        )
+        y_label.rotate(PI / 2)
 
         y_label.next_to(
             psd_axes,
@@ -988,55 +862,39 @@ class LogPSplineHero(
             buff=0.57,
         )
 
-        tick_labels = (
-            make_psd_tick_labels(
-                psd_axes
-            )
-        )
+        tick_labels = make_psd_tick_labels(psd_axes)
 
         # ====================================================
         # Static observed data
         # ====================================================
 
-        periodogram = (
-            make_periodogram(
-                psd_axes,
-                first,
-            )
+        periodogram = make_periodogram(
+            psd_axes,
+            first,
         )
 
-        periodogram.set_z_index(
-            1
-        )
+        periodogram.set_z_index(1)
 
         # ====================================================
         # Initial dynamic objects
         # ====================================================
 
-        current_basis = (
-            make_basis_group(
-                basis_axes,
-                first,
-            )
+        current_basis = make_basis_group(
+            basis_axes,
+            first,
         )
 
-        current_weights = (
-            make_weight_group(
-                weight_axes,
-                first,
-            )
+        current_weights = make_weight_group(
+            weight_axes,
+            first,
         )
 
-        current_band = (
-            make_posterior_band(
-                psd_axes,
-                first,
-            )
+        current_band = make_posterior_band(
+            psd_axes,
+            first,
         )
 
-        current_band.set_z_index(
-            2
-        )
+        current_band.set_z_index(2)
 
         current_state = first
 
@@ -1049,24 +907,19 @@ class LogPSplineHero(
             basis_title,
             current_k,
             current_basis,
-
             weight_axes,
             current_weights,
             weight_title,
-
             psd_axes,
             tick_labels,
             psd_title,
             x_label,
             y_label,
-
             periodogram,
             current_band,
         )
 
-        self.wait(
-            STATE_HOLD
-        )
+        self.wait(STATE_HOLD)
 
         # ====================================================
         # Transition helper
@@ -1085,30 +938,22 @@ class LogPSplineHero(
             # Canonical target state
             # ------------------------------------------------
 
-            new_basis = (
-                make_basis_group(
-                    basis_axes,
-                    new_state,
-                )
+            new_basis = make_basis_group(
+                basis_axes,
+                new_state,
             )
 
-            new_weights = (
-                make_weight_group(
-                    weight_axes,
-                    new_state,
-                )
+            new_weights = make_weight_group(
+                weight_axes,
+                new_state,
             )
 
-            new_band = (
-                make_posterior_band(
-                    psd_axes,
-                    new_state,
-                )
+            new_band = make_posterior_band(
+                psd_axes,
+                new_state,
             )
 
-            new_band.set_z_index(
-                2
-            )
+            new_band.set_z_index(2)
 
             (
                 matches,
@@ -1133,35 +978,23 @@ class LogPSplineHero(
             for old_i, new_i in matches:
                 animations.append(
                     Transform(
-                        current_basis[
-                            old_i
-                        ],
-                        new_basis[
-                            new_i
-                        ],
+                        current_basis[old_i],
+                        new_basis[new_i],
                     )
                 )
 
             # New curves grow up from the baseline.
             for new_i in new_only:
-                target = (
-                    new_basis[
-                        new_i
-                    ]
-                )
+                target = new_basis[new_i]
 
                 flat = flattened_curve(
                     target,
                     basis_axes,
                 )
 
-                self.add(
-                    flat
-                )
+                self.add(flat)
 
-                temporary_objects.append(
-                    flat
-                )
+                temporary_objects.append(flat)
 
                 animations.append(
                     Transform(
@@ -1172,13 +1005,7 @@ class LogPSplineHero(
 
             # Curves no longer required fade away.
             for old_i in old_only:
-                animations.append(
-                    FadeOut(
-                        current_basis[
-                            old_i
-                        ]
-                    )
-                )
+                animations.append(FadeOut(current_basis[old_i]))
 
             # =================================================
             # Weight bars
@@ -1186,44 +1013,24 @@ class LogPSplineHero(
 
             # Existing bars move/resize.
             for old_i, new_i in matches:
-                if (
-                    old_i
-                    < len(current_weights)
-                    and new_i
-                    < len(new_weights)
-                ):
+                if old_i < len(current_weights) and new_i < len(new_weights):
                     animations.append(
                         Transform(
-                            current_weights[
-                                old_i
-                            ],
-                            new_weights[
-                                new_i
-                            ],
+                            current_weights[old_i],
+                            new_weights[new_i],
                         )
                     )
 
             # New bars grow upward.
             for new_i in new_only:
-                if new_i >= len(
-                    new_weights
-                ):
+                if new_i >= len(new_weights):
                     continue
 
-                bar = (
-                    new_weights[
-                        new_i
-                    ]
-                    .copy()
-                )
+                bar = new_weights[new_i].copy()
 
-                self.add(
-                    bar
-                )
+                self.add(bar)
 
-                temporary_objects.append(
-                    bar
-                )
+                temporary_objects.append(bar)
 
                 animations.append(
                     GrowFromEdge(
@@ -1234,16 +1041,8 @@ class LogPSplineHero(
 
             # Old bars disappear on downward transitions.
             for old_i in old_only:
-                if old_i < len(
-                    current_weights
-                ):
-                    animations.append(
-                        FadeOut(
-                            current_weights[
-                                old_i
-                            ]
-                        )
-                    )
+                if old_i < len(current_weights):
+                    animations.append(FadeOut(current_weights[old_i]))
 
             # =================================================
             # Posterior band
@@ -1262,9 +1061,7 @@ class LogPSplineHero(
 
             self.play(
                 *animations,
-                run_time=(
-                    TRANSITION_TIME
-                ),
+                run_time=(TRANSITION_TIME),
                 rate_func=smooth,
             )
 
@@ -1278,51 +1075,31 @@ class LogPSplineHero(
             # This avoids high-K curves surviving when K falls.
             # =================================================
 
-            for obj in list(
-                current_basis
-            ):
-                self.remove(
-                    obj
-                )
+            for obj in list(current_basis):
+                self.remove(obj)
 
-            for obj in list(
-                current_weights
-            ):
-                self.remove(
-                    obj
-                )
+            for obj in list(current_weights):
+                self.remove(obj)
 
-            self.remove(
-                current_basis
-            )
+            self.remove(current_basis)
 
-            self.remove(
-                current_weights
-            )
+            self.remove(current_weights)
 
-            for obj in (
-                temporary_objects
-            ):
-                self.remove(
-                    obj
-                )
+            for obj in temporary_objects:
+                self.remove(obj)
 
             # =================================================
             # Add one clean canonical version of the new state
             # =================================================
 
-            current_basis = (
-                make_basis_group(
-                    basis_axes,
-                    new_state,
-                )
+            current_basis = make_basis_group(
+                basis_axes,
+                new_state,
             )
 
-            current_weights = (
-                make_weight_group(
-                    weight_axes,
-                    new_state,
-                )
+            current_weights = make_weight_group(
+                weight_axes,
+                new_state,
             )
 
             self.add(
@@ -1341,45 +1118,26 @@ class LogPSplineHero(
                 color=SUBTLE_TEXT,
             )
 
-            new_k.move_to(
-                current_k
-                .get_center()
-            )
+            new_k.move_to(current_k.get_center())
 
-            current_k.become(
-                new_k
-            )
+            current_k.become(new_k)
 
-            current_state = (
-                new_state
-            )
+            current_state = new_state
 
-            self.wait(
-                STATE_HOLD
-            )
+            self.wait(STATE_HOLD)
 
         # ====================================================
         # Increase K
         # ====================================================
 
-        for state in STATES[
-            1:
-        ]:
-            transition_to(
-                state
-            )
+        for state in STATES[1:]:
+            transition_to(state)
 
         # ====================================================
         # Decrease K for seamless loop
         # ====================================================
 
-        for state in STATES[
-            -2::-1
-        ]:
-            transition_to(
-                state
-            )
+        for state in STATES[-2::-1]:
+            transition_to(state)
 
-        self.wait(
-            0.2
-        )
+        self.wait(0.2)

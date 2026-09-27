@@ -79,7 +79,7 @@ class TimeSeries:
         self,
         fmin: float | None = None,
         fmax: float | None = None,
-    ) -> "WishartData":
+    ) -> WishartData:
         return compute_fft(
             self.data,
             fs=self.fs,
@@ -97,7 +97,7 @@ class TimeSeries:
         window: str | tuple | None = None,
         detrend: str | bool = "constant",
         wishart_floor_fraction: float | None = None,
-    ) -> "WishartData":
+    ) -> WishartData:
         n = self.data.shape[0]
         if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):
             raise TypeError("Nb must be a positive integer.")
@@ -137,7 +137,7 @@ class TimeSeries:
     def __repr__(self):
         return f"TimeSeries(n={self.data.shape[0]}, p={self.p}, fs={self.fs:.3f}, amplitudes={self.amplitude_range})"
 
-    def get_empirical_psd(self, **kwargs) -> "EmpiricalPSD":
+    def get_empirical_psd(self, **kwargs) -> EmpiricalPSD:
         return empirical_spectrum(
             self.data,
             fs=self.fs,

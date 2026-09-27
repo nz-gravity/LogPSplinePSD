@@ -97,16 +97,19 @@ Output and Evidence
    plots, and diagnostic tables/figures.
 
 ``compute_lnz``
-   Estimate log evidence with MorphZ when possible. Leave as ``None`` to use
-   the fit default.
+   Estimate log evidence with MorphZ when enabled. Defaults to ``False``.
+
+``lnz_kwargs``
+   Optional MorphZ keyword overrides used when ``compute_lnz`` is enabled.
 
 ``true_psd``
    Optional reference PSD used only for diagnostics and error summaries. It can
    be an array aligned to the analysis grid or a ``(freq, psd)`` tuple to be
    interpolated.
 
-   
+
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -122,7 +125,7 @@ FrequencyBand = tuple[float, float]
 
 @dataclass(frozen=True)
 class PipelineConfig:
-    """Flat configuration for preprocessing, VI, and MCMC pipeline setup."""
+    """Flat configuration for stationary preprocessing and inference."""
 
     n_samples: int = 1000
     n_warmup: int = 500
@@ -138,9 +141,6 @@ class PipelineConfig:
     wishart_window: str | tuple | None = None
     wishart_detrend: str | bool = "constant"
     wishart_floor_fraction: float | None = None
-    welch_nperseg: int | None = None
-    welch_noverlap: int | None = None
-    welch_window: str = "hann"
 
     n_knots: int | dict[str, int] = 10
     degree: int = 3
@@ -156,7 +156,7 @@ class PipelineConfig:
 
     verbose: bool = True
     outdir: str | None = None
-    compute_lnz: bool | None = None
+    compute_lnz: bool = False
 
     method: Literal["nuts", "vi"] = "nuts"
     vi_steps: int = 1500
@@ -164,7 +164,6 @@ class PipelineConfig:
     vi_guide: str | None = None
     vi_posterior_draws: int = 50
     vi_progress_bar: bool | None = None
-    vi_psd_max_draws: int = 50
 
     target_accept_prob: float = 0.8
     target_accept_prob_by_channel: list[float] | None = None
@@ -176,7 +175,7 @@ class PipelineConfig:
 
     eta: float = 1.0
 
-    extra_kwargs: dict[str, Any] = field(default_factory=dict)
+    lnz_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 __all__ = ["PipelineConfig", "PowerSplineConfig"]

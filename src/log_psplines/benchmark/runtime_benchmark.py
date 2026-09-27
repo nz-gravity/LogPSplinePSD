@@ -9,11 +9,14 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from log_psplines import fit
-from log_psplines.example_datasets.varma_data import VARMAData
+from log_psplines.benchmark.plotting import (
+    plot_data_size_results,
+    plot_knots_results,
+)
 from log_psplines.config import PipelineConfig
+from log_psplines.example_datasets.varma_data import VARMAData
 
 from ..logger import logger
-from log_psplines.benchmark.plotting import plot_data_size_results, plot_knots_results
 
 # Get device information
 DEVICE = jax.devices()[0].platform

@@ -82,7 +82,7 @@ def _legacy_compute_multivar_riae_diagnostics(
     freq_quantiles = np.quantile(freqs, [0.0, 0.25, 0.5, 0.75, 1.0])
     freq_edges = np.unique(freq_quantiles)
     riae_bands = []
-    for start, end in zip(freq_edges[:-1], freq_edges[1:]):
+    for start, end in zip(freq_edges[:-1], freq_edges[1:], strict=False):
         mask = (freqs >= start) & (freqs <= end)
         if np.count_nonzero(mask) < 2 or end <= start:
             continue
@@ -148,7 +148,7 @@ def _assert_diagnostics_equal(actual: dict, expected: dict) -> None:
         rhs = actual[key]
         if isinstance(lhs, list) and lhs and isinstance(lhs[0], dict):
             assert len(rhs) == len(lhs)
-            for left_item, right_item in zip(lhs, rhs):
+            for left_item, right_item in zip(lhs, rhs, strict=False):
                 assert set(left_item.keys()) == set(right_item.keys())
                 for subkey in left_item:
                     np.testing.assert_allclose(
@@ -157,9 +157,7 @@ def _assert_diagnostics_equal(actual: dict, expected: dict) -> None:
                         rtol=1e-12,
                         atol=1e-12,
                     )
-        elif isinstance(lhs, list):
-            np.testing.assert_allclose(rhs, lhs, rtol=1e-12, atol=1e-12)
-        elif isinstance(lhs, float):
+        elif isinstance(lhs, list) or isinstance(lhs, float):
             np.testing.assert_allclose(rhs, lhs, rtol=1e-12, atol=1e-12)
         else:
             assert rhs == lhs

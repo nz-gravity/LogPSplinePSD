@@ -34,6 +34,7 @@ from pathlib import Path
 
 import numpy as np
 from manim import (
+    WHITE,
     Dot,
     FadeIn,
     FadeOut,
@@ -44,12 +45,10 @@ from manim import (
     ValueTracker,
     VGroup,
     VMobject,
-    WHITE,
     always_redraw,
     config,
     smooth,
 )
-
 
 ROOT = Path(__file__).resolve().parent
 DATA_FILE = ROOT / "pspline_posterior.npz"
@@ -82,6 +81,7 @@ config.frame_rate = 30
 # Basis utilities
 # ============================================================
 
+
 def cardinal_cubic(u: np.ndarray) -> np.ndarray:
     """Centred cardinal cubic B-spline, with B(0)=2/3."""
     a = np.abs(np.asarray(u, dtype=float))
@@ -91,15 +91,9 @@ def cardinal_cubic(u: np.ndarray) -> np.ndarray:
     inner = a < 1.0
     shoulder = (a >= 1.0) & (a < 2.0)
 
-    out[inner] = (
-        4.0
-        - 6.0 * a[inner] ** 2
-        + 3.0 * a[inner] ** 3
-    ) / 6.0
+    out[inner] = (4.0 - 6.0 * a[inner] ** 2 + 3.0 * a[inner] ** 3) / 6.0
 
-    out[shoulder] = (
-        2.0 - a[shoulder]
-    ) ** 3 / 6.0
+    out[shoulder] = (2.0 - a[shoulder]) ** 3 / 6.0
 
     return out
 
@@ -111,9 +105,7 @@ def line_from_xy(
     width: float,
 ) -> VMobject:
     """Create a Manim polyline from x/y arrays."""
-    points = np.column_stack(
-        [x, y, np.zeros_like(x)]
-    )
+    points = np.column_stack([x, y, np.zeros_like(x)])
 
     curve = VMobject(
         color=color,
@@ -134,13 +126,9 @@ def band_polygon(
 ) -> Polygon:
     """Posterior credible-region polygon."""
 
-    upper = np.column_stack(
-        [x, hi, np.zeros_like(x)]
-    )
+    upper = np.column_stack([x, hi, np.zeros_like(x)])
 
-    lower = np.column_stack(
-        [x[::-1], lo[::-1], np.zeros_like(x)]
-    )
+    lower = np.column_stack([x[::-1], lo[::-1], np.zeros_like(x)])
 
     points = np.vstack([upper, lower])
 
@@ -155,6 +143,7 @@ def band_polygon(
 # ============================================================
 # Synthetic demo
 # ============================================================
+
 
 def make_demo_data():
     """Generate a reproducible synthetic example."""
@@ -177,50 +166,44 @@ def make_demo_data():
     spacing = centres[1] - centres[0]
 
     basis = np.array(
-        [
-            cardinal_cubic(
-                (x - centre) / spacing
-            )
-            for centre in centres
-        ]
+        [cardinal_cubic((x - centre) / spacing) for centre in centres]
     )
 
     # --------------------------------------------------------
     # Synthetic posterior on weights
     # --------------------------------------------------------
-    w_mean = np.array([
-        0.34,
-        0.70,
-        1.08,
-        0.76,
-        1.24,
-        0.72,
-        0.38,
-    ])
+    w_mean = np.array(
+        [
+            0.34,
+            0.70,
+            1.08,
+            0.76,
+            1.24,
+            0.72,
+            0.38,
+        ]
+    )
 
-    w_sd = np.array([
-        0.08,
-        0.09,
-        0.10,
-        0.09,
-        0.11,
-        0.09,
-        0.07,
-    ])
+    w_sd = np.array(
+        [
+            0.08,
+            0.09,
+            0.10,
+            0.09,
+            0.11,
+            0.09,
+            0.07,
+        ]
+    )
 
     # Mild correlation between neighbouring coefficients
     rho = 0.38
 
     indices = np.arange(n_basis)
 
-    corr = rho ** np.abs(
-        np.subtract.outer(indices, indices)
-    )
+    corr = rho ** np.abs(np.subtract.outer(indices, indices))
 
-    cov = (
-        np.outer(w_sd, w_sd)
-        * corr
-    )
+    cov = np.outer(w_sd, w_sd) * corr
 
     w_draws = rng.multivariate_normal(
         mean=w_mean,
@@ -231,15 +214,17 @@ def make_demo_data():
     # --------------------------------------------------------
     # Synthetic noisy data
     # --------------------------------------------------------
-    truth_w = np.array([
-        0.31,
-        0.75,
-        1.03,
-        0.80,
-        1.18,
-        0.78,
-        0.35,
-    ])
+    truth_w = np.array(
+        [
+            0.31,
+            0.75,
+            1.03,
+            0.80,
+            1.18,
+            0.78,
+            0.35,
+        ]
+    )
 
     truth = truth_w @ basis
 
@@ -255,13 +240,10 @@ def make_demo_data():
         truth,
     )
 
-    y = (
-        y_true
-        + rng.normal(
-            0.0,
-            0.055,
-            size=len(x_data),
-        )
+    y = y_true + rng.normal(
+        0.0,
+        0.055,
+        size=len(x_data),
     )
 
     return (
@@ -277,19 +259,16 @@ def make_demo_data():
 # Load real posterior or demo
 # ============================================================
 
-def load_inputs():
 
+def load_inputs():
     if not DATA_FILE.exists():
         print(
-            f"{DATA_FILE.name} not found. "
-            "Using synthetic demo posterior."
+            f"{DATA_FILE.name} not found. " "Using synthetic demo posterior."
         )
 
         return make_demo_data()
 
-    print(
-        f"Loading posterior from {DATA_FILE}"
-    )
+    print(f"Loading posterior from {DATA_FILE}")
 
     data = np.load(DATA_FILE)
 
@@ -300,14 +279,11 @@ def load_inputs():
         "w_draws",
     }
 
-    missing = required.difference(
-        data.files
-    )
+    missing = required.difference(data.files)
 
     if missing:
         raise ValueError(
-            f"{DATA_FILE.name} is missing keys: "
-            f"{sorted(missing)}"
+            f"{DATA_FILE.name} is missing keys: " f"{sorted(missing)}"
         )
 
     x = np.asarray(
@@ -342,30 +318,19 @@ def load_inputs():
     # Validation
     # --------------------------------------------------------
     if basis.ndim != 2:
-        raise ValueError(
-            "basis must have shape (K, N)"
-        )
+        raise ValueError("basis must have shape (K, N)")
 
     if w_draws.ndim != 2:
-        raise ValueError(
-            "w_draws must have shape (S, K)"
-        )
+        raise ValueError("w_draws must have shape (S, K)")
 
     if basis.shape[0] != w_draws.shape[1]:
-        raise ValueError(
-            "basis.shape[0] must equal "
-            "w_draws.shape[1]"
-        )
+        raise ValueError("basis.shape[0] must equal " "w_draws.shape[1]")
 
     if basis.shape[1] != len(x):
-        raise ValueError(
-            "basis.shape[1] must equal len(x)"
-        )
+        raise ValueError("basis.shape[1] must equal len(x)")
 
     if len(x_data) != len(y):
-        raise ValueError(
-            "x_data and y must have the same length"
-        )
+        raise ValueError("x_data and y must have the same length")
 
     return (
         x,
@@ -380,11 +345,11 @@ def load_inputs():
 # Manim scene
 # ============================================================
 
+
 class PSplinePosteriorExplainer(Scene):
     """Build a posterior spline fit one basis function at a time."""
 
     def construct(self):
-
         (
             x,
             x_data,
@@ -428,9 +393,7 @@ class PSplinePosteriorExplainer(Scene):
         # ----------------------------------------------------
         # Full posterior curves
         # ----------------------------------------------------
-        full_curves = (
-            w_draws @ basis
-        )
+        full_curves = w_draws @ basis
 
         y_lo_full = np.percentile(
             full_curves,
@@ -458,12 +421,9 @@ class PSplinePosteriorExplainer(Scene):
             np.max(y_hi_full),
         )
 
-        pad = (
-            0.10
-            * max(
-                1e-8,
-                y_max - y_min,
-            )
+        pad = 0.10 * max(
+            1e-8,
+            y_max - y_min,
         )
 
         y_min -= pad
@@ -476,52 +436,31 @@ class PSplinePosteriorExplainer(Scene):
         def sx(values):
             values = np.asarray(values)
 
-            return (
-                left
-                + (
-                    (values - x.min())
-                    / (x.max() - x.min())
-                )
-                * (right - left)
+            return left + ((values - x.min()) / (x.max() - x.min())) * (
+                right - left
             )
 
         def sy(values):
             values = np.asarray(values)
 
-            return (
-                top_bottom
-                + (
-                    (values - y_min)
-                    / (y_max - y_min)
-                )
-                * (top_top - top_bottom)
+            return top_bottom + ((values - y_min) / (y_max - y_min)) * (
+                top_top - top_bottom
             )
 
         # Separate scale for the bottom contributions
         contribution_scale = max(
             1e-8,
-            np.max(
-                np.abs(
-                    w_median[:, None]
-                    * basis
-                )
-            ),
+            np.max(np.abs(w_median[:, None] * basis)),
         )
 
         def by(values):
             values = np.asarray(values)
 
-            return (
-                basis_bottom
-                + (
-                    values / contribution_scale
-                )
-                * (basis_top - basis_bottom)
+            return basis_bottom + (values / contribution_scale) * (
+                basis_top - basis_bottom
             )
 
-        x_scene = np.asarray(
-            sx(x)
-        )
+        x_scene = np.asarray(sx(x))
 
         # ====================================================
         # Labels
@@ -534,11 +473,13 @@ class PSplinePosteriorExplainer(Scene):
             font_size=34,
         )
 
-        equation.move_to([
-            -3.45,
-            3.28,
-            0.0,
-        ])
+        equation.move_to(
+            [
+                -3.45,
+                3.28,
+                0.0,
+            ]
+        )
 
         title = Text(
             "Posterior P-spline fit",
@@ -547,11 +488,13 @@ class PSplinePosteriorExplainer(Scene):
             font_size=23,
         )
 
-        title.move_to([
-            4.65,
-            3.28,
-            0.0,
-        ])
+        title.move_to(
+            [
+                4.65,
+                3.28,
+                0.0,
+            ]
+        )
 
         data_label = Text(
             "data",
@@ -560,11 +503,13 @@ class PSplinePosteriorExplainer(Scene):
             font_size=18,
         )
 
-        data_label.move_to([
-            5.70,
-            2.50,
-            0.0,
-        ])
+        data_label.move_to(
+            [
+                5.70,
+                2.50,
+                0.0,
+            ]
+        )
 
         band_label = Text(
             "95% credible interval",
@@ -573,11 +518,13 @@ class PSplinePosteriorExplainer(Scene):
             font_size=17,
         )
 
-        band_label.move_to([
-            4.88,
-            2.18,
-            0.0,
-        ])
+        band_label.move_to(
+            [
+                4.88,
+                2.18,
+                0.0,
+            ]
+        )
 
         median_label = Text(
             "posterior median",
@@ -586,11 +533,13 @@ class PSplinePosteriorExplainer(Scene):
             font_size=17,
         )
 
-        median_label.move_to([
-            5.02,
-            1.91,
-            0.0,
-        ])
+        median_label.move_to(
+            [
+                5.02,
+                1.91,
+                0.0,
+            ]
+        )
 
         basis_label = Text(
             "weighted B-spline contributions",
@@ -599,11 +548,13 @@ class PSplinePosteriorExplainer(Scene):
             font_size=19,
         )
 
-        basis_label.move_to([
-            -4.55,
-            -0.69,
-            0.0,
-        ])
+        basis_label.move_to(
+            [
+                -4.55,
+                -0.69,
+                0.0,
+            ]
+        )
 
         # ====================================================
         # Data points
@@ -622,10 +573,10 @@ class PSplinePosteriorExplainer(Scene):
                     fill_opacity=0.70,
                     stroke_width=0,
                 )
-                for xi, yi
-                in zip(
+                for xi, yi in zip(
                     x_data,
                     y_data,
+                    strict=False,
                 )
             ]
         )
@@ -634,19 +585,11 @@ class PSplinePosteriorExplainer(Scene):
         # Trackers
         # ====================================================
 
-        trackers = [
-            ValueTracker(0.0)
-            for _ in range(n_basis)
-        ]
+        trackers = [ValueTracker(0.0) for _ in range(n_basis)]
 
         def alpha():
             """Current activation of each basis coefficient."""
-            return np.array(
-                [
-                    tracker.get_value()
-                    for tracker in trackers
-                ]
-            )
+            return np.array([tracker.get_value() for tracker in trackers])
 
         def active_draws():
             """
@@ -655,16 +598,10 @@ class PSplinePosteriorExplainer(Scene):
             Each coefficient's entire posterior distribution is
             multiplied by its activation parameter.
             """
-            return (
-                w_draws
-                * alpha()[None, :]
-            )
+            return w_draws * alpha()[None, :]
 
         def posterior_summaries():
-            curves = (
-                active_draws()
-                @ basis
-            )
+            curves = active_draws() @ basis
 
             lo = np.percentile(
                 curves,
@@ -692,16 +629,8 @@ class PSplinePosteriorExplainer(Scene):
         posterior_band = always_redraw(
             lambda: band_polygon(
                 x_scene,
-                np.asarray(
-                    sy(
-                        posterior_summaries()[0]
-                    )
-                ),
-                np.asarray(
-                    sy(
-                        posterior_summaries()[2]
-                    )
-                ),
+                np.asarray(sy(posterior_summaries()[0])),
+                np.asarray(sy(posterior_summaries()[2])),
                 color=BAND,
                 opacity=0.36,
             )
@@ -714,11 +643,7 @@ class PSplinePosteriorExplainer(Scene):
         median_curve = always_redraw(
             lambda: line_from_xy(
                 x_scene,
-                np.asarray(
-                    sy(
-                        posterior_summaries()[1]
-                    )
-                ),
+                np.asarray(sy(posterior_summaries()[1])),
                 color=INK,
                 width=7.0,
             )
@@ -728,9 +653,7 @@ class PSplinePosteriorExplainer(Scene):
         # Bottom panel
         # ====================================================
 
-        zero_y = float(
-            by(0.0)
-        )
+        zero_y = float(by(0.0))
 
         basis_axis = Line(
             [
@@ -754,16 +677,13 @@ class PSplinePosteriorExplainer(Scene):
         contributions = VGroup()
 
         for j in range(n_basis):
-
             contributions.add(
                 always_redraw(
-                    lambda jj=j:
-                    line_from_xy(
+                    lambda jj=j: line_from_xy(
                         x_scene,
                         np.asarray(
                             by(
-                                trackers[jj]
-                                .get_value()
+                                trackers[jj].get_value()
                                 * w_median[jj]
                                 * basis[jj]
                             )
@@ -778,18 +698,15 @@ class PSplinePosteriorExplainer(Scene):
         # Weight labels
         # ====================================================
 
-        centres = (
+        centres = np.sum(
+            basis * x[None, :],
+            axis=1,
+        ) / np.maximum(
             np.sum(
-                basis * x[None, :],
+                basis,
                 axis=1,
-            )
-            / np.maximum(
-                np.sum(
-                    basis,
-                    axis=1,
-                ),
-                1e-12,
-            )
+            ),
+            1e-12,
         )
 
         weight_labels = VGroup(
@@ -801,11 +718,7 @@ class PSplinePosteriorExplainer(Scene):
                     font_size=19,
                 ).move_to(
                     [
-                        float(
-                            sx(
-                                centres[j]
-                            )
-                        ),
+                        float(sx(centres[j])),
                         -3.02,
                         0.0,
                     ]
@@ -825,11 +738,13 @@ class PSplinePosteriorExplainer(Scene):
             font_size=20,
         )
 
-        status.move_to([
-            0.0,
-            -3.55,
-            0.0,
-        ])
+        status.move_to(
+            [
+                0.0,
+                -3.55,
+                0.0,
+            ]
+        )
 
         # ====================================================
         # Initial frame
@@ -838,20 +753,15 @@ class PSplinePosteriorExplainer(Scene):
         self.add(
             equation,
             title,
-
             data_points,
             data_label,
-
             posterior_band,
             median_curve,
-
             band_label,
             median_label,
-
             basis_label,
             basis_axis,
             contributions,
-
             weight_labels,
             status,
         )
@@ -863,7 +773,6 @@ class PSplinePosteriorExplainer(Scene):
         # ====================================================
 
         for j, tracker in enumerate(trackers):
-
             new_status = Text(
                 f"Add basis function {j + 1}",
                 color=COLORS[j],
@@ -871,9 +780,7 @@ class PSplinePosteriorExplainer(Scene):
                 font_size=20,
             )
 
-            new_status.move_to(
-                status.get_center()
-            )
+            new_status.move_to(status.get_center())
 
             self.play(
                 FadeOut(
@@ -889,9 +796,7 @@ class PSplinePosteriorExplainer(Scene):
             status = new_status
 
             self.play(
-                tracker.animate.set_value(
-                    1.0
-                ),
+                tracker.animate.set_value(1.0),
                 run_time=0.72,
                 rate_func=smooth,
             )
@@ -909,9 +814,7 @@ class PSplinePosteriorExplainer(Scene):
             font_size=20,
         )
 
-        final_status.move_to(
-            status.get_center()
-        )
+        final_status.move_to(status.get_center())
 
         self.play(
             FadeOut(
@@ -932,7 +835,6 @@ class PSplinePosteriorExplainer(Scene):
 # ============================================================
 
 if __name__ == "__main__":
-
     raise SystemExit(
         "Render with:\n\n"
         "manim -pqh "

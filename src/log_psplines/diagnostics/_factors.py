@@ -9,6 +9,7 @@ from typing import Any
 import xarray as xr
 from arviz_base import from_dict
 
+
 def _require_dataset(tree, group: str):
     node = tree[group]
     dataset = getattr(node, "dataset", node)

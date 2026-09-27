@@ -17,7 +17,7 @@ import xarray as xr
 
 if TYPE_CHECKING:
     from log_psplines.data.spectral import PowerData, WishartData
-    from log_psplines.inference.vi import FactorizedVIResult
+    from log_psplines.inference.vi import VIResult
 
 
 def observed_wishart_data(data: WishartData) -> xr.Dataset:
@@ -85,7 +85,7 @@ class PSDResult:
     spectrum: xr.DataArray
     sample_stats: xr.Dataset | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    vi: FactorizedVIResult | None = None
+    vi: VIResult | None = None
     vi_posterior: xr.Dataset | None = None
     vi_spectrum: xr.DataArray | None = None
     log_likelihood: xr.Dataset | None = None

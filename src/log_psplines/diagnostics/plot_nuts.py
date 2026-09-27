@@ -87,7 +87,7 @@ def plot_energy(posteriors: xr.DataTree | dict[str, xr.DataTree]):
     combined_fig, axes = plt.subplots(p, 1, figsize=(12, 5 * p))
     if p == 1:
         axes = [axes]
-    for ax, (factor_name, img) in zip(axes, images):
+    for ax, (factor_name, img) in zip(axes, images, strict=False):
         ax.imshow(img)
         ax.axis("off")
         ax.set_title(f"Channel {factor_name}", pad=6)

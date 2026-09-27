@@ -216,7 +216,9 @@
 <li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">One-dimensional log-P-spline PSD model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate PSD estimation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD estimation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="wdm-power.html">Time-varying WDM power fits</a></li>
+
+
+
 <li class="toctree-l1"><a class="reference internal" href="conventions.html">Conventions</a></li>
 
 
@@ -484,12 +486,12 @@
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.apply_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.apply_mask()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.cut"><code class="docutils literal notranslate"><span class="pre">WishartData.cut()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.exclude_frequency_bands"><code class="docutils literal notranslate"><span class="pre">WishartData.exclude_frequency_bands()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.filter_frequency_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.filter_frequency_mask()</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.EmpiricalPSD"><code class="docutils literal notranslate"><span class="pre">EmpiricalPSD</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.PowerData"><code class="docutils literal notranslate"><span class="pre">PowerData</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.PowerData.is_grid"><code class="docutils literal notranslate"><span class="pre">PowerData.is_grid</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.PowerData.is_scattered"><code class="docutils literal notranslate"><span class="pre">PowerData.is_scattered</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -930,12 +932,6 @@ get coarse <code class="docutils literal notranslate"><span class="pre">U</span>
 <dd><p>Return a new WishartData excluding bins in <code class="docutils literal notranslate"><span class="pre">bands</span></code>.</p>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="log_psplines.data.WishartData.filter_frequency_mask">
-<span class="sig-name descname"><span class="pre">filter_frequency_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.data.WishartData.filter_frequency_mask" title="Link to this definition">#</a></dt>
-<dd><p>Alias for <a class="reference internal" href="#log_psplines.data.WishartData.apply_mask" title="log_psplines.data.WishartData.apply_mask"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply_mask()</span></code></a> for compatibility with newer callers.</p>
-</dd></dl>
-
 </section>
 </dd></dl>
 
@@ -946,17 +942,23 @@ get coarse <code class="docutils literal notranslate"><span class="pre">U</span>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="log_psplines.data.PowerData">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.data.</span></span><span class="sig-name descname"><span class="pre">PowerData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">power</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">units</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'coefficient</span> <span class="pre">variance'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.data.PowerData" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.data.</span></span><span class="sig-name descname"><span class="pre">PowerData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">power</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">units</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'coefficient</span> <span class="pre">variance'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.data.PowerData" title="Link to this definition">#</a></dt>
 <dd><p>Summed component powers and counts on a grid or at paired points.</p>
 <p>Grid powers have shape (T, F), with increasing axis coordinates and
-<code class="docutils literal notranslate"><span class="pre">grid_shape=(T,</span> <span class="pre">F)</span></code>. Scattered powers have shape (P,), paired time and
-frequency coordinates of shape (P,), and <code class="docutils literal notranslate"><span class="pre">grid_shape=None</span></code>. A stationary
+<code class="docutils literal notranslate"><span class="pre">power.shape=(T,</span> <span class="pre">F)</span></code>. Scattered powers have shape (P,), paired time and
+frequency coordinates of shape (P,). A stationary
 frequency grid has shape (F,) and no time coordinate. Values are component
 variances, not automatically PSD per Hz.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="log_psplines.data.PowerData.is_grid">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_grid</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#log_psplines.data.PowerData.is_grid" title="Link to this definition">#</a></dt>
 <dd><p>Whether coordinates form independent grid axes.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.data.PowerData.is_scattered">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_scattered</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#log_psplines.data.PowerData.is_scattered" title="Link to this definition">#</a></dt>
+<dd><p>Whether powers use paired time-frequency coordinates.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1448,12 +1450,12 @@ the coarse-grid U factors used by the likelihood.</p></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.apply_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.apply_mask()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.cut"><code class="docutils literal notranslate"><span class="pre">WishartData.cut()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.exclude_frequency_bands"><code class="docutils literal notranslate"><span class="pre">WishartData.exclude_frequency_bands()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.filter_frequency_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.filter_frequency_mask()</span></code></a></li>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.EmpiricalPSD"><code class="docutils literal notranslate"><span class="pre">EmpiricalPSD</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.PowerData"><code class="docutils literal notranslate"><span class="pre">PowerData</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.PowerData.is_grid"><code class="docutils literal notranslate"><span class="pre">PowerData.is_grid</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.PowerData.is_scattered"><code class="docutils literal notranslate"><span class="pre">PowerData.is_scattered</span></code></a></li>
 </ul>
 </li>
 </ul>

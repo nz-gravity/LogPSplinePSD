@@ -423,6 +423,7 @@
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-documentation">Building Documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-tests">Running Tests</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#git-hooks">Git Hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typechecking-jaxtyping-beartype">Typechecking (Jaxtyping + Beartype)</a></li>
 </ul>
 </li>
@@ -489,6 +490,16 @@
 </pre></div>
 </div>
 </section>
+<section id="git-hooks">
+<h2>Git Hooks<a class="headerlink" href="#git-hooks" title="Link to this heading">#</a></h2>
+<p>Install the development dependencies, then install prek’s Git hooks:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>sync<span class="w"> </span>--all-extras<span class="w"> </span>--dev
+uv<span class="w"> </span>run<span class="w"> </span>prek<span class="w"> </span>install
+</pre></div>
+</div>
+<p>Run hooks on staged files with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">prek</span> <span class="pre">run</span></code>, or on the whole repository
+with <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">prek</span> <span class="pre">run</span> <span class="pre">--all-files</span></code>.</p>
+</section>
 <section id="typechecking-jaxtyping-beartype">
 <h2>Typechecking (Jaxtyping + Beartype)<a class="headerlink" href="#typechecking-jaxtyping-beartype" title="Link to this heading">#</a></h2>
 <p>Install dev extras so <code class="docutils literal notranslate"><span class="pre">jaxtyping</span></code> and <code class="docutils literal notranslate"><span class="pre">beartype</span></code> are available:</p>
@@ -516,8 +527,10 @@ disable runtime enforcement with:</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeSeries</span><span class="p">,</span> <span class="n">PipelineConfig</span><span class="p">,</span> <span class="n">fit</span>
 
 <span class="n">series</span> <span class="o">=</span> <span class="n">TimeSeries</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">PipelineConfig</span><span class="p">(</span><span class="n">n_knots</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">vi_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
-                                  <span class="n">n_warmup</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">200</span><span class="p">))</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span>
+    <span class="n">series</span><span class="p">,</span>
+    <span class="n">PipelineConfig</span><span class="p">(</span><span class="n">n_knots</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">vi_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">n_warmup</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">200</span><span class="p">),</span>
+<span class="p">)</span>
 <span class="n">frequency</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">frequency</span>
 <span class="n">spectral_draws</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">spectral_density</span>  <span class="c1"># (chain, draw, F, C, C)</span>
 <span class="n">auto_spectra</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">psd</span>
@@ -541,7 +554,7 @@ The latter sums to the full matrix likelihood and reduces to the former
 for one channel. Both omit data-only constants.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">data/</span></code>: <code class="docutils literal notranslate"><span class="pre">TimeSeries.data</span></code> always has shape <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">C)</span></code>. <code class="docutils literal notranslate"><span class="pre">WishartData</span></code> retains
 replicate counts, duration, window bandwidth and scaling metadata.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">preprocessing/</span></code>: FFT/Wishart and Welch construction, masking, coarse
+<li><p><code class="docutils literal notranslate"><span class="pre">preprocessing/</span></code>: FFT/Wishart construction, masking, coarse
 graining and knot selection. <code class="docutils literal notranslate"><span class="pre">compute_fft</span></code>, <code class="docutils literal notranslate"><span class="pre">compute_wishart</span></code> and
 <code class="docutils literal notranslate"><span class="pre">empirical_spectrum</span></code> are functions in <code class="docutils literal notranslate"><span class="pre">preprocessing/periodogram.py</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">inference/components.py</span></code>: one collection of scalar models for diagonal,
@@ -550,10 +563,9 @@ component registry has been removed. Observation-driven preparation lives
 in <code class="docutils literal notranslate"><span class="pre">inference.initialisation.prepare_components</span></code>; the collection has no
 constructor that reads data or fits coefficients.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">inference/model.py</span></code>: NumPyro priors, scalar evaluation, likelihood calls
-and preparation of model arguments. <code class="docutils literal notranslate"><span class="pre">vi.py</span></code> and <code class="docutils literal notranslate"><span class="pre">nuts.py</span></code> retain factorized
-VI, warm starts, per-channel tuning and blocked NUTS. Evidence remains an
-optional inference operation in <code class="docutils literal notranslate"><span class="pre">inference/evidence.py</span></code>. The blocked stages
-have no generic base class and accept only the arguments they use.
+and channel model arguments. <code class="docutils literal notranslate"><span class="pre">vi.py</span></code> and <code class="docutils literal notranslate"><span class="pre">nuts.py</span></code> run independent fits for
+each Cholesky channel; NUTS retains per-channel tuning. Evidence remains an
+optional inference operation in <code class="docutils literal notranslate"><span class="pre">inference/evidence.py</span></code>.
 Stationary and power fitting share <code class="docutils literal notranslate"><span class="pre">inference.nuts.run_nuts</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">results.py</span></code>: <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>, native storage, posterior reconstruction,
 quantiles and diagnostics interoperability. <code class="docutils literal notranslate"><span class="pre">to_arviz()</span></code> is diagnostics-only.
@@ -702,6 +714,7 @@ available. Multivariate TV inference remains future work.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-documentation">Building Documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-tests">Running Tests</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#git-hooks">Git Hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typechecking-jaxtyping-beartype">Typechecking (Jaxtyping + Beartype)</a></li>
 </ul>
 </li>

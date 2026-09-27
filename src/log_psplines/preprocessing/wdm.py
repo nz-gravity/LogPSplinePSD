@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from log_psplines.data.spectral import PowerSpectrum
+from log_psplines.data.spectral import PowerData
 from log_psplines.data.timeseries import TimeSeries
 
 
@@ -13,7 +13,7 @@ def wdm_periodogram(
     trim_time: int = 1,
     trim_low: int = 1,
     trim_high: int = 1,
-) -> PowerSpectrum:
+) -> PowerData:
     """Transform one channel, preserving WDM coefficient-variance units.
 
     Time is divided by the full duration. No automatic cropping, calibration,
@@ -50,7 +50,7 @@ def wdm_periodogram(
     keep_f = np.arange(trim_low, wdm.nf + 1 - trim_high)
     if not keep_t.size or not keep_f.size:
         raise ValueError("WDM trimming leaves an empty grid")
-    return PowerSpectrum(
+    return PowerData(
         power=coeffs[np.ix_(keep_t, keep_f)] ** 2,
         counts=1,
         frequency=np.asarray(wdm.freq_grid)[keep_f],

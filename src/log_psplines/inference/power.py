@@ -18,7 +18,7 @@ import numpyro.distributions as dist
 
 from log_psplines.basis.penalty import eigen_prior_scale, whiten_penalty_pair
 from log_psplines.config import PowerSplineConfig
-from log_psplines.data.spectral import PowerSpectrum, ScatteredPowerSpectrum
+from log_psplines.data.spectral import PowerData
 from log_psplines.inference.nuts import run_nuts
 from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
 from log_psplines.models.spectrum import LogPSpline
@@ -228,47 +228,55 @@ def initialize_scattered_with_penalized_least_squares(
 
 
 def prepare_power_model(
-    data: PowerSpectrum,
+    data: PowerData,
     spline: LogPSpline,
     config: PowerSplineConfig,
 ) -> tuple[Callable, dict, dict[str, np.ndarray]]:
-    """Build the model and WDM least-squares initial sites on matched grids."""
+    """Prepare the power likelihood and PLS sites on either geometry."""
     if spline.time is None or data.time is None:
-        raise ValueError(
-            "power fitting currently requires a time basis and grid"
-        )
-    if spline.time.basis.shape[0] != len(data.time) or spline.n != len(
-        data.frequency
+        raise ValueError("power fitting currently requires a time basis")
+    if data.is_grid and (
+        spline.time.basis.shape[0] != len(data.time)
+        or spline.n != len(data.frequency)
     ):
         raise ValueError("spline and power grids must have matching shapes")
+
     pair = whiten_penalty_pair(spline.time.penalty, spline.frequency.penalty)
-    # Evaluate through the same scalar model in the eigenbasis. The original
-    # basis and penalties are retained for initialization and result storage.
-    eigen_spline = LogPSpline(
-        frequency=replace(
-            spline.frequency,
-            basis=jnp.asarray(spline.frequency.basis @ pair["U_freq"]),
-            penalty=np.diag(pair["lam_freq"]),
-        ),
-        time=replace(
-            spline.time,
-            basis=jnp.asarray(spline.time.basis @ pair["U_time"]),
-            penalty=np.diag(pair["lam_time"]),
-        ),
-    )
     lam_t, lam_f = jnp.asarray(pair["lam_time"]), jnp.asarray(pair["lam_freq"])
     null = jnp.asarray(pair["joint_null"])
     power, counts = jnp.asarray(data.power), jnp.asarray(data.counts)
+
+    if data.is_grid:
+        eigen_spline = LogPSpline(
+            frequency=replace(
+                spline.frequency,
+                basis=jnp.asarray(spline.frequency.basis @ pair["U_freq"]),
+                penalty=np.diag(pair["lam_freq"]),
+            ),
+            time=replace(
+                spline.time,
+                basis=jnp.asarray(spline.time.basis @ pair["U_time"]),
+                penalty=np.diag(pair["lam_time"]),
+            ),
+        )
+        evaluate = eigen_spline
+    else:
+        bt_raw = np.asarray(spline.time.design_at(data.time))
+        bf_raw = np.asarray(spline.frequency.design_at(data.frequency))
+        bt_eigen = jnp.asarray(bt_raw @ pair["U_time"])
+        bf_eigen = jnp.asarray(bf_raw @ pair["U_freq"])
+
+        def evaluate(coefficients):
+            return jnp.einsum(
+                "pi,ij,pj->p", bt_eigen, coefficients, bf_eigen,
+                optimize="optimal",
+            )
 
     def model() -> None:
         phi_time = _sample_precision("sigma_time", config)
         phi_freq = _sample_precision("sigma_freq", config)
         scale = eigen_prior_scale(
-            phi_time,
-            phi_freq,
-            lam_t,
-            lam_f,
-            null,
+            phi_time, phi_freq, lam_t, lam_f, null,
             null_precision=config.null_precision,
             ridge_eps=config.ridge_eps,
         )
@@ -276,98 +284,37 @@ def prepare_power_model(
             "s", scale, scale.shape, config
         )
         log_like = power_whittle_log_likelihood(
-            power, counts, eigen_spline(coefficients)
+            power, counts, evaluate(coefficients)
         )
         numpyro.deterministic("log_likelihood", log_like)
         numpyro.factor("whittle", log_like)
 
     mean_power = np.divide(
-        data.power,
-        data.counts,
-        out=np.zeros_like(data.power),
-        where=data.counts > 0,
+        data.power, data.counts,
+        out=np.zeros_like(data.power), where=data.counts > 0,
     )
-    if np.any(data.counts == 0):
-        mean_power = _mean_power_for_masked_initialization(
-            data.power, data.counts
+    if data.is_grid:
+        if np.any(data.counts == 0):
+            mean_power = _mean_power_for_masked_initialization(
+                data.power, data.counts
+            )
+        pls = initialize_with_penalized_least_squares(
+            mean_power,
+            np.asarray(spline.time.basis),
+            np.asarray(spline.basis),
+            np.asarray(spline.time.penalty),
+            np.asarray(spline.frequency.penalty),
+            config,
         )
-    pls = initialize_with_penalized_least_squares(
-        mean_power,
-        np.asarray(spline.time.basis),
-        np.asarray(spline.basis),
-        np.asarray(spline.time.penalty),
-        np.asarray(spline.frequency.penalty),
-        config,
-    )
-    return model, whitened_init_values(pls, pair, config), pair
-
-
-def prepare_scattered_power_model(
-    data: ScatteredPowerSpectrum,
-    spline: LogPSpline,
-    config: PowerSplineConfig,
-) -> tuple[Callable, dict, dict[str, np.ndarray]]:
-    """Build the model and PLS initial sites for scattered ordinates.
-
-    Unlike :func:`prepare_power_model`, the spline's ``time``/``frequency``
-    grids need not match the data: each ordinate is evaluated at its own
-    exact ``(time, frequency)`` coordinate via ``SplineBasis.design_at``,
-    so ``log S(u_i, omega_i)`` is used directly rather than a rectangular
-    ``log S(t, f)`` surface.
-    """
-    if spline.time is None:
-        raise ValueError(
-            "scattered power fitting currently requires a time basis"
+    else:
+        pls = initialize_scattered_with_penalized_least_squares(
+            mean_power,
+            bt_raw,
+            bf_raw,
+            np.asarray(spline.time.penalty),
+            np.asarray(spline.frequency.penalty),
+            config,
         )
-    pair = whiten_penalty_pair(spline.time.penalty, spline.frequency.penalty)
-    Bt_raw = np.asarray(spline.time.design_at(data.time))
-    Bf_raw = np.asarray(spline.frequency.design_at(data.frequency))
-    Bt_eigen = jnp.asarray(Bt_raw @ pair["U_time"])
-    Bf_eigen = jnp.asarray(Bf_raw @ pair["U_freq"])
-    lam_t, lam_f = jnp.asarray(pair["lam_time"]), jnp.asarray(pair["lam_freq"])
-    null = jnp.asarray(pair["joint_null"])
-    power, counts = jnp.asarray(data.power), jnp.asarray(data.counts)
-
-    def model() -> None:
-        phi_time = _sample_precision("sigma_time", config)
-        phi_freq = _sample_precision("sigma_freq", config)
-        scale = eigen_prior_scale(
-            phi_time,
-            phi_freq,
-            lam_t,
-            lam_f,
-            null,
-            null_precision=config.null_precision,
-            ridge_eps=config.ridge_eps,
-        )
-        coefficients = sample_eigen_coefficients(
-            "s", scale, scale.shape, config
-        )
-        log_psd = jnp.einsum(
-            "pi,ij,pj->p",
-            Bt_eigen,
-            coefficients,
-            Bf_eigen,
-            optimize="optimal",
-        )
-        log_like = power_whittle_log_likelihood(power, counts, log_psd)
-        numpyro.deterministic("log_likelihood", log_like)
-        numpyro.factor("whittle", log_like)
-
-    mean_power = np.divide(
-        data.power,
-        data.counts,
-        out=np.zeros_like(data.power),
-        where=data.counts > 0,
-    )
-    pls = initialize_scattered_with_penalized_least_squares(
-        mean_power,
-        Bt_raw,
-        Bf_raw,
-        np.asarray(spline.time.penalty),
-        np.asarray(spline.frequency.penalty),
-        config,
-    )
     return model, whitened_init_values(pls, pair, config), pair
 
 
@@ -444,17 +391,19 @@ def _collect_power_samples(
     return posterior
 
 
-def fit_power_spline(
-    data: PowerSpectrum,
+def fit_power(
+    data: PowerData,
     spline: LogPSpline,
     config: PowerSplineConfig,
     *,
     partition=None,
 ) -> PSDResult:
-    """Fit native or pooled powers, retaining native PSD reconstruction."""
+    """Fit grid or scattered powers using the same likelihood and prior."""
     from log_psplines.preprocessing.power_partition import coarse_grain_power
     from log_psplines.results import PSDResult
 
+    if partition is not None and not data.is_grid:
+        raise ValueError("partition requires rectangular PowerData")
     fit_data = data
     fit_spline = spline
     if partition is not None:
@@ -506,24 +455,3 @@ def fit_power_spline(
             partition.frequency_starts
         )
     return fitted
-
-
-def fit_scattered_power_spline(
-    data: ScatteredPowerSpectrum,
-    spline: LogPSpline,
-    config: PowerSplineConfig,
-) -> PSDResult:
-    """Run NUTS on scattered time-frequency ordinates."""
-    from log_psplines.results import PSDResult
-
-    model, init, pair = prepare_scattered_power_model(data, spline, config)
-    result = _run_power_nuts(model, init, config)
-    posterior = _collect_power_samples(result, pair, config)
-    return PSDResult.from_scattered_power(
-        posterior=posterior,
-        sample_stats=result.sample_stats,
-        data=data,
-        spline=spline,
-        config=config,
-        log_likelihood=result.log_likelihood,
-    )

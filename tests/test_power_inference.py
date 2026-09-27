@@ -9,7 +9,7 @@ from numpyro.infer.util import log_density
 
 from log_psplines import (
     LogPSpline,
-    PowerSpectrum,
+    PowerData,
     PowerSplineConfig,
     PSDResult,
     SplineBasis,
@@ -24,7 +24,7 @@ REFERENCE = Path(__file__).parent / "reference" / "ls2_wdm.npz"
 @pytest.fixture
 def ls2():
     with jax.enable_x64(True), np.load(REFERENCE) as r:
-        data = PowerSpectrum(r["power"], 1, r["frequency"], r["time"])
+        data = PowerData(r["power"], 1, r["frequency"], r["time"])
         model = LogPSpline(
             frequency=SplineBasis.from_grid(
                 data.frequency / data.frequency[-1], 4
@@ -124,16 +124,16 @@ def test_ls2_posterior_target_and_nuts(ls2, centered, tmp_path):
 
 def test_power_input_validation():
     with pytest.raises(ValueError, match="zero-count"):
-        PowerSpectrum(
+        PowerData(
             np.ones((2, 3)),
             0 * np.eye(2, 3) + [0, 1, 1],
             np.arange(3),
             np.arange(2),
         )
     with pytest.raises(ValueError, match="finite"):
-        PowerSpectrum(np.full((2, 3), np.nan), 1, np.arange(3), np.arange(2))
+        PowerData(np.full((2, 3), np.nan), 1, np.arange(3), np.arange(2))
     with pytest.raises(ValueError, match="model="):
-        fit(PowerSpectrum(np.ones((2, 3)), 1, np.arange(3), np.arange(2)))
+        fit(PowerData(np.ones((2, 3)), 1, np.arange(3), np.arange(2)))
     with pytest.raises(ValueError, match="n_samples"):
         PowerSplineConfig(n_samples=0)
 
@@ -153,7 +153,7 @@ def test_masked_initialization_and_small_power(ls2):
     counts = data.counts.copy()
     counts[3:5, 2:7] = 0
     power[counts == 0] = 0
-    masked = PowerSpectrum(power, counts, data.frequency, data.time)
+    masked = PowerData(power, counts, data.frequency, data.time)
     model, init, _ = prepare_power_model(masked, spline, PowerSplineConfig())
     density, trace = log_density(model, (), {}, init)
     assert np.isfinite(density)

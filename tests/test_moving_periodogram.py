@@ -3,12 +3,13 @@ from numpyro.infer.util import log_density
 
 from log_psplines import (
     LogPSpline,
+    fit,
     PowerSplineConfig,
     SplineBasis,
     moving_periodogram,
     scattered_moving_periodogram,
 )
-from log_psplines.inference.power import prepare_scattered_power_model
+from log_psplines.inference.power import prepare_power_model
 from log_psplines.preprocessing.moving_periodogram import (
     bin_tang_ordinates,
     tang_moving_periodogram,
@@ -87,9 +88,19 @@ def test_scattered_ordinates_enter_the_power_likelihood() -> None:
             np.linspace(data.time.min(), data.time.max(), 7), 4
         ),
     )
-    model, initial_sites, _ = prepare_scattered_power_model(
+    model, initial_sites, _ = prepare_power_model(
         data, spline, PowerSplineConfig()
     )
     density, trace = log_density(model, (), {}, initial_sites)
     assert np.isfinite(density)
     assert np.isfinite(trace["log_likelihood"]["value"])
+    result = fit(
+        data,
+        PowerSplineConfig(n_warmup=3, n_samples=3, seed=11,
+                          progress_bar=False),
+        model=spline,
+    )
+    assert result.observed_data is not None
+    assert result.observed_data.sizes["ordinate"] == data.power.size
+    assert np.isfinite(result.psd).all()
+    assert np.all(result.psd > 0)

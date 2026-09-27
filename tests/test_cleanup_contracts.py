@@ -7,7 +7,7 @@ import xarray as xr
 from log_psplines import (
     LogPSpline,
     PipelineConfig,
-    PowerSpectrum,
+    PowerData,
     PowerSplineConfig,
     PSDResult,
     SplineBasis,
@@ -21,7 +21,7 @@ def test_tv_result_has_native_spectral_accessor():
         SplineBasis.from_grid(frequency, 0),
         time=SplineBasis.from_grid(time, 0),
     )
-    data = PowerSpectrum(np.ones((4, 5)), 1, frequency, time)
+    data = PowerData(np.ones((4, 5)), 1, frequency, time)
     posterior = xr.Dataset(
         {
             "weights": (
@@ -68,14 +68,8 @@ def test_unsupported_design_options_are_rejected():
 def test_chain_method_reaches_numpyro(monkeypatch):
     import jax
 
-    from log_psplines import TimeSeries, make_pipeline
     from log_psplines.inference import nuts
 
-    pipeline = make_pipeline(
-        TimeSeries(np.random.default_rng(3).normal(size=32)),
-        PipelineConfig(n_knots=4, chain_method="sequential"),
-    )
-    assert pipeline.nuts_stage.chain_method == "sequential"
     captured = {}
 
     class CaptureMCMC:
@@ -97,7 +91,7 @@ def test_chain_method_reaches_numpyro(monkeypatch):
         rng_key=jax.random.PRNGKey(1),
         n_warmup=1,
         n_samples=1,
-        chain_method=pipeline.nuts_stage.chain_method,
+        chain_method="sequential",
     )
     assert captured["chain_method"] == "sequential"
 

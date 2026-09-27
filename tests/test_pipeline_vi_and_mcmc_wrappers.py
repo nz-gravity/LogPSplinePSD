@@ -2,13 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-import xarray as xr
 
-import log_psplines.pipeline as pipeline_module
-import log_psplines.preprocessing.spectral as preprocessing_module
 import log_psplines.inference.vi as vi_module
-from log_psplines import fit
-from log_psplines.config import PipelineConfig
 
 
 def _model():
@@ -89,53 +84,3 @@ def test_resolve_guide_custom_and_invalid_variants():
         vi_module.resolve_guide("unknown", _model)
     with pytest.raises(TypeError, match="Guide must be"):
         vi_module.resolve_guide(123, _model)
-
-
-def test_fit_entrypoint_handles_config_and_save(tmp_path, monkeypatch):
-    saved = {}
-    captured = {}
-
-    class DummyResult:
-        idata = xr.DataTree()
-
-        def save(self, outdir, *, true_psd=None):
-            saved["outdir"] = outdir
-            saved["true_psd"] = true_psd
-
-    class DummyPipeline:
-        data = object()
-
-        def __init__(self, data, config):
-            self.data = data
-            self.config = config
-
-        def run(self):
-            return DummyResult()
-
-    def fake_make_pipeline(data, config):
-        captured["data"] = data
-        captured["config"] = config
-        return DummyPipeline(data, config)
-
-    monkeypatch.setattr(pipeline_module, "make_pipeline", fake_make_pipeline)
-    monkeypatch.setattr(
-        preprocessing_module,
-        "align_true_psd_to_freq",
-        lambda true_psd, data: ("aligned", true_psd, data),
-    )
-
-    result = fit(
-        "series",
-        PipelineConfig(
-            outdir=str(tmp_path),
-            n_knots=4,
-            vi_steps=2,
-            true_psd=np.ones(3),
-        ),
-    )
-
-    assert isinstance(result, object)
-    assert captured["data"] == "series"
-    assert isinstance(captured["config"], PipelineConfig)
-    assert saved["outdir"] == str(tmp_path)
-    assert saved["true_psd"][0] == "aligned"

@@ -38,7 +38,7 @@ Spline Options
 
 ``knot_kwargs``
    Extra keyword arguments passed to knot initialisation. Use this for
-   specialised knot placement while keeping the pipeline interface stable.
+   specialised knot placement while keeping the fit interface stable.
 
 Frequency Selection
 -------------------
@@ -66,7 +66,7 @@ VI and NUTS
 ``method``
    Either ``"nuts"`` (default) or ``"vi"``. VI and NUTS are independent,
    standalone fits: VI never seeds NUTS's initial values, and the unselected
-   stage never executes.
+   method never executes.
 
 ``method="vi"``
    Fit with stochastic variational inference only. This is a fast way to
@@ -87,18 +87,18 @@ Coarse Graining
 ---------------
 
 ``coarse_grain_config``
-   Coarse grain the frequency grid used by the inference stage.
+   Coarse grain the frequency grid used by the inference run.
 
 Output and Evidence
 -------------------
 
 ``outdir``
-   If set, the pipeline writes NetCDF inference data, posterior predictive
+   If set, fit writes NetCDF inference data, posterior predictive
    plots, and diagnostic tables/figures.
 
 ``compute_lnz``
    Estimate log evidence with MorphZ when possible. Leave as ``None`` to use
-   the pipeline default.
+   the fit default.
 
 ``true_psd``
    Optional reference PSD used only for diagnostics and error summaries. It can

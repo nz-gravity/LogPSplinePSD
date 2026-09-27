@@ -9,9 +9,9 @@ from .basis import SplineBasis
 from .models.spectrum import LogPSpline
 from .models.matrix import SpectralMatrix
 from .data import TimeSeries, WishartData
-from .data.spectral import PowerSpectrum, ScatteredPowerSpectrum
+from .data.spectral import PowerData
 from .config import PipelineConfig, PowerSplineConfig
-from .pipeline import fit, make_pipeline
+from .pipeline import fit
 from .results import PSDResult
 from .preprocessing.moving_periodogram import (
     moving_periodogram,
@@ -26,7 +26,6 @@ from .preprocessing.power_partition import (
 
 __all__ = [
     "fit",
-    "make_pipeline",
     "PipelineConfig",
     "PSDResult",
     "SplineBasis",
@@ -35,8 +34,7 @@ __all__ = [
     "TimeSeries",
     "WishartData",
     "PowerSplineConfig",
-    "PowerSpectrum",
-    "ScatteredPowerSpectrum",
+    "PowerData",
     "moving_periodogram",
     "scattered_moving_periodogram",
     "PowerPartition",

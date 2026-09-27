@@ -20,9 +20,9 @@ from log_psplines.models.reconstruction import reconstruct_psd_matrix
 
 if TYPE_CHECKING:
     from log_psplines.config import PipelineConfig, PowerSplineConfig
-    from log_psplines.data.spectral import PowerSpectrum, WishartData
+    from log_psplines.data.spectral import PowerData, WishartData
     from log_psplines.inference.components import SpectralComponents
-    from log_psplines.inference.vi import StageResult
+    from log_psplines.inference.vi import FactorizedVIResult
     from log_psplines.models.spectrum import LogPSpline
 
 
@@ -166,7 +166,7 @@ def _observed_wishart(data: "WishartData") -> xr.Dataset:
     return xr.Dataset(variables, coords=coords)
 
 
-def _observed_power(data: "PowerSpectrum") -> xr.Dataset:
+def _observed_power(data: "PowerData") -> xr.Dataset:
     return xr.Dataset(
         {
             "power": (("time", "frequency"), np.asarray(data.power)),
@@ -216,7 +216,7 @@ class PSDResult:
     spectrum: xr.DataArray
     sample_stats: xr.Dataset | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    vi: "StageResult | None" = None
+    vi: "FactorizedVIResult | None" = None
     vi_posterior: xr.Dataset | None = None
     vi_spectrum: xr.DataArray | None = None
     log_likelihood: xr.Dataset | None = None
@@ -231,7 +231,7 @@ class PSDResult:
         data: "WishartData",
         spline_model: "SpectralComponents",
         config: "PipelineConfig",
-        vi: "StageResult | None" = None,
+        vi: "FactorizedVIResult | None" = None,
         log_likelihood: xr.Dataset | None = None,
         sampling_eta: float | None = None,
     ) -> "PSDResult":
@@ -280,11 +280,11 @@ class PSDResult:
         *,
         posterior: xr.Dataset,
         sample_stats: xr.Dataset | None,
-        data: "PowerSpectrum",
+        data: "PowerData",
         spline: "LogPSpline",
         config: "PowerSplineConfig",
         log_likelihood: xr.Dataset | None = None,
-        native_data: "PowerSpectrum | None" = None,
+        native_data: "PowerData | None" = None,
     ) -> "PSDResult":
         output_data = data if native_data is None else native_data
         return cls(
@@ -293,8 +293,10 @@ class PSDResult:
             spectrum=_power_spectrum(
                 posterior,
                 spline,
-                time=output_data.time,
-                frequency=output_data.frequency,
+                time=output_data.time if output_data.is_grid else None,
+                frequency=(
+                    output_data.frequency if output_data.is_grid else None
+                ),
             ),
             metadata={
                 **asdict(config),
@@ -303,32 +305,10 @@ class PSDResult:
                 "units": output_data.units,
             },
             log_likelihood=log_likelihood,
-            observed_data=_observed_power(data),
-        )
-
-    @classmethod
-    def from_scattered_power(
-        cls,
-        *,
-        posterior: xr.Dataset,
-        sample_stats: xr.Dataset | None,
-        data,
-        spline: "LogPSpline",
-        config: "PowerSplineConfig",
-        log_likelihood: xr.Dataset | None = None,
-    ) -> "PSDResult":
-        return cls(
-            posterior=posterior,
-            sample_stats=sample_stats,
-            spectrum=_power_spectrum(posterior, spline),
-            metadata={
-                **asdict(config),
-                "data_type": "power",
-                "likelihood": "power_whittle",
-                "units": data.units,
-            },
-            log_likelihood=log_likelihood,
-            observed_data=_observed_scattered(data),
+            observed_data=(
+                _observed_power(data) if data.is_grid
+                else _observed_scattered(data)
+            ),
         )
 
     @property

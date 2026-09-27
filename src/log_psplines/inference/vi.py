@@ -1,8 +1,4 @@
-"""Pipeline-owned variational inference helpers.
-
-This module mirrors the minimal VI API used by pipeline stages without
-importing from :mod:`log_psplines.samplers`.
-"""
+"""Variational inference and factorized Wishart fitting helpers."""
 
 from __future__ import annotations
 
@@ -297,8 +293,8 @@ __all__ = ["GuideSpecifier", "VIResult", "resolve_guide", "fit_vi"]
 
 
 @dataclass
-class StageResult:
-    """VI initialization, draws and optimization diagnostics."""
+class FactorizedVIResult:
+    """Combined VI posterior draws and optimization diagnostics."""
 
     init_values: dict[str, jnp.ndarray] | None
     losses: jnp.ndarray | None
@@ -309,87 +305,78 @@ class StageResult:
     samples: dict[str, jnp.ndarray] | None = None
 
 
-@dataclass
-class FactorizedMultivarVIStage:
-    """Run independent VI optimizations per multivariate Cholesky factor."""
+def run_factorized_vi(
+    model_kwargs: dict[str, Any],
+    *,
+    rng_key: jax.Array,
+    steps: int = 1500,
+    lr: float = 1e-2,
+    guide: str = "diag",
+    posterior_draws: int = 256,
+    eta: float = 1.0,
+    init_values: dict[str, jnp.ndarray] | None = None,
+    verbose: bool = False,
+) -> FactorizedVIResult:
+    """Run one VI optimization per multivariate Cholesky factor."""
+    from log_psplines.inference.model import _blocked_channel_model
 
-    steps: int = 1500
-    lr: float = 1e-2
-    guide: str = "diag"
-    posterior_draws: int = 256
-    eta: float = 1.0
+    kwargs = dict(model_kwargs)
+    kwargs["eta"] = eta
+    n_channels = int(kwargs["n_channels"])
+    keys = jax.random.split(rng_key, n_channels)
 
-    def run(
-        self,
-        model_kwargs: dict[str, Any],
-        init_values: dict[str, jnp.ndarray] | None = None,
-        *,
-        rng_key: jax.Array,
-        verbose: bool = False,
-    ) -> StageResult:
-        from log_psplines.inference.model import _blocked_channel_model
+    t0 = time.time()
+    merged_means: dict[str, jnp.ndarray] = {}
+    merged_samples: dict[str, jnp.ndarray] = {}
+    losses_per_block: list[jnp.ndarray] = []
+    guide_names: list[str] = []
 
-        kwargs = dict(model_kwargs)
-        kwargs["eta"] = self.eta
-        n_channels = int(kwargs["n_channels"])
-        keys = jax.random.split(rng_key, n_channels)
-
-        t0 = time.time()
-        merged_means: dict[str, jnp.ndarray] = {}
-        merged_samples: dict[str, jnp.ndarray] = {}
-        losses_per_block: list[jnp.ndarray] = []
-        guide_names: list[str] = []
-
-        for channel_index in range(n_channels):
-            channel_kwargs = _channel_model_kwargs(kwargs, channel_index)
-            channel_init = _init_values_for_channel(
-                init_values,
-                channel_index,
-            )
-            result = fit_vi(
-                _blocked_channel_model,
-                rng_key=keys[channel_index],
-                vi_steps=self.steps,
-                optimizer_lr=self.lr,
-                model_kwargs=channel_kwargs,
-                guide=self.guide,
-                posterior_draws=self.posterior_draws,
-                progress_bar=verbose,
-                init_values=channel_init,
-            )
-            merged_means.update(result.means)
-            if result.samples is not None:
-                merged_samples.update(result.samples)
-            losses_per_block.append(jnp.asarray(result.losses))
-            guide_names.append(result.guide_name)
-
-        runtime = time.time() - t0
-        nonempty_losses = [
-            losses for losses in losses_per_block if int(losses.size) > 0
-        ]
-        if nonempty_losses:
-            n_common = min(int(losses.size) for losses in nonempty_losses)
-            losses = jnp.sum(
-                jnp.stack(
-                    [losses[:n_common] for losses in nonempty_losses],
-                    axis=0,
-                ),
-                axis=0,
-            )
-        else:
-            losses = jnp.asarray([])
-
-        guide_name = (
-            f"factorized:{guide_names[0]}"
-            if len(set(guide_names)) == 1 and guide_names
-            else "factorized"
+    for channel_index in range(n_channels):
+        channel_kwargs = _channel_model_kwargs(kwargs, channel_index)
+        channel_init = _init_values_for_channel(init_values, channel_index)
+        result = fit_vi(
+            _blocked_channel_model,
+            rng_key=keys[channel_index],
+            vi_steps=steps,
+            optimizer_lr=lr,
+            model_kwargs=channel_kwargs,
+            guide=guide,
+            posterior_draws=posterior_draws,
+            progress_bar=verbose,
+            init_values=channel_init,
         )
-        return StageResult(
-            init_values=merged_means,
-            losses=losses,
-            khat=None,
-            guide_name=guide_name,
-            runtime=runtime,
-            losses_per_block=losses_per_block,
-            samples=merged_samples or None,
+        merged_means.update(result.means)
+        if result.samples is not None:
+            merged_samples.update(result.samples)
+        losses_per_block.append(jnp.asarray(result.losses))
+        guide_names.append(result.guide_name)
+
+    runtime = time.time() - t0
+    nonempty_losses = [
+        losses for losses in losses_per_block if int(losses.size) > 0
+    ]
+    if nonempty_losses:
+        n_common = min(int(losses.size) for losses in nonempty_losses)
+        losses = jnp.sum(
+            jnp.stack(
+                [losses[:n_common] for losses in nonempty_losses], axis=0
+            ),
+            axis=0,
         )
+    else:
+        losses = jnp.asarray([])
+
+    guide_name = (
+        f"factorized:{guide_names[0]}"
+        if len(set(guide_names)) == 1 and guide_names
+        else "factorized"
+    )
+    return FactorizedVIResult(
+        init_values=merged_means,
+        losses=losses,
+        khat=None,
+        guide_name=guide_name,
+        runtime=runtime,
+        losses_per_block=losses_per_block,
+        samples=merged_samples or None,
+    )

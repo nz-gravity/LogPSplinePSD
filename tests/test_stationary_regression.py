@@ -7,12 +7,13 @@ import jax
 import numpy as np
 from numpyro import handlers
 
-from log_psplines import make_pipeline
+from log_psplines import fit
 from log_psplines.models.reconstruction import reconstruct_psd_matrix
 from log_psplines.config import PipelineConfig
 from log_psplines.data import TimeSeries
 from log_psplines.inference.initialisation import build_component
-from log_psplines.inference.model import _joint_multivar_model
+from log_psplines.inference.model import _joint_multivar_model, prepare_model
+from log_psplines.preprocessing.spectral import preprocess_to_freq_domain
 
 REFERENCE = Path(__file__).parent / "reference" / "stationary.npz"
 
@@ -40,11 +41,12 @@ def stationary_values():
             n_warmup=3,
             rng_key=14,
         )
-        pipeline = make_pipeline(data, config)
+        prepared = preprocess_to_freq_domain(data, config)
+        model_kwargs, _ = prepare_model(prepared, config)
         trace = handlers.trace(
             handlers.seed(_joint_multivar_model, jax.random.PRNGKey(9))
-        ).get_trace(**pipeline.full_model_kwargs)
-        values[f"u_{channels}"] = pipeline.data.U
+        ).get_trace(**model_kwargs)
+        values[f"u_{channels}"] = prepared.U
         for name, site in trace.items():
             if name.startswith("log_likelihood_block_"):
                 values[f"{channels}_{name}"] = np.asarray(site["value"])
@@ -54,7 +56,7 @@ def stationary_values():
         values[f"matrix_{channels}"] = reconstruct_psd_matrix(
             logs, theta, theta / 3
         )
-        result = pipeline.run()
+        result = fit(prepared, config)
         for name, arr in result.posterior.data_vars.items():
             values[f"posterior_{channels}_{name}"] = np.asarray(arr)
     return values

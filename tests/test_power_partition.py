@@ -9,7 +9,7 @@ from numpyro.infer.util import log_density
 from log_psplines import (
     LogPSpline,
     PowerPartition,
-    PowerSpectrum,
+    PowerData,
     PowerSplineConfig,
     PSDResult,
     SplineBasis,
@@ -31,7 +31,7 @@ def test_masked_pooling_conserves_power_and_counts():
     mask = np.ones_like(power, dtype=bool)
     mask[1, 2] = False
     mask[3, :] = False
-    native = mask_power(PowerSpectrum(power, counts, freq, time), mask)
+    native = mask_power(PowerData(power, counts, freq, time), mask)
     partition = PowerPartition(np.array([0, 2, 3, 4]), np.array([0, 2]))
     coarse = coarse_grain_power(native, partition)
     np.testing.assert_allclose(coarse.power.sum(), native.power.sum())
@@ -56,7 +56,7 @@ def test_pilot_only_sets_boundaries_and_gap_splits():
     np.testing.assert_array_equal(partition.time_starts, [0, 2, 3])
     raw = np.arange(1, 21., dtype=float).reshape(5, 4)
     raw[2, :] = 0
-    data = PowerSpectrum(raw, counts, np.arange(1., 5.), time)
+    data = PowerData(raw, counts, np.arange(1., 5.), time)
     pooled = coarse_grain_power(data, partition)
     assert pooled.power[0, 0] == raw[:2, :2].sum()
     with pytest.raises(ValueError, match="time_starts"):
@@ -66,7 +66,7 @@ def test_pilot_only_sets_boundaries_and_gap_splits():
 def test_block_constant_likelihood_identity():
     power = np.array([[1., 2.], [3., 0.]])
     counts = np.array([[1., 2.], [1., 0.]])
-    data = PowerSpectrum(power, counts, [1., 2.], [0., 1.])
+    data = PowerData(power, counts, [1., 2.], [0., 1.])
     pooled = coarse_grain_power(data, PowerPartition([0], [0]))
     log_s = np.log(3.)
     native_ll = power_whittle_log_likelihood(
@@ -105,7 +105,7 @@ def test_explicit_interior_knots():
 
 def test_halfnormal_prior_log_density():
     with jax.enable_x64(True):
-        data = PowerSpectrum(np.ones((4, 5)), 1, np.arange(1., 6.),
+        data = PowerData(np.ones((4, 5)), 1, np.arange(1., 6.),
                              np.arange(4.))
         spline = LogPSpline(SplineBasis.from_grid(data.frequency, 1),
                             SplineBasis.from_grid(data.time, 1))
@@ -134,7 +134,7 @@ def test_short_partition_fit_and_roundtrip(gapped, tmp_path):
         if gapped:
             counts[3:5] = 0
             power[3:5] = 0
-        data = PowerSpectrum(power, counts, freq, time)
+        data = PowerData(power, counts, freq, time)
         pilot = np.zeros((2, 8))
         partition = select_power_partition(
             pilot, time, counts=counts, time_bin=2,

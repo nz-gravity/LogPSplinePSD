@@ -1,4 +1,4 @@
-"""Tests for the new InferencePipeline / make_pipeline interface."""
+"""Stationary fit and result integration tests."""
 
 from __future__ import annotations
 
@@ -7,16 +7,12 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from log_psplines import make_pipeline
+from log_psplines import fit
 from log_psplines.results import _values_to_dataset
 from log_psplines.data import WishartData, TimeSeries
 from log_psplines.config import PipelineConfig
-from log_psplines.pipeline import (
-    InferencePipeline,
-    PSDResult,
-)
-from log_psplines.inference.nuts import FactorizedMultivarNUTSStage
-from log_psplines.inference.vi import FactorizedMultivarVIStage, StageResult
+from log_psplines.results import PSDResult
+from log_psplines.inference.vi import FactorizedVIResult
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
 
 # ---------------------------------------------------------------------------
@@ -81,77 +77,13 @@ def test_vi_init_values_dataset_uses_variable_specific_dims():
 
 
 # ---------------------------------------------------------------------------
-# make_pipeline construction
-# ---------------------------------------------------------------------------
-
-
-def test_make_pipeline_p1_returns_inference_pipeline(p1_data):
-    pipeline = make_pipeline(p1_data, _fast_config())
-    assert isinstance(pipeline, InferencePipeline)
-    assert isinstance(pipeline.data, WishartData)
-    assert pipeline.data.p == 1
-    # Default method="nuts" never constructs a VI stage.
-    assert pipeline.vi_stage is None
-    assert isinstance(pipeline.nuts_stage, FactorizedMultivarNUTSStage)
-
-
-def test_make_pipeline_multivar_returns_inference_pipeline(multivar_data):
-    pipeline = make_pipeline(multivar_data, _fast_config())
-    assert isinstance(pipeline, InferencePipeline)
-    assert pipeline.vi_stage is None
-    assert isinstance(pipeline.nuts_stage, FactorizedMultivarNUTSStage)
-
-
-def test_make_pipeline_vi_stage_uses_config(p1_data):
-    config = PipelineConfig(
-        n_knots=4,
-        n_samples=5,
-        n_warmup=5,
-        num_chains=1,
-        vi_steps=77,
-        vi_lr=3e-3,
-        vi_posterior_draws=5,
-        verbose=False,
-        eta=0.5,
-        method="vi",
-    )
-    pipeline = make_pipeline(p1_data, config)
-    # method="vi" never constructs a NUTS stage.
-    assert pipeline.nuts_stage is None
-    assert pipeline.vi_stage is not None
-    assert pipeline.vi_stage.steps == 77
-    assert pipeline.vi_stage.lr == pytest.approx(3e-3)
-    assert pipeline.vi_stage.eta == pytest.approx(0.5)
-
-
-def test_make_pipeline_nuts_stage_uses_config(p1_data):
-    config = PipelineConfig(
-        n_knots=4,
-        vi_steps=20,
-        vi_posterior_draws=5,
-        n_samples=13,
-        n_warmup=7,
-        num_chains=1,
-        target_accept_prob=0.9,
-        verbose=False,
-        eta=0.25,
-    )
-    pipeline = make_pipeline(p1_data, config)
-    assert pipeline.nuts_stage is not None
-    assert pipeline.nuts_stage.n_samples == 13
-    assert pipeline.nuts_stage.n_warmup == 7
-    assert pipeline.nuts_stage.target_accept_prob == pytest.approx(0.9)
-    assert pipeline.nuts_stage.eta == pytest.approx(0.25)
-
-
-# ---------------------------------------------------------------------------
 # only_vi mode (p=1)
 # ---------------------------------------------------------------------------
 
 
 def test_pipeline_p1_only_vi(p1_data):
     config = _fast_config(method="vi")
-    result = make_pipeline(p1_data, config).run()
+    result = fit(p1_data, config)
 
     assert isinstance(result, PSDResult)
     assert result.vi is not None
@@ -174,14 +106,13 @@ def test_pipeline_p1_only_vi(p1_data):
 
 def test_pipeline_multivar_only_vi(multivar_data):
     config = _fast_config(method="vi")
-    result = make_pipeline(multivar_data, config).run()
+    result = fit(multivar_data, config)
 
     assert isinstance(result, PSDResult)
     assert result.vi is not None
     assert result.vi.losses.shape[0] > 0
     assert result.vi.losses_per_block is not None
     assert len(result.vi.losses_per_block) == multivar_data.p
-    posterior = result.posterior
     # All per-channel weight sites should be present in VI means
     assert "weights_delta_0" in result.vi.init_values
     assert "weights_delta_1" in result.vi.init_values
@@ -199,7 +130,7 @@ def test_pipeline_multivar_vi_reconstructs_and_plots_coherence(multivar_data):
     import matplotlib.pyplot as plt
 
     config = _fast_config(method="vi", vi_posterior_draws=8)
-    result = make_pipeline(multivar_data, config).run()
+    result = fit(multivar_data, config)
 
     quantiles = result.quantiles((5.0, 50.0, 95.0))
     freq = result.frequency
@@ -255,7 +186,7 @@ def test_pipeline_multivar_vi_reconstructs_and_plots_coherence(multivar_data):
 
 def test_pipeline_p1_nuts(p1_data):
     config = _fast_config()
-    result = make_pipeline(p1_data, config).run()
+    result = fit(p1_data, config)
 
     assert isinstance(result, PSDResult)
     # Default method="nuts" never runs VI.
@@ -283,7 +214,7 @@ def test_pipeline_p1_nuts(p1_data):
 
 def test_pipeline_multivar_nuts(multivar_data):
     config = _fast_config()
-    result = make_pipeline(multivar_data, config).run()
+    result = fit(multivar_data, config)
 
     assert isinstance(result, PSDResult)
     # Default method="nuts" never runs VI.
@@ -306,7 +237,7 @@ def test_pipeline_multivar_nuts(multivar_data):
 
 def test_pipeline_result_save(tmp_path, p1_data):
     config = _fast_config(method="vi")
-    result = make_pipeline(p1_data, config).run()
+    result = fit(p1_data, config)
     result.save(str(tmp_path))
 
     assert (tmp_path / "inference_data.nc").exists()
@@ -318,7 +249,7 @@ def test_pipeline_multivar_vi_save_records_truth_metrics(
     multivar_data,
 ):
     config = _fast_config(method="vi")
-    result = make_pipeline(multivar_data, config).run()
+    result = fit(multivar_data, config)
     freq = result.frequency
     p = int(multivar_data.p)
     true_psd = np.tile(np.eye(p, dtype=np.complex128), (freq.size, 1, 1))
@@ -344,7 +275,7 @@ def test_posterior_predictive_save_overlays_vi_when_available(
         "log_psplines.plotting.results.plot_psd_matrix",
         _fake_plot_psd_matrix,
     )
-    vi = StageResult(
+    vi = FactorizedVIResult(
         init_values={"weights_delta_0": np.zeros(2)},
         losses=np.asarray([1.0]),
         khat=None,
@@ -391,7 +322,7 @@ def test_posterior_predictive_save_does_not_label_only_vi_as_nuts(
         "log_psplines.plotting.results.plot_psd_matrix",
         _fake_plot_psd_matrix,
     )
-    vi = StageResult(
+    vi = FactorizedVIResult(
         init_values={"weights_delta_0": np.zeros(2)},
         losses=np.asarray([1.0]),
         khat=None,

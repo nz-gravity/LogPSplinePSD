@@ -7,7 +7,7 @@ the dependence-control step used by the dynamic-Whittle implementation.
 
 For exact scattered-coordinate fitting, use
 :func:`scattered_moving_periodogram`. :func:`moving_periodogram` instead pools
-the ordinates onto a rectangular ``PowerSpectrum`` grid. Use
+the ordinates onto a rectangular ``PowerData`` grid. Use
 :func:`tang_moving_periodogram` when complex coefficients are also needed.
 """
 
@@ -17,7 +17,7 @@ from typing import TypedDict
 
 import numpy as np
 
-from log_psplines.data.spectral import PowerSpectrum, ScatteredPowerSpectrum
+from log_psplines.data.spectral import PowerData
 
 
 class MovingPeriodogram(TypedDict):
@@ -159,11 +159,11 @@ def moving_periodogram(
     thin: int = 2,
     time_bin: int = 1,
     freq_bin: int = 1,
-) -> PowerSpectrum:
+) -> PowerData:
     """Prepare moving-periodogram powers for ``fit``.
 
     The returned frequency is in Hz and time is rescaled to the full record.
-    Since :class:`~log_psplines.data.spectral.PowerSpectrum` is rectangular,
+    Since this transform returns a rectangular ``PowerData`` grid,
     time coordinates are the pooled centres of each retained block.  The
     exact scattered coordinates and complex coefficients remain available by
     calling :func:`tang_moving_periodogram` separately.
@@ -178,7 +178,7 @@ def moving_periodogram(
     counts = pooled["counts"].reshape(n_time, n_freq)
     time = pooled["u"].reshape(n_time, n_freq).mean(axis=1)
     frequency = np.unique(pooled["omega"]) / (2.0 * np.pi * dt)
-    return PowerSpectrum(
+    return PowerData(
         power=power,
         counts=counts,
         frequency=frequency,
@@ -198,7 +198,7 @@ __all__ = [
 
 def scattered_moving_periodogram(
     data: np.ndarray, *, dt: float, m: int, thin: int = 2
-) -> ScatteredPowerSpectrum:
+) -> PowerData:
     """Prepare moving-periodogram powers at their exact (u, omega) ordinates.
 
     Unlike :func:`moving_periodogram`, no rectangular pooling is applied: each
@@ -210,7 +210,7 @@ def scattered_moving_periodogram(
     if not np.isfinite(dt) or dt <= 0:
         raise ValueError("dt must be strictly positive.")
     raw = tang_moving_periodogram(data, m=m, thin=thin)
-    return ScatteredPowerSpectrum(
+    return PowerData(
         power=2.0 * raw["mi"],
         counts=np.full_like(raw["mi"], 2.0),
         time=raw["u"],

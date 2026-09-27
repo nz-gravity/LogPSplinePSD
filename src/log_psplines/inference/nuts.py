@@ -199,96 +199,83 @@ def _suffix(dataset: xr.Dataset | None, channel: int) -> xr.Dataset | None:
     )
 
 
-@dataclass
-class FactorizedMultivarNUTSStage:
-    """Run independent NUTS chains for each multivariate Cholesky factor."""
+def _channel_setting(values, default, channel_index):
+    """Use a per-channel override when present."""
+    if values is None:
+        return default
+    try:
+        return values[int(channel_index)]
+    except (IndexError, TypeError, ValueError):
+        return default
 
-    n_samples: int = 1000
-    n_warmup: int = 500
-    target_accept_prob: float = 0.8
-    max_tree_depth: int = 10
-    dense_mass: bool = True
-    num_chains: int = 1
-    eta: float = 1.0
-    chain_method: str | None = None
-    target_accept_prob_by_channel: list[float] | None = None
-    max_tree_depth_by_channel: list[int] | None = None
 
-    def _channel_target_accept(self, channel_index: int) -> float:
-        values = self.target_accept_prob_by_channel
-        if values is None:
-            return float(self.target_accept_prob)
-        try:
-            return float(values[int(channel_index)])
-        except (IndexError, TypeError, ValueError):
-            return float(self.target_accept_prob)
+def run_factorized_nuts(
+    model_kwargs: dict[str, Any],
+    *,
+    rng_key: jax.Array,
+    n_warmup: int,
+    n_samples: int,
+    num_chains: int = 1,
+    target_accept_prob: float = 0.8,
+    max_tree_depth: int = 10,
+    dense_mass: bool = True,
+    chain_method: str | None = None,
+    eta: float = 1.0,
+    target_accept_prob_by_channel: list[float] | None = None,
+    max_tree_depth_by_channel: list[int] | None = None,
+    init_values: dict[str, jnp.ndarray] | None = None,
+    verbose: bool = False,
+) -> MCMCResult:
+    """Run one NUTS fit for each multivariate Cholesky factor."""
+    from log_psplines.inference.model import _blocked_channel_model
 
-    def _channel_max_tree_depth(self, channel_index: int) -> int:
-        values = self.max_tree_depth_by_channel
-        if values is None:
-            return int(self.max_tree_depth)
-        try:
-            return int(values[int(channel_index)])
-        except (IndexError, TypeError, ValueError):
-            return int(self.max_tree_depth)
+    kwargs = dict(model_kwargs)
+    kwargs["eta"] = eta
+    n_channels = int(kwargs["n_channels"])
+    keys = jax.random.split(rng_key, n_channels)
+    posterior_parts = []
+    stats_parts = []
+    log_likelihood_parts = []
 
-    def run(
-        self,
-        model_kwargs: dict[str, Any],
-        init_values: dict[str, jnp.ndarray] | None = None,
-        *,
-        rng_key: jax.Array,
-        verbose: bool = False,
-    ) -> MCMCResult:
-        from log_psplines.inference.model import _blocked_channel_model
-
-        kwargs = dict(model_kwargs)
-        kwargs["eta"] = self.eta
-        n_channels = int(kwargs["n_channels"])
-        keys = jax.random.split(rng_key, n_channels)
-        posterior_parts = []
-        stats_parts = []
-        log_likelihood_parts = []
-
-        for channel_index in range(n_channels):
-            result = run_nuts(
-                _blocked_channel_model,
-                rng_key=keys[channel_index],
-                model_kwargs=_channel_model_kwargs(kwargs, channel_index),
-                init_values=_init_values_for_channel(init_values, channel_index),
-                n_warmup=self.n_warmup,
-                n_samples=self.n_samples,
-                num_chains=self.num_chains,
-                dense_mass=self.dense_mass,
-                target_accept_prob=self._channel_target_accept(channel_index),
-                max_tree_depth=self._channel_max_tree_depth(channel_index),
-                chain_method=self.chain_method,
-                progress_bar=verbose,
-                extra_fields=(
-                    "potential_energy",
-                    "energy",
-                    "num_steps",
-                    "accept_prob",
-                    "adapt_state.step_size",
-                    "diverging",
-                ),
-            )
-            posterior_parts.append(result.posterior)
-            stats = _suffix(result.sample_stats, channel_index)
-            if stats is not None:
-                stats_parts.append(stats)
-            if result.log_likelihood is not None:
-                log_likelihood_parts.append(result.log_likelihood)
-
-        return MCMCResult(
-            posterior=xr.merge(posterior_parts),
-            sample_stats=xr.merge(stats_parts) if stats_parts else None,
-            log_likelihood=(
-                xr.merge(log_likelihood_parts)
-                if log_likelihood_parts
-                else None
+    for channel_index in range(n_channels):
+        result = run_nuts(
+            _blocked_channel_model,
+            rng_key=keys[channel_index],
+            model_kwargs=_channel_model_kwargs(kwargs, channel_index),
+            init_values=_init_values_for_channel(init_values, channel_index),
+            n_warmup=n_warmup,
+            n_samples=n_samples,
+            num_chains=num_chains,
+            dense_mass=dense_mass,
+            target_accept_prob=float(_channel_setting(
+                target_accept_prob_by_channel,
+                target_accept_prob,
+                channel_index,
+            )),
+            max_tree_depth=int(_channel_setting(
+                max_tree_depth_by_channel, max_tree_depth, channel_index
+            )),
+            chain_method=chain_method,
+            progress_bar=verbose,
+            extra_fields=(
+                "potential_energy", "energy", "num_steps", "accept_prob",
+                "adapt_state.step_size", "diverging",
             ),
         )
+        posterior_parts.append(result.posterior)
+        stats = _suffix(result.sample_stats, channel_index)
+        if stats is not None:
+            stats_parts.append(stats)
+        if result.log_likelihood is not None:
+            log_likelihood_parts.append(result.log_likelihood)
+
+    return MCMCResult(
+        posterior=xr.merge(posterior_parts),
+        sample_stats=xr.merge(stats_parts) if stats_parts else None,
+        log_likelihood=(
+            xr.merge(log_likelihood_parts) if log_likelihood_parts else None
+        ),
+    )
 
 
-__all__ = ["MCMCResult", "run_nuts", "FactorizedMultivarNUTSStage"]
+__all__ = ["MCMCResult", "run_nuts", "run_factorized_nuts"]

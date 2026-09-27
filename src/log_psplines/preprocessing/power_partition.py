@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from log_psplines.data.spectral import PowerSpectrum
+from log_psplines.data.spectral import PowerData
 
 
 def _starts(value: np.ndarray, size: int, name: str) -> np.ndarray:
@@ -35,14 +35,14 @@ class PowerPartition:
     frequency_starts: np.ndarray
 
 
-def mask_power(data: PowerSpectrum, mask: np.ndarray) -> PowerSpectrum:
+def mask_power(data: PowerData, mask: np.ndarray) -> PowerData:
     """Exclude native cells while retaining their grid coordinates."""
-    if data.time is None:
-        raise ValueError("mask_power requires a time-frequency PowerSpectrum")
+    if not data.is_grid or data.time is None:
+        raise ValueError("mask_power requires a time-frequency grid")
     mask = np.asarray(mask)
     if mask.shape != data.power.shape or mask.dtype != np.bool_:
         raise ValueError("mask must be boolean with the native power shape")
-    return PowerSpectrum(
+    return PowerData(
         np.where(mask, data.power, 0.0),
         np.where(mask, data.counts, 0.0),
         data.frequency,
@@ -143,15 +143,15 @@ def select_power_partition(
 
 
 def coarse_grain_power(
-    data: PowerSpectrum, partition: PowerPartition
-) -> PowerSpectrum:
+    data: PowerData, partition: PowerPartition
+) -> PowerData:
     """Pool native power and exact counts; use native-center block means.
 
     A block's single spline evaluation approximates its constituent PSDs.
     Empty blocks stay present with zero power/count so the tensor grid remains
     rectangular, and contribute zero to the Whittle likelihood.
     """
-    if data.time is None:
+    if not data.is_grid or data.time is None:
         raise ValueError("coarse_grain_power requires time-frequency power")
     ts = _starts(partition.time_starts, len(data.time), "time_starts")
     fs = _starts(
@@ -167,4 +167,4 @@ def coarse_grain_power(
     fsize = np.diff(np.r_[fs, len(data.frequency)])
     time = np.add.reduceat(data.time, ts) / tsize
     frequency = np.add.reduceat(data.frequency, fs) / fsize
-    return PowerSpectrum(power, counts, frequency, time, data.units)
+    return PowerData(power, counts, frequency, time, data.units)

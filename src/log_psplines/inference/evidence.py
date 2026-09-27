@@ -115,10 +115,7 @@ def _unpack_params(
     for spec in specs:
         stop = start + spec.width
         value = sample_vec[start:stop]
-        if spec.shape:
-            value = jnp.reshape(value, spec.shape)
-        else:
-            value = value[0]
+        value = jnp.reshape(value, spec.shape) if spec.shape else value[0]
         params[spec.name] = value
         start = stop
     return params

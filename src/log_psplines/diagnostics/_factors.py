@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -82,21 +83,17 @@ def _copy_factor_attrs(idata: xr.DataTree, factor: str) -> dict[str, Any]:
 
     max_tree_depth_by_channel = attrs.get("max_tree_depth_by_channel")
     if max_tree_depth_by_channel is not None:
-        try:
+        with contextlib.suppress(IndexError, TypeError, ValueError):
             attrs["max_tree_depth"] = int(
                 max_tree_depth_by_channel[factor_idx]
             )
-        except (IndexError, TypeError, ValueError):
-            pass
 
     target_accept_by_channel = attrs.get("target_accept_prob_by_channel")
     if target_accept_by_channel is not None:
-        try:
+        with contextlib.suppress(IndexError, TypeError, ValueError):
             attrs["target_accept_prob"] = float(
                 target_accept_by_channel[factor_idx]
             )
-        except (IndexError, TypeError, ValueError):
-            pass
 
     attrs["factor"] = factor
     return attrs

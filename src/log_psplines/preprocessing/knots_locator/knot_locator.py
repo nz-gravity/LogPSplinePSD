@@ -137,7 +137,8 @@ def init_knots(
         missing_knots = original_knots[np.isnan(knots)]
         warnings.warn(
             f"Some knots are NaN after normalization. "
-            f"Missing knots: {missing_knots}"
+            f"Missing knots: {missing_knots}",
+            stacklevel=2,
         )
         knots = knots[~np.isnan(knots)]
 

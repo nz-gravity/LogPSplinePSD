@@ -262,9 +262,7 @@ def make_demo_data():
 
 def load_inputs():
     if not DATA_FILE.exists():
-        print(
-            f"{DATA_FILE.name} not found. " "Using synthetic demo posterior."
-        )
+        print(f"{DATA_FILE.name} not found. Using synthetic demo posterior.")
 
         return make_demo_data()
 
@@ -283,7 +281,7 @@ def load_inputs():
 
     if missing:
         raise ValueError(
-            f"{DATA_FILE.name} is missing keys: " f"{sorted(missing)}"
+            f"{DATA_FILE.name} is missing keys: {sorted(missing)}"
         )
 
     x = np.asarray(
@@ -324,7 +322,7 @@ def load_inputs():
         raise ValueError("w_draws must have shape (S, K)")
 
     if basis.shape[0] != w_draws.shape[1]:
-        raise ValueError("basis.shape[0] must equal " "w_draws.shape[1]")
+        raise ValueError("basis.shape[0] must equal w_draws.shape[1]")
 
     if basis.shape[1] != len(x):
         raise ValueError("basis.shape[1] must equal len(x)")

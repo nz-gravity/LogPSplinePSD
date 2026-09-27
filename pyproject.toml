@@ -87,10 +87,13 @@ line-length = 79
 target-version = "py312"
 src = ["src"]
 
+[tool.ruff.format]
+# Formats docstrings and comments to respect line-length = 79
+docstring-code-format = true
+
 [tool.ruff.lint]
-# E/W: pycodestyle, F: pyflakes, I: isort, UP: pyupgrade, B: bugbear, SIM: flake8-simplify, NPY: numpy-specific rules
 select = ["E", "F", "I", "UP", "B", "SIM", "NPY"]
-ignore = ["B008"] # Useful to ignore for JAX/NumPyro default argument definitions
+ignore = ["B008","E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["log_psplines"]

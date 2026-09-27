@@ -77,9 +77,9 @@ def test_spline_init(mock_fft: WishartData, outdir):
     assert psd.shape == mock_fft.freq.shape
     assert np.all(np.isfinite(psd))
     assert np.all(psd > 0.0)
-    assert (
-        runtime < 5
-    ), f"Initialization should complete in less than 5 seconds, it took {runtime:.2f} seconds."
+    assert runtime < 5, (
+        f"Initialization should complete in less than 5 seconds, it took {runtime:.2f} seconds."
+    )
 
 
 def test_spline_basis(mock_fft: WishartData, outdir):
@@ -87,7 +87,7 @@ def test_spline_basis(mock_fft: WishartData, outdir):
     os.makedirs(out, exist_ok=True)
 
     # init splines
-    t0 = time.time()
+    time.time()
     spline_model = prepare_components(
         mock_fft,
         n_knots=10,

@@ -70,7 +70,7 @@ def ordered_eigvals_hermitian(matrix: np.ndarray) -> np.ndarray:
     matrix = np.asarray(matrix)
     if matrix.ndim != 3 or matrix.shape[-1] != matrix.shape[-2]:
         raise ValueError(
-            "matrix must have shape (N, p, p); " f"got {matrix.shape}."
+            f"matrix must have shape (N, p, p); got {matrix.shape}."
         )
     herm = 0.5 * (matrix + np.swapaxes(np.conj(matrix), -1, -2))
     eig = np.linalg.eigvalsh(herm)  # ascending
@@ -95,8 +95,7 @@ def eig_ratios(
     eigvals_desc = np.asarray(eigvals_desc, dtype=np.float64)
     if eigvals_desc.ndim != 2:
         raise ValueError(
-            "eigvals_desc must have shape (N, p); "
-            f"got {eigvals_desc.shape}."
+            f"eigvals_desc must have shape (N, p); got {eigvals_desc.shape}."
         )
     if eps is None:
         eps = float(np.finfo(np.float64).tiny)
@@ -109,7 +108,7 @@ def eig_ratios(
         with np.errstate(divide="ignore", invalid="ignore"):
             ratio = num / den
         ratio = np.where(den <= eps, np.nan, ratio)
-        ratios[f"r_{idx+1}{idx+2}"] = np.clip(ratio, 0.0, 1.0)
+        ratios[f"r_{idx + 1}{idx + 2}"] = np.clip(ratio, 0.0, 1.0)
     return ratios
 
 
@@ -126,14 +125,14 @@ def ratio_summary_string(
     if np.isclose(rmin, rmax):
         return (
             f"{name}: constant={rmin:.3f}, "
-            f"frac(>{warn_threshold:.2f})={frac*100:.1f}%"
+            f"frac(>{warn_threshold:.2f})={frac * 100:.1f}%"
         )
 
     p05, p50, p95 = np.percentile(ratio, [5.0, 50.0, 95.0])
     return (
         f"{name}: q05/50/95={p05:.3f}/{p50:.3f}/{p95:.3f}, "
         f"range={rmin:.3f}-{rmax:.3f}, "
-        f"frac(>{warn_threshold:.2f})={frac*100:.1f}%"
+        f"frac(>{warn_threshold:.2f})={frac * 100:.1f}%"
     )
 
 
@@ -359,9 +358,9 @@ def save_eigenvalue_separation_plot(
     p = int(eig.shape[1]) if eig.ndim == 2 else 0
     for idx in range(p):
         if use_log_x:
-            ax_eig.loglog(freq, eig[:, idx], label=f"λ{idx+1}")
+            ax_eig.loglog(freq, eig[:, idx], label=f"λ{idx + 1}")
         else:
-            ax_eig.semilogy(freq, eig[:, idx], label=f"λ{idx+1}")
+            ax_eig.semilogy(freq, eig[:, idx], label=f"λ{idx + 1}")
     ax_eig.set_xlabel("Frequency")
     ax_eig.set_ylabel("Eigenvalue scale")
     ax_eig.grid(True, which="both", alpha=0.2)
@@ -381,17 +380,17 @@ def save_eigenvalue_separation_plot(
 
                 if row == col:
                     y = log_delta_sq[:, row]
-                    label = f"LogDelta{row+1}{col+1}"
+                    label = f"LogDelta{row + 1}{col + 1}"
                     color = "tab:blue"
                 elif row < col:
                     y = np.real(theta[:, col, row])
-                    label = f"Re(Theta{row+1}{col+1})"
-                    pair_idx = row * (2 * p - row - 1) // 2 + (col - row - 1)
+                    label = f"Re(Theta{row + 1}{col + 1})"
+                    row * (2 * p - row - 1) // 2 + (col - row - 1)
                     color = "tab:orange"
                 else:
                     y = np.imag(theta[:, row, col])
-                    label = f"Im(Theta{row+1}{col+1})"
-                    pair_idx = col * (2 * p - col - 1) // 2 + (row - col - 1)
+                    label = f"Im(Theta{row + 1}{col + 1})"
+                    col * (2 * p - col - 1) // 2 + (row - col - 1)
                     color = "tab:red"
 
                 _shade_excluded_bands(ax, add_label=False)
@@ -495,24 +494,30 @@ def extract_component_knots(
     for j in range(p):
         model = spline_model.diagonal_models[j]
         knots_norm = np.asarray(model.knots, dtype=float)
-        result[f"LogDelta{j+1}{j+1}"] = f_min + knots_norm * (f_max - f_min)
+        result[f"LogDelta{j + 1}{j + 1}"] = f_min + knots_norm * (
+            f_max - f_min
+        )
 
     # Off-diagonal theta pairs
-    theta_pairs = [(j, l) for j in range(1, p) for l in range(j)]
-    for j, l in theta_pairs:
+    theta_pairs = [
+        (row_idx, col_idx)
+        for row_idx in range(1, p)
+        for col_idx in range(row_idx)
+    ]
+    for row_idx, col_idx in theta_pairs:
         # Re(Theta) — shown in upper triangle where row < col,
-        # with row=l, col=j (since l < j).
-        re_model = spline_model.get_theta_model("re", j, l)
+        # with row=col_idx, col=row_idx (since col_idx < row_idx).
+        re_model = spline_model.get_theta_model("re", row_idx, col_idx)
         knots_norm = np.asarray(re_model.knots, dtype=float)
         re_freq = f_min + knots_norm * (f_max - f_min)
-        result[f"Re(Theta{l+1}{j+1})"] = re_freq
+        result[f"Re(Theta{col_idx + 1}{row_idx + 1})"] = re_freq
 
         # Im(Theta) — shown in lower triangle where row > col,
-        # with row=j, col=l (since j > l).
-        im_model = spline_model.get_theta_model("im", j, l)
+        # with row=row_idx, col=col_idx (since row_idx > col_idx).
+        im_model = spline_model.get_theta_model("im", row_idx, col_idx)
         knots_norm = np.asarray(im_model.knots, dtype=float)
         im_freq = f_min + knots_norm * (f_max - f_min)
-        result[f"Im(Theta{j+1}{l+1})"] = im_freq
+        result[f"Im(Theta{row_idx + 1}{col_idx + 1})"] = im_freq
 
     return result
 

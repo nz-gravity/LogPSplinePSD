@@ -90,8 +90,10 @@ import numpy as np
 from log_psplines import TimeSeries, PipelineConfig, fit
 
 series = TimeSeries(data=np.random.default_rng(7).normal(size=(256, 2)))
-result = fit(series, PipelineConfig(n_knots=6, vi_steps=200,
-                                  n_warmup=100, n_samples=200))
+result = fit(
+    series,
+    PipelineConfig(n_knots=6, vi_steps=200, n_warmup=100, n_samples=200),
+)
 frequency = result.frequency
 spectral_draws = result.spectral_density  # (chain, draw, F, C, C)
 auto_spectra = result.psd

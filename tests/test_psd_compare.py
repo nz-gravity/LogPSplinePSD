@@ -157,7 +157,7 @@ def _assert_diagnostics_equal(actual: dict, expected: dict) -> None:
                         rtol=1e-12,
                         atol=1e-12,
                     )
-        elif isinstance(lhs, list) or isinstance(lhs, float):
+        elif isinstance(lhs, (list, float)):
             np.testing.assert_allclose(rhs, lhs, rtol=1e-12, atol=1e-12)
         else:
             assert rhs == lhs

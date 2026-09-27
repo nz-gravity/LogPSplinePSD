@@ -29,10 +29,7 @@ def logspace_widths(xs, log_width=0.1):
 def plot_box(ax, xs, ys, color="C0", alpha=0.7, filled=True):
     xscale = ax.get_xscale()
 
-    if xscale == "log":
-        widths = logspace_widths(xs, log_width=0.1)
-    else:
-        widths = None
+    widths = logspace_widths(xs, log_width=0.1) if xscale == "log" else None
 
     bp = ax.boxplot(
         ys,

@@ -57,7 +57,6 @@ class VIResult:
     losses_per_block: list[jnp.ndarray] | None = None
 
 
-
 def resolve_guide(
     guide: str | Callable[..., Any] | None,
     model: Callable[..., Any],
@@ -96,9 +95,7 @@ def resolve_guide(
             parts = key.split(":", 1)
             if len(parts) == 2 and parts[1]:
                 rank = int(parts[1])
-            guide_instance = AutoLowRankMultivariateNormal(
-                model, rank=rank
-            )
+            guide_instance = AutoLowRankMultivariateNormal(model, rank=rank)
             return guide_instance, f"lowrank:{rank}"
         if key.startswith("flow"):
             layers = 1
@@ -107,13 +104,9 @@ def resolve_guide(
                 layers = int(parts[1])
             # Use IAF for speed; allow switching to BNAF by prefix.
             if key.startswith("flowbnaf"):
-                guide_instance = AutoBNAFNormal(
-                    model, num_flows=layers
-                )
+                guide_instance = AutoBNAFNormal(model, num_flows=layers)
                 return guide_instance, f"flowbnaf:{layers}"
-            guide_instance = AutoIAFNormal(
-                model, num_flows=layers
-            )
+            guide_instance = AutoIAFNormal(model, num_flows=layers)
             return guide_instance, f"flow:{layers}"
         raise ValueError(f"Unknown VI guide specifier: {guide}")
 
@@ -216,10 +209,7 @@ def fit_vi(
 ) -> VIResult:
     """Run SVI and return posterior draws with loss diagnostics."""
 
-    if model_kwargs is None:
-        model_kwargs = {}
-    else:
-        model_kwargs = dict(model_kwargs)
+    model_kwargs = {} if model_kwargs is None else dict(model_kwargs)
 
     if vi_steps <= 0:
         raise ValueError("vi_steps must be positive")

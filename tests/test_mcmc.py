@@ -265,13 +265,13 @@ def _run_multivar_mcmc(outdir):
         outdir=outdir,
         compute_lnz=False,
         lnz_kwargs={
-                "morph_type": "pair",
-                "n_resamples": 64,
-                "n_estimations": 1,
-                "kde_bw": "silverman",
-                "max_iter": 200,
-                "tol": 1e-2,
-                "verbose": True,
+            "morph_type": "pair",
+            "n_resamples": 64,
+            "n_estimations": 1,
+            "kde_bw": "silverman",
+            "max_iter": 200,
+            "tol": 1e-2,
+            "verbose": True,
         },
     )
     result = fit(data=ts_run, config=config)

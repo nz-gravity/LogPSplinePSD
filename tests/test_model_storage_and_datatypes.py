@@ -294,7 +294,7 @@ def test_multivariate_model_registry_design_weights_and_psd_reconstruction() -> 
     }
 
     n_draws = 3
-    n_basis = model.diagonal_models[0].n_basis
+    model.diagonal_models[0].n_basis
     log_delta_sq = np.zeros((n_draws, model.N, model.p))
     theta_re = np.zeros((n_draws, model.N, model.n_theta))
     theta_im = np.zeros_like(theta_re)

@@ -10,15 +10,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-
-def _require_dataset(tree, group: str):
-    node = tree[group]
-    dataset = getattr(node, "dataset", node)
-    if dataset is None:
-        raise KeyError(group)
-    return dataset
-
-
 from log_psplines.diagnostics._factors import factor_idatas, vi_factor_idatas
 from log_psplines.diagnostics._utils import (
     compute_ci_coverage_multivar,
@@ -26,6 +17,14 @@ from log_psplines.diagnostics._utils import (
     compute_matrix_riae,
     interior_frequency_slice,
 )
+
+
+def _require_dataset(tree, group: str):
+    node = tree[group]
+    dataset = getattr(node, "dataset", node)
+    if dataset is None:
+        raise KeyError(group)
+    return dataset
 
 
 def _is_arviz_loo_source(source: Any) -> bool:

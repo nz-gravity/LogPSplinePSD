@@ -176,11 +176,11 @@ def _sum_bins_equal(x: np.ndarray, *, Nh: int) -> np.ndarray:
 
 
 def _coarse_grain_wishart_y_to_u(
-    Y_sel: Complex[np.ndarray, "nl p p"],
+    Y_sel: Complex[np.ndarray, "nl p p"],  # noqa: F722
     *,
     Nc: int,
     Nh: int,
-) -> Complex[np.ndarray, "nc p p"]:
+) -> Complex[np.ndarray, "nc p p"]:  # noqa: F722
     """Coarse-grain Wishart matrices by summing Y(f) within each bin.
 
     For each bin h, compute:
@@ -210,7 +210,7 @@ def _coarse_grain_wishart_y_to_u(
 
 @runtime_typecheck
 def compute_binning_structure(
-    freqs: Float[np.ndarray, nl],
+    freqs: Float[np.ndarray, "nl"],  # noqa: F821, UP037
     *,
     Nc: int | None = None,
     Nh: int | None = None,
@@ -238,16 +238,16 @@ def compute_binning_structure(
 
     Nc, Nh = _resolve_equal_bin_params(Nl=Nl, Nc=Nc, Nh=Nh)
 
-    J_start: Int[np.ndarray, nc] = (np.arange(Nc, dtype=np.int64) * Nh).astype(
-        np.int32
-    )
+    J_start: Int[np.ndarray, "nc"] = (  # noqa: F821, UP037
+        np.arange(Nc, dtype=np.int64) * Nh
+    ).astype(np.int32)
 
     if (Nh % 2) == 0:
         logger.info(f"Nl={Nl} and Nc={Nc} imply even Nh={Nh}. ")
-        J_mid: Int[np.ndarray, nc] = J_start + (Nh // 2) - 1
+        J_mid: Int[np.ndarray, "nc"] = J_start + (Nh // 2) - 1  # noqa: F821, UP037
     else:
         J_mid = J_start + (Nh // 2)
-    f_coarse: Float[np.ndarray, nc] = freqs[J_mid].astype(np.float64)
+    f_coarse: Float[np.ndarray, "nc"] = freqs[J_mid].astype(np.float64)  # noqa: F821, UP037
 
     return CoarseGrainSpec(
         f_coarse=f_coarse,

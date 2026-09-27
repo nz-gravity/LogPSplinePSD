@@ -1,0 +1,16 @@
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "ruff-format"
+name = "ruff format"
+entry = "uv run ruff format src/"
+language = "system"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "ruff-check"
+name = "ruff check"
+entry = "uv run ruff check src/ --fix --unsafe-fixes"
+language = "system"
+pass_filenames = false

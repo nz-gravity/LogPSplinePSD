@@ -147,8 +147,7 @@ class VARMAData:
         np.ndarray, shape (N, C)
             Simulated multivariate time series.
         """
-        if seed is not None:
-            np.random.seed(seed)
+        rng = np.random.default_rng(seed)
 
         lag_ma = self.vma_coeffs.shape[0]
         lag_ar = self.var_coeffs.shape[0]
@@ -162,14 +161,14 @@ class VARMAData:
         x = np.empty((self.n_samples + 101, self.p))
         x[:] = np.nan
         x[: lag_ar + 1] = x_init
-        epsilon = np.random.multivariate_normal(
+        epsilon = rng.multivariate_normal(
             np.zeros(self.p), cov_matrix, size=[lag_ma]
         )
 
         for i in range(lag_ar + 1, x.shape[0]):
             epsilon = np.concatenate(
                 [
-                    np.random.multivariate_normal(
+                    rng.multivariate_normal(
                         np.zeros(self.p), cov_matrix, size=[1]
                     ),
                     epsilon[:-1],
@@ -474,10 +473,7 @@ def _calculate_spec_matrix_helper(omega, p, var_coeffs, vma_coeffs, sigma):
     np.ndarray, shape (C, C)
         Complex spectral matrix value at ``omega``.
     """
-    if sigma.shape[0] == 1:
-        cov_matrix = np.identity(p) * sigma
-    else:
-        cov_matrix = sigma
+    cov_matrix = np.identity(p) * sigma if sigma.shape[0] == 1 else sigma
 
     k_ar = np.arange(1, var_coeffs.shape[0] + 1)
     angles_ar = k_ar[:, np.newaxis, np.newaxis] * omega

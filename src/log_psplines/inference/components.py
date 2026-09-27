@@ -16,7 +16,7 @@ class MultivarComponentKey:
 
     family: Literal["delta", "theta"]
     j: int
-    l: int | None = None
+    l: int | None = None  # noqa: E741
     part: Literal["re", "im"] | None = None
 
     def __post_init__(self):
@@ -146,12 +146,21 @@ class SpectralComponents:
     @property
     def theta_pairs(self) -> list[tuple[int, int]]:
         """Lower-triangular (j, l) index pairs with j > l in model order."""
-        return [(j, l) for j in range(1, self.p) for l in range(j)]
+        return [
+            (row_idx, col_idx)
+            for row_idx in range(1, self.p)
+            for col_idx in range(row_idx)
+        ]
 
     def delta_key(self, j: int) -> MultivarComponentKey:
         return MultivarComponentKey("delta", int(j))
 
-    def theta_key(self, part: str, j: int, l: int) -> MultivarComponentKey:
+    def theta_key(
+        self,
+        part: str,
+        j: int,
+        l: int,  # noqa: E741
+    ) -> MultivarComponentKey:
         part_val = str(part).strip().lower()
         if part_val not in ("re", "im"):
             raise ValueError(f"Unknown theta part '{part}'. Use 're' or 'im'.")
@@ -165,8 +174,14 @@ class SpectralComponents:
     @property
     def expected_component_order(self) -> list[MultivarComponentKey]:
         order = [self.delta_key(j) for j in range(self.p)]
-        order.extend(self.theta_key("re", j, l) for j, l in self.theta_pairs)
-        order.extend(self.theta_key("im", j, l) for j, l in self.theta_pairs)
+        order.extend(
+            self.theta_key("re", row_idx, col_idx)
+            for row_idx, col_idx in self.theta_pairs
+        )
+        order.extend(
+            self.theta_key("im", row_idx, col_idx)
+            for row_idx, col_idx in self.theta_pairs
+        )
         return order
 
     def theta_pair_from_index(self, theta_idx: int) -> tuple[int, int]:
@@ -182,14 +197,19 @@ class SpectralComponents:
             return self.diagonal_models[key.j]
         return self.get_theta_model(key.part, key.j, key.l)
 
-    def theta_index(self, j: int, l: int) -> int:
+    def theta_index(self, j: int, l: int) -> int:  # noqa: E741
         if not (0 <= l < j < self.p):
             raise ValueError(
                 f"Invalid theta pair ({j}, {l}) for p={self.p}; expected 0 <= l < j < p."
             )
         return j * (j - 1) // 2 + l
 
-    def get_theta_model(self, part: str, j: int, l: int) -> LogPSpline:
+    def get_theta_model(
+        self,
+        part: str,
+        j: int,
+        l: int,  # noqa: E741
+    ) -> LogPSpline:
         """Return the model for theta_{j,l} real/imag part."""
         self.theta_key(part, j, l)
         models = (
@@ -239,9 +259,9 @@ class SpectralComponents:
             matrix[j][j] = value
             counts.append(value)
 
-        for j, l in self.theta_pairs:
-            re_model = self.get_theta_model("re", j, l)
-            im_model = self.get_theta_model("im", j, l)
+        for row_idx, col_idx in self.theta_pairs:
+            re_model = self.get_theta_model("re", row_idx, col_idx)
+            im_model = self.get_theta_model("im", row_idx, col_idx)
             re_value = (
                 int(len(re_model.knots))
                 if quantity == "n_knots"
@@ -252,8 +272,8 @@ class SpectralComponents:
                 if quantity == "n_knots"
                 else int(im_model.n_basis)
             )
-            matrix[j][l] = re_value
-            matrix[l][j] = im_value
+            matrix[row_idx][col_idx] = re_value
+            matrix[col_idx][row_idx] = im_value
             counts.extend([re_value, im_value])
 
         return counts[0] if len(set(counts)) == 1 else matrix

@@ -15,9 +15,9 @@ def _typecheck_enabled() -> bool:
 
 
 @lru_cache(maxsize=1)
-def _load_checkers() -> (
-    tuple[Callable[..., Any] | None, Callable[..., Any] | None]
-):
+def _load_checkers() -> tuple[
+    Callable[..., Any] | None, Callable[..., Any] | None
+]:
     """Load runtime typechecker callables without hard import requirements."""
     try:
         beartype_module = importlib.import_module("beartype")
@@ -30,7 +30,7 @@ def _load_checkers() -> (
     return jaxtyped_callable, beartype_callable
 
 
-def runtime_typecheck(func: F) -> F:
+def runtime_typecheck[F: Callable[..., Any]](func: F) -> F:
     """Apply jaxtyping+beartype checks when available."""
     jaxtyped_callable, beartype_callable = _load_checkers()
     if jaxtyped_callable is None or beartype_callable is None:

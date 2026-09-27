@@ -95,8 +95,10 @@ def plot_spline_basis(model, outdir: str | None = None):
 
     Examples
     --------
-    >>> plot_spline_basis(model,)  # Display plot
-    >>> plot_spline_basis(model,outdir="./diagnostics")  # Save to file
+    >>> plot_spline_basis(
+    ...     model,
+    ... )  # Display plot
+    >>> plot_spline_basis(model, outdir="./diagnostics")  # Save to file
     """
     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     plot_basis(np.asarray(model.basis), axes=axes[:2])

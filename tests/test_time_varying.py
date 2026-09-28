@@ -92,6 +92,65 @@ def test_masked_partition_pooling_conserves_power_counts_and_block_likelihood():
     np.testing.assert_allclose(native_ll, coarse_ll)
 
 
+def test_reference_and_truth_use_native_grid_without_changing_the_model(
+    tmp_path,
+):
+    time = np.linspace(0.0, 1.0, 6)
+    frequency = np.linspace(0.1, 1.0, 7)
+    shape = (time.size, frequency.size)
+    reference = np.exp(np.linspace(-2.0, 2.0, np.prod(shape)).reshape(shape))
+    correction = 1.1 + 0.1 * np.arange(shape[1])[None, :]
+    power = reference * correction
+    truth = reference * 1.2
+    config = PowerConfig(
+        n_interior_knots_time=1,
+        n_interior_knots_freq=1,
+        n_warmup=2,
+        n_samples=2,
+        seed=14,
+        progress_bar=False,
+    )
+    partition = PowerPartition(np.array([0, 3]), np.array([0, 3, 5]))
+    result = fit(
+        PowerData(power, 1, frequency, time),
+        config,
+        partition=partition,
+        reference=reference,
+        true_psd=truth,
+    )
+    normalized = fit(
+        PowerData(power / reference, 1, frequency, time),
+        config,
+        partition=partition,
+    )
+    np.testing.assert_allclose(
+        result.posterior["weights"], normalized.posterior["weights"]
+    )
+    np.testing.assert_allclose(result.psd, normalized.psd * reference)
+    np.testing.assert_allclose(result.truth, truth)
+    result.to_netcdf(tmp_path / "fit.nc")
+    from log_psplines.results import PSDResult
+
+    restored = PSDResult.from_netcdf(tmp_path / "fit.nc")
+    np.testing.assert_allclose(restored.truth, truth)
+    assert result.metadata["reference_applied"]
+
+
+def test_reference_and_truth_require_positive_native_grid():
+    time = np.linspace(0.0, 1.0, 5)
+    frequency = np.linspace(0.1, 1.0, 5)
+    data = PowerData(np.ones((5, 5)), 1, frequency, time)
+    model = LogPSpline(
+        SplineBasis.from_grid(frequency, 1),
+        time=SplineBasis.from_grid(time, 1),
+    )
+    config = PowerConfig(n_warmup=1, n_samples=1, progress_bar=False)
+    with pytest.raises(ValueError, match="reference must"):
+        fit(data, config, model=model, reference=np.zeros((5, 5)))
+    with pytest.raises(ValueError, match="true_psd must"):
+        fit(data, config, model=model, true_psd=np.ones((4, 5)))
+
+
 def test_surface_basis_stationary_limit_and_power_likelihood_gradient():
     frequency = np.linspace(0.1, 1.0, 6)
     time = np.linspace(0.0, 1.0, 5)

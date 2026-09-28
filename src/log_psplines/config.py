@@ -195,6 +195,14 @@ class PowerConfig:
     """
 
     roughness_scale: float = 10.0
+    n_interior_knots_time: int = 8
+    n_interior_knots_freq: int = 10
+    interior_knots_time: np.ndarray | None = None
+    interior_knots_freq: np.ndarray | None = None
+    degree_time: int = 3
+    degree_freq: int = 3
+    penalty_order_time: int = 2
+    penalty_order_freq: int = 2
     null_precision: float = 1e-4
     ridge_eps: float = 1e-6
     init_penalty_time: float = 0.05
@@ -209,6 +217,32 @@ class PowerConfig:
     progress_bar: bool = True
 
     def __post_init__(self) -> None:
+        for axis in ("time", "freq"):
+            count = getattr(self, f"n_interior_knots_{axis}")
+            degree = getattr(self, f"degree_{axis}")
+            order = getattr(self, f"penalty_order_{axis}")
+            if (
+                not isinstance(count, int)
+                or isinstance(count, bool)
+                or count < 0
+            ):
+                raise ValueError(
+                    f"n_interior_knots_{axis} must be non-negative"
+                )
+            if (
+                not isinstance(degree, int)
+                or isinstance(degree, bool)
+                or degree < 0
+            ):
+                raise ValueError(f"degree_{axis} must be non-negative")
+            if (
+                not isinstance(order, int)
+                or isinstance(order, bool)
+                or not 0 <= order <= degree
+            ):
+                raise ValueError(
+                    f"penalty_order_{axis} must lie between 0 and degree"
+                )
         for name in (
             "roughness_scale",
             "null_precision",

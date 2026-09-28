@@ -89,6 +89,7 @@ class PSDResult:
     vi: VIResult | None = None
     log_likelihood: xr.Dataset | None = None
     observed_data: xr.Dataset | None = None
+    truth: xr.DataArray | None = None
 
     @property
     def frequency(self) -> np.ndarray:
@@ -150,6 +151,8 @@ class PSDResult:
         data_vars: dict[str, xr.DataArray] = {
             "spectral_density": self.spectrum,
         }
+        if self.truth is not None:
+            data_vars["true_psd"] = self.truth
         groups = (
             ("posterior", self.posterior),
             ("sample_stats", self.sample_stats),
@@ -215,6 +218,7 @@ class PSDResult:
             metadata=dict(stored.attrs),
             log_likelihood=group("log_likelihood"),
             observed_data=group("observed"),
+            truth=stored.get("true_psd"),
         )
 
     def save(
@@ -224,6 +228,8 @@ class PSDResult:
         true_psd: np.ndarray | None = None,
     ) -> None:
         """Save fitted samples, plots and diagnostics."""
+        if true_psd is None and self.truth is not None:
+            true_psd = np.asarray(self.truth)
         os.makedirs(outdir, exist_ok=True)
         from log_psplines.diagnostics import save_diagnostics
         from log_psplines.plotting.results import (

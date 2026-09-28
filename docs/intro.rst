@@ -44,7 +44,7 @@ Follow the pages in this order:
 1. :doc:`examples/univar-example` runs a univariate analysis.
 2. :doc:`examples/multivariate-example` introduces spectral matrices.
 3. :doc:`examples/timevarying-example` fits scalar time-varying spectra.
-4. :doc:`wdm-power` shows array-based WDM likelihood compression.
+4. :doc:`power-reference` shows reference-based time-varying power fits.
 5. :doc:`conventions` explains units and spectral conventions.
 6. :doc:`development` gives implementation notes, followed by the :doc:`api`
    reference.

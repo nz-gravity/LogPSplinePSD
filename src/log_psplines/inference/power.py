@@ -15,6 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
+import xarray as xr
 from jaxtyping import Float
 
 from log_psplines.basis.penalty import eigen_prior_scale, whiten_penalty_pair
@@ -408,14 +409,17 @@ def fit_power(
     *,
     partition=None,
     reference=None,
+    true_psd=None,
 ) -> PSDResult:
     """Fit grid or scattered powers using the same likelihood and prior."""
     from log_psplines.preprocessing.power_partition import coarse_grain_power
     from log_psplines.results import PSDResult, observed_power_data
 
     anova = isinstance(spline, ANOVALogPSpline)
-    if reference is not None and (not anova or not data.is_grid):
-        raise ValueError("reference requires rectangular ANOVALogPSpline data")
+    if reference is not None and not data.is_grid:
+        raise ValueError("reference requires rectangular PowerData")
+    if true_psd is not None and not data.is_grid:
+        raise ValueError("true_psd requires rectangular PowerData")
     if anova and not data.is_grid:
         raise ValueError(
             "ANOVALogPSpline requires rectangular GridTV PowerData"
@@ -447,6 +451,16 @@ def fit_power(
         )
     else:
         data_for_fit = data
+    if true_psd is not None:
+        true_psd = np.asarray(true_psd, dtype=float)
+        if (
+            true_psd.shape != data.power.shape
+            or not np.isfinite(true_psd).all()
+            or np.any(true_psd <= 0)
+        ):
+            raise ValueError(
+                "true_psd must be finite, positive and match native power"
+            )
 
     if partition is not None and not data.is_grid:
         raise ValueError("partition requires rectangular PowerData")
@@ -512,17 +526,17 @@ def fit_power(
             "data_type": "power",
             "likelihood": "power_whittle",
             "units": data.units,
+            "reference_applied": reference is not None,
+            "reference_normalization": (
+                "native_power_divided_before_pooling"
+                if reference is not None
+                else None
+            ),
             **(
                 {
                     "model": "anova",
                     "centered": True,
                     "sigma_eta_prior": spline.sigma_eta_prior,
-                    "reference_applied": reference is not None,
-                    "reference_normalization": (
-                        "native_power_divided_before_pooling"
-                        if reference is not None
-                        else None
-                    ),
                 }
                 if anova
                 else {}
@@ -530,6 +544,16 @@ def fit_power(
         },
         log_likelihood=result.log_likelihood,
         observed_data=observed_power_data(fit_data),
+        truth=(
+            None
+            if true_psd is None
+            else xr.DataArray(
+                true_psd,
+                dims=("time", "frequency"),
+                coords={"time": data.time, "frequency": data.frequency},
+                name="true_psd",
+            )
+        ),
     )
     if partition is not None:
         fitted.metadata["partition_time_starts"] = np.asarray(

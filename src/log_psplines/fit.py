@@ -5,6 +5,7 @@ from __future__ import annotations
 import jax
 import numpy as np
 
+from log_psplines.basis import SplineBasis
 from log_psplines.config import PowerConfig, StationaryConfig
 from log_psplines.data.spectral import (
     PowerData,
@@ -19,6 +20,7 @@ from log_psplines.inference.nuts import run_multivariate_nuts
 from log_psplines.inference.power import fit_power
 from log_psplines.inference.vi import run_multivariate_vi
 from log_psplines.models.reconstruction import reconstruct_stationary_spectrum
+from log_psplines.models.spectrum import LogPSpline
 from log_psplines.preprocessing.checks import _save_preprocessing_plot
 from log_psplines.preprocessing.spectral import (
     align_true_psd_to_freq,
@@ -176,31 +178,67 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
 
 
 def fit(
-    data, config=None, *, model=None, partition=None, reference=None
+    data,
+    config=None,
+    *,
+    model=None,
+    partition=None,
+    reference=None,
+    true_psd=None,
 ) -> PSDResult:
     """Fit stationary Wishart data or scalar time-frequency powers.
 
-    Power data require an explicit LogPSpline or ANOVALogPSpline and PowerConfig.
+    Power data use the default tensor LogPSpline unless a model is supplied.
     A partition may pool rectangular powers while retaining native-grid
     reconstruction. Scattered ordinates are evaluated at their exact points.
-    For GridTV ANOVA, reference is a fixed positive native-grid PSD. Powers
-    are divided by reference before pooling and it is restored to PSDResult.
+    For grid power data, reference is a fixed positive native-grid spectrum in
+    the same units as the powers. The fitted spline models its log correction.
+    true_psd is used only for post-fit analysis, never for inference.
     """
     if isinstance(data, PowerData):
-        if model is None:
-            raise ValueError(
-                "PowerData fitting requires LogPSpline or ANOVALogPSpline model"
-            )
         config = PowerConfig() if config is None else config
         if not isinstance(config, PowerConfig):
             raise TypeError("PowerData requires PowerConfig")
+        if model is None:
+
+            def basis(grid, axis):
+                knots = getattr(config, f"interior_knots_{axis}")
+                kwargs = (
+                    {"interior_knots": knots}
+                    if knots is not None
+                    else {
+                        "n_interior_knots": getattr(
+                            config, f"n_interior_knots_{axis}"
+                        )
+                    }
+                )
+                return SplineBasis.from_grid(
+                    grid,
+                    degree=getattr(config, f"degree_{axis}"),
+                    penalty_order=getattr(config, f"penalty_order_{axis}"),
+                    **kwargs,
+                )
+
+            if data.is_grid:
+                time_grid, frequency_grid = data.time, data.frequency
+            else:
+                time_grid = np.unique(data.time)
+                frequency_grid = np.unique(data.frequency)
+            model = LogPSpline(
+                basis(frequency_grid, "freq"), time=basis(time_grid, "time")
+            )
         return fit_power(
-            data, model, config, partition=partition, reference=reference
+            data,
+            model,
+            config,
+            partition=partition,
+            reference=reference,
+            true_psd=true_psd,
         )
     if reference is not None:
-        raise ValueError(
-            "reference requires GridTV PowerData and ANOVALogPSpline"
-        )
+        raise ValueError("reference requires grid PowerData")
+    if true_psd is not None:
+        raise ValueError("true_psd requires grid PowerData")
     if partition is not None:
         raise ValueError("partition requires PowerData")
     if model is not None:

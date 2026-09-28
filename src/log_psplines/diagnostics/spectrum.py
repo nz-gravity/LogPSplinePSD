@@ -40,7 +40,11 @@ def spectrum_diagnostics(
     excluded when at least four bins are available.
     """
     if truth is None:
-        truth = result.metadata.get("true_psd")
+        truth = (
+            result.truth
+            if result.truth is not None
+            else result.metadata.get("true_psd")
+        )
     if truth is None:
         return {}
 

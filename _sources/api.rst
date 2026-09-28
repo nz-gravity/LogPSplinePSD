@@ -73,7 +73,16 @@ Spline Models
 Knot Initialisation
 -------------------
 
-.. autofunction:: log_psplines.preprocessing.knots_locator.knot_locator.init_knots
+.. autofunction:: log_psplines.preprocessing.knot_locator.init_knots
+
+.. autoclass:: log_psplines.preprocessing.knot_locator.Component
+   :members:
+
+.. autofunction:: log_psplines.preprocessing.knot_locator.variation_profiles
+
+.. autofunction:: log_psplines.preprocessing.knot_locator.quantile_knots
+
+.. autofunction:: log_psplines.preprocessing.knot_locator.allocate_components
 
 Coarse Graining
 ---------------

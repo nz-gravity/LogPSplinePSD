@@ -1,3 +1,4 @@
+from . import knot_locator
 from .moving_periodogram import (
     bin_tang_ordinates,
     moving_periodogram,
@@ -20,4 +21,5 @@ __all__ = [
     "coarse_grain_power",
     "mask_power",
     "select_power_partition",
+    "knot_locator",
 ]

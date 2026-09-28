@@ -15,7 +15,7 @@ from log_psplines.inference.components import (
     SpectralComponents,
 )
 from log_psplines.models.spectrum import LogPSpline
-from log_psplines.preprocessing.knots_locator import (
+from log_psplines.preprocessing.knot_locator import (
     init_knots,
     multivar_psd_knot_scores,
 )

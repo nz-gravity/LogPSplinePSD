@@ -400,7 +400,7 @@ def save_eigenvalue_separation_plot(
                     ax.plot(freq, y, color=color, lw=0.7, alpha=0.45)
 
                 # Overlay the denoised signal the knot allocator uses.
-                from log_psplines.preprocessing.knots_locator import (
+                from log_psplines.preprocessing.knot_locator import (
                     denoise_score,
                 )
 

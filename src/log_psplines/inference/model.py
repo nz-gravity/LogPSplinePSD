@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 import numpyro
 import numpyro.distributions as dist
+from jax.scipy.linalg import solve_triangular
 
 from log_psplines.config import StationaryConfig
 from log_psplines.data.spectral import WishartData
@@ -44,12 +46,10 @@ def channel_model_kwargs(
         "penalty_theta_im_by_component": tuple(
             model_kwargs["penalties_theta_im"][j]
         ),
-        "alpha_phi": model_kwargs["alpha_phi"],
-        "beta_phi": model_kwargs["beta_phi"],
-        "alpha_phi_theta": model_kwargs["alpha_phi_theta"],
-        "beta_phi_theta": model_kwargs["beta_phi_theta"],
-        "alpha_delta": model_kwargs["alpha_delta"],
-        "beta_delta": model_kwargs["beta_delta"],
+        "roughness_scale": model_kwargs["roughness_scale"],
+        "smoothing_parameterization": model_kwargs.get(
+            "smoothing_parameterization", "centered"
+        ),
         "duration": model_kwargs["duration"],
         "Nb": model_kwargs["Nb"],
         "Nh": model_kwargs["Nh"],
@@ -59,58 +59,37 @@ def channel_model_kwargs(
 
 
 def _sample_pspline_block(
-    delta_name: str,
-    phi_name: str,
+    sigma_name: str,
     weights_name: str,
     penalty_matrix: jnp.ndarray,
-    alpha_phi: float,
-    beta_phi: float,
-    alpha_delta: float,
-    beta_delta: float,
-    factor_name: str | None = None,
-) -> dict[str, Any]:
-    """Draw hierarchical Gamma-Normal P-spline weights and record log priors."""
-    log_delta_base = dist.Normal(0.0, 1.0)
-    log_delta = numpyro.sample(delta_name, log_delta_base)
-    delta = jnp.exp(log_delta)
-    delta_dist = dist.Gamma(concentration=alpha_delta, rate=beta_delta)
-    log_prior_delta = delta_dist.log_prob(delta) + log_delta
-    numpyro.factor(
-        f"{delta_name}_prior",
-        log_prior_delta - log_delta_base.log_prob(log_delta),
-    )
-
-    log_phi_base = dist.Normal(0.0, 1.0)
-    log_phi = numpyro.sample(phi_name, log_phi_base)
-    phi = jnp.exp(log_phi)
-    phi_rate = jnp.asarray(beta_phi, dtype=delta.dtype) * delta
-    phi_dist = dist.Gamma(
-        concentration=jnp.asarray(alpha_phi, dtype=delta.dtype),
-        rate=phi_rate,
-    )
-    log_prior_phi = phi_dist.log_prob(phi) + log_phi
-    numpyro.factor(
-        f"{phi_name}_prior",
-        log_prior_phi - log_phi_base.log_prob(log_phi),
-    )
+    roughness_scale: float,
+    smoothing_parameterization: str = "centered",
+) -> jnp.ndarray:
+    """Draw spline weights; return shape ``(K,)`` under a HalfNormal scale."""
+    sigma = numpyro.sample(sigma_name, dist.HalfNormal(roughness_scale))
 
     k = penalty_matrix.shape[0]
     base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
-    weights = numpyro.sample(weights_name, base_normal)
+    if smoothing_parameterization == "noncentered":
+        raw_weights = numpyro.sample(f"{weights_name}_raw", base_normal)
+        cholesky = jnp.linalg.cholesky(penalty_matrix)
+        weights = sigma * solve_triangular(
+            cholesky.T, raw_weights, lower=False
+        )
+        numpyro.deterministic(weights_name, weights)
+    else:
+        weights = numpyro.sample(weights_name, base_normal)
 
-    wPw = jnp.dot(weights, jnp.dot(penalty_matrix, weights))
-    log_prior_w = 0.5 * k * jnp.log(phi) - 0.5 * phi * wPw
-    base_log_prob = base_normal.log_prob(weights)
+    if smoothing_parameterization == "centered":
+        wPw = jnp.dot(weights, jnp.dot(penalty_matrix, weights))
+        precision = sigma**-2
+        log_prior_w = 0.5 * k * jnp.log(precision) - 0.5 * precision * wPw
+        base_log_prob = base_normal.log_prob(weights)
+        numpyro.factor(
+            f"weights_prior_{weights_name}", log_prior_w - base_log_prob
+        )
 
-    if factor_name is None:
-        factor_name = f"weights_prior_{weights_name}"
-    numpyro.factor(factor_name, log_prior_w - base_log_prob)
-
-    return {
-        "weights": weights,
-        "delta": delta,
-        "phi": phi,
-    }
+    return weights
 
 
 __all__ = [
@@ -130,15 +109,11 @@ def _blocked_channel_model(
     penalty_theta_re_by_component: tuple[jnp.ndarray, ...],
     basis_theta_im_by_component: tuple[jnp.ndarray, ...],
     penalty_theta_im_by_component: tuple[jnp.ndarray, ...],
-    alpha_phi: float,
-    beta_phi: float,
-    alpha_phi_theta: float,
-    beta_phi_theta: float,
-    alpha_delta: float,
-    beta_delta: float,
     duration: float,
     Nb: int,
     Nh: int,
+    roughness_scale: float,
+    smoothing_parameterization: str = "centered",
     enbw: float = 1.0,
     eta: float = 1.0,
 ) -> None:
@@ -149,18 +124,15 @@ def _blocked_channel_model(
     # Sample P-spline weights and evaluate: log_delta_sq[h] = log(δ²_{jh})
     # δ²_{jh} is the j-th diagonal of D_h (the noise variance for this channel
     # at coarse bin h in the Cholesky factorisation S^{-1} = T* D^{-1} T).
-    delta_block = _sample_pspline_block(
-        delta_name=f"delta_{channel_label}",
-        phi_name=f"phi_delta_{channel_label}",
+    delta_weights = _sample_pspline_block(
+        sigma_name=f"sigma_delta_{channel_label}",
         weights_name=f"weights_delta_{channel_label}",
         penalty_matrix=penalty_delta,
-        alpha_phi=alpha_phi,
-        beta_phi=beta_phi,
-        alpha_delta=alpha_delta,
-        beta_delta=beta_delta,
+        roughness_scale=roughness_scale,
+        smoothing_parameterization=smoothing_parameterization,
     )
     # log_delta_sq[h] = B_h @ w  →  log(δ²_{jh}), shape (n_coarse_bins,)
-    log_delta_sq = build_spline(basis_delta, delta_block["weights"])
+    log_delta_sq = build_spline(basis_delta, delta_weights)
 
     n_freq = u_re_channel.shape[0]
     # channel_index == j means there are j preceding channels (l = 0, …, j-1)
@@ -179,36 +151,30 @@ def _blocked_channel_model(
             penalty_theta_re = penalty_theta_re_by_component[theta_idx]
             theta_prefix = f"theta_re_{channel_label}_{theta_idx}"
             theta_re_block = _sample_pspline_block(
-                delta_name=f"delta_{theta_prefix}",
-                phi_name=f"phi_{theta_prefix}",
+                sigma_name=f"sigma_{theta_prefix}",
                 weights_name=f"weights_{theta_prefix}",
                 penalty_matrix=penalty_theta_re,
-                alpha_phi=alpha_phi_theta,
-                beta_phi=beta_phi_theta,
-                alpha_delta=alpha_delta,
-                beta_delta=beta_delta,
+                roughness_scale=roughness_scale,
+                smoothing_parameterization=smoothing_parameterization,
             )
             # Re(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
             theta_re_components.append(
-                build_spline(basis_theta_re, theta_re_block["weights"])
+                build_spline(basis_theta_re, theta_re_block)
             )
 
             basis_theta_im = basis_theta_im_by_component[theta_idx]
             penalty_theta_im = penalty_theta_im_by_component[theta_idx]
             theta_im_prefix = f"theta_im_{channel_label}_{theta_idx}"
             theta_im_block = _sample_pspline_block(
-                delta_name=f"delta_{theta_im_prefix}",
-                phi_name=f"phi_{theta_im_prefix}",
+                sigma_name=f"sigma_{theta_im_prefix}",
                 weights_name=f"weights_{theta_im_prefix}",
                 penalty_matrix=penalty_theta_im,
-                alpha_phi=alpha_phi_theta,
-                beta_phi=beta_phi_theta,
-                alpha_delta=alpha_delta,
-                beta_delta=beta_delta,
+                roughness_scale=roughness_scale,
+                smoothing_parameterization=smoothing_parameterization,
             )
             # Im(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
             theta_im_components.append(
-                build_spline(basis_theta_im, theta_im_block["weights"])
+                build_spline(basis_theta_im, theta_im_block)
             )
 
         # theta_re/im: shape (n_coarse_bins, n_theta_block=j)
@@ -244,6 +210,10 @@ def prepare_model(
     data: WishartData,
     config: StationaryConfig,
 ) -> tuple[dict, SpectralComponents]:
+    if not np.isfinite(config.roughness_scale) or config.roughness_scale <= 0:
+        raise ValueError("roughness_scale must be finite and positive")
+    if config.smoothing_parameterization not in ("centered", "noncentered"):
+        raise ValueError("Unknown smoothing_parameterization")
     spline = prepare_components(
         data,
         n_knots=config.n_knots,
@@ -282,17 +252,6 @@ def prepare_model(
         bases_theta_im.append(bi)
         penalties_theta_im.append(pi)
 
-    alpha_phi_theta = (
-        config.alpha_phi_theta
-        if config.alpha_phi_theta is not None
-        else config.alpha_phi
-    )
-    beta_phi_theta = (
-        config.beta_phi_theta
-        if config.beta_phi_theta is not None
-        else config.beta_phi
-    )
-
     kwargs = {
         "u_re": u_re,
         "u_im": u_im,
@@ -303,12 +262,8 @@ def prepare_model(
         "penalties_theta_re": penalties_theta_re,
         "bases_theta_im": bases_theta_im,
         "penalties_theta_im": penalties_theta_im,
-        "alpha_phi": float(config.alpha_phi),
-        "beta_phi": float(config.beta_phi),
-        "alpha_phi_theta": float(alpha_phi_theta),
-        "beta_phi_theta": float(beta_phi_theta),
-        "alpha_delta": float(config.alpha_delta),
-        "beta_delta": float(config.beta_delta),
+        "roughness_scale": float(config.roughness_scale),
+        "smoothing_parameterization": config.smoothing_parameterization,
         "duration": float(getattr(data, "duration", 1.0) or 1.0),
         "Nb": int(data.Nb),
         "Nh": int(data.Nh),

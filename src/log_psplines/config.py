@@ -84,6 +84,13 @@ VI and NUTS
    NumPyro NUTS tuning controls. Per-channel values can be supplied with
    ``target_accept_prob_by_channel`` and ``max_tree_depth_by_channel``.
 
+``roughness_scale``, ``smoothing_parameterization``
+   Each stationary spline block draws ``sigma ~ HalfNormal(roughness_scale)``.
+   The existing penalty uses precision ``sigma**-2``. Smaller sigma gives
+   stronger smoothing. The default scale 1.28 comes from the stationary
+   smoothing-prior study and is specific to this penalty normalization.
+   Centered weights are the default; non-centering remains experimental.
+
 Coarse Graining
 ---------------
 
@@ -132,10 +139,8 @@ class StationaryConfig:
     n_warmup: int = 500
     num_chains: int = 1
     chain_method: Literal["parallel", "vectorized", "sequential"] | None = None
-    alpha_phi: float = 1.0
-    beta_phi: float = 1.0
-    alpha_delta: float = 1e-4
-    beta_delta: float = 1e-4
+    roughness_scale: float = 1.28
+    smoothing_parameterization: Literal["centered", "noncentered"] = "centered"
     rng_key: int = 42
     coarse_grain_config: CoarseGrainConfig | dict | None = None
     Nb: int = 1
@@ -172,8 +177,6 @@ class StationaryConfig:
     max_tree_depth: int = 10
     max_tree_depth_by_channel: list[int] | None = None
     dense_mass: bool = True
-    alpha_phi_theta: float | None = None
-    beta_phi_theta: float | None = None
 
     eta: float = 1.0
 

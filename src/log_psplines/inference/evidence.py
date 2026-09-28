@@ -123,18 +123,18 @@ def _unpack_params(
 
 def _param_belongs_to_channel(name: str, channel_index: int) -> bool:
     j = int(channel_index)
-    prefixes = (
-        f"delta_{j}",
-        f"phi_delta_{j}",
+    scalar_names = {
+        f"sigma_delta_{j}",
         f"weights_delta_{j}",
-        f"delta_theta_re_{j}_",
-        f"phi_theta_re_{j}_",
+        f"weights_delta_{j}_raw",
+    }
+    prefixes = (
+        f"sigma_theta_re_{j}_",
         f"weights_theta_re_{j}_",
-        f"delta_theta_im_{j}_",
-        f"phi_theta_im_{j}_",
+        f"sigma_theta_im_{j}_",
         f"weights_theta_im_{j}_",
     )
-    return any(str(name).startswith(prefix) for prefix in prefixes)
+    return name in scalar_names or name.startswith(prefixes)
 
 
 def _posterior_param_names(
@@ -146,13 +146,18 @@ def _posterior_param_names(
     if channel_index is None:
         return [
             name
-            for name in ("weights", "phi", "delta")
+            for name in ("weights", "sigma")
             if name in posterior.data_vars
         ]
     return sorted(
         str(name)
         for name in posterior.data_vars
         if _param_belongs_to_channel(str(name), channel_index)
+        and not (
+            str(name).startswith("weights_")
+            and not str(name).endswith("_raw")
+            and f"{name}_raw" in posterior.data_vars
+        )
     )
 
 

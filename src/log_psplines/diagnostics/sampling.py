@@ -22,18 +22,16 @@ if TYPE_CHECKING:
 def _channel_idata(result: PSDResult, channel: int) -> xr.DataTree:
     """Build a diagnostics view for one blocked Cholesky channel."""
     scalar_names = {
-        f"delta_{channel}",
-        f"phi_delta_{channel}",
+        f"sigma_delta_{channel}",
         f"weights_delta_{channel}",
+        f"weights_delta_{channel}_raw",
     }
     prefixes = tuple(
         f"{name}_{channel}_"
         for name in (
-            "delta_theta_re",
-            "phi_theta_re",
+            "sigma_theta_re",
             "weights_theta_re",
-            "delta_theta_im",
-            "phi_theta_im",
+            "sigma_theta_im",
             "weights_theta_im",
         )
     )

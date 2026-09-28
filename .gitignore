@@ -289,8 +289,8 @@ cython_debug/
 #.idea/
 
 /src/log_psplines/_version.py
-/docs/studies/lvk/lvkdata_cache.pkl
-/docs/studies/lvk/strain_cache.hdf5
+/docs/studies
+/docs/studies
 
 
 *.gwf
@@ -313,14 +313,11 @@ media/
 logs_*
 
 
-docs/studies/phi_test
+docs/studies
 
 
 runs
 
-# Frozen numerical references are inputs to tests, not analysis outputs.
-!tests/reference/wdm_core.npz
-!tests/reference/wdm_core.json
-
-!tests/reference/ls2_wdm.npz
-!tests/reference/ls2_wdm.json
+*.npz
+*.png
+studies

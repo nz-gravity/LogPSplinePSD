@@ -146,6 +146,32 @@ def _channel_setting(values, default, channel_index):
         return default
 
 
+def _noncentered_init_values(
+    kwargs: dict[str, Any], channel_index: int
+) -> dict:
+    """Start weak-penalty null modes at zero in experimental non-centering."""
+    j = channel_index
+    blocks = [(f"delta_{j}", kwargs["penalties_delta"][j])]
+    for previous in range(j):
+        blocks.extend(
+            (
+                (
+                    f"theta_re_{j}_{previous}",
+                    kwargs["penalties_theta_re"][j][previous],
+                ),
+                (
+                    f"theta_im_{j}_{previous}",
+                    kwargs["penalties_theta_im"][j][previous],
+                ),
+            )
+        )
+    values = {}
+    for label, penalty in blocks:
+        values[f"weights_{label}_raw"] = np.zeros(penalty.shape[0])
+        values[f"sigma_{label}"] = float(kwargs["roughness_scale"])
+    return values
+
+
 def run_multivariate_nuts(
     model_kwargs: dict[str, Any],
     *,
@@ -175,6 +201,11 @@ def run_multivariate_nuts(
         result = run_nuts(
             _blocked_channel_model,
             rng_key=keys[channel_index],
+            init_values=(
+                _noncentered_init_values(kwargs, channel_index)
+                if kwargs.get("smoothing_parameterization") == "noncentered"
+                else None
+            ),
             model_kwargs=channel_model_kwargs(kwargs, channel_index),
             n_warmup=n_warmup,
             n_samples=n_samples,

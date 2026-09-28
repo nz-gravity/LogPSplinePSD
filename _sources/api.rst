@@ -8,16 +8,16 @@ stable user surface.
 Fitting and results
 -------------------
 
-.. autofunction:: log_psplines.pipeline.fit
+.. autofunction:: log_psplines.fit.fit
 
 .. autoclass:: log_psplines.results.PSDResult
    :members:
 
-.. autoclass:: log_psplines.config.PipelineConfig
+.. autoclass:: log_psplines.config.StationaryConfig
    :members:
    :undoc-members:
 
-.. autoclass:: log_psplines.config.PowerSplineConfig
+.. autoclass:: log_psplines.config.PowerConfig
    :members:
 
 Data Containers

@@ -525,14 +525,14 @@ and <code class="docutils literal notranslate"><span class="pre">spectrum</span>
 <code class="docutils literal notranslate"><span class="pre">result.to_arviz()</span></code> provides an ArviZ view for sampling diagnostics.</p>
 <p>The stationary path is <code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">WishartData</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">prepare_model()</span></code> -&gt;
 blocked channel NUTS or VI -&gt; <code class="docutils literal notranslate"><span class="pre">reconstruct_stationary_spectrum()</span></code> -&gt;
-<code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>. <code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code> controls this path. The Cholesky channel
+<code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>. <code class="docutils literal notranslate"><span class="pre">StationaryConfig</span></code> controls this path. The Cholesky channel
 models in <code class="docutils literal notranslate"><span class="pre">inference/model.py</span></code> share the Wishart likelihood, while
 <code class="docutils literal notranslate"><span class="pre">inference/initialisation.py</span></code> prepares scalar spline components.
-<code class="docutils literal notranslate"><span class="pre">PipelineConfig.analytical_psd</span></code> supplies an optional reference spectral
+<code class="docutils literal notranslate"><span class="pre">StationaryConfig.analytical_psd</span></code> supplies an optional reference spectral
 matrix for density-based knot placement. It does not center the coefficient
 prior.</p>
 <p>The scalar time-varying path is transform -&gt; <code class="docutils literal notranslate"><span class="pre">PowerData</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">fit_power()</span></code> -&gt;
-<code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>, configured by <code class="docutils literal notranslate"><span class="pre">PowerSplineConfig</span></code> and an explicit <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code>.
+<code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>, configured by <code class="docutils literal notranslate"><span class="pre">PowerConfig</span></code> and an explicit <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code>.
 <code class="docutils literal notranslate"><span class="pre">PowerData</span></code> accepts two coordinate geometries:</p>
 <ul class="simple">
 <li><p>Rectangular grid: <code class="docutils literal notranslate"><span class="pre">power</span> <span class="pre">(T,</span> <span class="pre">F)</span></code>, <code class="docutils literal notranslate"><span class="pre">time</span> <span class="pre">(T,)</span></code>, <code class="docutils literal notranslate"><span class="pre">frequency</span> <span class="pre">(F,)</span></code>.

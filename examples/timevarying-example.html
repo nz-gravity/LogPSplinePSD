@@ -723,7 +723,7 @@ In the next cells, we generate data from this, and analyse it with the WDM and M
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">LogPSpline</span><span class="p">,</span>
-    <span class="n">PowerSplineConfig</span><span class="p">,</span>
+    <span class="n">PowerConfig</span><span class="p">,</span>
     <span class="n">SplineBasis</span><span class="p">,</span>
     <span class="n">TimeSeries</span><span class="p">,</span>
     <span class="n">fit</span><span class="p">,</span>
@@ -868,7 +868,7 @@ Window length: <strong><span class="math notranslate nohighlight">\(N_{\text{win
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Configs</span>
 <span class="n">N_freq_K</span> <span class="o">=</span> <span class="mi">8</span>
 <span class="n">N_time_K</span> <span class="o">=</span> <span class="mi">8</span>
-<span class="n">configs</span> <span class="o">=</span> <span class="n">PowerSplineConfig</span><span class="p">(</span><span class="n">n_warmup</span><span class="o">=</span><span class="mi">250</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">configs</span> <span class="o">=</span> <span class="n">PowerConfig</span><span class="p">(</span><span class="n">n_warmup</span><span class="o">=</span><span class="mi">250</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
 <span class="c1"># WDM fit</span>
 <span class="n">wdm_freqs</span> <span class="o">=</span> <span class="n">wdm_data</span><span class="o">.</span><span class="n">frequency</span> <span class="o">/</span> <span class="n">wdm_data</span><span class="o">.</span><span class="n">frequency</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
@@ -1112,7 +1112,7 @@ removing each method’s constant units offset),</p></li>
     <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span>
         <span class="n">wdm</span><span class="p">,</span>
-        <span class="n">PowerSplineConfig</span><span class="p">(</span>
+        <span class="n">PowerConfig</span><span class="p">(</span>
             <span class="n">n_warmup</span><span class="o">=</span><span class="n">n_warmup</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_mcmc_samples</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span>
         <span class="p">),</span>
         <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
@@ -1136,7 +1136,7 @@ removing each method’s constant units offset),</p></li>
     <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span>
         <span class="n">mp</span><span class="p">,</span>
-        <span class="n">PowerSplineConfig</span><span class="p">(</span>
+        <span class="n">PowerConfig</span><span class="p">(</span>
             <span class="n">n_warmup</span><span class="o">=</span><span class="n">n_warmup</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_mcmc_samples</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span> <span class="o">+</span> <span class="mi">1</span>
         <span class="p">),</span>
         <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
@@ -1284,7 +1284,7 @@ input power.</p>
 <p>.. code-block:: python</p>
 <p>import numpy as np
 from log_psplines import (
-LogPSpline, PowerData, PowerSplineConfig, SplineBasis,
+LogPSpline, PowerData, PowerConfig, SplineBasis,
 fit, mask_power, select_power_partition,
 )</p>
 </section>
@@ -1323,7 +1323,7 @@ n_interior_knots=8,
 )
 result = fit(
 retained,
-PowerSplineConfig(roughness_scale=10),
+PowerConfig(roughness_scale=10),
 model=model,
 partition=partition,
 )

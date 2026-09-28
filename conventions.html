@@ -579,8 +579,8 @@ code all consume spectra with the same units and sidedness.</p>
 <li><p><strong>Timeseries</strong> – raw or standardised time-domain data.</p></li>
 <li><p><strong>WishartData</strong> – <code class="docutils literal notranslate"><span class="pre">to_wishart_stats</span></code> produces frequency grids and
 eigenvector-weighted Wishart factors <code class="docutils literal notranslate"><span class="pre">U(f)</span></code> on the positive-frequency
-grid. The analysis band is controlled by <code class="docutils literal notranslate"><span class="pre">PipelineConfig.fmin</span></code> and
-<code class="docutils literal notranslate"><span class="pre">PipelineConfig.fmax</span></code>.</p></li>
+grid. The analysis band is controlled by <code class="docutils literal notranslate"><span class="pre">StationaryConfig.fmin</span></code> and
+<code class="docutils literal notranslate"><span class="pre">StationaryConfig.fmax</span></code>.</p></li>
 <li><p><strong>CoarseGrain</strong> – optional <strong>linear, full-band</strong> binning combines nearby
 frequencies by summing <span class="math notranslate nohighlight">\(\bar Y_h = \sum_{f\in J_h} Y(f)\)</span> and assigns each
 bin the member count <span class="math notranslate nohighlight">\(N_h\)</span> for log-determinant scaling. Coarse-grain
@@ -614,7 +614,7 @@ non-JIT code paths.</p></li>
 <section id="implementation-map">
 <h2>Implementation Map<a class="headerlink" href="#implementation-map" title="Link to this heading">#</a></h2>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.pipeline</span></code></dt><dd><p>Canonical high-level <code class="docutils literal notranslate"><span class="pre">fit()</span></code> entry point plus orchestration helpers.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.fit</span></code></dt><dd><p>Canonical high-level <code class="docutils literal notranslate"><span class="pre">fit()</span></code> entry point plus orchestration helpers.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">log_psplines.inference</span></code></dt><dd><p>Model preparation, VI, NUTS, and evidence estimation.</p>
 </dd>
@@ -705,10 +705,10 @@ statistic.</p>
 <p>Coarse graining sums neighbouring Wishart matrices into equal-size consecutive
 frequency bins. It is useful when the frequency grid is much denser than the
 spectral structure being estimated.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineConfig</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">StationaryConfig</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.preprocessing.coarse_grain</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoarseGrainConfig</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">PipelineConfig</span><span class="p">(</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">StationaryConfig</span><span class="p">(</span>
     <span class="n">coarse_grain_config</span><span class="o">=</span><span class="n">CoarseGrainConfig</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">Nc</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">Nh</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span>
 <span class="p">)</span>
 </pre></div>

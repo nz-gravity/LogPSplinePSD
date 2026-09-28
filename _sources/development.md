@@ -93,15 +93,15 @@ and `spectrum` are the fitted draws and reconstructed spectral density.
 
 The stationary path is `TimeSeries` -> `WishartData` -> `prepare_model()` ->
 blocked channel NUTS or VI -> `reconstruct_stationary_spectrum()` ->
-`PSDResult`. `PipelineConfig` controls this path. The Cholesky channel
+`PSDResult`. `StationaryConfig` controls this path. The Cholesky channel
 models in `inference/model.py` share the Wishart likelihood, while
 `inference/initialisation.py` prepares scalar spline components.
-`PipelineConfig.analytical_psd` supplies an optional reference spectral
+`StationaryConfig.analytical_psd` supplies an optional reference spectral
 matrix for density-based knot placement. It does not center the coefficient
 prior.
 
 The scalar time-varying path is transform -> `PowerData` -> `fit_power()` ->
-`PSDResult`, configured by `PowerSplineConfig` and an explicit `LogPSpline`.
+`PSDResult`, configured by `PowerConfig` and an explicit `LogPSpline`.
 `PowerData` accepts two coordinate geometries:
 
 - Rectangular grid: `power (T, F)`, `time (T,)`, `frequency (F,)`.

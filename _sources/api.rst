@@ -5,7 +5,7 @@ This page documents the public entry points most users need. Lower-level
 helpers remain importable from their modules, but are not all part of the
 stable user surface.
 
-High-Level Pipeline
+Fitting and results
 -------------------
 
 .. autofunction:: log_psplines.pipeline.fit
@@ -89,14 +89,11 @@ Coarse Graining
 .. autofunction:: log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft
 
 
-Result objects
---------------
-
-.. autoclass:: log_psplines.results.PSDResult
-   :members:
-
-
 Diagnostics
 -----------
+
+.. autofunction:: log_psplines.diagnostics.build_nuts_summary_table
+
+.. autofunction:: log_psplines.diagnostics.build_vi_summary_table
 
 .. autofunction:: log_psplines.diagnostics.to_arviz

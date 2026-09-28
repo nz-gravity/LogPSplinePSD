@@ -427,13 +427,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typechecking-jaxtyping-beartype">Typechecking (Jaxtyping + Beartype)</a></li>
 </ul>
 </li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-architecture">PSD architecture</a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-navigation">Code navigation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-dependence-shared-scalar-models">Time dependence: shared scalar models</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration">Migration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-contracts-after-the-cleanup">Explicit contracts after the cleanup</a></li>
-</ul>
-</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-architecture">PSD architecture</a></li>
 </ul>
 
             </nav>
@@ -502,7 +496,8 @@ with <code class="docutils literal notranslate"><span class="pre">uv</span> <spa
 </section>
 <section id="typechecking-jaxtyping-beartype">
 <h2>Typechecking (Jaxtyping + Beartype)<a class="headerlink" href="#typechecking-jaxtyping-beartype" title="Link to this heading">#</a></h2>
-<p>Install dev extras so <code class="docutils literal notranslate"><span class="pre">jaxtyping</span></code> and <code class="docutils literal notranslate"><span class="pre">beartype</span></code> are available:</p>
+<p>Install dev extras so the pytest-only <code class="docutils literal notranslate"><span class="pre">beartype</span></code> checker is available.
+<code class="docutils literal notranslate"><span class="pre">jaxtyping</span></code> is a regular dependency for the array annotations:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.[dev,typecheck]'</span>
 </pre></div>
 </div>
@@ -510,144 +505,55 @@ with <code class="docutils literal notranslate"><span class="pre">uv</span> <spa
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>mypy<span class="w"> </span>--config-file<span class="w"> </span>pyproject.toml<span class="w"> </span>src/log_psplines
 </pre></div>
 </div>
-<p>The mypy configuration in <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> includes scoped overrides for a
-small set of external libraries without stubs. The package source under
-<code class="docutils literal notranslate"><span class="pre">src/log_psplines</span></code> is checked end-to-end without per-module suppressions.</p>
-<p>Runtime checks are enabled by default when dependencies are installed. You can
-disable runtime enforcement with:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">LOG_PSPLINES_RUNTIME_TYPECHECK</span><span class="o">=</span><span class="m">0</span><span class="w"> </span>.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/test_runtime_typecheck.py
+<p>Mypy checks the ordinary Python types. Jaxtyping’s symbolic dimensions are
+checked by pytest at runtime rather than inferred by mypy. The repository
+currently reports additional typing errors, including missing third-party
+stubs.</p>
+<p>Pytest’s <code class="docutils literal notranslate"><span class="pre">--jaxtyping-packages</span></code> option applies <code class="docutils literal notranslate"><span class="pre">beartype</span></code> to package functions
+and dataclasses only while tests import them. Normal imports and inference runs
+do not install a type-checking hook or wrap source functions. Run the suite with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/
 </pre></div>
 </div>
 </section>
 </section>
 <section class="tex2jax_ignore mathjax_ignore" id="psd-architecture">
 <h1>PSD architecture<a class="headerlink" href="#psd-architecture" title="Link to this heading">#</a></h1>
-<p>The public entry point is <code class="docutils literal notranslate"><span class="pre">fit(data,</span> <span class="pre">config)</span> <span class="pre">-&gt;</span> <span class="pre">PSDResult</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeSeries</span><span class="p">,</span> <span class="n">PipelineConfig</span><span class="p">,</span> <span class="n">fit</span>
-
-<span class="n">series</span> <span class="o">=</span> <span class="n">TimeSeries</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span>
-    <span class="n">series</span><span class="p">,</span>
-    <span class="n">PipelineConfig</span><span class="p">(</span><span class="n">n_knots</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">vi_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">n_warmup</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">200</span><span class="p">),</span>
-<span class="p">)</span>
-<span class="n">frequency</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">frequency</span>
-<span class="n">spectral_draws</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">spectral_density</span>  <span class="c1"># (chain, draw, F, C, C)</span>
-<span class="n">auto_spectra</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">psd</span>
-<span class="n">coherence</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">coherence</span>
-<span class="n">result</span><span class="o">.</span><span class="n">to_netcdf</span><span class="p">(</span><span class="s2">"inference_data.nc"</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>These short example chains illustrate the interface, not convergence.</p>
-<section id="code-navigation">
-<h2>Code navigation<a class="headerlink" href="#code-navigation" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">pipeline.py</span></code> runs preprocessing, model preparation, VI or blocked NUTS,
-reconstruction, and optional output saving through <code class="docutils literal notranslate"><span class="pre">fit()</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">fit()</span></code> returns one <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code> for either inference method. Its <code class="docutils literal notranslate"><span class="pre">posterior</span></code>
+and <code class="docutils literal notranslate"><span class="pre">spectrum</span></code> are the fitted draws and reconstructed spectral density.
+<code class="docutils literal notranslate"><span class="pre">result.vi</span></code> holds VI loss and guide diagnostics when <code class="docutils literal notranslate"><span class="pre">method=&quot;vi&quot;</span></code>.
+<code class="docutils literal notranslate"><span class="pre">result.to_arviz()</span></code> provides an ArviZ view for sampling diagnostics.</p>
+<p>The stationary path is <code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">WishartData</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">prepare_model()</span></code> -&gt;
+blocked channel NUTS or VI -&gt; <code class="docutils literal notranslate"><span class="pre">reconstruct_stationary_spectrum()</span></code> -&gt;
+<code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>. <code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code> controls this path. The Cholesky channel
+models in <code class="docutils literal notranslate"><span class="pre">inference/model.py</span></code> share the Wishart likelihood, while
+<code class="docutils literal notranslate"><span class="pre">inference/initialisation.py</span></code> prepares scalar spline components.
+<code class="docutils literal notranslate"><span class="pre">PipelineConfig.analytical_psd</span></code> supplies an optional reference spectral
+matrix for density-based knot placement. It does not center the coefficient
+prior.</p>
+<p>The scalar time-varying path is transform -&gt; <code class="docutils literal notranslate"><span class="pre">PowerData</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">fit_power()</span></code> -&gt;
+<code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>, configured by <code class="docutils literal notranslate"><span class="pre">PowerSplineConfig</span></code> and an explicit <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code>.
+<code class="docutils literal notranslate"><span class="pre">PowerData</span></code> accepts two coordinate geometries:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">basis/splines.py</span></code>: <code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code>, B-spline construction and normalized
-integrated-derivative penalties. No data preparation, plotting or NumPyro.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">models/spectrum.py</span></code>: <code class="docutils literal notranslate"><span class="pre">LogPSpline(frequency,</span> <span class="pre">time=None)</span></code> and scalar evaluation.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">models/matrix.py</span></code>: <code class="docutils literal notranslate"><span class="pre">SpectralMatrix(C)</span></code>, with modified-Cholesky construction
-<code class="docutils literal notranslate"><span class="pre">S</span> <span class="pre">=</span> <span class="pre">inv(T)</span> <span class="pre">D</span> <span class="pre">inv(T)^H</span></code>, <code class="docutils literal notranslate"><span class="pre">T[j,l]</span> <span class="pre">=</span> <span class="pre">-theta[j,l]</span></code>, <code class="docutils literal notranslate"><span class="pre">D</span> <span class="pre">=</span> <span class="pre">diag(exp(log_variance))</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">likelihoods/</span></code>: pure JAX Whittle and channel-factor Wishart likelihoods.
-The latter sums to the full matrix likelihood and reduces to the former
-for one channel. Both omit data-only constants.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">data/</span></code>: <code class="docutils literal notranslate"><span class="pre">TimeSeries.data</span></code> always has shape <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">C)</span></code>. <code class="docutils literal notranslate"><span class="pre">WishartData</span></code> retains
-replicate counts, duration, window bandwidth and scaling metadata.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">preprocessing/</span></code>: FFT/Wishart construction, masking, coarse
-graining and knot selection. <code class="docutils literal notranslate"><span class="pre">compute_fft</span></code>, <code class="docutils literal notranslate"><span class="pre">compute_wishart</span></code> and
-<code class="docutils literal notranslate"><span class="pre">empirical_spectrum</span></code> are functions in <code class="docutils literal notranslate"><span class="pre">preprocessing/periodogram.py</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">inference/components.py</span></code>: one collection of scalar models for diagonal,
-real off-diagonal and imaginary off-diagonal components. The duplicate
-component registry has been removed. Observation-driven preparation lives
-in <code class="docutils literal notranslate"><span class="pre">inference.initialisation.prepare_components</span></code>; the collection has no
-constructor that reads data or fits coefficients.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">inference/model.py</span></code>: NumPyro priors, scalar evaluation, likelihood calls
-and channel model arguments. <code class="docutils literal notranslate"><span class="pre">vi.py</span></code> and <code class="docutils literal notranslate"><span class="pre">nuts.py</span></code> run independent fits for
-each Cholesky channel; NUTS retains per-channel tuning. Evidence remains an
-optional inference operation in <code class="docutils literal notranslate"><span class="pre">inference/evidence.py</span></code>.
-Stationary and power fitting share <code class="docutils literal notranslate"><span class="pre">inference.nuts.run_nuts</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">results.py</span></code>: <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>, native storage, posterior reconstruction,
-quantiles and diagnostics interoperability. <code class="docutils literal notranslate"><span class="pre">to_arviz()</span></code> is diagnostics-only.
-Existing ArviZ variable names and coordinates are preserved. Result properties
-reorder axes to put matrix dimensions last and restore physical units.</p></li>
+<li><p>Rectangular grid: <code class="docutils literal notranslate"><span class="pre">power</span> <span class="pre">(T,</span> <span class="pre">F)</span></code>, <code class="docutils literal notranslate"><span class="pre">time</span> <span class="pre">(T,)</span></code>, <code class="docutils literal notranslate"><span class="pre">frequency</span> <span class="pre">(F,)</span></code>.
+WDM preprocessing is one possible producer. Model evaluation uses
+<code class="docutils literal notranslate"><span class="pre">Bt</span> <span class="pre">&#64;</span> <span class="pre">W</span> <span class="pre">&#64;</span> <span class="pre">Bf.T</span></code>.</p></li>
+<li><p>Paired ordinates: <code class="docutils literal notranslate"><span class="pre">power</span> <span class="pre">(P,)</span></code>, <code class="docutils literal notranslate"><span class="pre">time</span> <span class="pre">(P,)</span></code>, <code class="docutils literal notranslate"><span class="pre">frequency</span> <span class="pre">(P,)</span></code>.
+A moving periodogram is one possible producer. Model evaluation uses a
+paired contraction at each observed coordinate.</p></li>
 </ul>
-<p><code class="docutils literal notranslate"><span class="pre">PSDResult.from_netcdf(path)</span></code> reloads posterior/model metadata and reconstructs
-spectral draws. It does not recreate live NumPyro optimizers or stage objects.
-<code class="docutils literal notranslate"><span class="pre">save(outdir)</span></code> writes data first, then summaries and diagnostic plots. Unexpected
-reporting errors propagate. Spectrum plots are named <code class="docutils literal notranslate"><span class="pre">posterior_spectrum.png</span></code>;
-there is no fallback that substitutes a trace plot. <code class="docutils literal notranslate"><span class="pre">to_netcdf(path)</span></code> only stores
-data. Figure creation lives in <code class="docutils literal notranslate"><span class="pre">plotting/results.py</span></code>, diagnostic table writing
-in <code class="docutils literal notranslate"><span class="pre">diagnostics/report.py</span></code>, with native result construction in <code class="docutils literal notranslate"><span class="pre">results.py</span></code>.</p>
-</section>
-<section id="time-dependence-shared-scalar-models">
-<h2>Time dependence: shared scalar models<a class="headerlink" href="#time-dependence-shared-scalar-models" title="Link to this heading">#</a></h2>
-<p>A stationary scalar component accepts weights <code class="docutils literal notranslate"><span class="pre">(Kf,)</span></code> and returns <code class="docutils literal notranslate"><span class="pre">(F,)</span></code>.
-A time basis accepts weights <code class="docutils literal notranslate"><span class="pre">(Kt,</span> <span class="pre">Kf)</span></code> and evaluates
-<code class="docutils literal notranslate"><span class="pre">Bt</span> <span class="pre">&#64;</span> <span class="pre">weights</span> <span class="pre">&#64;</span> <span class="pre">Bf.T</span></code>, returning <code class="docutils literal notranslate"><span class="pre">(T,</span> <span class="pre">F)</span></code>. This evaluator uses an optimized
-tensor contraction and does not require a dense Kronecker basis. There is no
-separate time-varying class.</p>
-<p><code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code> accepts scalar values with any leading dimensions. Inputs
-<code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C)</span></code> and <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C*(C-1)//2)</span></code> produce <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">C,</span> <span class="pre">C)</span></code>. This includes both
-<code class="docutils literal notranslate"><span class="pre">(F,</span> <span class="pre">C,</span> <span class="pre">C)</span></code> and a future <code class="docutils literal notranslate"><span class="pre">(T,</span> <span class="pre">F,</span> <span class="pre">C,</span> <span class="pre">C)</span></code> without changing matrix algebra.
-Posterior sample axes use the same rule. It does not define temporal priors.</p>
-<p><code class="docutils literal notranslate"><span class="pre">fit(PowerData,</span> <span class="pre">PowerSplineConfig,</span> <span class="pre">model=LogPSpline(...))</span></code> now samples
-scalar time-frequency surfaces with the package’s WDM tensor prior. It calls
-<code class="docutils literal notranslate"><span class="pre">inference/power.py</span></code> directly. The optional <code class="docutils literal notranslate"><span class="pre">preprocessing/wdm.py</span></code> adapter
-produces powers/counts; inference has no transform dependency.</p>
-<p><code class="docutils literal notranslate"><span class="pre">PSDResult.time</span></code> contains the time grid for these fits. Coefficients and both
-bases are stored for reconstruction and NetCDF round trips. The old standalone
-scalar storage helper still rejects time bases; TV fit storage uses the common
-result’s explicit <code class="docutils literal notranslate"><span class="pre">power_basis</span></code> group instead. Existing stationary plotting
-helpers remain stationary; <code class="docutils literal notranslate"><span class="pre">PSDResult.save()</span></code> renders a surface for TV fits.</p>
-<p>The historical stationary prior and VI/blocked-NUTS path are unchanged.
-Multivariate TV inference and TV VI remain future work. The
-<a class="reference internal" href="examples/timevarying-example.html"><span class="std std-doc">time-varying example</span></a> demonstrates the WDM
-and moving-periodogram adapters.</p>
-</section>
-<section id="migration">
-<h2>Migration<a class="headerlink" href="#migration" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">MultivariateTimeseries(y=...)</span></code> becomes <code class="docutils literal notranslate"><span class="pre">TimeSeries(data=...)</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">MultivarFFT</span></code> becomes <code class="docutils literal notranslate"><span class="pre">WishartData</span></code>; FFT/statistic construction moves to
-<code class="docutils literal notranslate"><span class="pre">preprocessing.periodogram</span></code> (TimeSeries convenience methods remain).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">LogPSplines</span></code> becomes <code class="docutils literal notranslate"><span class="pre">LogPSpline(SplineBasis.from_knots(...))</span></code>.
-Initial weight fitting lives in <code class="docutils literal notranslate"><span class="pre">inference.initialisation</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">MultivariateLogPSplines</span></code> is replaced by prepared <code class="docutils literal notranslate"><span class="pre">SpectralComponents</span></code>
-for inference and the independent <code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code> for matrix algebra.</p></li>
-<li><p>Results store reconstructed spectra directly, and basis
-plotting in <code class="docutils literal notranslate"><span class="pre">plotting.basis.plot_spline_basis</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code> is in <code class="docutils literal notranslate"><span class="pre">config.py</span></code>; <code class="docutils literal notranslate"><span class="pre">PipelineResult</span></code> becomes <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>.</p></li>
-<li><p>Old <code class="docutils literal notranslate"><span class="pre">pipeline/</span></code>, <code class="docutils literal notranslate"><span class="pre">psplines/</span></code> and <code class="docutils literal notranslate"><span class="pre">datatypes/</span></code> modules are removed rather
-than retained as aliases. The canonical public API is the single <code class="docutils literal notranslate"><span class="pre">fit()</span></code>
-entry point.</p></li>
-</ul>
-</section>
-<section id="explicit-contracts-after-the-cleanup">
-<h2>Explicit contracts after the cleanup<a class="headerlink" href="#explicit-contracts-after-the-cleanup" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">PSDResult.spectrum</span></code> handles both stationary and scalar TV fits.
-Its labeled axes are <code class="docutils literal notranslate"><span class="pre">(chain,</span> <span class="pre">draw,</span> <span class="pre">[time,]</span> <span class="pre">frequency,</span> <span class="pre">channel,</span> <span class="pre">channel_aux)</span></code>.
-<code class="docutils literal notranslate"><span class="pre">PSDResult.spectral_density</span></code> exposes the same values as a NumPy array.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">PipelineConfig.chain_method</span></code> reaches NumPyro. The unused <code class="docutils literal notranslate"><span class="pre">design_from_vi</span></code>
-and <code class="docutils literal notranslate"><span class="pre">design_from_vi_tau</span></code> options have been removed. This does not remove the
-separate low-level design-weight fitting function.</p></li>
-<li><p>VI pointwise likelihoods are not currently computed. Their group is absent,
-so LOO metrics stay unavailable instead of being computed from zero arrays.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code> records <code class="docutils literal notranslate"><span class="pre">penalty_normalization</span></code>, <code class="docutils literal notranslate"><span class="pre">penalty_ridge</span></code> and
-<code class="docutils literal notranslate"><span class="pre">knot_convention</span></code>. Constructor keywords <code class="docutils literal notranslate"><span class="pre">normalization</span></code> and <code class="docutils literal notranslate"><span class="pre">ridge</span></code> expose
-these choices. Historical defaults are unchanged: <code class="docutils literal notranslate"><span class="pre">from_knots</span></code> uses max
-normalization, ridge 1e-6 and breakpoints; <code class="docutils literal notranslate"><span class="pre">from_grid</span></code> uses trace normalization,
-no ridge and clamped knots. Storage records the choices and preserves exact
-operators for clamped bases. Old stationary files retain historical defaults.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">SpectralComponents.from_multivar_fft(...)</span></code> becomes
-<code class="docutils literal notranslate"><span class="pre">inference.initialisation.prepare_components(...)</span></code>.
-<code class="docutils literal notranslate"><span class="pre">components.compute_design_weights(S)</span></code> becomes
-<code class="docutils literal notranslate"><span class="pre">inference.initialisation.fit_design_weights(components,</span> <span class="pre">S)</span></code>.</p></li>
-</ul>
-<p>Moving-periodogram preprocessing and scattered-coordinate scalar inference are
-available. Multivariate TV inference remains future work.</p>
-</section>
+<p><code class="docutils literal notranslate"><span class="pre">PowerData</span></code> always has time coordinates. Stationary fits use <code class="docutils literal notranslate"><span class="pre">WishartData</span></code>.
+A <code class="docutils literal notranslate"><span class="pre">PowerPartition</span></code> can pool rectangular powers for the likelihood while the
+result remains on the original grid. Both coordinate geometries share the
+power likelihood and tensor P-spline prior.</p>
+<p><code class="docutils literal notranslate"><span class="pre">SplineBasis</span></code> and <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code> construct the scalar model. <code class="docutils literal notranslate"><span class="pre">SpectralComponents</span></code>
+groups stationary Cholesky components; <code class="docutils literal notranslate"><span class="pre">SpectralMatrix</span></code> reconstructs positive
+definite matrices. <code class="docutils literal notranslate"><span class="pre">models/reconstruction.py</span></code> owns stationary reconstruction
+and chunked PSD quantiles. <code class="docutils literal notranslate"><span class="pre">results.py</span></code> stores labeled posterior, spectrum,
+sampler statistics and observed data. NetCDF saves these native values;
+<code class="docutils literal notranslate"><span class="pre">diagnostics/</span></code> builds per-channel ArviZ views when needed. <code class="docutils literal notranslate"><span class="pre">plotting/</span></code> renders
+spectra and diagnostics from <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>.</p>
+<p>Multivariate time-varying inference is not yet implemented.</p>
 </section>
 
     <script type="text/x-thebe-config">
@@ -718,13 +624,7 @@ available. Multivariate TV inference remains future work.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#typechecking-jaxtyping-beartype">Typechecking (Jaxtyping + Beartype)</a></li>
 </ul>
 </li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-architecture">PSD architecture</a><ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-navigation">Code navigation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-dependence-shared-scalar-models">Time dependence: shared scalar models</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration">Migration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#explicit-contracts-after-the-cleanup">Explicit contracts after the cleanup</a></li>
-</ul>
-</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-architecture">PSD architecture</a></li>
 </ul>
 
   </nav></div>

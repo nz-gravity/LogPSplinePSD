@@ -57,7 +57,8 @@ with `uv run prek run --all-files`.
 
 ## Typechecking (Jaxtyping + Beartype)
 
-Install dev extras so `jaxtyping` and `beartype` are available:
+Install dev extras so the pytest-only `beartype` checker is available.
+`jaxtyping` is a regular dependency for the array annotations:
 
 ```bash
 .venv/bin/python -m pip install -e '.[dev,typecheck]'
@@ -69,15 +70,17 @@ Run static type checking across the package:
 .venv/bin/python -m mypy --config-file pyproject.toml src/log_psplines
 ```
 
-The mypy configuration in `pyproject.toml` includes scoped overrides for a
-small set of external libraries without stubs. The package source under
-`src/log_psplines` is checked end-to-end without per-module suppressions.
+Mypy checks the ordinary Python types. Jaxtyping's symbolic dimensions are
+checked by pytest at runtime rather than inferred by mypy. The repository
+currently reports additional typing errors, including missing third-party
+stubs.
 
-Runtime checks are enabled by default when dependencies are installed. You can
-disable runtime enforcement with:
+Pytest's `--jaxtyping-packages` option applies `beartype` to package functions
+and dataclasses only while tests import them. Normal imports and inference runs
+do not install a type-checking hook or wrap source functions. Run the suite with:
 
 ```bash
-LOG_PSPLINES_RUNTIME_TYPECHECK=0 .venv/bin/python -m pytest tests/test_runtime_typecheck.py
+.venv/bin/python -m pytest tests/
 ```
 
 

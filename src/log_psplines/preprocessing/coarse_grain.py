@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from math import isqrt
 
 import numpy as np
+from jaxtyping import Complex, Float
 
-from log_psplines._jaxtypes import Complex, Float, Int
-from log_psplines._typecheck import runtime_typecheck
 from log_psplines.data.spectral import WishartData
 from log_psplines.data.spectral_utils import (
     U_to_Y,
@@ -176,11 +175,11 @@ def _sum_bins_equal(x: np.ndarray, *, Nh: int) -> np.ndarray:
 
 
 def _coarse_grain_wishart_y_to_u(
-    Y_sel: Complex[np.ndarray, "nl p p"],  # noqa: F722
+    Y_sel: Complex[np.ndarray, "N p p"],
     *,
     Nc: int,
     Nh: int,
-) -> Complex[np.ndarray, "nc p p"]:  # noqa: F722
+) -> np.ndarray:
     """Coarse-grain Wishart matrices by summing Y(f) within each bin.
 
     For each bin h, compute:
@@ -208,9 +207,8 @@ def _coarse_grain_wishart_y_to_u(
     return Y_to_U(Y_bar)
 
 
-@runtime_typecheck
 def compute_binning_structure(
-    freqs: Float[np.ndarray, "nl"],  # noqa: F821, UP037
+    freqs: Float[np.ndarray, "N"],
     *,
     Nc: int | None = None,
     Nh: int | None = None,
@@ -238,16 +236,14 @@ def compute_binning_structure(
 
     Nc, Nh = _resolve_equal_bin_params(Nl=Nl, Nc=Nc, Nh=Nh)
 
-    J_start: Int[np.ndarray, "nc"] = (  # noqa: F821, UP037
-        np.arange(Nc, dtype=np.int64) * Nh
-    ).astype(np.int32)
+    J_start = (np.arange(Nc, dtype=np.int64) * Nh).astype(np.int32)
 
     if (Nh % 2) == 0:
         logger.info(f"Nl={Nl} and Nc={Nc} imply even Nh={Nh}. ")
-        J_mid: Int[np.ndarray, "nc"] = J_start + (Nh // 2) - 1  # noqa: F821, UP037
+        J_mid = J_start + (Nh // 2) - 1
     else:
         J_mid = J_start + (Nh // 2)
-    f_coarse: Float[np.ndarray, "nc"] = freqs[J_mid].astype(np.float64)  # noqa: F821, UP037
+    f_coarse = freqs[J_mid].astype(np.float64)
 
     return CoarseGrainSpec(
         f_coarse=f_coarse,
@@ -258,7 +254,6 @@ def compute_binning_structure(
     )
 
 
-@runtime_typecheck
 def apply_coarse_grain_multivar_fft(
     fft: WishartData, spec: CoarseGrainSpec
 ) -> WishartData:

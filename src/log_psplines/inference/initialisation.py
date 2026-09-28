@@ -4,6 +4,8 @@ from collections.abc import Mapping
 
 import jax.numpy as jnp
 import numpy as np
+from jax import Array
+from jaxtyping import Float
 
 from log_psplines.basis.splines import SplineBasis
 from log_psplines.data import WishartData
@@ -23,9 +25,9 @@ _MULTIVAR_KNOT_FAMILY_KEYS = ("delta", "theta_re", "theta_im")
 
 
 def init_weights(
-    log_pdgrm: jnp.ndarray,
+    log_pdgrm: Float[Array | np.ndarray, "N"],
     log_psplines: "LogPSpline",
-) -> jnp.ndarray:
+) -> Float[Array, "K_f"]:
     """Return a stabilized least-squares fit for the spline weights."""
     basis = jnp.asarray(log_psplines.basis)
     target = jnp.asarray(log_pdgrm)
@@ -46,12 +48,12 @@ def build_component(
     degree: int,
     diffMatrixOrder: int,
     n: int,
-    knots: jnp.ndarray,
-    basis: jnp.ndarray | None = None,
-    penalty_matrix: jnp.ndarray | None = None,
-    weights: jnp.ndarray | None = None,
-    grid_points: jnp.ndarray | None = None,
-    log_target: jnp.ndarray | None = None,
+    knots: Array | np.ndarray,
+    basis: Array | np.ndarray | None = None,
+    penalty_matrix: Array | np.ndarray | None = None,
+    weights: Array | np.ndarray | None = None,
+    grid_points: Array | np.ndarray | None = None,
+    log_target: Array | np.ndarray | None = None,
 ) -> LogPSpline:
     """Prepare a scalar component, optionally fitting its initial weights."""
     frequency = SplineBasis.create(

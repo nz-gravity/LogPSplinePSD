@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import TypedDict
 
 import numpy as np
+from jaxtyping import Complex, Float
 
 from log_psplines.data.spectral import PowerData
 
@@ -23,14 +24,14 @@ from log_psplines.data.spectral import PowerData
 class MovingPeriodogram(TypedDict):
     """Raw scattered moving-periodogram ordinates."""
 
-    u: np.ndarray
-    omega: np.ndarray
-    coeff: np.ndarray
-    mi: np.ndarray
+    u: Float[np.ndarray, "Q"]
+    omega: Float[np.ndarray, "Q"]
+    coeff: Complex[np.ndarray, "Q"]
+    mi: Float[np.ndarray, "Q"]
 
 
 def tang_moving_periodogram(
-    data: np.ndarray, *, m: int, thin: int = 2
+    data: Float[np.ndarray, "n"], *, m: int, thin: int = 2
 ) -> MovingPeriodogram:
     """Return thinned zig-zag moving-periodogram ordinates.
 
@@ -150,7 +151,7 @@ def bin_tang_ordinates(
 
 
 def moving_periodogram(
-    data: np.ndarray,
+    data: Float[np.ndarray, "n"],
     *,
     dt: float,
     m: int,
@@ -195,7 +196,7 @@ __all__ = [
 
 
 def scattered_moving_periodogram(
-    data: np.ndarray, *, dt: float, m: int, thin: int = 2
+    data: Float[np.ndarray, "n"], *, dt: float, m: int, thin: int = 2
 ) -> PowerData:
     """Prepare moving-periodogram powers at their exact (u, omega) ordinates.
 

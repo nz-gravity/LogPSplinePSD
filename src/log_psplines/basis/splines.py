@@ -1,10 +1,12 @@
 """One-dimensional B-splines and normalized integrated-derivative penalties."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
 import jax.numpy as jnp
 import numpy as np
+from jax import Array
 from scipy.interpolate import BSpline
 from skfda.misc.operators import LinearDifferentialOperator
 from skfda.misc.regularization import L2Regularization
@@ -23,8 +25,8 @@ class SplineBasis:
 
     grid: np.ndarray
     knots: np.ndarray
-    basis: jnp.ndarray
-    penalty: jnp.ndarray
+    basis: Array | np.ndarray
+    penalty: Array | np.ndarray
     degree: int = 3
     penalty_order: int = 2
     penalty_normalization: Literal["max", "trace"] = "max"
@@ -49,7 +51,7 @@ class SplineBasis:
         grid: np.ndarray,
         n_interior_knots: int | None = None,
         *,
-        interior_knots: np.ndarray | None = None,
+        interior_knots: np.ndarray | Sequence[float] | None = None,
         degree: int = 3,
         penalty_order: int = 2,
         normalization: Literal["max", "trace"] = "trace",
@@ -184,8 +186,8 @@ class SplineBasis:
         penalty_order: int,
         n: int,
         knots: np.ndarray,
-        basis: jnp.ndarray | None = None,
-        penalty: jnp.ndarray | None = None,
+        basis: Array | np.ndarray | None = None,
+        penalty: Array | np.ndarray | None = None,
         grid: np.ndarray | None = None,
         normalization: Literal["max", "trace"] = "max",
         ridge: float = 1e-6,

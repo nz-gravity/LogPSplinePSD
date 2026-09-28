@@ -77,8 +77,8 @@ class TimeSeries:
 
     def to_cross_spectral_density(
         self,
-        fmin: float | None = None,
-        fmax: float | None = None,
+        fmin: float | int | None = None,
+        fmax: float | int | None = None,
     ) -> WishartData:
         return compute_fft(
             self.data,
@@ -92,8 +92,8 @@ class TimeSeries:
     def to_wishart_stats(
         self,
         Nb: int,
-        fmin: float | None = None,
-        fmax: float | None = None,
+        fmin: float | int | None = None,
+        fmax: float | int | None = None,
         window: str | tuple | None = None,
         detrend: str | bool = "constant",
         wishart_floor_fraction: float | None = None,

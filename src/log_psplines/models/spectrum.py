@@ -5,12 +5,16 @@ from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jaxtyping import Float
 
 from log_psplines.basis import SplineBasis
 
 
 @jax.jit
-def build_spline(basis: jax.Array, weights: jax.Array) -> jax.Array:
+def build_spline(
+    basis: Float[jax.Array | np.ndarray, "N K_f"],
+    weights: Float[jax.Array | np.ndarray, "K_f"],
+) -> Float[jax.Array, "N"]:
     return jnp.einsum("ij,j->i", basis, weights)
 
 
@@ -25,7 +29,7 @@ class LogPSpline:
 
     frequency: SplineBasis
     time: SplineBasis | None = None
-    weights: jax.Array | None = None
+    weights: jax.Array | np.ndarray | None = None
 
     def __post_init__(self) -> None:
         shape = (
@@ -44,7 +48,14 @@ class LogPSpline:
                     f"weights length and shape must match {shape}"
                 )
 
-    def __call__(self, weights: jax.Array | None = None) -> jax.Array:
+    def __call__(
+        self,
+        weights: (
+            Float[jax.Array | np.ndarray, "K_f"]
+            | Float[jax.Array | np.ndarray, "K_t K_f"]
+            | None
+        ) = None,
+    ) -> Float[jax.Array, "N"] | Float[jax.Array, "N_t N_f"]:
         weights = self.weights if weights is None else weights
         if weights is None:
             raise ValueError("weights must be provided or initialized.")
@@ -66,15 +77,15 @@ class LogPSpline:
 
     def at_points(
         self,
-        time_points: jax.Array,
-        freq_points: jax.Array,
-        weights: jax.Array | None = None,
-    ) -> jax.Array:
+        time_points: Float[jax.Array | np.ndarray, "Q"],
+        freq_points: Float[jax.Array | np.ndarray, "Q"],
+        weights: Float[jax.Array | np.ndarray, "K_t K_f"] | None = None,
+    ) -> Float[jax.Array, "Q"]:
         """Evaluate log S(u, omega) at scattered (time, frequency) ordinates.
 
         Unlike ``__call__``, points need not share a common time or
-        frequency axis: ordinate ``p`` uses ``time_points[p]`` and
-        ``freq_points[p]`` independently, with no grid ever built.
+        frequency axis: ordinate ``q`` uses ``time_points[q]`` and
+        ``freq_points[q]`` independently, with no grid ever built.
         """
         if self.time is None:
             raise ValueError("scattered evaluation requires a time basis")
@@ -89,11 +100,11 @@ class LogPSpline:
         return jnp.einsum("pi,ij,pj->p", bt, weights, bf, optimize="optimal")
 
     @property
-    def basis(self) -> jax.Array:
+    def basis(self) -> jax.Array | np.ndarray:
         return self.frequency.basis
 
     @property
-    def penalty_matrix(self) -> jax.Array:
+    def penalty_matrix(self) -> jax.Array | np.ndarray:
         return self.frequency.penalty
 
     @property

@@ -41,7 +41,11 @@ def compute_confidence_intervals(
     quantiles: tuple[float, float, float] = (16, 50, 84),
     method: str = "percentile",
     alpha: float = 0.1,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+    np.ndarray | jnp.ndarray,
+    np.ndarray | jnp.ndarray,
+    np.ndarray | jnp.ndarray,
+]:
     """
     Compute confidence intervals from posterior samples.
 

@@ -1,26 +1,28 @@
 """Modified-Cholesky Wishart factors, omitting data-only constants."""
 
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
+from jaxtyping import Float
 
 from log_psplines.likelihoods.whittle import whittle_log_likelihood
 
 
 def wishart_log_likelihood(
-    log_variance: Array,
-    theta_re: Array,
-    theta_im: Array,
-    u_re: Array,
-    u_im: Array,
-    prev_re: Array,
-    prev_im: Array,
+    log_variance: Float[Array | np.ndarray, "*batch N"],
+    theta_re: Float[Array | np.ndarray, "*batch N _"],
+    theta_im: Float[Array | np.ndarray, "*batch N _"],
+    u_re: Float[Array | np.ndarray, "*batch N p"],
+    u_im: Float[Array | np.ndarray, "*batch N p"],
+    prev_re: Float[Array | np.ndarray, "*batch N _ p"],
+    prev_im: Float[Array | np.ndarray, "*batch N _ p"],
     *,
     Nb: int = 1,
     Nh: int = 1,
-    duration: float = 1.0,
-    enbw: float = 1.0,
-    eta: float = 1.0,
-) -> Array:
+    duration: float | int = 1.0,
+    enbw: float | int = 1.0,
+    eta: float | int = 1.0,
+) -> Float[Array, ""]:
     """One channel factor; sum factors to obtain the matrix likelihood.
 
     log_variance: (..., F), theta: (..., F, preceding_channels),

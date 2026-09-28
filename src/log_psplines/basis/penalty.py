@@ -10,12 +10,13 @@ silently substituted for the time-frequency prior.
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
+from jaxtyping import Bool, Float
 from scipy import interpolate
 
 
 def whiten_penalty_pair(
-    penalty_time: np.ndarray,
-    penalty_freq: np.ndarray,
+    penalty_time: Float[Array | np.ndarray, "K_t K_t"],
+    penalty_freq: Float[Array | np.ndarray, "K_f K_f"],
     *,
     null_tol: float = 1e-10,
 ) -> dict[str, np.ndarray]:
@@ -41,15 +42,15 @@ def whiten_penalty_pair(
 
 
 def eigen_prior_scale(
-    phi_time: Array,
-    phi_freq: Array,
-    lam_time: Array,
-    lam_freq: Array,
-    joint_null: Array,
+    phi_time: float | Float[Array | np.ndarray, ""],
+    phi_freq: float | Float[Array | np.ndarray, ""],
+    lam_time: Float[Array | np.ndarray, "K_t"],
+    lam_freq: Float[Array | np.ndarray, "K_f"],
+    joint_null: Bool[Array | np.ndarray, "K_t K_f"],
     *,
     null_precision: float = 1e-4,
     ridge_eps: float = 1e-6,
-) -> Array:
+) -> Float[Array, "K_t K_f"]:
     """Normal scales (Kt,Kf) for the anisotropic tensor eigen-coefficients.
 
     Precision is phi_time*lambda_time + phi_freq*lambda_freq outside the

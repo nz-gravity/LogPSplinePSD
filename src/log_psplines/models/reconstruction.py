@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 import jax.numpy as jnp
 import numpy as np
 import xarray as xr
+from jax import Array
+from jaxtyping import Float
 
 from log_psplines.models.matrix import SpectralMatrix
 
@@ -51,9 +53,9 @@ def _psd_chunk_iterator(
 
 
 def reconstruct_psd_matrix(
-    log_delta_sq_samples: jnp.ndarray,
-    theta_re_samples: jnp.ndarray,
-    theta_im_samples: jnp.ndarray,
+    log_delta_sq_samples: Float[Array | np.ndarray, "*samples N p"],
+    theta_re_samples: Float[Array | np.ndarray, "*samples N _"],
+    theta_im_samples: Float[Array | np.ndarray, "*samples N _"],
     n_samples_max: int = 50,
     chunk_size: int = 2048,
 ) -> np.ndarray:
@@ -102,9 +104,9 @@ def reconstruct_psd_matrix(
 
 
 def compute_psd_quantiles(
-    log_delta_sq_samples: jnp.ndarray,
-    theta_re_samples: jnp.ndarray,
-    theta_im_samples: jnp.ndarray,
+    log_delta_sq_samples: Float[Array | np.ndarray, "*samples N p"],
+    theta_re_samples: Float[Array | np.ndarray, "*samples N _"],
+    theta_im_samples: Float[Array | np.ndarray, "*samples N _"],
     *,
     percentiles: Sequence[float] | None = None,
     n_samples_max: int = 50,
@@ -205,7 +207,10 @@ def _flatten(array: np.ndarray) -> np.ndarray:
     return arr.reshape((-1,) + arr.shape[2:])
 
 
-def _batch_spline_eval(basis: np.ndarray, weights: np.ndarray) -> np.ndarray:
+def _batch_spline_eval(
+    basis: Float[Array | np.ndarray, "N K_f"],
+    weights: Float[Array | np.ndarray, "*samples K_f"],
+) -> Float[np.ndarray, "*samples N"]:
     return np.einsum("fk,sk->sf", np.asarray(basis), np.asarray(weights))
 
 

@@ -13,7 +13,7 @@ import numpy as np
 from log_psplines.data.spectral import PowerData
 
 
-def _starts(value: np.ndarray, size: int, name: str) -> np.ndarray:
+def _starts(value: np.ndarray | list[int], size: int, name: str) -> np.ndarray:
     starts = np.asarray(value)
     if (
         starts.ndim != 1
@@ -31,8 +31,8 @@ def _starts(value: np.ndarray, size: int, name: str) -> np.ndarray:
 class PowerPartition:
     """Zero-based starts of separable time and frequency likelihood blocks."""
 
-    time_starts: np.ndarray
-    frequency_starts: np.ndarray
+    time_starts: np.ndarray | list[int]
+    frequency_starts: np.ndarray | list[int]
 
 
 def mask_power(data: PowerData, mask: np.ndarray) -> PowerData:

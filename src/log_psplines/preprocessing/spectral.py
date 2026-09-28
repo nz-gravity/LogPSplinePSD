@@ -10,8 +10,6 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from log_psplines._jaxtypes import Complex, Float
-from log_psplines._typecheck import runtime_typecheck
 from log_psplines.config import PipelineConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.data.spectral_utils import _interp_frequency_indexed_array
@@ -82,7 +80,7 @@ def preprocess_to_freq_domain(
 
 
 def _normalize_excluded_frequency_bands(
-    bands: Sequence[tuple[float, float]] | None,
+    bands: Sequence[Sequence[float]] | None,
 ) -> tuple[tuple[float, float], ...]:
     """Return sorted, merged excluded frequency bands."""
     if bands is None:
@@ -136,12 +134,11 @@ def _unpack_true_psd(
     return None, np.asarray(true_psd)
 
 
-@runtime_typecheck
 def _interp_psd_array(
-    psd: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],  # noqa: F722
-    freq_src: Float[np.ndarray, f_src],  # noqa: F821
-    freq_tgt: Float[np.ndarray, f_tgt],  # noqa: F821
-) -> Complex[np.ndarray, "f_tgt ..."] | Float[np.ndarray, "f_tgt ..."]:  # noqa: F722
+    psd: np.ndarray,
+    freq_src: np.ndarray,
+    freq_tgt: np.ndarray,
+) -> np.ndarray:
     """Interpolate PSD arrays onto target frequencies."""
     return _interp_frequency_indexed_array(
         freq_src,

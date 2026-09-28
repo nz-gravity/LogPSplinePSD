@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-
-from log_psplines._jaxtypes import Complex, Float
-from log_psplines._typecheck import runtime_typecheck
+from jaxtyping import Complex, Float
 
 
 def _as_positive_int(name: str, value: int) -> int:
@@ -74,12 +72,11 @@ def _interp_frequency_indexed_array(
     return res.reshape((freq_tgt.size,) + values.shape[1:])
 
 
-@runtime_typecheck
 def interp_matrix(
-    freq_src: Float[np.ndarray, f_src],  # noqa: F821
-    mat: Complex[np.ndarray, "f_src ..."] | Float[np.ndarray, "f_src ..."],  # noqa: F722
-    freq_tgt: Float[np.ndarray, f_tgt],  # noqa: F821
-) -> Complex[np.ndarray, "f_tgt ..."]:  # noqa: F722
+    freq_src: np.ndarray,
+    mat: np.ndarray,
+    freq_tgt: np.ndarray,
+) -> np.ndarray:
     """Interpolate a frequency-indexed matrix onto a new frequency grid.
 
     Parameters
@@ -101,11 +98,10 @@ def interp_matrix(
     )
 
 
-@runtime_typecheck
 def u_re_im_to_U(
-    u_re: Float[np.ndarray, ...],
-    u_im: Float[np.ndarray, ...],
-) -> Complex[np.ndarray, ...]:
+    u_re: Float[np.ndarray, "N p p"],
+    u_im: Float[np.ndarray, "N p p"],
+) -> Complex[np.ndarray, "N p p"]:
     """Combine real/imag Wishart factors into a complex U matrix."""
     u_re = np.asarray(u_re, dtype=np.float64)
     u_im = np.asarray(u_im, dtype=np.float64)
@@ -121,10 +117,9 @@ def _ishermitian(Y: np.ndarray, atol: float = 1e-10) -> bool:
     return np.allclose(Y, Y.swapaxes(-1, -2).conj(), atol=atol)
 
 
-@runtime_typecheck
 def U_to_Y(
-    u: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
-) -> Complex[np.ndarray, ...]:
+    u: Complex[np.ndarray, "N p p"] | Float[np.ndarray, "N p p"],
+) -> Complex[np.ndarray, "N p p"]:
     """Convert eigenvector-weighted periodogram components to Wishart matrices.
 
     Eg:
@@ -140,10 +135,9 @@ def U_to_Y(
     return np.einsum("fkc,flc->fkl", u, np.conj(u))
 
 
-@runtime_typecheck
 def Y_to_U(
-    Y: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
-) -> Complex[np.ndarray, ...]:
+    Y: Complex[np.ndarray, "N p p"] | Float[np.ndarray, "N p p"],
+) -> Complex[np.ndarray, "N p p"]:
     """Return U factors for Wishart matrices where Y[f] = U[f] U[f]^H."""
     Y = np.asarray(Y, dtype=np.complex128)
     if Y.ndim != 3:
@@ -156,15 +150,14 @@ def Y_to_U(
     return v * sqrt_lam
 
 
-@runtime_typecheck
 def Y_to_S(
-    Y: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
+    Y: Complex[np.ndarray, "N p p"] | Float[np.ndarray, "N p p"],
     Nb: int,
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
     Nh: int = 1,
-) -> Complex[np.ndarray, ...]:
+) -> Complex[np.ndarray, "N p p"]:
     """Convert Wishart matrices into one-sided PSD matrices.
 
     Eg:
@@ -188,15 +181,14 @@ def Y_to_S(
     return psd
 
 
-@runtime_typecheck
 def wishart_u_to_psd(
-    u: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
+    u: Complex[np.ndarray, "N p p"] | Float[np.ndarray, "N p p"],
     Nb: int,
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
     Nh: int = 1,
-) -> Complex[np.ndarray, ...]:
+) -> Complex[np.ndarray, "N p p"]:
     """Convenience wrapper combining :func:`U_to_Y` and conversion."""
 
     Y = U_to_Y(u)
@@ -209,10 +201,9 @@ def wishart_u_to_psd(
     )
 
 
-@runtime_typecheck
 def _get_coherence(
-    psd: Complex[np.ndarray, ...] | Float[np.ndarray, ...],
-) -> Float[np.ndarray, ...]:
+    psd: Complex[np.ndarray, "N p p"] | Float[np.ndarray, "N p p"],
+) -> Float[np.ndarray, "N p p"]:
     """Compute coherence matrices from PSD estimates.
 
     Cxy = |Pxy|^2 / (Pxx * Pyy), diagonal set to 1.0, clipped to [0, 1].
@@ -242,11 +233,11 @@ def _get_coherence(
 
 
 def psd_to_cholesky_components(
-    matrix: np.ndarray,
+    matrix: Complex[np.ndarray, "N p p"] | Float[np.ndarray, "N p p"],
     *,
     cholesky_jitter: float = 1e-12,
     max_cholesky_jitter: float = 1e-4,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[Float[np.ndarray, "N p"], Complex[np.ndarray, "N p p"]]:
     """Map PSD matrices to model-native Cholesky components.
 
     Decomposes each frequency slice via Cholesky: S = L L^H, then extracts

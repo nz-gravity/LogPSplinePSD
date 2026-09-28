@@ -24,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "jax",
+    "jaxtyping>=0.3.9",
     "optax",
     "numpy",
     "matplotlib",
@@ -48,8 +49,7 @@ dependencies = [
 [project.optional-dependencies]
 wdm = ["wdm-transform>=0.5.0"]
 typecheck = [
-    "jaxtyping>=0.2.36",
-    "beartype>=0.18.5",
+    "beartype>=0.22.9",
 ]
 dev = [
     "LogPSplinePSD[typecheck]",
@@ -101,6 +101,22 @@ ignore = ["B008", "E501"]
 [tool.ruff.lint.isort]
 known-first-party = ["log_psplines"]
 
+# Ruff parses jaxtyping's quoted dimension strings as Python forward references.
+[tool.ruff.lint.per-file-ignores]
+"src/log_psplines/basis/penalty.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/data/spectral.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/data/spectral_utils.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/inference/initialisation.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/inference/power.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/likelihoods/whittle.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/likelihoods/wishart.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/models/matrix.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/models/reconstruction.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/models/spectrum.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/preprocessing/coarse_grain.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/preprocessing/moving_periodogram.py" = ["F722", "F821", "UP037"]
+"src/log_psplines/preprocessing/periodogram.py" = ["F722", "F821", "UP037"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--durations=20 -s --import-mode=importlib --jaxtyping-packages=log_psplines,beartype.beartype"
@@ -139,7 +155,6 @@ explicit_package_bases = true
 show_error_codes = true
 warn_unused_ignores = true
 check_untyped_defs = true
-plugins = ["jaxtyping.plugin"]
 
 [[tool.mypy.overrides]]
 module = [

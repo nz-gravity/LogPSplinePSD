@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from jaxtyping import TypeCheckError
 
 from log_psplines.data import (
     EmpiricalPSD,
@@ -249,7 +250,7 @@ def test_multivar_utils_interpolation_scaling_and_cholesky_errors() -> None:
     coh = _get_coherence(psd)
     assert coh[0, 0, 0] == pytest.approx(1.0)
 
-    with pytest.raises(ValueError, match="matching shapes"):
+    with pytest.raises(TypeCheckError, match="u_im"):
         u_re_im_to_U(np.zeros((1, 1, 1)), np.zeros((2, 1, 1)))
     with pytest.raises(ValueError, match="Hermitian"):
         Y_to_U(np.asarray([[[1.0, 2.0], [3.0, 1.0]]]))
@@ -257,15 +258,13 @@ def test_multivar_utils_interpolation_scaling_and_cholesky_errors() -> None:
         Y_to_S(Y, 1, duration=0.0)
     with pytest.raises(TypeError, match="positive integer"):
         Y_to_S(Y, True)
-    with pytest.raises(ValueError, match="square"):
+    with pytest.raises(TypeCheckError, match="psd"):
         _get_coherence(np.ones((2, 2, 3)))
     with pytest.raises(ValueError, match="non-negative"):
         psd_to_cholesky_components(psd, cholesky_jitter=-1.0)
 
 
-def test_multivariate_model_registry_and_psd_reconstruction() -> (
-    None
-):
+def test_multivariate_model_registry_and_psd_reconstruction() -> None:
     model = _simple_multivar_model()
     assert model.n_theta == 1
     assert model.theta_pairs == [(1, 0)]
@@ -309,7 +308,7 @@ def test_multivariate_model_registry_and_psd_reconstruction() -> (
         MultivarComponentKey("delta", -1)
     with pytest.raises(ValueError, match="delta components"):
         MultivarComponentKey("delta", 0, l=0)
-    with pytest.raises(ValueError, match="Unknown component"):
+    with pytest.raises(TypeCheckError, match="family"):
         MultivarComponentKey("bad", 0)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="theta components require l"):
         MultivarComponentKey("theta", 1)

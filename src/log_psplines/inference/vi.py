@@ -51,14 +51,14 @@ def _values_to_dataset(
 class VIResult:
     """VI posterior draws and optimization diagnostics."""
 
-    posterior: xr.Dataset
-    losses: jnp.ndarray
+    posterior: xr.Dataset | None
+    losses: jnp.ndarray | np.ndarray
     guide_name: str
-    losses_per_block: list[jnp.ndarray] | None = None
+    losses_per_block: list[jnp.ndarray | np.ndarray] | None = None
 
 
 def resolve_guide(
-    guide: str | Callable[..., Any] | None,
+    guide: object,
     model: Callable[..., Any],
 ) -> tuple[Any, str]:
     """Instantiate an autoguide for ``model``.

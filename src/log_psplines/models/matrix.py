@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 
 import numpy as np
+from jax import Array
+from jaxtyping import Complex, Float
 
 
 @dataclass(frozen=True)
@@ -24,10 +26,10 @@ class SpectralMatrix:
 
     def __call__(
         self,
-        log_variance: np.ndarray,
-        theta_re: np.ndarray | None = None,
-        theta_im: np.ndarray | None = None,
-    ) -> np.ndarray:
+        log_variance: Float[Array | np.ndarray, "*batch p"],
+        theta_re: Float[Array | np.ndarray, "*batch _"] | None = None,
+        theta_im: Float[Array | np.ndarray, "*batch _"] | None = None,
+    ) -> Complex[np.ndarray, "*batch p p"]:
         logs = np.asarray(log_variance)
         if logs.shape[-1] != self.channels:
             raise ValueError(
@@ -57,7 +59,9 @@ class SpectralMatrix:
         )
 
     @staticmethod
-    def coherence(spectrum: np.ndarray) -> np.ndarray:
+    def coherence(
+        spectrum: Complex[np.ndarray, "*batch p p"],
+    ) -> Float[np.ndarray, "*batch p p"]:
         """Squared coherence (..., C, C), including unit diagonal."""
         diagonal = np.diagonal(spectrum, axis1=-2, axis2=-1).real
         return np.abs(spectrum) ** 2 / (

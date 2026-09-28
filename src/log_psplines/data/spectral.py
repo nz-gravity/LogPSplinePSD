@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
+from jaxtyping import Complex
 
 from log_psplines.data.spectral_utils import (
     U_to_Y,
@@ -228,12 +229,12 @@ class WishartData:
         return out
 
     @property
-    def Y(self) -> np.ndarray:
+    def Y(self) -> Complex[np.ndarray, "N p p"]:
         """Return the Wishart matrices Y[f] = U[f] U[f]^H."""
         return U_to_Y(self.U)
 
     @property
-    def U(self) -> np.ndarray:
+    def U(self) -> Complex[np.ndarray, "N p p"]:
         """Return the complex Wishart factors U[f]."""
         return u_re_im_to_U(self.u_re, self.u_im)
 
@@ -253,16 +254,16 @@ class EmpiricalPSD:
 class PowerData:
     """Summed component powers and counts on a grid or at paired points.
 
-    Grid powers have shape (T, F), with increasing axis coordinates and
-    ``power.shape=(T, F)``. Scattered powers have shape (P,), paired time and
-    frequency coordinates of shape (P,). Values are component
+    Grid powers have shape (N_t, N_f), with increasing axis coordinates.
+    Scattered powers have shape (Q,), paired time and frequency coordinates
+    of shape (Q,). Values are component
     variances, not automatically PSD per Hz.
     """
 
-    power: np.ndarray
-    counts: np.ndarray
-    frequency: np.ndarray
-    time: np.ndarray | None = None
+    power: np.ndarray | Sequence
+    counts: np.ndarray | float | int | Sequence
+    frequency: np.ndarray | Sequence
+    time: np.ndarray | Sequence | None = None
     units: str = "coefficient variance"
 
     def __post_init__(self) -> None:

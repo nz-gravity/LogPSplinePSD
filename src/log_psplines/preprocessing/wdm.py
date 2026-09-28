@@ -28,7 +28,7 @@ def wdm_periodogram(
     n = len(series.data)
     if not isinstance(nt, int) or nt <= 0 or n % nt or nt % 2 or (n // nt) % 2:
         raise ValueError(
-            "WDM requires N divisible by nt and both nt and N/nt even"
+            "WDM requires n divisible by nt and both nt and n/nt even"
         )
     for trim in (trim_time, trim_low, trim_high):
         if not isinstance(trim, int) or trim < 0:

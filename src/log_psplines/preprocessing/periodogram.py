@@ -5,6 +5,7 @@ Time-frequency power preprocessing lives in ``moving_periodogram.py`` and
 """
 
 import numpy as np
+from jaxtyping import Float
 from scipy.signal import csd, welch, windows
 from scipy.signal import detrend as signal_detrend
 
@@ -18,10 +19,10 @@ from log_psplines.data.spectral_utils import (
 
 
 def compute_fft(
-    x: np.ndarray,
+    x: Float[np.ndarray, "n p"],
     fs: float = 1.0,
-    fmin: float | None = None,
-    fmax: float | None = None,
+    fmin: float | int | None = None,
+    fmax: float | int | None = None,
     scaling_factor: float | None = 1.0,
     channel_stds: np.ndarray | None = None,
     window: str | tuple | None = None,
@@ -40,11 +41,11 @@ def compute_fft(
 
 
 def compute_wishart(
-    x: np.ndarray,
+    x: Float[np.ndarray, "n p"],
     fs: float,
     Nb: int,
-    fmin: float | None = None,
-    fmax: float | None = None,
+    fmin: float | int | None = None,
+    fmax: float | int | None = None,
     scaling_factor: float | None = 1.0,
     channel_stds: np.ndarray | None = None,
     window: str | tuple | None = None,

@@ -15,6 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
+from jaxtyping import Float
 
 from log_psplines.basis.penalty import eigen_prior_scale, whiten_penalty_pair
 from log_psplines.config import PowerSplineConfig
@@ -41,7 +42,9 @@ def power_floor(power: np.ndarray) -> float:
     return 0.05 * float(np.percentile(positive, 10.0))
 
 
-def _sample_precision(name: str, config: PowerSplineConfig) -> jnp.ndarray:
+def _sample_precision(
+    name: str, config: PowerSplineConfig
+) -> jax.Array | float:
     """Sample a HalfNormal roughness scale and derive its precision."""
     sigma = numpyro.sample(name, dist.HalfNormal(config.roughness_scale))
     return sigma**-2
@@ -52,7 +55,7 @@ def sample_eigen_coefficients(
     scale: jnp.ndarray,
     shape: tuple[int, ...],
     config: PowerSplineConfig,
-) -> jnp.ndarray:
+) -> jax.Array | np.ndarray:
     """Sample eigen-coefficients while honoring ``config.centered``.
 
     In centered form the sampling site is the coefficient itself and has prior
@@ -72,11 +75,11 @@ def sample_eigen_coefficients(
 
 
 def initialize_with_penalized_least_squares(
-    observed_power: np.ndarray,
-    B_time: np.ndarray,
-    B_freq: np.ndarray,
-    penalty_time: np.ndarray,
-    penalty_freq: np.ndarray,
+    observed_power: Float[np.ndarray, "N_t N_f"],
+    B_time: Float[np.ndarray, "N_t K_t"],
+    B_freq: Float[np.ndarray, "N_f K_f"],
+    penalty_time: Float[np.ndarray, "K_t K_t"],
+    penalty_freq: Float[np.ndarray, "K_f K_f"],
     config: PowerSplineConfig,
 ) -> dict[str, np.ndarray | float]:
     """Penalized least-squares warm start in the *coefficient* basis.
@@ -150,9 +153,9 @@ def whitened_init_values(
 
 
 def _mean_power_for_masked_initialization(
-    summed_power: np.ndarray,
-    counts: np.ndarray,
-) -> np.ndarray:
+    summed_power: Float[np.ndarray, "N_t N_f"],
+    counts: Float[np.ndarray, "N_t N_f"],
+) -> Float[np.ndarray, "N_t N_f"]:
     """Fill masked cells for initialization without changing the target.
 
     Retained cells use their per-component mean power. Missing cells are filled
@@ -183,17 +186,17 @@ def _mean_power_for_masked_initialization(
 
 
 def initialize_scattered_with_penalized_least_squares(
-    observed_power: np.ndarray,
-    B_time: np.ndarray,
-    B_freq: np.ndarray,
-    penalty_time: np.ndarray,
-    penalty_freq: np.ndarray,
+    observed_power: Float[np.ndarray, "Q"],
+    B_time: Float[np.ndarray, "Q K_t"],
+    B_freq: Float[np.ndarray, "Q K_f"],
+    penalty_time: Float[np.ndarray, "K_t K_t"],
+    penalty_freq: Float[np.ndarray, "K_f K_f"],
     config: PowerSplineConfig,
 ) -> dict[str, np.ndarray | float]:
     """Penalized least-squares warm start for scattered (u, omega) ordinates.
 
     Unlike :func:`initialize_with_penalized_least_squares`, ``B_time`` and
-    ``B_freq`` are evaluated per-ordinate (``(P, Kt)``/``(P, Kf)``), not on a
+    ``B_freq`` are evaluated per-ordinate (``(Q, K_t)``/``(Q, K_f)``), not on a
     shared grid, so the design cannot be factored as a Kronecker product of
     marginal Grams and is built explicitly instead.
     """

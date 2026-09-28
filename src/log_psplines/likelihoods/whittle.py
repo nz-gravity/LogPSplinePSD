@@ -1,15 +1,19 @@
 """Whittle likelihood without data-only constants."""
 
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
+from jaxtyping import Float, Real
 
 # Preserve the historical inference overflow guard.
 LOG_SPECTRUM_LIMIT = 80.0
 
 
 def power_whittle_log_likelihood(
-    summed_power: Array, counts: Array, log_psd: Array
-) -> Array:
+    summed_power: Float[Array | np.ndarray, "*grid"],
+    counts: Real[Array | np.ndarray, "*grid"],
+    log_psd: Float[Array | np.ndarray, "*grid"],
+) -> Float[Array, ""]:
     """Power/count likelihood for scalar time-frequency surfaces.
 
     Inputs broadcast to (F,) or (T, F). Counts are numbers of independent
@@ -26,14 +30,14 @@ def power_whittle_log_likelihood(
 
 
 def whittle_log_likelihood(
-    log_psd: Array,
-    power: Array,
+    log_psd: Float[Array | np.ndarray, "*grid"],
+    power: Float[Array | np.ndarray, "*grid"],
     *,
-    count: float = 1.0,
-    duration: float = 1.0,
-    enbw: float = 1.0,
-    eta: float = 1.0,
-) -> Array:
+    count: float | int | Real[Array | np.ndarray, ""] = 1.0,
+    duration: float | int = 1.0,
+    enbw: float | int = 1.0,
+    eta: float | int = 1.0,
+) -> Float[Array, ""]:
     """Scalar log spectrum and summed power (..., F); return total log L.
 
     power is summed, not averaged, over `count` independent replicates.

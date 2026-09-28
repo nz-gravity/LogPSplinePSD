@@ -112,6 +112,7 @@ Output and Evidence
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -120,7 +121,6 @@ import numpy as np
 from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
 TruePSDInput = None | np.ndarray | tuple[np.ndarray, np.ndarray] | list | dict
-FrequencyBand = tuple[float, float]
 
 
 @dataclass(frozen=True)
@@ -149,9 +149,9 @@ class PipelineConfig:
     # Optional reference spectrum for density-based knot placement only.
     analytical_psd: np.ndarray | tuple[np.ndarray, np.ndarray] | None = None
     true_psd: TruePSDInput = None
-    fmin: float | None = None
-    fmax: float | None = None
-    exclude_freq_bands: tuple[FrequencyBand, ...] = field(
+    fmin: float | int | None = None
+    fmax: float | int | None = None
+    exclude_freq_bands: Sequence[Sequence[float]] = field(
         default_factory=tuple
     )
 

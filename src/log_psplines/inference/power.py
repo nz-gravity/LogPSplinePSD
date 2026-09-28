@@ -42,9 +42,7 @@ def power_floor(power: np.ndarray) -> float:
     return 0.05 * float(np.percentile(positive, 10.0))
 
 
-def _sample_precision(
-    name: str, config: PowerConfig
-) -> jax.Array | float:
+def _sample_precision(name: str, config: PowerConfig) -> jax.Array | float:
     """Sample a HalfNormal roughness scale and derive its precision."""
     sigma = numpyro.sample(name, dist.HalfNormal(config.roughness_scale))
     return sigma**-2

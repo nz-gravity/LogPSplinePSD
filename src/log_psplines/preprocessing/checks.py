@@ -6,6 +6,11 @@ import numpy as np
 
 from log_psplines.config import StationaryConfig
 from log_psplines.data.spectral import WishartData
+from log_psplines.preprocessing.diagnostics import (
+    eigenvalue_separation_diagnostics,
+    extract_component_knots,
+    model_component_curves,
+)
 from log_psplines.preprocessing.spectral import (
     _normalize_excluded_frequency_bands,
 )
@@ -27,10 +32,6 @@ def _run_preprocessing_checks(
         return
 
     try:
-        from log_psplines.diagnostics.preprocessing import (
-            eigenvalue_separation_diagnostics,
-        )
-
         min_lambda1_quantile = 0.05
         warn_threshold = 0.8
         warn_frac = 0.25
@@ -105,10 +106,8 @@ def _save_preprocessing_plot(
         return
 
     try:
-        from log_psplines.diagnostics.preprocessing import (
-            eigenvalue_separation_diagnostics,
-            extract_component_knots,
-            save_eigenvalue_separation_plot,
+        from log_psplines.plotting.preprocessing import (
+            plot_eigenvalue_separation,
         )
 
         if config.outdir is None:
@@ -124,6 +123,8 @@ def _save_preprocessing_plot(
         p = int(diag.eigvals_desc.shape[1])
         if p < 2:
             return
+
+        _run_preprocessing_checks(processed_data, config)
 
         out_path = (
             Path(config.outdir)
@@ -178,15 +179,21 @@ def _save_preprocessing_plot(
                     f"Could not extract knot locations for plot: {knot_exc}"
                 )
 
-        save_eigenvalue_separation_plot(
+        curves = model_component_curves(
+            freq, np.asarray(processed_data.raw_psd)
+        )
+        fig = plot_eigenvalue_separation(
             diag,
-            str(out_path),
             warn_threshold=0.8,
             info_text=info_text,
             excluded_bands=excluded_bands,
-            cholesky_matrix=np.asarray(processed_data.raw_psd),
+            component_curves=curves,
             component_knots=comp_knots,
         )
+        fig.savefig(out_path, dpi=200)
+        import matplotlib.pyplot as plt
+
+        plt.close(fig)
         if config.verbose:
             logger.info(f"Saved preprocessing eigenvalue plot to {out_path}")
     except Exception as exc:

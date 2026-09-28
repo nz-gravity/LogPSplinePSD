@@ -1,46 +1,24 @@
+"""Shared pytest setup and persistent local artifact directory."""
+
 import os
+from pathlib import Path
 
 import pytest
 
-from log_psplines.logger import set_level
+OUTPUT_DIR = Path(__file__).resolve().parent / "test-output"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", str(OUTPUT_DIR / ".matplotlib"))
 
-if os.getenv("GITHUB_ACTIONS") == "true":
-    os.environ.setdefault("LOG_PSPLINES_SLOW_TESTS", "0")
-else:
-    os.environ.setdefault("LOG_PSPLINES_SLOW_TESTS", "1")
+from log_psplines.logger import set_level  # noqa: E402
 
-set_level("DEBUG")
-
-
-def _compute_test_mode() -> str:
-    if os.getenv("GITHUB_ACTIONS") == "true":
-        return "fast"
-
-    if os.getenv("LOG_PSPLINES_SLOW_TESTS") == "1":
-        return "slow"
-
-    return "fast"
-
-
-TEST_MODE = _compute_test_mode()
+os.environ.setdefault(
+    "LOG_PSPLINES_SLOW_TESTS",
+    "0" if os.getenv("GITHUB_ACTIONS") == "true" else "1",
+)
+set_level("WARNING")
 
 
 @pytest.fixture(scope="session")
-def test_mode():
-    """Expose the resolved test mode to tests."""
-    return TEST_MODE
-
-
-def pytest_collection_modifyitems(config, items):
-    if TEST_MODE != "fast":
-        return
-    skip_slow = pytest.mark.skip(reason="Skipping slow tests in fast mode.")
-    for item in items:
-        if "slow" in item.keywords:
-            item.add_marker(skip_slow)
-
-
-@pytest.fixture
-def outdir(tmp_path):
-    """Give each test a clean output directory managed by pytest."""
-    return tmp_path
+def outdir() -> Path:
+    """Return an ignored, persistent directory for fit outputs and plots."""
+    return OUTPUT_DIR

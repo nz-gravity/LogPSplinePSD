@@ -1,6 +1,9 @@
 import warnings
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 import numpy as np
+from scipy.integrate import cumulative_trapezoid, trapezoid
 from scipy.signal import medfilt, savgol_filter
 
 from log_psplines.data.spectral_utils import psd_to_cholesky_components
@@ -307,3 +310,163 @@ def multivar_psd_knot_scores(
     ]
 
     return diagonal_scores, offdiag_re_scores, offdiag_im_scores
+
+
+@dataclass(frozen=True)
+class Component:
+    """A smooth pilot component with coordinate axes in array order."""
+
+    values: np.ndarray
+    coordinates: Mapping[str, np.ndarray]
+
+
+def variation_profiles(
+    component: Component, aggregation: str = "rms"
+) -> dict[str, np.ndarray]:
+    """Marginal absolute derivatives in each supplied coordinate.
+
+    The pilot values and coordinates must be finite. For a surface,
+    derivatives are aggregated over the other axis using RMS by default.
+    """
+    values = np.asarray(component.values, dtype=float)
+    if (
+        values.ndim != len(component.coordinates)
+        or not np.isfinite(values).all()
+    ):
+        raise ValueError(
+            "component needs finite values and one coordinate per axis"
+        )
+    if aggregation not in {"rms", "median", "q90"}:
+        raise ValueError("aggregation must be 'rms', 'median', or 'q90'")
+
+    profiles: dict[str, np.ndarray] = {}
+    for axis, (name, coordinate) in enumerate(component.coordinates.items()):
+        x = np.asarray(coordinate, dtype=float)
+        if (
+            x.ndim != 1
+            or x.size != values.shape[axis]
+            or x.size < 3
+            or not np.isfinite(x).all()
+            or np.any(np.diff(x) <= 0)
+        ):
+            raise ValueError(
+                f"{name} must be finite, increasing, and match its axis"
+            )
+        derivative = np.abs(np.gradient(values, x, axis=axis, edge_order=2))
+        other_axes = tuple(i for i in range(values.ndim) if i != axis)
+        if other_axes:
+            if aggregation == "rms":
+                derivative = np.sqrt(
+                    np.mean(derivative * derivative, axis=other_axes)
+                )
+            elif aggregation == "median":
+                derivative = np.median(derivative, axis=other_axes)
+            else:
+                derivative = np.quantile(derivative, 0.9, axis=other_axes)
+        profiles[name] = np.asarray(derivative, dtype=float)
+    return profiles
+
+
+def quantile_knots(
+    coordinate: np.ndarray,
+    variation: np.ndarray,
+    count: int,
+    *,
+    min_spacing: float,
+    floor_fraction: float = 0.1,
+    power: float = 1.0,
+) -> np.ndarray:
+    """Interior knots at quantiles of component variation plus a uniform floor.
+
+    ``min_spacing`` is in coordinate units and includes the end intervals.
+    The caller supplies a smooth training-only pilot and a spacing tied to
+    the analysis resolution.
+    """
+    x = np.asarray(coordinate, dtype=float)
+    variation = np.asarray(variation, dtype=float)
+    if (
+        x.ndim != 1
+        or x.size < 2
+        or variation.shape != x.shape
+        or not np.isfinite(x).all()
+        or not np.isfinite(variation).all()
+        or np.any(np.diff(x) <= 0)
+        or np.any(variation < 0)
+    ):
+        raise ValueError(
+            "invalid coordinates or nonnegative variation profile"
+        )
+    if (
+        isinstance(count, (bool, np.bool_))
+        or not isinstance(count, (int, np.integer))
+        or count < 0
+        or not np.isfinite(min_spacing)
+        or min_spacing <= 0
+        or not np.isfinite(floor_fraction)
+        or not 0 < floor_fraction <= 1
+        or not np.isfinite(power)
+        or power <= 0
+    ):
+        raise ValueError("invalid knot count, spacing, floor, or power")
+
+    count = int(count)
+    span = float(x[-1] - x[0])
+    if (count + 1) * min_spacing > span * (1 + 1e-12):
+        raise ValueError("requested knots exceed the analysis spacing limit")
+    if count == 0:
+        return np.empty(0, dtype=float)
+
+    scaled_variation = variation**power
+    mass = float(trapezoid(scaled_variation, x))
+    density = (
+        np.ones_like(x)
+        if mass <= 0
+        else floor_fraction
+        + (1 - floor_fraction) * scaled_variation * span / mass
+    )
+    cdf = cumulative_trapezoid(density, x, initial=0)
+    knots = np.interp(np.arange(1, count + 1) / (count + 1), cdf / cdf[-1], x)
+    for i in range(count):
+        knots[i] = max(knots[i], (knots[i - 1] if i else x[0]) + min_spacing)
+    for i in range(count - 1, -1, -1):
+        knots[i] = min(
+            knots[i], (knots[i + 1] if i + 1 < count else x[-1]) - min_spacing
+        )
+    return knots
+
+
+def allocate_components(
+    components: Mapping[str, Component],
+    counts: Mapping[str, Mapping[str, int]],
+    spacings: Mapping[str, Mapping[str, float]],
+    *,
+    aggregation: str = "rms",
+    floor_fraction: float = 0.1,
+    power: float = 1.0,
+) -> dict[str, dict[str, np.ndarray]]:
+    """Allocate independent knot arrays for each named pilot component."""
+    if set(components) != set(counts) or set(components) != set(spacings):
+        raise ValueError(
+            "components, counts, and spacings must have the same keys"
+        )
+    allocated: dict[str, dict[str, np.ndarray]] = {}
+    for name, component in components.items():
+        profiles = variation_profiles(component, aggregation=aggregation)
+        if set(profiles) != set(counts[name]) or set(profiles) != set(
+            spacings[name]
+        ):
+            raise ValueError(
+                f"counts and spacings for {name} must cover its axes"
+            )
+        allocated[name] = {
+            axis: quantile_knots(
+                coordinate,
+                profiles[axis],
+                counts[name][axis],
+                min_spacing=spacings[name][axis],
+                floor_fraction=floor_fraction,
+                power=power,
+            )
+            for axis, coordinate in component.coordinates.items()
+        }
+    return allocated

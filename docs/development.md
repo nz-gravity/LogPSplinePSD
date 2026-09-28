@@ -116,6 +116,14 @@ A `PowerPartition` can pool rectangular powers for the likelihood while the
 result remains on the original grid. Both coordinate geometries share the
 power likelihood and tensor P-spline prior.
 
+`preprocessing.knot_locator.allocate_components()` places interior knots for
+each named pilot component separately. Supply finite, smooth pilot values
+formed from training data, knot counts, and minimum spacings in the same
+coordinates used by the spline bases. The variation-quantile rule uses RMS
+marginal derivatives and a 10% uniform density floor by default. Pass the
+returned knots to `SplineBasis.from_grid(interior_knots=...)`; knot placement
+is independent of the likelihood partition.
+
 `SplineBasis` and `LogPSpline` construct the scalar model. `SpectralComponents`
 groups stationary Cholesky components; `SpectralMatrix` reconstructs positive
 definite matrices. `models/reconstruction.py` owns stationary reconstruction
@@ -124,5 +132,12 @@ sampler statistics and observed data. NetCDF saves these native values;
 `diagnostics/sampling.py` reports NUTS and VI behaviour directly from
 `PSDResult`; `diagnostics/spectrum.py` compares fitted spectra to supplied
 truth. `plotting/` renders spectra and sampling diagnostics from `PSDResult`.
+
+Preprocessing diagnostics assess the input spectral matrix and chosen spline
+model before inference. `preprocessing/diagnostics.py` computes eigenvalue
+separation, model component curves, and component knot locations.
+`preprocessing/checks.py` handles warnings and saves figures drawn by
+`plotting/preprocessing.py`. Post-fit diagnostics in `diagnostics/` assess
+sampler behaviour and recovery of the fitted spectrum.
 
 Multivariate time-varying inference is not yet implemented.

@@ -3,7 +3,7 @@ from numpyro.infer.util import log_density
 
 from log_psplines import (
     LogPSpline,
-    PowerSplineConfig,
+    PowerConfig,
     SplineBasis,
     fit,
     moving_periodogram,
@@ -89,14 +89,14 @@ def test_scattered_ordinates_enter_the_power_likelihood() -> None:
         ),
     )
     model, initial_sites, _ = prepare_power_model(
-        data, spline, PowerSplineConfig()
+        data, spline, PowerConfig()
     )
     density, trace = log_density(model, (), {}, initial_sites)
     assert np.isfinite(density)
     assert np.isfinite(trace["log_likelihood"]["value"])
     result = fit(
         data,
-        PowerSplineConfig(
+        PowerConfig(
             n_warmup=3, n_samples=3, seed=11, progress_bar=False
         ),
         model=spline,

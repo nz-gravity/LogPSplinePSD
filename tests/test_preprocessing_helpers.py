@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from log_psplines.config import PipelineConfig
+from log_psplines.config import StationaryConfig
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
@@ -35,10 +35,10 @@ def test_excluded_frequency_bands_are_validated_and_merged() -> None:
 
 def test_frequency_exclusion_filters_wishart_data() -> None:
     series = _series()
-    original = preprocess_to_freq_domain(series, PipelineConfig())
+    original = preprocess_to_freq_domain(series, StationaryConfig())
     band = (float(original.freq[2]), float(original.freq[4]))
     filtered = preprocess_to_freq_domain(
-        series, PipelineConfig(exclude_freq_bands=[band])
+        series, StationaryConfig(exclude_freq_bands=[band])
     )
     mask = (original.freq < band[0]) | (original.freq > band[1])
     np.testing.assert_allclose(filtered.freq, original.freq[mask])
@@ -46,7 +46,7 @@ def test_frequency_exclusion_filters_wishart_data() -> None:
     with pytest.raises(ValueError, match="all inference bins"):
         preprocess_to_freq_domain(
             series,
-            PipelineConfig(
+            StationaryConfig(
                 exclude_freq_bands=[
                     (float(original.freq[0]), float(original.freq[-1]))
                 ]
@@ -70,10 +70,10 @@ def test_coarse_grain_config_and_equal_bin_helpers() -> None:
 
 def test_stationary_coarse_graining_matches_direct_operation() -> None:
     series = _series()
-    original = preprocess_to_freq_domain(series, PipelineConfig())
+    original = preprocess_to_freq_domain(series, StationaryConfig())
     spec = compute_binning_structure(original.freq, Nc=5)
     direct = apply_coarse_grain_multivar_fft(original, spec)
-    config = PipelineConfig(
+    config = StationaryConfig(
         coarse_grain_config={"enabled": True, "Nc": 5, "Nh": None}
     )
     processed = preprocess_to_freq_domain(series, config)

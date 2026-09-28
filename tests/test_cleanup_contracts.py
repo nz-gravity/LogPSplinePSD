@@ -6,10 +6,10 @@ import xarray as xr
 
 from log_psplines import (
     LogPSpline,
-    PipelineConfig,
     PowerData,
     PSDResult,
     SplineBasis,
+    StationaryConfig,
 )
 
 
@@ -63,7 +63,7 @@ def test_public_api_has_a_single_canonical_entry_point():
 
 def test_unsupported_design_options_are_rejected():
     with pytest.raises(TypeError, match="design_from_vi"):
-        PipelineConfig(design_from_vi=True)
+        StationaryConfig(design_from_vi=True)
 
 
 def test_chain_method_reaches_numpyro(monkeypatch):

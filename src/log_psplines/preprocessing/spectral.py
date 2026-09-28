@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from log_psplines.config import PipelineConfig
+from log_psplines.config import StationaryConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.data.spectral_utils import _interp_frequency_indexed_array
 from log_psplines.data.timeseries import TimeSeries
@@ -24,7 +24,7 @@ from ..logger import logger
 
 
 def preprocess_to_freq_domain(
-    data: TimeSeries, config: PipelineConfig
+    data: TimeSeries, config: StationaryConfig
 ) -> WishartData:
     """Standardize, form Wishart data, bin, and exclude frequencies."""
     if not isinstance(data, TimeSeries):

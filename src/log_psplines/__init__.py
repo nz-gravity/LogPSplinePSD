@@ -7,12 +7,12 @@ except ImportError:
     __commit_id__ = None
 
 from .basis import SplineBasis
-from .config import PipelineConfig, PowerSplineConfig
+from .config import PowerConfig, StationaryConfig
 from .data import TimeSeries, WishartData
 from .data.spectral import PowerData
+from .fit import fit
 from .models.matrix import SpectralMatrix
 from .models.spectrum import LogPSpline
-from .pipeline import fit
 from .preprocessing.moving_periodogram import (
     moving_periodogram,
     scattered_moving_periodogram,
@@ -27,14 +27,14 @@ from .results import PSDResult
 
 __all__ = [
     "fit",
-    "PipelineConfig",
+    "StationaryConfig",
     "PSDResult",
     "SplineBasis",
     "LogPSpline",
     "SpectralMatrix",
     "TimeSeries",
     "WishartData",
-    "PowerSplineConfig",
+    "PowerConfig",
     "PowerData",
     "moving_periodogram",
     "scattered_moving_periodogram",

@@ -18,7 +18,7 @@ import numpyro.distributions as dist
 from jaxtyping import Float
 
 from log_psplines.basis.penalty import eigen_prior_scale, whiten_penalty_pair
-from log_psplines.config import PowerSplineConfig
+from log_psplines.config import PowerConfig
 from log_psplines.data.spectral import PowerData
 from log_psplines.inference.nuts import run_nuts
 from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
@@ -43,7 +43,7 @@ def power_floor(power: np.ndarray) -> float:
 
 
 def _sample_precision(
-    name: str, config: PowerSplineConfig
+    name: str, config: PowerConfig
 ) -> jax.Array | float:
     """Sample a HalfNormal roughness scale and derive its precision."""
     sigma = numpyro.sample(name, dist.HalfNormal(config.roughness_scale))
@@ -54,7 +54,7 @@ def sample_eigen_coefficients(
     name: str,
     scale: jnp.ndarray,
     shape: tuple[int, ...],
-    config: PowerSplineConfig,
+    config: PowerConfig,
 ) -> jax.Array | np.ndarray:
     """Sample eigen-coefficients while honoring ``config.centered``.
 
@@ -80,7 +80,7 @@ def initialize_with_penalized_least_squares(
     B_freq: Float[np.ndarray, "N_f K_f"],
     penalty_time: Float[np.ndarray, "K_t K_t"],
     penalty_freq: Float[np.ndarray, "K_f K_f"],
-    config: PowerSplineConfig,
+    config: PowerConfig,
 ) -> dict[str, np.ndarray | float]:
     """Penalized least-squares warm start in the *coefficient* basis.
 
@@ -122,7 +122,7 @@ def initialize_with_penalized_least_squares(
 def whitened_init_values(
     pls_init: dict[str, np.ndarray | float],
     whitened: dict[str, np.ndarray],
-    config: PowerSplineConfig,
+    config: PowerConfig,
 ) -> dict[str, np.ndarray]:
     """Map least-squares coefficients to the whitened sampling sites."""
     U_t = whitened["U_time"]
@@ -191,7 +191,7 @@ def initialize_scattered_with_penalized_least_squares(
     B_freq: Float[np.ndarray, "Q K_f"],
     penalty_time: Float[np.ndarray, "K_t K_t"],
     penalty_freq: Float[np.ndarray, "K_f K_f"],
-    config: PowerSplineConfig,
+    config: PowerConfig,
 ) -> dict[str, np.ndarray | float]:
     """Penalized least-squares warm start for scattered (u, omega) ordinates.
 
@@ -234,7 +234,7 @@ def initialize_scattered_with_penalized_least_squares(
 def prepare_power_model(
     data: PowerData,
     spline: LogPSpline,
-    config: PowerSplineConfig,
+    config: PowerConfig,
 ) -> tuple[Callable, dict, dict[str, np.ndarray]]:
     """Prepare the power likelihood and PLS sites on either geometry."""
     if spline.time is None or data.time is None:
@@ -331,7 +331,7 @@ def prepare_power_model(
     return model, whitened_init_values(pls, pair, config), pair
 
 
-def _run_power_nuts(model: Callable, init: dict, config: PowerSplineConfig):
+def _run_power_nuts(model: Callable, init: dict, config: PowerConfig):
     return run_nuts(
         model,
         rng_key=jax.random.PRNGKey(config.seed),
@@ -354,7 +354,7 @@ def _run_power_nuts(model: Callable, init: dict, config: PowerSplineConfig):
 
 
 def _collect_power_samples(
-    result, pair: dict[str, np.ndarray], config: PowerSplineConfig
+    result, pair: dict[str, np.ndarray], config: PowerConfig
 ):
     """Rotate sampled eigen-coefficients to spline weights."""
     import xarray as xr
@@ -405,7 +405,7 @@ def _collect_power_samples(
 def fit_power(
     data: PowerData,
     spline: LogPSpline,
-    config: PowerSplineConfig,
+    config: PowerConfig,
     *,
     partition=None,
 ) -> PSDResult:

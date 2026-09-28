@@ -9,10 +9,10 @@ from scipy.interpolate import BSpline
 
 from log_psplines import (
     LogPSpline,
-    PipelineConfig,
     PSDResult,
     SpectralMatrix,
     SplineBasis,
+    StationaryConfig,
     TimeSeries,
     fit,
 )
@@ -136,7 +136,7 @@ def test_fit_result_roundtrip(channels, tmp_path):
     assert data.data.shape == (32, channels)
     result = fit(
         data,
-        PipelineConfig(
+        StationaryConfig(
             n_knots=4,
             vi_steps=3,
             vi_posterior_draws=3,

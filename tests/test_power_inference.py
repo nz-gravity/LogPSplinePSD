@@ -9,8 +9,8 @@ from numpyro.infer.util import log_density
 
 from log_psplines import (
     LogPSpline,
+    PowerConfig,
     PowerData,
-    PowerSplineConfig,
     PSDResult,
     SplineBasis,
     TimeSeries,
@@ -64,7 +64,7 @@ def test_ls2_basis_and_preprocessing(ls2):
 def test_ls2_posterior_target_and_nuts(ls2, centered, tmp_path):
     r, data, spline = ls2
     prefix = "centered_" if centered else "noncentered_"
-    config = PowerSplineConfig(
+    config = PowerConfig(
         centered=centered,
         n_warmup=24,
         n_samples=16,
@@ -136,7 +136,7 @@ def test_power_input_validation():
     with pytest.raises(ValueError, match="model="):
         fit(PowerData(np.ones((2, 3)), 1, np.arange(3), np.arange(2)))
     with pytest.raises(ValueError, match="n_samples"):
-        PowerSplineConfig(n_samples=0)
+        PowerConfig(n_samples=0)
 
 
 def test_masked_initialization_and_small_power(ls2):
@@ -155,7 +155,7 @@ def test_masked_initialization_and_small_power(ls2):
     counts[3:5, 2:7] = 0
     power[counts == 0] = 0
     masked = PowerData(power, counts, data.frequency, data.time)
-    model, init, _ = prepare_power_model(masked, spline, PowerSplineConfig())
+    model, init, _ = prepare_power_model(masked, spline, PowerConfig())
     density, trace = log_density(model, (), {}, init)
     assert np.isfinite(density)
     assert np.isfinite(trace["log_likelihood"]["value"])

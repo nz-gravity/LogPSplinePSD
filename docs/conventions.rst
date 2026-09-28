@@ -119,8 +119,8 @@ The multivariate pipeline follows a fixed sequence of transformations:
 1. **Timeseries** – raw or standardised time-domain data.
 2. **WishartData** – ``to_wishart_stats`` produces frequency grids and
    eigenvector-weighted Wishart factors ``U(f)`` on the positive-frequency
-   grid. The analysis band is controlled by ``PipelineConfig.fmin`` and
-   ``PipelineConfig.fmax``.
+   grid. The analysis band is controlled by ``StationaryConfig.fmin`` and
+   ``StationaryConfig.fmax``.
 3. **CoarseGrain** – optional **linear, full-band** binning combines nearby
    frequencies by summing :math:`\bar Y_h = \sum_{f\in J_h} Y(f)` and assigns each
    bin the member count :math:`N_h` for log-determinant scaling. Coarse-grain
@@ -155,7 +155,7 @@ Core Invariants
 Implementation Map
 ------------------
 
-``log_psplines.pipeline``
+``log_psplines.fit``
    Canonical high-level ``fit()`` entry point plus orchestration helpers.
 
 ``log_psplines.inference``
@@ -267,10 +267,10 @@ spectral structure being estimated.
 
 .. code-block:: python
 
-   from log_psplines.config import PipelineConfig
+   from log_psplines.config import StationaryConfig
    from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
 
-   config = PipelineConfig(
+   config = StationaryConfig(
        coarse_grain_config=CoarseGrainConfig(enabled=True, Nc=128, Nh=None),
    )
 

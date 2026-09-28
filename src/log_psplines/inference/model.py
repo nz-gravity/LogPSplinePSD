@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 
-from log_psplines.config import PipelineConfig
+from log_psplines.config import StationaryConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.inference.components import SpectralComponents
 from log_psplines.inference.initialisation import prepare_components
@@ -242,7 +242,7 @@ def _blocked_channel_model(
 
 def prepare_model(
     data: WishartData,
-    config: PipelineConfig,
+    config: StationaryConfig,
 ) -> tuple[dict, SpectralComponents]:
     spline = prepare_components(
         data,

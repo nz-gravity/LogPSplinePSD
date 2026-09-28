@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from log_psplines.config import PipelineConfig
+from log_psplines.config import StationaryConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.preprocessing.spectral import (
     _normalize_excluded_frequency_bands,
@@ -15,7 +15,7 @@ from ..logger import logger
 
 def _run_preprocessing_checks(
     processed_data: WishartData | None,
-    config: PipelineConfig,
+    config: StationaryConfig,
 ) -> None:
     """Run eigenvalue separation warnings (lightweight, no plotting)."""
     if not isinstance(processed_data, WishartData):
@@ -85,7 +85,7 @@ def _run_preprocessing_checks(
 
 def _save_preprocessing_plot(
     processed_data: WishartData | None,
-    config: PipelineConfig,
+    config: StationaryConfig,
     spline_model: object | None = None,
 ) -> None:
     """Save the preprocessing diagnostic plot, optionally with knot locations.

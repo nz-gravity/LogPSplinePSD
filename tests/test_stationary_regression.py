@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from log_psplines import fit
-from log_psplines.config import PipelineConfig
+from log_psplines.config import StationaryConfig
 from log_psplines.data import TimeSeries
 from log_psplines.inference.initialisation import build_component
 from log_psplines.models.reconstruction import reconstruct_psd_matrix
@@ -30,7 +30,7 @@ def stationary_values():
     rng = np.random.default_rng(31)
     for channels in (1, 2):
         data = TimeSeries(rng.normal(size=(32, channels)))
-        config = PipelineConfig(
+        config = StationaryConfig(
             n_knots=4,
             vi_steps=3,
             vi_posterior_draws=3,

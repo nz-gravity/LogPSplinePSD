@@ -8,9 +8,9 @@ from numpyro.infer.util import log_density
 
 from log_psplines import (
     LogPSpline,
+    PowerConfig,
     PowerData,
     PowerPartition,
-    PowerSplineConfig,
     PSDResult,
     SplineBasis,
     coarse_grain_power,
@@ -114,7 +114,7 @@ def test_halfnormal_prior_log_density():
             SplineBasis.from_grid(data.frequency, 1),
             SplineBasis.from_grid(data.time, 1),
         )
-        config = PowerSplineConfig(roughness_scale=3.0)
+        config = PowerConfig(roughness_scale=3.0)
         model, init, _ = prepare_power_model(data, spline, config)
         from numpyro import handlers
 
@@ -155,7 +155,7 @@ def test_short_partition_fit_and_roundtrip(gapped, tmp_path):
         )
         result = fit(
             data,
-            PowerSplineConfig(
+            PowerConfig(
                 n_warmup=2, n_samples=2, progress_bar=False, max_tree_depth=3
             ),
             model=spline,

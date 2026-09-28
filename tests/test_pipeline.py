@@ -8,7 +8,7 @@ import pytest
 import xarray as xr
 
 from log_psplines import fit
-from log_psplines.config import PipelineConfig
+from log_psplines.config import StationaryConfig
 from log_psplines.data import TimeSeries, WishartData
 from log_psplines.inference.vi import VIResult, _values_to_dataset
 from log_psplines.plotting import PSDMatrixPlotSpec, plot_psd_matrix
@@ -36,8 +36,8 @@ def multivar_data() -> WishartData:
     return varma.ts.standardise_for_psd().to_wishart_stats(Nb=1)
 
 
-def _fast_config(**extra) -> PipelineConfig:
-    """Return a PipelineConfig tuned for speed in CI."""
+def _fast_config(**extra) -> StationaryConfig:
+    """Return a StationaryConfig tuned for speed in CI."""
     defaults = dict(
         n_knots=4,
         n_samples=5,
@@ -48,7 +48,7 @@ def _fast_config(**extra) -> PipelineConfig:
         verbose=False,
     )
     defaults.update(extra)
-    return PipelineConfig(**defaults)
+    return StationaryConfig(**defaults)
 
 
 def test_vi_posterior_dataset_uses_variable_specific_dims():

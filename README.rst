@@ -37,14 +37,14 @@ Five-Minute Example
 
 .. code-block:: python
 
-   from log_psplines import PipelineConfig, fit
+   from log_psplines import StationaryConfig, fit
    from log_psplines.example_datasets import VARMAData
 
    data = VARMAData.ar(order=4, n_samples=8192, fs=64.0, seed=7)
 
    result = fit(
        data.ts,
-       PipelineConfig(
+       StationaryConfig(
            n_knots=16,
            knot_kwargs={"method": "density"},
            vi_steps=200,

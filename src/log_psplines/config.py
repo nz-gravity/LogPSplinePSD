@@ -2,19 +2,20 @@
 Configuration
 =============
 
-Most user-facing behaviour is controlled by
-:class:`log_psplines.config.PipelineConfig`. The configuration is a
-flat dataclass so runs can be saved, logged, and reproduced without nested
-state.
+Use :class:`log_psplines.config.StationaryConfig` for stationary
+``TimeSeries`` or ``WishartData`` analysis, and
+:class:`log_psplines.config.PowerConfig` for scalar time-varying
+``PowerData`` analysis. Both configurations are flat dataclasses so runs can
+be saved, logged, and reproduced without nested state.
 
-Minimal Configuration
----------------------
+Stationary Configuration
+------------------------
 
 .. code-block:: python
 
-   from log_psplines.config import PipelineConfig
+   from log_psplines.config import StationaryConfig
 
-   config = PipelineConfig(
+   config = StationaryConfig(
        n_knots=8,
        n_warmup=500,
        n_samples=1000,
@@ -124,7 +125,7 @@ TruePSDInput = None | np.ndarray | tuple[np.ndarray, np.ndarray] | list | dict
 
 
 @dataclass(frozen=True)
-class PipelineConfig:
+class StationaryConfig:
     """Flat configuration for stationary preprocessing and inference."""
 
     n_samples: int = 1000
@@ -179,11 +180,11 @@ class PipelineConfig:
     lnz_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
-__all__ = ["PipelineConfig", "PowerSplineConfig"]
+__all__ = ["StationaryConfig", "PowerConfig"]
 
 
 @dataclass
-class PowerSplineConfig:
+class PowerConfig:
     """WDM power/count prior and NUTS settings, separate from Wishart priors.
 
     ``sigma_time`` and ``sigma_freq`` have HalfNormal priors. The smoothing

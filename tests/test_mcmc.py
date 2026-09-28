@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from log_psplines import PSDResult, fit
-from log_psplines.config import PipelineConfig
+from log_psplines.config import StationaryConfig
 from log_psplines.inference.evidence import run_morphz_evidence
 from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
@@ -187,7 +187,7 @@ def _run_p1_mcmc(outdir):
     )
     print(f"{data.ts}")
 
-    config = PipelineConfig(
+    config = StationaryConfig(
         n_knots=n_knots,
         n_samples=n_samples,
         n_warmup=n_warmup,
@@ -249,7 +249,7 @@ def _run_multivar_mcmc(outdir):
         cfg=coarse_cfg,
     )
 
-    config = PipelineConfig(
+    config = StationaryConfig(
         n_knots=10,
         degree=3,
         diffMatrixOrder=2,

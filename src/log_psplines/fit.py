@@ -5,7 +5,7 @@ from __future__ import annotations
 import jax
 import numpy as np
 
-from log_psplines.config import PipelineConfig, PowerSplineConfig
+from log_psplines.config import PowerConfig, StationaryConfig
 from log_psplines.data.spectral import (
     PowerData,
     WishartData,
@@ -34,7 +34,7 @@ def _attach_lnz_metadata(
     *,
     data: WishartData,
     model_kwargs: dict,
-    config: PipelineConfig,
+    config: StationaryConfig,
 ) -> None:
     """Add optional evidence diagnostics to a completed stationary fit."""
     if not config.compute_lnz:
@@ -78,7 +78,7 @@ def _attach_lnz_metadata(
         result.metadata[f"lnz_valid_factor_{index}"] = bool(factor.is_valid)
 
 
-def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
+def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
     """Preprocess, sample, reconstruct and optionally save a Wishart fit."""
     if not isinstance(data, WishartData):
         data = preprocess_to_freq_domain(data, config)
@@ -178,7 +178,7 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
 def fit(data, config=None, *, model=None, partition=None) -> PSDResult:
     """Fit stationary Wishart data or scalar time-frequency powers.
 
-    Power data require an explicit LogPSpline and PowerSplineConfig.
+    Power data require an explicit LogPSpline and PowerConfig.
     A partition may pool rectangular powers while retaining native-grid
     reconstruction. Scattered ordinates are evaluated at their exact points.
     """
@@ -187,15 +187,15 @@ def fit(data, config=None, *, model=None, partition=None) -> PSDResult:
             raise ValueError(
                 "PowerData fitting requires model=LogPSpline(...)"
             )
-        config = PowerSplineConfig() if config is None else config
-        if not isinstance(config, PowerSplineConfig):
-            raise TypeError("PowerData requires PowerSplineConfig")
+        config = PowerConfig() if config is None else config
+        if not isinstance(config, PowerConfig):
+            raise TypeError("PowerData requires PowerConfig")
         return fit_power(data, model, config, partition=partition)
     if partition is not None:
         raise ValueError("partition requires PowerData")
     if model is not None:
         raise ValueError("explicit model requires PowerData")
-    config = PipelineConfig() if config is None else config
-    if not isinstance(config, PipelineConfig):
-        raise TypeError("stationary fitting requires PipelineConfig")
+    config = StationaryConfig() if config is None else config
+    if not isinstance(config, StationaryConfig):
+        raise TypeError("stationary fitting requires StationaryConfig")
     return _fit_stationary(data, config)

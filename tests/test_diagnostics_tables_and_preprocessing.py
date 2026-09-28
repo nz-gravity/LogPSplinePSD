@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from log_psplines.config import PipelineConfig
+from log_psplines.config import StationaryConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.diagnostics import sampling_diagnostics, spectrum_diagnostics
 from log_psplines.diagnostics.preprocessing import (
@@ -141,7 +141,7 @@ def test_preprocessing_diagnostics_plot_and_validation(tmp_path) -> None:
 
 def test_pipeline_preprocessing_check_wrappers(tmp_path) -> None:
     fft = _fft_for_checks()
-    config = PipelineConfig(
+    config = StationaryConfig(
         verbose=True, outdir=str(tmp_path), exclude_freq_bands=[(0.2, 0.25)]
     )
 
@@ -163,7 +163,7 @@ def test_pipeline_preprocessing_check_wrappers(tmp_path) -> None:
         tmp_path / "diagnostics" / "preprocessing_eigenvalue_ratios.png"
     ).exists()
     _save_preprocessing_plot(
-        fft, PipelineConfig(outdir=None), spline_model=_model()
+        fft, StationaryConfig(outdir=None), spline_model=_model()
     )
     _save_preprocessing_plot(None, config)
     _save_preprocessing_plot(no_raw, config)

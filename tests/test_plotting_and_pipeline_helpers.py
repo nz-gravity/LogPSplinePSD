@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from log_psplines.config import PipelineConfig
+from log_psplines.config import StationaryConfig
 from log_psplines.data import TimeSeries, WishartData
 from log_psplines.inference.vi import VIResult
 from log_psplines.plotting.base import (
@@ -64,7 +64,7 @@ def test_pipeline_preprocessing_alignment() -> None:
         align_true_psd_to_freq((fft.freq[:-1], psd), fft)
 
     ts = TimeSeries(np.arange(16.0), t=np.arange(16.0))
-    processed = preprocess_to_freq_domain(ts, PipelineConfig())
+    processed = preprocess_to_freq_domain(ts, StationaryConfig())
     assert processed.N > 0
 
 

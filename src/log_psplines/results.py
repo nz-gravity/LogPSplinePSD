@@ -137,9 +137,14 @@ class PSDResult:
 
     def to_arviz(self):
         """Return a minimal ArviZ view for sampling diagnostics."""
-        from log_psplines.diagnostics.arviz import to_arviz
+        from arviz_base import from_dict
 
-        return to_arviz(self)
+        groups = {"posterior": self.posterior}
+        if self.sample_stats is not None:
+            groups["sample_stats"] = self.sample_stats
+        if self.log_likelihood is not None:
+            groups["log_likelihood"] = self.log_likelihood
+        return from_dict(groups, attrs=self.metadata)
 
     def _storage_dataset(self) -> xr.Dataset:
         data_vars: dict[str, xr.DataArray] = {
@@ -220,14 +225,14 @@ class PSDResult:
     ) -> None:
         """Save fitted samples, plots and diagnostics."""
         os.makedirs(outdir, exist_ok=True)
-        from log_psplines.diagnostics.report import save_summary_tables
+        from log_psplines.diagnostics import save_diagnostics
         from log_psplines.plotting.results import (
             plot_posterior_spectrum,
             plot_result_diagnostics,
         )
 
         self.to_netcdf(Path(outdir) / "inference_data.nc")
-        save_summary_tables(self, outdir, true_psd=true_psd)
+        save_diagnostics(self, outdir, truth=true_psd)
         plot_posterior_spectrum(self, outdir, true_psd=true_psd)
         plot_result_diagnostics(self, outdir)
 

@@ -7,7 +7,7 @@ import arviz_plots as azp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from log_psplines.diagnostics.plot_nuts import plot_energy
+from log_psplines.diagnostics.sampling import plot_energy
 from log_psplines.plotting.psd_matrix import PSDMatrixPlotSpec, plot_psd_matrix
 from log_psplines.plotting.vi import plot_vi_loss
 
@@ -57,12 +57,13 @@ def plot_result_diagnostics(result: "PSDResult", outdir: str | Path) -> None:
             result.vi,
             outfile=str(outdir / "vi_loss.png"),
         )
-    if result.sample_stats is not None and result.time is None:
-        diagnostics = result.to_arviz()
-        azp.plot_trace_dist(
-            diagnostics, compact=True, backend="matplotlib"
-        ).savefig(outdir / "traces.png", dpi=150, bbox_inches="tight")
-        plt.close("all")
+    if result.sample_stats is not None:
+        if result.time is None:
+            diagnostics = result.to_arviz()
+            azp.plot_trace_dist(
+                diagnostics, compact=True, backend="matplotlib"
+            ).savefig(outdir / "traces.png", dpi=150, bbox_inches="tight")
+            plt.close("all")
         plot_energy(result).savefig(
             outdir / "energy.png", dpi=150, bbox_inches="tight"
         )

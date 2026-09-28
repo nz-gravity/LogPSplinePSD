@@ -273,7 +273,7 @@ def test_pipeline_multivar_vi_save_records_truth_metrics(
 
     result.save(str(tmp_path), true_psd=true_psd)
 
-    vi_summary = pd.read_csv(tmp_path / "diagnostics" / "vi_summary.csv")
+    vi_summary = pd.read_csv(tmp_path / "diagnostics" / "spectrum_summary.csv")
     for col in ("riae", "l2", "coverage"):
         values = pd.to_numeric(vi_summary[col], errors="coerce").to_numpy()
         assert np.all(np.isfinite(values))

@@ -150,6 +150,7 @@ def _fit_stationary(data, config: PipelineConfig) -> PSDResult:
                 else np.asarray(data.channel_stds)
             ),
             "max_tree_depth": int(config.max_tree_depth),
+            "max_tree_depth_by_channel": config.max_tree_depth_by_channel,
             "eta": float(config.eta),
             "sampling_eta": float(config.eta),
             "compute_lnz": config.compute_lnz,

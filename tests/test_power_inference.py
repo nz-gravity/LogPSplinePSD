@@ -120,6 +120,7 @@ def test_ls2_posterior_target_and_nuts(ls2, centered, tmp_path):
     result.save(str(tmp_path / "saved"))
     assert (tmp_path / "saved" / "posterior_spectrum.png").exists()
     assert (tmp_path / "saved" / "diagnostics" / "nuts_summary.csv").exists()
+    assert (tmp_path / "saved" / "diagnostics" / "energy.png").exists()
 
 
 def test_power_input_validation():

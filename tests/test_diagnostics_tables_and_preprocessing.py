@@ -1,11 +1,10 @@
 import numpy as np
-import pandas as pd
 import pytest
 import xarray as xr
 
 from log_psplines.config import PipelineConfig
 from log_psplines.data.spectral import WishartData
-from log_psplines.diagnostics import summary_tables as st
+from log_psplines.diagnostics import sampling_diagnostics, spectrum_diagnostics
 from log_psplines.diagnostics.preprocessing import (
     eig_ratios,
     eigenvalue_separation_diagnostics,
@@ -203,25 +202,29 @@ def _diagnostic_result():
         posterior,
         spectrum,
         sample_stats=stats,
-        metadata={"max_tree_depth": 5},
+        metadata={
+            "max_tree_depth": 6,
+            "max_tree_depth_by_channel": [5],
+        },
         vi=vi,
     )
 
 
-def test_summary_table_helpers_and_builders(monkeypatch) -> None:
+def test_sampling_diagnostics_for_nuts_and_vi(monkeypatch) -> None:
+    import pandas as pd
+
     monkeypatch.setattr(
-        st.azs,
-        "summary",
+        "log_psplines.diagnostics.sampling.azs.summary",
         lambda _: pd.DataFrame(
             {
-                "r_hat": [1.01, np.nan, 1.03],
-                "ess_bulk": [100.0, 90.0, np.nan],
-                "ess_tail": [80.0, 70.0, 60.0],
+                "r_hat": [1.01, 1.03],
+                "ess_bulk": [100.0, 90.0],
+                "ess_tail": [80.0, 60.0],
             }
         ),
     )
     result = _diagnostic_result()
-    row = st.build_nuts_summary_table(result).iloc[0]
+    row = sampling_diagnostics(result)["nuts"][0]
     assert row["factor"] == "0"
     assert row["divergences"] == 2
     assert row["max_treedepth_hits"] == 2
@@ -231,9 +234,65 @@ def test_summary_table_helpers_and_builders(monkeypatch) -> None:
     assert row["ess_tail_min"] == pytest.approx(60.0)
     assert row["n_draws"] == 4
 
-    vi_row = st.build_vi_summary_table(result, elbo_window=2).iloc[0]
+    vi_row = sampling_diagnostics(result, elbo_window=2)["vi"][0]
     assert vi_row["factor"] == "0"
-    assert vi_row["final_elbo"] == pytest.approx(3.0)
-    assert vi_row["elbo_improvement_last_window"] == pytest.approx(1.0)
-    assert "pareto_k_max" not in vi_row
+    assert vi_row["final_elbo"] == pytest.approx(-3.0)
+    assert vi_row["elbo_improvement"] == pytest.approx(1.0)
     assert vi_row["n_draws"] == 4
+
+
+def test_spectrum_diagnostics_for_real_multichannel_truth() -> None:
+    from log_psplines.results import PSDResult
+
+    frequency = np.linspace(0.1, 0.5, 5)
+    truth = np.tile(np.asarray([[2.0, 0.2], [0.2, 1.5]]), (5, 1, 1))
+    spectrum = xr.DataArray(
+        np.tile(truth, (1, 3, 1, 1, 1)).astype(complex),
+        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
+        coords={"frequency": frequency},
+    )
+    result = PSDResult(posterior=xr.Dataset(), spectrum=spectrum)
+
+    metrics = spectrum_diagnostics(result, truth=truth)
+    assert metrics["riae"] == pytest.approx(0.0)
+    assert metrics["l2"] == pytest.approx(0.0)
+    assert metrics["coverage"] == pytest.approx(1.0)
+    assert metrics["channel_riae"] == pytest.approx([0.0, 0.0])
+    assert metrics["coherence_mae"] == pytest.approx(0.0)
+
+
+def test_power_tree_depth_and_truth_comparison(monkeypatch) -> None:
+    import pandas as pd
+
+    from log_psplines.results import PSDResult
+
+    monkeypatch.setattr(
+        "log_psplines.diagnostics.sampling.azs.summary",
+        lambda _: pd.DataFrame(),
+    )
+    frequency = np.linspace(0.1, 0.5, 5)
+    spectrum = xr.DataArray(
+        np.ones((1, 4, 2, 5, 1, 1), dtype=complex),
+        dims=("chain", "draw", "time", "frequency", "channel", "channel_aux"),
+        coords={"time": [0.0, 1.0], "frequency": frequency},
+    )
+    posterior = xr.Dataset(
+        {"weights": (("chain", "draw"), [[0.0, 0.0, 0.0, 0.0]])}
+    )
+    sample_stats = xr.Dataset(
+        {
+            "tree_depth": (("chain", "draw"), [[2, 3, 5, 5]]),
+            "diverging": (("chain", "draw"), [[0, 0, 0, 0]]),
+        }
+    )
+    result = PSDResult(
+        posterior=posterior,
+        spectrum=spectrum,
+        sample_stats=sample_stats,
+        metadata={"max_tree_depth": 5},
+    )
+
+    assert sampling_diagnostics(result)["nuts"][0]["max_treedepth_hits"] == 2
+    assert (
+        spectrum_diagnostics(result, truth=np.ones((2, 5)))["coverage"] == 1.0
+    )

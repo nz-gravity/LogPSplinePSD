@@ -4,9 +4,6 @@ import numpy as np
 from scipy.signal import medfilt, savgol_filter
 
 from log_psplines.data.spectral_utils import psd_to_cholesky_components
-from log_psplines.preprocessing.knots_locator.lvk_knot_allocator import (
-    LvkKnotAllocator,
-)
 
 _KNOT_TOL = 1e-12
 
@@ -110,16 +107,6 @@ def init_knots(
                 guide_power=guide_power,
                 guide_strength=float(kwargs.get("guide_strength", 1.0)),
             )
-
-        elif method == "lvk":
-            knot_alloc = LvkKnotAllocator(
-                freqs=freqs,
-                psd=power,
-                fmin=min_freq,
-                fmax=max_freq,
-                **kwargs,
-            )
-            knots = knot_alloc.knots_hz
 
         else:
             raise ValueError(f"Unknown knot placement method: {method}")

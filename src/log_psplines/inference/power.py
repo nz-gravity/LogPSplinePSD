@@ -22,6 +22,7 @@ from log_psplines.config import PowerConfig
 from log_psplines.data.spectral import PowerData
 from log_psplines.inference.nuts import run_nuts
 from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
+from log_psplines.models.anova import ANOVALogPSpline
 from log_psplines.models.reconstruction import reconstruct_power_spectrum
 from log_psplines.models.spectrum import LogPSpline
 
@@ -402,18 +403,54 @@ def _collect_power_samples(
 
 def fit_power(
     data: PowerData,
-    spline: LogPSpline,
+    spline: LogPSpline | ANOVALogPSpline,
     config: PowerConfig,
     *,
     partition=None,
+    reference=None,
 ) -> PSDResult:
     """Fit grid or scattered powers using the same likelihood and prior."""
     from log_psplines.preprocessing.power_partition import coarse_grain_power
     from log_psplines.results import PSDResult, observed_power_data
 
+    anova = isinstance(spline, ANOVALogPSpline)
+    if reference is not None and (not anova or not data.is_grid):
+        raise ValueError("reference requires rectangular ANOVALogPSpline data")
+    if anova and not data.is_grid:
+        raise ValueError(
+            "ANOVALogPSpline requires rectangular GridTV PowerData"
+        )
+    if anova and (
+        len(spline.time.grid) != len(data.time)
+        or len(spline.frequency.grid) != len(data.frequency)
+        or not np.array_equal(spline.time.grid, data.time)
+        or not np.array_equal(spline.frequency.grid, data.frequency)
+    ):
+        raise ValueError("ANOVA model must use the native PowerData grid")
+    if reference is not None:
+        reference = np.asarray(reference, dtype=float)
+        if (
+            reference.shape != data.power.shape
+            or not np.isfinite(reference).all()
+            or np.any(reference <= 0)
+        ):
+            raise ValueError(
+                "reference must be finite, positive and match native power"
+            )
+        # Native-cell division precedes pooling. The sum of log R is data-only.
+        data_for_fit = PowerData(
+            data.power / reference,
+            data.counts,
+            data.frequency,
+            data.time,
+            f"reference-normalized {data.units}",
+        )
+    else:
+        data_for_fit = data
+
     if partition is not None and not data.is_grid:
         raise ValueError("partition requires rectangular PowerData")
-    fit_data = data
+    fit_data = data_for_fit
     fit_spline = spline
     if partition is not None:
         if (
@@ -423,7 +460,7 @@ def fit_power(
             or len(spline.frequency.grid) != len(data.frequency)
         ):
             raise ValueError("partitioned fits require a native-grid spline")
-        fit_data = coarse_grain_power(data, partition)
+        fit_data = coarse_grain_power(data_for_fit, partition)
         ts = np.asarray(partition.time_starts)
         fs = np.asarray(partition.frequency_starts)
         model_time = np.add.reduceat(spline.time.grid, ts) / np.diff(
@@ -432,21 +469,34 @@ def fit_power(
         model_frequency = np.add.reduceat(spline.frequency.grid, fs) / np.diff(
             np.r_[fs, len(data.frequency)]
         )
-        fit_spline = LogPSpline(
-            frequency=replace(
-                spline.frequency,
-                grid=model_frequency,
-                basis=spline.frequency.design_at(model_frequency),
-            ),
-            time=replace(
-                spline.time,
-                grid=model_time,
-                basis=spline.time.design_at(model_time),
-            ),
+        if not anova:
+            fit_spline = LogPSpline(
+                frequency=replace(
+                    spline.frequency,
+                    grid=model_frequency,
+                    basis=spline.frequency.design_at(model_frequency),
+                ),
+                time=replace(
+                    spline.time,
+                    grid=model_time,
+                    basis=spline.time.design_at(model_time),
+                ),
+            )
+    if anova:
+        from log_psplines.inference.anova_power import (
+            collect_anova_samples,
+            prepare_anova_power_model,
         )
-    model, init, pair = prepare_power_model(fit_data, fit_spline, config)
+
+        model, pair, init = prepare_anova_power_model(fit_data, spline, config)
+    else:
+        model, init, pair = prepare_power_model(fit_data, fit_spline, config)
     result = _run_power_nuts(model, init, config)
-    posterior = _collect_power_samples(result, pair, config)
+    posterior = (
+        collect_anova_samples(result.posterior, pair)
+        if anova
+        else _collect_power_samples(result, pair, config)
+    )
     fitted = PSDResult(
         posterior=posterior,
         sample_stats=result.sample_stats,
@@ -455,12 +505,28 @@ def fit_power(
             spline,
             time=data.time if data.is_grid else None,
             frequency=data.frequency if data.is_grid else None,
+            reference=reference,
         ),
         metadata={
             **asdict(config),
             "data_type": "power",
             "likelihood": "power_whittle",
             "units": data.units,
+            **(
+                {
+                    "model": "anova",
+                    "centered": True,
+                    "sigma_eta_prior": spline.sigma_eta_prior,
+                    "reference_applied": reference is not None,
+                    "reference_normalization": (
+                        "native_power_divided_before_pooling"
+                        if reference is not None
+                        else None
+                    ),
+                }
+                if anova
+                else {}
+            ),
         },
         log_likelihood=result.log_likelihood,
         observed_data=observed_power_data(fit_data),

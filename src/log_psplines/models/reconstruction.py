@@ -9,6 +9,7 @@ import xarray as xr
 from jax import Array
 from jaxtyping import Float
 
+from log_psplines.models.anova import ANOVALogPSpline
 from log_psplines.models.matrix import SpectralMatrix
 
 if TYPE_CHECKING:
@@ -273,22 +274,38 @@ def reconstruct_stationary_spectrum(
 
 def reconstruct_power_spectrum(
     posterior: xr.Dataset,
-    spline: "LogPSpline",
+    spline: "LogPSpline | ANOVALogPSpline",
     *,
     time: np.ndarray | None = None,
     frequency: np.ndarray | None = None,
+    reference: np.ndarray | None = None,
 ) -> xr.DataArray:
     """Reconstruct a scalar time-frequency spectrum from coefficient draws."""
     if spline.time is None:
         raise ValueError("Power results require a time basis")
-    log_psd = np.einsum(
-        "ti,cdij,fj->cdtf",
-        np.asarray(spline.time.basis),
-        np.asarray(posterior["weights"].values),
-        np.asarray(spline.basis),
-        optimize=True,
-    )
-    spectrum = np.exp(log_psd)[..., None, None]
+    if isinstance(spline, ANOVALogPSpline):
+        bf = np.asarray(spline.frequency.basis)
+        g = np.einsum("fj,cdj->cdf", bf, posterior["weights_g"].values)
+        eta = np.einsum(
+            "ti,cdij,fj->cdtf",
+            spline.time_basis,
+            posterior["weights_eta"].values,
+            bf,
+            optimize=True,
+        )
+        log_psd = g[:, :, None, :] + eta
+    else:
+        log_psd = np.einsum(
+            "ti,cdij,fj->cdtf",
+            np.asarray(spline.time.basis),
+            np.asarray(posterior["weights"].values),
+            np.asarray(spline.basis),
+            optimize=True,
+        )
+    spectrum = np.exp(log_psd)
+    if reference is not None:
+        spectrum = spectrum * np.asarray(reference)[None, None, :, :]
+    spectrum = spectrum[..., None, None]
     return xr.DataArray(
         spectrum.astype(np.complex128),
         dims=("chain", "draw", "time", "frequency", "channel", "channel_aux"),

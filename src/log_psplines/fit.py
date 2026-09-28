@@ -175,22 +175,32 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
     return result
 
 
-def fit(data, config=None, *, model=None, partition=None) -> PSDResult:
+def fit(
+    data, config=None, *, model=None, partition=None, reference=None
+) -> PSDResult:
     """Fit stationary Wishart data or scalar time-frequency powers.
 
-    Power data require an explicit LogPSpline and PowerConfig.
+    Power data require an explicit LogPSpline or ANOVALogPSpline and PowerConfig.
     A partition may pool rectangular powers while retaining native-grid
     reconstruction. Scattered ordinates are evaluated at their exact points.
+    For GridTV ANOVA, reference is a fixed positive native-grid PSD. Powers
+    are divided by reference before pooling and it is restored to PSDResult.
     """
     if isinstance(data, PowerData):
         if model is None:
             raise ValueError(
-                "PowerData fitting requires model=LogPSpline(...)"
+                "PowerData fitting requires LogPSpline or ANOVALogPSpline model"
             )
         config = PowerConfig() if config is None else config
         if not isinstance(config, PowerConfig):
             raise TypeError("PowerData requires PowerConfig")
-        return fit_power(data, model, config, partition=partition)
+        return fit_power(
+            data, model, config, partition=partition, reference=reference
+        )
+    if reference is not None:
+        raise ValueError(
+            "reference requires GridTV PowerData and ANOVALogPSpline"
+        )
     if partition is not None:
         raise ValueError("partition requires PowerData")
     if model is not None:

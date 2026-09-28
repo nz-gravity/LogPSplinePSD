@@ -11,6 +11,7 @@ from .config import PowerConfig, StationaryConfig
 from .data import TimeSeries, WishartData
 from .data.spectral import PowerData
 from .fit import fit
+from .models.anova import ANOVALogPSpline
 from .models.matrix import SpectralMatrix
 from .models.spectrum import LogPSpline
 from .preprocessing.moving_periodogram import (
@@ -31,6 +32,7 @@ __all__ = [
     "PSDResult",
     "SplineBasis",
     "LogPSpline",
+    "ANOVALogPSpline",
     "SpectralMatrix",
     "TimeSeries",
     "WishartData",

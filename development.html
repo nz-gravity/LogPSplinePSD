@@ -551,8 +551,9 @@ groups stationary Cholesky components; <code class="docutils literal notranslate
 definite matrices. <code class="docutils literal notranslate"><span class="pre">models/reconstruction.py</span></code> owns stationary reconstruction
 and chunked PSD quantiles. <code class="docutils literal notranslate"><span class="pre">results.py</span></code> stores labeled posterior, spectrum,
 sampler statistics and observed data. NetCDF saves these native values;
-<code class="docutils literal notranslate"><span class="pre">diagnostics/</span></code> builds per-channel ArviZ views when needed. <code class="docutils literal notranslate"><span class="pre">plotting/</span></code> renders
-spectra and diagnostics from <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">diagnostics/sampling.py</span></code> reports NUTS and VI behaviour directly from
+<code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>; <code class="docutils literal notranslate"><span class="pre">diagnostics/spectrum.py</span></code> compares fitted spectra to supplied
+truth. <code class="docutils literal notranslate"><span class="pre">plotting/</span></code> renders spectra and sampling diagnostics from <code class="docutils literal notranslate"><span class="pre">PSDResult</span></code>.</p>
 <p>Multivariate time-varying inference is not yet implemented.</p>
 </section>
 

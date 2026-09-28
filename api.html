@@ -530,10 +530,7 @@
 </li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-initialisation">Knot Initialisation</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.knots_locator.knot_locator.init_knots"><code class="docutils literal notranslate"><span class="pre">init_knots()</span></code></a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-initialisation">Knot Initialisation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig"><code class="docutils literal notranslate"><span class="pre">CoarseGrainConfig</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code></a></li>
@@ -542,9 +539,9 @@
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics">Diagnostics</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.build_nuts_summary_table"><code class="docutils literal notranslate"><span class="pre">build_nuts_summary_table()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.build_vi_summary_table"><code class="docutils literal notranslate"><span class="pre">build_vi_summary_table()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.to_arviz"><code class="docutils literal notranslate"><span class="pre">to_arviz()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.sampling_diagnostics"><code class="docutils literal notranslate"><span class="pre">sampling_diagnostics()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.spectrum_diagnostics"><code class="docutils literal notranslate"><span class="pre">spectrum_diagnostics()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.save_diagnostics"><code class="docutils literal notranslate"><span class="pre">save_diagnostics()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -1154,12 +1151,6 @@ ensuring positive definiteness of the estimated PSD matrix.</p>
 </section>
 <section id="knot-initialisation">
 <h2>Knot Initialisation<a class="headerlink" href="#knot-initialisation" title="Link to this heading">#</a></h2>
-<dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.preprocessing.knots_locator.knot_locator.init_knots">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.knots_locator.knot_locator.</span></span><span class="sig-name descname"><span class="pre">init_knots</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freqs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">guide_power</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'density'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">knots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#log_psplines.preprocessing.knots_locator.knot_locator.init_knots" title="Link to this definition">#</a></dt>
-<dd><p>Core knot allocation implementation from raw frequency/power arrays.</p>
-</dd></dl>
-
 </section>
 <section id="coarse-graining">
 <h2>Coarse Graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
@@ -1234,21 +1225,25 @@ the coarse-grid U factors used by the likelihood.</p></li>
 <section id="diagnostics">
 <h2>Diagnostics<a class="headerlink" href="#diagnostics" title="Link to this heading">#</a></h2>
 <dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.diagnostics.build_nuts_summary_table">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.diagnostics.</span></span><span class="sig-name descname"><span class="pre">build_nuts_summary_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.results.PSDResult" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_psd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">pd.DataFrame</span></span></span><a class="headerlink" href="#log_psplines.diagnostics.build_nuts_summary_table" title="Link to this definition">#</a></dt>
-<dd><p>Return one NUTS diagnostics row per blocked channel.</p>
+<dt class="sig sig-object py" id="log_psplines.diagnostics.sampling_diagnostics">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.diagnostics.</span></span><span class="sig-name descname"><span class="pre">sampling_diagnostics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.results.PSDResult" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elbo_window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.diagnostics.sampling_diagnostics" title="Link to this definition">#</a></dt>
+<dd><p>Return NUTS or VI diagnostics per blocked factor.</p>
+<p>NumPyro reports the loss (negative ELBO), so <code class="docutils literal notranslate"><span class="pre">final_elbo</span></code> negates it.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.diagnostics.build_vi_summary_table">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.diagnostics.</span></span><span class="sig-name descname"><span class="pre">build_vi_summary_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.results.PSDResult" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elbo_window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_psd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">pd.DataFrame</span></span></span><a class="headerlink" href="#log_psplines.diagnostics.build_vi_summary_table" title="Link to this definition">#</a></dt>
-<dd><p>Return ELBO diagnostics from the fitted VI result.</p>
+<dt class="sig sig-object py" id="log_psplines.diagnostics.spectrum_diagnostics">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.diagnostics.</span></span><span class="sig-name descname"><span class="pre">spectrum_diagnostics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.results.PSDResult" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">np.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">object</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.diagnostics.spectrum_diagnostics" title="Link to this definition">#</a></dt>
+<dd><p>Compare posterior spectra with truth on the result’s native grid.</p>
+<p>Stationary truth has shape (F, p, p), or (F,) for a scalar fit.
+Time-varying scalar truth has shape (T, F). Frequency endpoints are
+excluded when at least four bins are available.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="log_psplines.diagnostics.to_arviz">
-<span class="sig-prename descclassname"><span class="pre">log_psplines.diagnostics.</span></span><span class="sig-name descname"><span class="pre">to_arviz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.diagnostics.to_arviz" title="Link to this definition">#</a></dt>
-<dd><p>Build a minimal ArviZ-compatible diagnostics view of a PSDResult.</p>
+<dt class="sig sig-object py" id="log_psplines.diagnostics.save_diagnostics">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.diagnostics.</span></span><span class="sig-name descname"><span class="pre">save_diagnostics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.results.PSDResult" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">np.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#log_psplines.diagnostics.save_diagnostics" title="Link to this definition">#</a></dt>
+<dd><p>Write available sampling and truth-comparison diagnostics to CSV.</p>
 </dd></dl>
 
 </section>
@@ -1433,10 +1428,7 @@ the coarse-grid U factors used by the likelihood.</p></li>
 </li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-initialisation">Knot Initialisation</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.knots_locator.knot_locator.init_knots"><code class="docutils literal notranslate"><span class="pre">init_knots()</span></code></a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#knot-initialisation">Knot Initialisation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig"><code class="docutils literal notranslate"><span class="pre">CoarseGrainConfig</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code></a></li>
@@ -1445,9 +1437,9 @@ the coarse-grid U factors used by the likelihood.</p></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics">Diagnostics</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.build_nuts_summary_table"><code class="docutils literal notranslate"><span class="pre">build_nuts_summary_table()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.build_vi_summary_table"><code class="docutils literal notranslate"><span class="pre">build_vi_summary_table()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.to_arviz"><code class="docutils literal notranslate"><span class="pre">to_arviz()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.sampling_diagnostics"><code class="docutils literal notranslate"><span class="pre">sampling_diagnostics()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.spectrum_diagnostics"><code class="docutils literal notranslate"><span class="pre">spectrum_diagnostics()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.save_diagnostics"><code class="docutils literal notranslate"><span class="pre">save_diagnostics()</span></code></a></li>
 </ul>
 </li>
 </ul>

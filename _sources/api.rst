@@ -92,8 +92,8 @@ Coarse Graining
 Diagnostics
 -----------
 
-.. autofunction:: log_psplines.diagnostics.build_nuts_summary_table
+.. autofunction:: log_psplines.diagnostics.sampling_diagnostics
 
-.. autofunction:: log_psplines.diagnostics.build_vi_summary_table
+.. autofunction:: log_psplines.diagnostics.spectrum_diagnostics
 
-.. autofunction:: log_psplines.diagnostics.to_arviz
+.. autofunction:: log_psplines.diagnostics.save_diagnostics

@@ -121,7 +121,8 @@ groups stationary Cholesky components; `SpectralMatrix` reconstructs positive
 definite matrices. `models/reconstruction.py` owns stationary reconstruction
 and chunked PSD quantiles. `results.py` stores labeled posterior, spectrum,
 sampler statistics and observed data. NetCDF saves these native values;
-`diagnostics/` builds per-channel ArviZ views when needed. `plotting/` renders
-spectra and diagnostics from `PSDResult`.
+`diagnostics/sampling.py` reports NUTS and VI behaviour directly from
+`PSDResult`; `diagnostics/spectrum.py` compares fitted spectra to supplied
+truth. `plotting/` renders spectra and sampling diagnostics from `PSDResult`.
 
 Multivariate time-varying inference is not yet implemented.

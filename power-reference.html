@@ -154,6 +154,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -391,7 +395,9 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
 </div></div>
       
     </div>
@@ -407,6 +413,16 @@
     <div id="print-main-content">
         <div id="jb-print-toc">
             
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#anova-corrections">ANOVA corrections</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-parametric-spectra">External parametric spectra</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#large-grid-results">Large-grid results</a></li>
+</ul>
+            </nav>
         </div>
     </div>
 </div>
@@ -465,6 +481,57 @@ the caller.</p>
 <p>The WDM adapter returns coefficient-variance powers, not PSD per Hz. Convert
 the supplied reference and truth to those same units before calling <code class="docutils literal notranslate"><span class="pre">fit</span></code>;
 the package does not infer a transform calibration from an analytic PSD.</p>
+<section id="anova-corrections">
+<h2>ANOVA corrections<a class="headerlink" href="#anova-corrections" title="Link to this heading">#</a></h2>
+<p>Set <code class="docutils literal notranslate"><span class="pre">PowerConfig(structure=&quot;anova&quot;,</span> <span class="pre">interaction_scale=0.5)</span></code> to use
+<code class="docutils literal notranslate"><span class="pre">log</span> <span class="pre">S</span> <span class="pre">=</span> <span class="pre">log</span> <span class="pre">reference</span> <span class="pre">+</span> <span class="pre">g(f)</span> <span class="pre">+</span> <span class="pre">eta(t,</span> <span class="pre">f)</span></code>. The interaction is centered on
+the full native time grid. <code class="docutils literal notranslate"><span class="pre">roughness_scale</span></code> controls the HalfNormal
+smoothing scales; <code class="docutils literal notranslate"><span class="pre">interaction_scale</span></code> controls the interaction amplitude.
+This uses the same <code class="docutils literal notranslate"><span class="pre">fit(data,</span> <span class="pre">config,</span> <span class="pre">reference=...,</span> <span class="pre">true_psd=...)</span></code> call.</p>
+</section>
+<section id="external-parametric-spectra">
+<h2>External parametric spectra<a class="headerlink" href="#external-parametric-spectra" title="Link to this heading">#</a></h2>
+<p>For a physical model, supply a deterministic JAX function and independent
+scalar priors. The package constructs the Bayesian model and power likelihood:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpyro</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">dist</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">ParametricSpectrum</span>
+
+<span class="n">template</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reference_power</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">ParametricSpectrum</span><span class="p">(</span>
+    <span class="n">spectrum</span><span class="o">=</span><span class="k">lambda</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">section</span><span class="p">:</span> <span class="p">(</span>
+        <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">parameters</span><span class="p">[</span><span class="s2">"log_scale"</span><span class="p">])</span> <span class="o">*</span> <span class="n">template</span><span class="p">[:,</span> <span class="n">section</span><span class="p">]</span>
+    <span class="p">),</span>
+    <span class="n">priors</span><span class="o">=</span><span class="p">{</span><span class="s2">"log_scale"</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)},</span>
+    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"log_scale"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">true_psd</span><span class="o">=</span><span class="n">truth_power</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The function returns a positive variance grid matching <code class="docutils literal notranslate"><span class="pre">PowerData</span></code>.
+<code class="docutils literal notranslate"><span class="pre">(time,</span> <span class="pre">frequency,</span> <span class="pre">channel)</span></code> powers with <code class="docutils literal notranslate"><span class="pre">channels=(&quot;sensor_1&quot;,</span> <span class="pre">&quot;sensor_2&quot;)</span></code>
+use independent channel likelihoods and shared parameters. Off-diagonal
+covariances are not fitted. Data, deterministic templates, response projection
+and pooling must already agree; <code class="docutils literal notranslate"><span class="pre">reference</span></code> and <code class="docutils literal notranslate"><span class="pre">partition</span></code> are therefore
+not accepted with <code class="docutils literal notranslate"><span class="pre">ParametricSpectrum</span></code>. Domain-specific physics stays in
+external scripts. Scalar tensor and ANOVA models still take scalar powers.</p>
+</section>
+<section id="large-grid-results">
+<h2>Large-grid results<a class="headerlink" href="#large-grid-results" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">PowerConfig(spectrum_draws=2,</span> <span class="pre">spectrum_chunk_size=4)</span></code> retains every
+parameter draw but stores only two spectral draws per chain. The 5/50/95
+percentiles, arithmetic mean and geometric mean in <code class="docutils literal notranslate"><span class="pre">result.spectrum_summary</span></code>
+use <strong>all</strong> draws, evaluated in frequency chunks. <code class="docutils literal notranslate"><span class="pre">result.quantiles()</span></code> and
+plots use those summaries. <code class="docutils literal notranslate"><span class="pre">result.psd</span></code> and <code class="docutils literal notranslate"><span class="pre">result.spectrum</span></code> contain the
+preview only. Other percentiles require reconstruction from the saved draws.
+The default <code class="docutils literal notranslate"><span class="pre">spectrum_draws=None</span></code> retains all spectral draws.</p>
+<p>Spline results save their bases and reference in <code class="docutils literal notranslate"><span class="pre">result.model_data</span></code>.
+<code class="docutils literal notranslate"><span class="pre">log_psplines.models.reconstruction.power_draws_from_basis</span></code> reconstructs all
+scalar draws, optionally for a frequency slice. Parametric reconstruction
+requires the caller’s deterministic function and external model inputs, which
+should be saved alongside the result. NetCDF persistence preserves the
+separate lengths of posterior chains and spectral previews.</p>
+</section>
 </section>
 
     <script type="text/x-thebe-config">
@@ -521,6 +588,25 @@ the package does not infer a transform calibration from an analytic PSD.</p>
             </div>
             
             
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#anova-corrections">ANOVA corrections</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-parametric-spectra">External parametric spectra</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#large-grid-results">Large-grid results</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
           </div>

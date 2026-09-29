@@ -52,18 +52,16 @@ def spectrum_diagnostics(
     frequency = result.frequency
     selection = slice(1, -1) if frequency.size > 3 else slice(None)
     frequency = frequency[selection]
-    samples = np.asarray(result.spectrum.values).reshape(
-        -1, *result.spectrum.shape[2:]
+    quantiles = np.asarray(result.quantiles((5.0, 50.0, 95.0)))
+    quantiles = (
+        quantiles[:, :, selection] if time_varying else quantiles[:, selection]
     )
-    samples = (
-        samples[:, :, selection] if time_varying else samples[:, selection]
-    )
-    median = np.median(samples.real, axis=0) + 1j * np.median(
-        samples.imag, axis=0
-    )
+    median = quantiles[1]
     reference = np.asarray(truth)
     if reference.ndim == (2 if time_varying else 1):
         reference = reference[..., None, None]
+    elif time_varying and reference.ndim == 3:
+        reference = reference[..., :, None] * np.eye(reference.shape[-1])
     reference = (
         reference[:, selection] if time_varying else reference[selection]
     )
@@ -72,9 +70,7 @@ def spectrum_diagnostics(
             f"truth must match the fitted spectrum shape {median.shape} "
             f"after frequency endpoint removal; got {reference.shape}"
         )
-    lower, upper = np.percentile(
-        _real_components(samples), [5.0, 95.0], axis=0
-    )
+    lower, upper = _real_components(quantiles[[0, 2]])
 
     # Integrate the full Frobenius norm over frequency, then sum over time.
     error_norm = np.linalg.norm(median - reference, axis=(-2, -1))
@@ -93,6 +89,10 @@ def spectrum_diagnostics(
         np.sum(simpson(truth_norm**2, x=frequency, axis=frequency_axis))
     )
     encoded_truth = _real_components(reference)
+    if result.metadata.get("likelihood") == "diagonal_power_whittle":
+        lower = np.diagonal(lower, axis1=-2, axis2=-1)
+        upper = np.diagonal(upper, axis1=-2, axis2=-1)
+        encoded_truth = np.diagonal(encoded_truth, axis1=-2, axis2=-1)
     metrics: dict[str, object] = {
         "riae": error_integral / truth_integral
         if truth_integral > 0
@@ -125,7 +125,7 @@ def spectrum_diagnostics(
             numerator / denominator if denominator > 0 else float("nan")
         )
     metrics["channel_riae"] = channel_riae
-    if p > 1:
+    if p > 1 and result.metadata.get("likelihood") != "diagonal_power_whittle":
         offdiag = np.triu(np.ones((p, p), dtype=bool), k=1)
         difference = np.abs(
             _coherence(median)[..., offdiag]

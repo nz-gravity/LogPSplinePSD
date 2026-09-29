@@ -195,6 +195,12 @@ class PowerConfig:
     """
 
     roughness_scale: float = 10.0
+    structure: Literal["tensor", "anova"] = "tensor"
+    interaction_scale: float = 0.5
+    # None stores every surface draw. An integer stores a preview per chain,
+    # while frequency-chunked summaries still use every posterior draw.
+    spectrum_draws: int | None = None
+    spectrum_chunk_size: int = 16
     n_interior_knots_time: int = 8
     n_interior_knots_freq: int = 10
     interior_knots_time: np.ndarray | None = None
@@ -208,6 +214,7 @@ class PowerConfig:
     init_penalty_time: float = 0.05
     init_penalty_freq: float = 0.05
     centered: bool = False
+    dense_mass: bool = False
     n_warmup: int = 250
     n_samples: int = 300
     num_chains: int = 1
@@ -217,6 +224,23 @@ class PowerConfig:
     progress_bar: bool = True
 
     def __post_init__(self) -> None:
+        if self.structure not in ("tensor", "anova"):
+            raise ValueError("structure must be tensor or anova")
+        if (
+            not np.isfinite(self.interaction_scale)
+            or self.interaction_scale <= 0
+        ):
+            raise ValueError("interaction_scale must be positive")
+        for name in ("spectrum_draws", "spectrum_chunk_size"):
+            value = getattr(self, name)
+            if value is None and name == "spectrum_draws":
+                continue
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 1
+            ):
+                raise ValueError(f"{name} must be a positive integer")
         for axis in ("time", "freq"):
             count = getattr(self, f"n_interior_knots_{axis}")
             degree = getattr(self, f"degree_{axis}")

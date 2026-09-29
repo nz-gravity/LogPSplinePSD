@@ -24,7 +24,6 @@ from log_psplines.data.spectral import PowerData
 from log_psplines.inference.nuts import run_nuts
 from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
 from log_psplines.models.anova import ANOVALogPSpline
-from log_psplines.models.reconstruction import reconstruct_power_spectrum
 from log_psplines.models.spectrum import LogPSpline
 
 if TYPE_CHECKING:
@@ -340,6 +339,7 @@ def _run_power_nuts(model: Callable, init: dict, config: PowerConfig):
         n_samples=config.n_samples,
         num_chains=config.num_chains,
         chain_method="sequential",
+        dense_mass=config.dense_mass,
         target_accept_prob=config.target_accept_prob,
         max_tree_depth=config.max_tree_depth,
         progress_bar=config.progress_bar,
@@ -511,16 +511,45 @@ def fit_power(
         if anova
         else _collect_power_samples(result, pair, config)
     )
+    from log_psplines.inference.power_results import power_result_spectra
+    from log_psplines.models.reconstruction import power_draws_from_basis
+
+    model_data = xr.Dataset(
+        {
+            "basis_time": (
+                ("time", "time_coefficient"),
+                np.asarray(spline.time_basis if anova else spline.time.basis),
+            ),
+            "basis_frequency": (
+                ("frequency", "frequency_coefficient"),
+                np.asarray(spline.frequency.basis),
+            ),
+            "knots_time": (("time_knot",), spline.time.knots),
+            "knots_frequency": (("frequency_knot",), spline.frequency.knots),
+        },
+        coords={
+            "time": data.time if data.is_grid else spline.time.grid,
+            "frequency": data.frequency
+            if data.is_grid
+            else spline.frequency.grid,
+        },
+    )
+    if reference is not None:
+        model_data["reference"] = (("time", "frequency"), reference)
+    spectrum, spectrum_summary = power_result_spectra(
+        posterior,
+        lambda section: power_draws_from_basis(posterior, model_data, section),
+        model_data.time.values,
+        model_data.frequency.values,
+        (0,),
+        config,
+    )
     fitted = PSDResult(
         posterior=posterior,
         sample_stats=result.sample_stats,
-        spectrum=reconstruct_power_spectrum(
-            posterior,
-            spline,
-            time=data.time if data.is_grid else None,
-            frequency=data.frequency if data.is_grid else None,
-            reference=reference,
-        ),
+        spectrum=spectrum,
+        spectrum_summary=spectrum_summary,
+        model_data=model_data,
         metadata={
             **asdict(config),
             "data_type": "power",

@@ -52,3 +52,60 @@ the caller.
 The WDM adapter returns coefficient-variance powers, not PSD per Hz. Convert
 the supplied reference and truth to those same units before calling ``fit``;
 the package does not infer a transform calibration from an analytic PSD.
+
+ANOVA corrections
+-----------------
+
+Set ``PowerConfig(structure="anova", interaction_scale=0.5)`` to use
+``log S = log reference + g(f) + eta(t, f)``. The interaction is centered on
+the full native time grid. ``roughness_scale`` controls the HalfNormal
+smoothing scales; ``interaction_scale`` controls the interaction amplitude.
+This uses the same ``fit(data, config, reference=..., true_psd=...)`` call.
+
+External parametric spectra
+---------------------------
+
+For a physical model, supply a deterministic JAX function and independent
+scalar priors. The package constructs the Bayesian model and power likelihood:
+
+.. code-block:: python
+
+   import jax.numpy as jnp
+   from numpyro import distributions as dist
+   from log_psplines import ParametricSpectrum
+
+   template = jnp.asarray(reference_power)
+   model = ParametricSpectrum(
+       spectrum=lambda parameters, section: (
+           jnp.exp(parameters["log_scale"]) * template[:, section]
+       ),
+       priors={"log_scale": dist.Normal(0.0, 0.5)},
+       initial_values={"log_scale": 0.0},
+   )
+   result = fit(data, config, model=model, true_psd=truth_power)
+
+The function returns a positive variance grid matching ``PowerData``.
+``(time, frequency, channel)`` powers with ``channels=("sensor_1", "sensor_2")``
+use independent channel likelihoods and shared parameters. Off-diagonal
+covariances are not fitted. Data, deterministic templates, response projection
+and pooling must already agree; ``reference`` and ``partition`` are therefore
+not accepted with ``ParametricSpectrum``. Domain-specific physics stays in
+external scripts. Scalar tensor and ANOVA models still take scalar powers.
+
+Large-grid results
+------------------
+
+``PowerConfig(spectrum_draws=2, spectrum_chunk_size=4)`` retains every
+parameter draw but stores only two spectral draws per chain. The 5/50/95
+percentiles, arithmetic mean and geometric mean in ``result.spectrum_summary``
+use **all** draws, evaluated in frequency chunks. ``result.quantiles()`` and
+plots use those summaries. ``result.psd`` and ``result.spectrum`` contain the
+preview only. Other percentiles require reconstruction from the saved draws.
+The default ``spectrum_draws=None`` retains all spectral draws.
+
+Spline results save their bases and reference in ``result.model_data``.
+``log_psplines.models.reconstruction.power_draws_from_basis`` reconstructs all
+scalar draws, optionally for a frequency slice. Parametric reconstruction
+requires the caller's deterministic function and external model inputs, which
+should be saved alongside the result. NetCDF persistence preserves the
+separate lengths of posterior chains and spectral previews.

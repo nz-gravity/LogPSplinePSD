@@ -48,6 +48,7 @@ def mask_power(data: PowerData, mask: np.ndarray) -> PowerData:
         data.frequency,
         data.time,
         data.units,
+        data.channels,
     )
 
 
@@ -167,4 +168,4 @@ def coarse_grain_power(
     fsize = np.diff(np.r_[fs, len(data.frequency)])
     time = np.add.reduceat(data.time, ts) / tsize
     frequency = np.add.reduceat(data.frequency, fs) / fsize
-    return PowerData(power, counts, frequency, time, data.units)
+    return PowerData(power, counts, frequency, time, data.units, data.channels)

@@ -254,7 +254,8 @@ class EmpiricalPSD:
 class PowerData:
     """Summed component powers and counts on a grid or at paired points.
 
-    Grid powers have shape (N_t, N_f), with increasing axis coordinates.
+    Grid powers have shape (N_t, N_f) or (N_t, N_f, C), with increasing
+    axis coordinates. The latter represents independent channels with labels.
     Scattered powers have shape (Q,), paired time and frequency coordinates
     of shape (Q,). Values are component
     variances, not automatically PSD per Hz.
@@ -265,6 +266,7 @@ class PowerData:
     frequency: np.ndarray | Sequence
     time: np.ndarray | Sequence | None = None
     units: str = "coefficient variance"
+    channels: np.ndarray | Sequence[str] | None = None
 
     def __post_init__(self) -> None:
         power = np.asarray(self.power, dtype=float)
@@ -274,8 +276,10 @@ class PowerData:
         )
         if time is None:
             raise ValueError("PowerData requires time coordinates")
-        if power.ndim not in (1, 2) or power.size == 0:
-            raise ValueError("power must be non-empty and 1-D or 2-D")
+        if power.ndim not in (1, 2, 3) or power.size == 0:
+            raise ValueError(
+                "power must be non-empty with 1, 2 or 3 dimensions"
+            )
         scattered = power.ndim == 1
         if scattered:
             if time.shape != power.shape or frequency.shape != power.shape:
@@ -294,8 +298,27 @@ class PowerData:
                         "spectral grids must be finite and increasing"
                     )
             expected = (len(time), len(frequency))
+            if power.ndim == 3:
+                expected += (power.shape[-1],)
             if power.shape != expected:
                 raise ValueError(f"power must have shape {expected}")
+        if power.ndim == 3:
+            channels = tuple(
+                map(str, range(power.shape[-1]))
+                if self.channels is None
+                else self.channels
+            )
+            if len(channels) != power.shape[-1] or len(set(channels)) != len(
+                channels
+            ):
+                raise ValueError(
+                    "channels must uniquely label the final power axis"
+                )
+            object.__setattr__(self, "channels", channels)
+        elif self.channels is not None:
+            raise ValueError(
+                "channels requires (time, frequency, channel) powers"
+            )
         counts = np.broadcast_to(
             np.asarray(self.counts, dtype=float), power.shape
         ).copy()
@@ -324,7 +347,7 @@ class PowerData:
     @property
     def is_grid(self) -> bool:
         """Whether coordinates form independent grid axes."""
-        return self.power.ndim == 2
+        return self.power.ndim in (2, 3)
 
     @property
     def is_scattered(self) -> bool:

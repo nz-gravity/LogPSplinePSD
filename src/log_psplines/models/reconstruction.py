@@ -272,6 +272,39 @@ def reconstruct_stationary_spectrum(
     )
 
 
+def power_draws_from_basis(posterior, model_data, frequency_slice=slice(None)):
+    """Reconstruct all scalar power draws from saved bases, in a frequency chunk.
+
+    Returns (chain, draw, time, frequency, 1), in the original data units.
+    Works after a PSDResult NetCDF round trip without the original model.
+    """
+    bt = np.asarray(model_data["basis_time"])
+    bf = np.asarray(model_data["basis_frequency"])[frequency_slice]
+    if "weights_eta" in posterior:
+        g = np.einsum("fj,cdj->cdf", bf, posterior["weights_g"].values)
+        logs = g[:, :, None, :] + np.einsum(
+            "ti,cdij,fj->cdtf",
+            bt,
+            posterior["weights_eta"].values,
+            bf,
+            optimize=True,
+        )
+    else:
+        logs = np.einsum(
+            "ti,cdij,fj->cdtf",
+            bt,
+            posterior["weights"].values,
+            bf,
+            optimize=True,
+        )
+    values = np.exp(logs)
+    if "reference" in model_data:
+        values *= np.asarray(model_data["reference"])[
+            None, None, :, frequency_slice
+        ]
+    return values[..., None]
+
+
 def reconstruct_power_spectrum(
     posterior: xr.Dataset,
     spline: "LogPSpline | ANOVALogPSpline",

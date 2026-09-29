@@ -43,6 +43,9 @@ def observed_power_data(data: PowerData) -> xr.Dataset:
             "frequency": np.asarray(data.frequency),
             "time": np.asarray(data.time),
         }
+        if data.power.ndim == 3:
+            dims += ("channel",)
+            coords["channel"] = list(data.channels)
         return xr.Dataset(
             {
                 "power": (dims, np.asarray(data.power)),
@@ -90,6 +93,8 @@ class PSDResult:
     log_likelihood: xr.Dataset | None = None
     observed_data: xr.Dataset | None = None
     truth: xr.DataArray | None = None
+    spectrum_summary: xr.Dataset | None = None
+    model_data: xr.Dataset | None = None
 
     @property
     def frequency(self) -> np.ndarray:
@@ -122,6 +127,14 @@ class PSDResult:
         self, percentiles: tuple[float, ...] = (5.0, 50.0, 95.0)
     ) -> xr.DataArray:
         """Posterior spectral quantiles over chain and draw."""
+        if self.spectrum_summary is not None:
+            cached = self.spectrum_summary["quantiles"]
+            if all(q in cached.percentile.values for q in percentiles):
+                return cached.sel(percentile=list(percentiles))
+            if self.spectrum.sizes["draw"] != self.posterior.sizes["draw"]:
+                raise ValueError(
+                    "Only 5/50/95 percentiles are cached from all draws; reconstruct other quantiles from posterior samples"
+                )
         values = np.asarray(self.spectrum)
         flat = values.reshape(-1, *values.shape[2:])
         q = np.percentile(flat.real, percentiles, axis=0) + 1j * np.percentile(
@@ -149,7 +162,9 @@ class PSDResult:
 
     def _storage_dataset(self) -> xr.Dataset:
         data_vars: dict[str, xr.DataArray] = {
-            "spectral_density": self.spectrum,
+            "spectral_density": self.spectrum.rename(
+                {"draw": "spectrum_draw"}
+            ),
         }
         if self.truth is not None:
             data_vars["true_psd"] = self.truth
@@ -158,6 +173,8 @@ class PSDResult:
             ("sample_stats", self.sample_stats),
             ("log_likelihood", self.log_likelihood),
             ("observed", self.observed_data),
+            ("spectrum_summary", self.spectrum_summary),
+            ("model", self.model_data),
         )
         for prefix, dataset in groups:
             if dataset is None:
@@ -211,14 +228,19 @@ class PSDResult:
         posterior = group("posterior")
         if posterior is None:
             raise ValueError("Stored result is missing posterior samples")
+        spectrum = stored["spectral_density"]
+        if "spectrum_draw" in spectrum.dims:
+            spectrum = spectrum.rename({"spectrum_draw": "draw"})
         return cls(
             posterior=posterior,
             sample_stats=group("sample_stats"),
-            spectrum=stored["spectral_density"],
+            spectrum=spectrum,
             metadata=dict(stored.attrs),
             log_likelihood=group("log_likelihood"),
             observed_data=group("observed"),
             truth=stored.get("true_psd"),
+            spectrum_summary=group("spectrum_summary"),
+            model_data=group("model"),
         )
 
     def save(

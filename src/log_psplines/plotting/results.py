@@ -24,13 +24,44 @@ def plot_posterior_spectrum(
     """Save a spectrum/surface, never a substitute trace or placeholder."""
     outdir = Path(outdir)
     if result.time is not None:
-        fig, ax = plt.subplots(figsize=(7, 4))
-        median = np.median(result.psd, axis=(0, 1))
-        mesh = ax.pcolormesh(
-            result.time, result.frequency, np.log(median).T, shading="auto"
+        median = np.diagonal(
+            result.quantiles((50.0,)).values[0], axis1=-2, axis2=-1
+        ).real
+        if true_psd is None and result.truth is not None:
+            true_psd = np.asarray(result.truth)
+        if true_psd is not None:
+            true_psd = np.asarray(true_psd)
+            if true_psd.ndim == 2:
+                true_psd = true_psd[..., None]
+        ncols = 1 if true_psd is None else 3
+        fig, axes = plt.subplots(
+            median.shape[-1],
+            ncols,
+            squeeze=False,
+            figsize=(6 * ncols, 3 * median.shape[-1]),
         )
-        ax.set(xlabel="Rescaled time", ylabel="Frequency [Hz]")
-        fig.colorbar(mesh, ax=ax, label=f"log({result.metadata['units']})")
+        for c in range(median.shape[-1]):
+            panels = [("Posterior median", np.log(median[..., c]))]
+            if true_psd is not None:
+                panels = [
+                    ("Truth", np.log(true_psd[..., c])),
+                    *panels,
+                    (
+                        "log(median / truth)",
+                        np.log(median[..., c] / true_psd[..., c]),
+                    ),
+                ]
+            for ax, (title, values) in zip(axes[c], panels, strict=True):
+                mesh = ax.pcolormesh(
+                    result.time, result.frequency, values.T, shading="auto"
+                )
+                ax.set(
+                    xlabel="Time",
+                    ylabel="Frequency [Hz]",
+                    title=f"{result.spectrum.channel.values[c]}: {title}",
+                )
+                fig.colorbar(mesh, ax=ax)
+        fig.tight_layout()
         fig.savefig(
             outdir / "posterior_spectrum.png", dpi=150, bbox_inches="tight"
         )

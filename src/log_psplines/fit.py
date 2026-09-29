@@ -19,6 +19,8 @@ from log_psplines.inference.model import prepare_model
 from log_psplines.inference.nuts import run_multivariate_nuts
 from log_psplines.inference.power import fit_power
 from log_psplines.inference.vi import run_multivariate_vi
+from log_psplines.models.anova import ANOVALogPSpline
+from log_psplines.models.parametric import ParametricSpectrum
 from log_psplines.models.reconstruction import reconstruct_stationary_spectrum
 from log_psplines.models.spectrum import LogPSpline
 from log_psplines.preprocessing.checks import _save_preprocessing_plot
@@ -186,9 +188,10 @@ def fit(
     reference=None,
     true_psd=None,
 ) -> PSDResult:
-    """Fit stationary Wishart data or scalar time-frequency powers.
+    """Fit stationary Wishart data or time-frequency powers.
 
-    Power data use the default tensor LogPSpline unless a model is supplied.
+    Scalar powers use the tensor or ANOVA structure in PowerConfig.
+    ParametricSpectrum also supports joint independent channel powers.
     A partition may pool rectangular powers while retaining native-grid
     reconstruction. Scattered ordinates are evaluated at their exact points.
     For grid power data, reference is a fixed positive native-grid spectrum in
@@ -199,6 +202,20 @@ def fit(
         config = PowerConfig() if config is None else config
         if not isinstance(config, PowerConfig):
             raise TypeError("PowerData requires PowerConfig")
+        if isinstance(model, ParametricSpectrum):
+            if reference is not None or partition is not None:
+                raise ValueError(
+                    "ParametricSpectrum supplies its own projected and pooled spectrum"
+                )
+            from log_psplines.inference.parametric_power import (
+                fit_parametric_power,
+            )
+
+            return fit_parametric_power(data, model, config, true_psd=true_psd)
+        if data.power.ndim == 3:
+            raise ValueError(
+                "Fit scalar splines per channel; joint diagonal powers require ParametricSpectrum"
+            )
         if model is None:
 
             def basis(grid, axis):
@@ -224,8 +241,18 @@ def fit(
             else:
                 time_grid = np.unique(data.time)
                 frequency_grid = np.unique(data.frequency)
-            model = LogPSpline(
-                basis(frequency_grid, "freq"), time=basis(time_grid, "time")
+            frequency_basis, time_basis = (
+                basis(frequency_grid, "freq"),
+                basis(time_grid, "time"),
+            )
+            model = (
+                ANOVALogPSpline(
+                    frequency_basis,
+                    time_basis,
+                    sigma_eta_prior=config.interaction_scale,
+                )
+                if config.structure == "anova"
+                else LogPSpline(frequency_basis, time=time_basis)
             )
         return fit_power(
             data,

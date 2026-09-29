@@ -225,199 +225,29 @@ class LS2Data:
         fname: str | Path | None = None,
         show: bool = False,
         cmap: str = "viridis",
-        figsize: tuple[float, float] = (10.0, 6.0),
-        nperseg: int = 64,
-        noverlap: int | None = None,
+        figsize: tuple[float, float] = (8.0, 5.0),
     ) -> None:
-        """Plot the LS2 realization and its local spectrum.
+        """Plot the analytic local PSD on the time-frequency grid.
 
-        Layout
-        ------
-        - top: time series with true local standard deviation envelope
-        - left: time-averaged empirical PSD and time-averaged true PSD
-        - centre: empirical spectrogram with true PSD contours overlaid
+        The colour values use the digital PSD convention of
+        :meth:`get_true_psd`.
         """
-        from pathlib import Path
-
-        from scipy.signal import spectrogram
-
-        x = self.data[:, 0]
-
-        if noverlap is None:
-            noverlap = int(0.875 * nperseg)
-
-        # ------------------------------------------------------------------
-        # Empirical local PSD from the data
-        # ------------------------------------------------------------------
-        freq, time_stft, empirical_psd = spectrogram(
-            x,
-            fs=self.fs,
-            window="hann",
-            nperseg=nperseg,
-            noverlap=noverlap,
-            detrend=False,
-            scaling="density",
-            mode="psd",
-        )
-
-        # Drop DC to match the convention used elsewhere in the class.
-        freq = freq[1:]
-        empirical_psd = empirical_psd[1:, :]
-
-        # ------------------------------------------------------------------
-        # Analytic truth on the same STFT grid
-        # ------------------------------------------------------------------
-        u_stft = time_stft / self.duration
-
-        true_psd = self.get_true_psd(
-            time_grid=u_stft,
-            freq_grid=freq,
-        )
-
-        # Convert from digital PSD convention to one-sided PSD-per-Hz convention
-        # used by scipy.signal.spectrogram(..., scaling="density").
-        true_psd_hz = 2.0 * true_psd / self.fs
-
-        empirical_mean = empirical_psd.mean(axis=1)
-        true_mean = true_psd_hz.mean(axis=0)
-
-        # Local standard deviation for the top panel
-        b = self.coefficient(self.rescaled_time)
-        local_std = self.sigma * np.sqrt(1.0 + b**2)
-
-        # ------------------------------------------------------------------
-        # Figure layout
-        # ------------------------------------------------------------------
-        fig = plt.figure(figsize=figsize)
-
-        gs = fig.add_gridspec(
-            2,
-            3,
-            width_ratios=(1.35, 6.0, 0.22),
-            height_ratios=(1.25, 5.0),
-            left=0.08,
-            right=0.95,
-            bottom=0.10,
-            top=0.94,
-            wspace=0.12,
-            hspace=0.20,
-        )
-
-        ax_time = fig.add_subplot(gs[0, 1])
-        ax_spec = fig.add_subplot(gs[1, 0])
-        ax_tf = fig.add_subplot(gs[1, 1])
-        cax = fig.add_subplot(gs[1, 2])
-
-        # ------------------------------------------------------------------
-        # Top panel: time series
-        # ------------------------------------------------------------------
-        ax_time.plot(
+        fig, ax = plt.subplots(figsize=figsize, layout="constrained")
+        mesh = ax.pcolormesh(
             self.time,
-            x,
-            lw=1.0,
-            color="C0",
-            label="Data",
-        )
-
-        ax_time.plot(
-            self.time,
-            local_std,
-            lw=1.2,
-            ls="--",
-            color="k",
-            alpha=0.8,
-            label=r"True local $\sigma_t$",
-        )
-
-        ax_time.plot(
-            self.time,
-            -local_std,
-            lw=1.2,
-            ls="--",
-            color="k",
-            alpha=0.5,
-        )
-
-        ax_time.set_ylabel("Amplitude")
-        ax_time.set_xlim(self.time[0], self.time[-1])
-        ax_time.tick_params(axis="x", labelbottom=False)
-        ax_time.spines["top"].set_visible(False)
-        ax_time.spines["right"].set_visible(False)
-        ax_time.legend(frameon=False, fontsize=8, loc="upper right")
-
-        # ------------------------------------------------------------------
-        # Middle panel: empirical spectrogram
-        # ------------------------------------------------------------------
-        mesh = ax_tf.pcolormesh(
-            time_stft,
-            freq,
-            empirical_psd,
+            self.freq,
+            self.get_true_psd().T,
             shading="auto",
             cmap=cmap,
         )
-
-        truth_min = np.min(true_psd_hz)
-        truth_max = np.max(true_psd_hz)
-        levels = np.linspace(truth_min, truth_max, 5)[1:-1]
-
-        ax_tf.contour(
-            time_stft,
-            freq,
-            true_psd_hz.T,
-            levels=levels,
-            colors="white",
-            linewidths=1.2,
-            alpha=0.95,
-        )
-
-        ax_tf.set_xlabel("Time [s]")
-        ax_tf.set_ylabel("Frequency [Hz]")
-        ax_tf.set_xlim(time_stft[0], time_stft[-1])
-        ax_tf.set_ylim(freq[0], freq[-1])
-
-        # ------------------------------------------------------------------
-        # Left panel: time-averaged PSD
-        # ------------------------------------------------------------------
-        ax_spec.plot(
-            empirical_mean,
-            freq,
-            lw=1.4,
-            color="C0",
-            label="Data",
-        )
-
-        ax_spec.plot(
-            true_mean,
-            freq,
-            lw=1.4,
-            ls="--",
-            color="k",
-            label="Truth",
-        )
-
-        ax_spec.set_xlabel("Time-averaged PSD")
-        ax_spec.set_ylim(freq[0], freq[-1])
-        ax_spec.tick_params(axis="y", labelleft=False)
-        ax_spec.spines["top"].set_visible(False)
-        ax_spec.spines["right"].set_visible(False)
-        ax_spec.legend(frameon=False, fontsize=8, loc="upper right")
-
-        # ------------------------------------------------------------------
-        # Colorbar
-        # ------------------------------------------------------------------
-        cbar = fig.colorbar(mesh, cax=cax)
-        cbar.set_label("PSD")
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("Frequency [Hz]")
+        fig.colorbar(mesh, ax=ax, label="PSD [digital]")
 
         if fname is not None:
-            fname = Path(fname)
-            fname.parent.mkdir(parents=True, exist_ok=True)
-            fig.savefig(
-                fname,
-                dpi=200,
-                bbox_inches="tight",
-            )
-
+            path = Path(fname)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(path, dpi=200)
         if show:
             plt.show()
-
         plt.close(fig)

@@ -13,6 +13,7 @@ from .data.spectral import PowerData
 from .fit import fit
 from .models.anova import ANOVALogPSpline
 from .models.matrix import SpectralMatrix
+from .models.parametric import ParametricSpectrum
 from .models.spectrum import LogPSpline
 from .preprocessing.moving_periodogram import (
     moving_periodogram,
@@ -33,6 +34,7 @@ __all__ = [
     "SplineBasis",
     "LogPSpline",
     "ANOVALogPSpline",
+    "ParametricSpectrum",
     "SpectralMatrix",
     "TimeSeries",
     "WishartData",

@@ -35,8 +35,15 @@ Data Containers
 .. autoclass:: log_psplines.data.PowerData
    :members:
 
+.. autoclass:: log_psplines.data.WishartGridData
+   :members:
+
 Time-Varying Preprocessing
 --------------------------
+
+.. autofunction:: log_psplines.preprocessing.wishart_grid.local_wishart_grid
+
+.. autofunction:: log_psplines.preprocessing.wishart_grid.coarse_grain_wishart_grid
 
 .. autofunction:: log_psplines.preprocessing.wdm.wdm_periodogram
 

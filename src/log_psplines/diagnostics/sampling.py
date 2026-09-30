@@ -40,6 +40,14 @@ def _channel_idata(result: PSDResult, channel: int) -> xr.DataTree:
         for name in result.posterior.data_vars
         if name in scalar_names or name.startswith(prefixes)
     ]
+    if result.metadata.get("data_type") == "multivariate_gridtv":
+        names = [
+            name
+            for name in result.posterior
+            if name.endswith(f"_delta_{channel}")
+            or f"_theta_re_{channel}_" in name
+            or f"_theta_im_{channel}_" in name
+        ]
     if not names:
         raise ValueError(f"No posterior variables for channel {channel}")
     posterior = result.posterior[names]
@@ -81,7 +89,8 @@ def _tree_depth_hits(idata: xr.DataTree, max_depth: int | None) -> int:
     if depth.size:
         return int(np.sum(depth >= max_depth))
     steps = _stat(idata, "n_steps")
-    return int(np.sum(steps[np.isfinite(steps)] >= 2**max_depth))
+    # A depth-d binary tree makes at most 2**d - 1 leapfrog steps.
+    return int(np.sum(steps[np.isfinite(steps)] >= 2**max_depth - 1))
 
 
 def _reduction(summary: pd.DataFrame, name: str, reducer: str) -> float:
@@ -108,17 +117,17 @@ def sampling_diagnostics(
         result.posterior.sizes.get("draw", 0)
     )
     if result.sample_stats is not None:
-        factors = (
-            1
-            if result.time is not None
-            else int(result.spectrum.sizes["channel"])
+        blocked = (
+            result.time is None
+            or result.metadata.get("data_type") == "multivariate_gridtv"
         )
+        factors = int(result.spectrum.sizes["channel"]) if blocked else 1
         rows = []
         for channel in range(factors):
             idata = (
-                result.to_arviz()
-                if result.time is not None
-                else _channel_idata(result, channel)
+                _channel_idata(result, channel)
+                if blocked
+                else result.to_arviz()
             )
             summary = azs.summary(idata)
             step = _stat(idata, "step_size")
@@ -126,7 +135,7 @@ def sampling_diagnostics(
             depths = result.metadata.get("max_tree_depth_by_channel")
             max_depth = (
                 int(depths[channel])
-                if depths is not None and result.time is None
+                if depths is not None and blocked
                 else result.metadata.get("max_tree_depth")
             )
             rows.append(
@@ -174,15 +183,15 @@ def plot_energy(result: PSDResult) -> plt.Figure:
         raise ValueError("Energy diagnostics require sample_stats")
     import arviz_plots as azp
 
-    count = (
-        1 if result.time is not None else int(result.spectrum.sizes["channel"])
+    blocked = (
+        result.time is None
+        or result.metadata.get("data_type") == "multivariate_gridtv"
     )
+    count = int(result.spectrum.sizes["channel"]) if blocked else 1
     images = []
     for channel in range(count):
         idata = (
-            result.to_arviz()
-            if result.time is not None
-            else _channel_idata(result, channel)
+            _channel_idata(result, channel) if blocked else result.to_arviz()
         )
         plot = azp.plot_energy(idata, backend="matplotlib")
         figure = plot.viz["figure"].item()

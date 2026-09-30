@@ -6,6 +6,7 @@ chapters:
   - file: examples/multivariate-example.ipynb
   - file: examples/timevarying-example.ipynb
   - file: power-reference.rst
+  - file: multivariate-gridtv.rst
   - file: conventions.rst
   - file: api.rst
   - file: development.md

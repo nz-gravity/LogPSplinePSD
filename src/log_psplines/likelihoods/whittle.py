@@ -33,25 +33,31 @@ def whittle_log_likelihood(
     log_psd: Float[Array | np.ndarray, "*grid"],
     power: Float[Array | np.ndarray, "*grid"],
     *,
-    count: float | int | Real[Array | np.ndarray, ""] = 1.0,
+    count: float | int | Real[Array | np.ndarray, "..."] = 1.0,
     duration: float | int = 1.0,
     enbw: float | int = 1.0,
     eta: float | int = 1.0,
+    clip_log_psd: bool = True,
 ) -> Float[Array, ""]:
     """Scalar log spectrum and summed power (..., F); return total log L.
 
     power is summed, not averaged, over `count` independent replicates.
     duration converts FFT power to spectral density. Window bandwidth and
-    likelihood tempering follow the existing Wishart convention.
+    likelihood tempering follow the existing Wishart convention. Array counts
+    weight each cell. Zero-count cells have zero value and gradient, even for
+    nonfinite omitted inputs. Normalized GridTV coefficients use duration=1,
+    enbw=1, eta=1 and disable the historical stationary clipping guard.
     """
-    variance = jnp.exp(
-        jnp.clip(log_psd, -LOG_SPECTRUM_LIMIT, LOG_SPECTRUM_LIMIT)
-    )
-    determinant = -jnp.asarray(count, dtype=variance.dtype) * jnp.sum(
-        jnp.log(variance)
-    )
+    count = jnp.asarray(count)
+    active = count > 0
+    logs = jnp.where(active, log_psd, 0.0)
+    if clip_log_psd:
+        logs = jnp.clip(logs, -LOG_SPECTRUM_LIMIT, LOG_SPECTRUM_LIMIT)
+    variance = jnp.exp(logs)
+    determinant = -jnp.sum(count * logs)
     quadratic = jnp.sum(
-        power / (jnp.asarray(duration, dtype=variance.dtype) * variance)
+        jnp.where(active, power, 0.0)
+        / (jnp.asarray(duration, dtype=variance.dtype) * variance)
     )
     return (
         (determinant - quadratic)

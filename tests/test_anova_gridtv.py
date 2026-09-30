@@ -227,7 +227,7 @@ def test_anova_prior_scales_match_old_nested_hierarchy():
         model.time.grid,
     )
     sample_model, _, init = prepare_anova_power_model(
-        data, model, PowerConfig()
+        data, model, PowerConfig(centered=True)
     )
     for sigma_eta in (0.5, 1e-5):
         sites = {**init, "sigma_g": sigma_g, "sigma_eta": sigma_eta}
@@ -252,7 +252,7 @@ def test_native_likelihood_uses_supplied_basis_matrices():
     power = np.ones((len(model.time.grid), len(model.frequency.grid)))
     data = PowerData(power, 1, model.frequency.grid, model.time.grid)
     sample_model, pair, init = prepare_anova_power_model(
-        data, model, PowerConfig()
+        data, model, PowerConfig(centered=True)
     )
     rng = np.random.default_rng(9)
     g = rng.normal(size=init["g"].shape) * 0.1

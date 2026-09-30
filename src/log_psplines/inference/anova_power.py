@@ -6,8 +6,8 @@ by default. Frequency mean coefficients have standard deviation
 modes use ``null_precision**-1/2``. Deviation coefficients have standard
 deviation ``sigma_eta * (lambda_t + lambda_f + ridge_eps)**-1/2``; joint null
 modes use ``sigma_eta``. ``sigma_eta ~ HalfNormal(0.5)`` by default. The
-deviation uses a centered coefficient hierarchy, independent of the tensor
-model's ``PowerConfig.centered`` setting.
+``PowerConfig.centered`` selects centered coefficients or standard-Normal
+coordinates with the same conditional prior and learned scales.
 """
 
 from __future__ import annotations
@@ -26,9 +26,101 @@ from log_psplines.data.spectral import PowerData
 from log_psplines.inference.power import (
     _mean_power_for_masked_initialization,
     power_floor,
+    sample_eigen_coefficients,
 )
 from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
-from log_psplines.models.anova import ANOVALogPSpline
+from log_psplines.models.anova import ANOVALogPSpline, anova_components
+
+
+def prepare_anova_prior(
+    spline: ANOVALogPSpline, config: PowerConfig
+) -> dict[str, np.ndarray]:
+    """Factor the fixed penalties once; random field hyperparameters stay independent."""
+    pair = whiten_penalty_pair(spline.time_penalty, spline.frequency.penalty)
+    lam_t, lam_f = pair["lam_time"], pair["lam_freq"]
+    pair["null_freq"] = lam_f <= 1e-10 * max(lam_f.max(), 1.0)
+    pair["eta_scale"] = np.where(
+        pair["joint_null"],
+        1.0,
+        (lam_t[:, None] + lam_f[None, :] + config.ridge_eps) ** -0.5,
+    )
+    return pair
+
+
+def _mean_scale(
+    pair: dict[str, np.ndarray],
+    config: PowerConfig,
+    sigma_g: float | jnp.ndarray,
+) -> jnp.ndarray:
+    """Conditional mean-field scale, including the fixed frequency null modes."""
+    return jnp.where(
+        jnp.asarray(pair["null_freq"]),
+        config.null_precision**-0.5,
+        sigma_g
+        / jnp.sqrt(
+            jnp.asarray(pair["lam_freq"]) + config.ridge_eps * sigma_g**2
+        ),
+    )
+
+
+def anova_init_values(
+    init: dict[str, np.ndarray | float],
+    pair: dict[str, np.ndarray],
+    config: PowerConfig,
+    *,
+    label: str = "",
+) -> dict[str, np.ndarray | float]:
+    """Map physical eigen-coefficients into the selected sampling coordinates."""
+    suffix = f"_{label}" if label else ""
+    values = dict(init)
+    if not config.centered:
+        values["z_g"] = values.pop("g") / np.asarray(
+            _mean_scale(pair, config, init["sigma_g"])
+        )
+        values["z_eta"] = values.pop("eta") / (
+            init["sigma_eta"] * pair["eta_scale"].reshape(-1)
+        )
+    return {f"{name}{suffix}": value for name, value in values.items()}
+
+
+def sample_anova_field(
+    pair: dict[str, np.ndarray],
+    config: PowerConfig,
+    interaction_scale: float,
+    *,
+    label: str = "",
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Sample one independent scalar field in the existing ANOVA eigenbasis.
+
+    Returns g (Kf,), eta (Kt,Kf). Labels suffix every random site and plate;
+    only deterministic penalties/designs are shared between Cholesky fields.
+    """
+    suffix = f"_{label}" if label else ""
+    sigma_g = numpyro.sample(
+        f"sigma_g{suffix}", dist.HalfNormal(config.roughness_scale)
+    )
+    scale_g = _mean_scale(pair, config, sigma_g)
+    g = sample_eigen_coefficients(
+        f"{'g' if config.centered else 'z_g'}{suffix}",
+        scale_g,
+        (len(pair["lam_freq"]),),
+        config,
+    )
+    if not config.centered:
+        numpyro.deterministic(f"g{suffix}", g)
+    sigma_eta = numpyro.sample(
+        f"sigma_eta{suffix}", dist.HalfNormal(interaction_scale)
+    )
+    scale_eta = jnp.asarray(pair["eta_scale"])
+    eta = sample_eigen_coefficients(
+        f"{'eta' if config.centered else 'z_eta'}{suffix}",
+        (sigma_eta * scale_eta).reshape(-1),
+        (scale_eta.size,),
+        config,
+    )
+    if not config.centered:
+        numpyro.deterministic(f"eta{suffix}", eta)
+    return jnp.asarray(g), jnp.asarray(eta).reshape(scale_eta.shape)
 
 
 def initialize_anova(
@@ -83,73 +175,22 @@ def initialize_anova(
 def prepare_anova_power_model(
     data: PowerData, spline: ANOVALogPSpline, config: PowerConfig
 ) -> tuple[Callable, dict[str, np.ndarray], dict[str, np.ndarray | float]]:
-    """Build the centered GridTV likelihood and independent priors."""
+    """Build the GridTV likelihood and independent ANOVA priors."""
     if not data.is_grid:
         raise ValueError(
             "ANOVALogPSpline requires rectangular GridTV PowerData"
         )
-    for basis, grid in (
-        (spline.time, data.time),
-        (spline.frequency, data.frequency),
-    ):
-        if (
-            not np.array_equal(grid, basis.grid)
-            and basis.knot_convention != "clamped"
-        ):
-            raise ValueError(
-                "partitioned ANOVA requires SplineBasis.from_grid bases"
-            )
-    bt = (
-        spline.time_basis
-        if np.array_equal(data.time, spline.time.grid)
-        else np.asarray(spline.time.design_at(data.time))
-        @ spline.time_transform
-    )
-    bf = np.asarray(
-        spline.frequency.basis
-        if np.array_equal(data.frequency, spline.frequency.grid)
-        else spline.frequency.design_at(data.frequency)
-    )
-    pair = whiten_penalty_pair(spline.time_penalty, spline.frequency.penalty)
+    bt, bf = spline.design(data.time, data.frequency)
+    pair = prepare_anova_prior(spline, config)
     bt_eig = jnp.asarray(bt @ pair["U_time"])
     bf_eig = jnp.asarray(bf @ pair["U_freq"])
-    lam_t = jnp.asarray(pair["lam_time"])
-    lam_f = jnp.asarray(pair["lam_freq"])
-    null_f = jnp.asarray(
-        pair["lam_freq"] <= 1e-10 * max(pair["lam_freq"].max(), 1.0)
-    )
-    joint_null = jnp.asarray(pair["joint_null"])
     power = jnp.asarray(data.power)
     counts = jnp.asarray(data.counts)
 
     def model() -> None:
-        # The frequency null space retains a fixed scale.
-        sigma_g = numpyro.sample(
-            "sigma_g", dist.HalfNormal(config.roughness_scale)
-        )
-        scale_g = jnp.where(
-            null_f,
-            config.null_precision**-0.5,
-            sigma_g / jnp.sqrt(lam_f + config.ridge_eps * sigma_g**2),
-        )
-        with numpyro.plate("g_plate", len(pair["lam_freq"])):
-            g = numpyro.sample("g", dist.Normal(0.0, scale_g))
-        scale_eta = jnp.where(
-            joint_null,
-            1.0,
-            (lam_t[:, None] + lam_f[None, :] + config.ridge_eps) ** -0.5,
-        )
-        sigma_eta = numpyro.sample(
-            "sigma_eta", dist.HalfNormal(spline.sigma_eta_prior)
-        )
-        with numpyro.plate("eta_plate", scale_eta.size):
-            eta = numpyro.sample(
-                "eta", dist.Normal(0.0, (sigma_eta * scale_eta).reshape(-1))
-            )
-        eta = eta.reshape(scale_eta.shape)
-        correction = (bf_eig @ g)[None, :] + jnp.einsum(
-            "ti,ij,fj->tf", bt_eig, eta, bf_eig, optimize="optimal"
-        )
+        g, eta = sample_anova_field(pair, config, spline.sigma_eta_prior)
+        mean, deviation = anova_components(bt_eig, bf_eig, g, eta)
+        correction = mean[None, :] + deviation
         log_like = power_whittle_log_likelihood(power, counts, correction)
         numpyro.deterministic("log_likelihood", log_like)
         numpyro.factor("whittle", log_like)
@@ -163,23 +204,24 @@ def prepare_anova_power_model(
         pair,
         config,
     )
-    return model, pair, init
+    return model, pair, anova_init_values(init, pair, config)
 
 
 def collect_anova_samples(
-    posterior: xr.Dataset, pair: dict[str, np.ndarray]
+    posterior: xr.Dataset, pair: dict[str, np.ndarray], *, label: str = ""
 ) -> xr.Dataset:
     """Expose reconstruction-grid coefficients in the original spline bases."""
     output = posterior.copy()
-    g = np.asarray(output["g"])
-    eta = np.asarray(output["eta"]).reshape(
+    suffix = f"_{label}" if label else ""
+    g = np.asarray(output[f"g{suffix}"])
+    eta = np.asarray(output[f"eta{suffix}"]).reshape(
         *g.shape[:2], len(pair["lam_time"]), len(pair["lam_freq"])
     )
-    output["weights_g"] = xr.DataArray(
+    output[f"weights_g{suffix}"] = xr.DataArray(
         np.einsum("ij,cdj->cdi", pair["U_freq"], g),
         dims=("chain", "draw", "frequency_coefficient"),
     )
-    output["weights_eta"] = xr.DataArray(
+    output[f"weights_eta{suffix}"] = xr.DataArray(
         np.einsum("ia,cdab,jb->cdij", pair["U_time"], eta, pair["U_freq"]),
         dims=("chain", "draw", "time_coefficient", "frequency_coefficient"),
     )

@@ -11,6 +11,7 @@ from log_psplines.data.spectral import (
     PowerData,
     WishartData,
 )
+from log_psplines.data.wishart_grid import WishartGridData
 from log_psplines.inference.evidence import (
     compute_pointwise_lnl,
     estimate_pipeline_lnz,
@@ -179,6 +180,39 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
     return result
 
 
+def _grid_spline(
+    time: np.ndarray, frequency: np.ndarray, config: PowerConfig
+) -> LogPSpline | ANOVALogPSpline:
+    """Build scalar fields on the supplied reference grid with shared settings."""
+
+    def basis(grid: np.ndarray, axis: str) -> SplineBasis:
+        knots = getattr(config, f"interior_knots_{axis}")
+        kwargs = (
+            {"interior_knots": knots}
+            if knots is not None
+            else {
+                "n_interior_knots": getattr(config, f"n_interior_knots_{axis}")
+            }
+        )
+        return SplineBasis.from_grid(
+            grid,
+            degree=getattr(config, f"degree_{axis}"),
+            penalty_order=getattr(config, f"penalty_order_{axis}"),
+            **kwargs,
+        )
+
+    frequency_basis, time_basis = basis(frequency, "freq"), basis(time, "time")
+    return (
+        ANOVALogPSpline(
+            frequency_basis,
+            time_basis,
+            sigma_eta_prior=config.interaction_scale,
+        )
+        if config.structure == "anova"
+        else LogPSpline(frequency_basis, time=time_basis)
+    )
+
+
 def fit(
     data,
     config=None,
@@ -188,7 +222,7 @@ def fit(
     reference=None,
     true_psd=None,
 ) -> PSDResult:
-    """Fit stationary Wishart data or time-frequency powers.
+    """Fit stationary Wishart data, complex GridTV data, or scalar powers.
 
     Scalar powers use the tensor or ANOVA structure in PowerConfig.
     ParametricSpectrum also supports joint independent channel powers.
@@ -197,7 +231,31 @@ def fit(
     For grid power data, reference is a fixed positive native-grid spectrum in
     the same units as the powers. The fitted spline models its log correction.
     true_psd is used only for post-fit analysis, never for inference.
+    WishartGridData uses independent blocked ANOVA rows and PowerConfig with
+    structure='anova'. Pool its complex statistics in preprocessing; output
+    uses the preserved reference grid, with fixed pre-pooling time centring.
     """
+    if isinstance(data, WishartGridData):
+        config = PowerConfig(structure="anova") if config is None else config
+        if not isinstance(config, PowerConfig):
+            raise TypeError(
+                "WishartGridData requires PowerConfig(structure='anova')"
+            )
+        if config.structure != "anova":
+            raise ValueError("WishartGridData requires structure='anova'")
+        if partition is not None or reference is not None:
+            raise ValueError(
+                "pool WishartGridData in preprocessing; matrix reference whitening is unsupported"
+            )
+        if model is None:
+            model = _grid_spline(
+                data.reference_time, data.reference_frequency, config
+            )
+        if not isinstance(model, ANOVALogPSpline):
+            raise ValueError("WishartGridData requires ANOVALogPSpline fields")
+        from log_psplines.inference.wishart_grid import fit_wishart_grid
+
+        return fit_wishart_grid(data, model, config, true_psd=true_psd)
     if isinstance(data, PowerData):
         config = PowerConfig() if config is None else config
         if not isinstance(config, PowerConfig):
@@ -217,43 +275,12 @@ def fit(
                 "Fit scalar splines per channel; joint diagonal powers require ParametricSpectrum"
             )
         if model is None:
-
-            def basis(grid, axis):
-                knots = getattr(config, f"interior_knots_{axis}")
-                kwargs = (
-                    {"interior_knots": knots}
-                    if knots is not None
-                    else {
-                        "n_interior_knots": getattr(
-                            config, f"n_interior_knots_{axis}"
-                        )
-                    }
-                )
-                return SplineBasis.from_grid(
-                    grid,
-                    degree=getattr(config, f"degree_{axis}"),
-                    penalty_order=getattr(config, f"penalty_order_{axis}"),
-                    **kwargs,
-                )
-
             if data.is_grid:
                 time_grid, frequency_grid = data.time, data.frequency
             else:
                 time_grid = np.unique(data.time)
                 frequency_grid = np.unique(data.frequency)
-            frequency_basis, time_basis = (
-                basis(frequency_grid, "freq"),
-                basis(time_grid, "time"),
-            )
-            model = (
-                ANOVALogPSpline(
-                    frequency_basis,
-                    time_basis,
-                    sigma_eta_prior=config.interaction_scale,
-                )
-                if config.structure == "anova"
-                else LogPSpline(frequency_basis, time=time_basis)
-            )
+            model = _grid_spline(time_grid, frequency_grid, config)
         return fit_power(
             data,
             model,

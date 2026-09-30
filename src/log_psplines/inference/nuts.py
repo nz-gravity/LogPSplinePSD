@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from time import perf_counter
 from typing import Any
 
 import jax
@@ -25,6 +26,7 @@ class MCMCResult:
     posterior: xr.Dataset
     sample_stats: xr.Dataset | None = None
     log_likelihood: xr.Dataset | None = None
+    timings: dict[str, float] = field(default_factory=dict)
 
 
 def _mapping_to_dataset(
@@ -64,8 +66,13 @@ def run_nuts(
     chain_method: str | None = None,
     progress_bar: bool = False,
     extra_fields: tuple[str, ...] = (),
+    record_timing: bool = False,
 ) -> MCMCResult:
-    """Execute NumPyro NUTS and return native samples/statistics."""
+    """Execute NumPyro NUTS and return native samples/statistics.
+
+    Optional phase timings synchronize JAX and include each phase's HMC
+    compilation/initialization overhead. Stationary defaults are unchanged.
+    """
     kernel_options = dict(
         target_accept_prob=target_accept_prob,
         max_tree_depth=max_tree_depth,
@@ -84,7 +91,27 @@ def run_nuts(
         progress_bar=progress_bar,
         **chain_options,
     )
-    mcmc.run(rng_key, extra_fields=extra_fields, **(model_kwargs or {}))
+    timings = {}
+    if record_timing:
+        warmup_key, sampling_key = jax.random.split(rng_key)
+        start = perf_counter()
+        mcmc.warmup(
+            warmup_key, extra_fields=extra_fields, **(model_kwargs or {})
+        )
+        jax.block_until_ready(mcmc.last_state)
+        timings["warmup_including_compilation_seconds"] = (
+            perf_counter() - start
+        )
+        start = perf_counter()
+        mcmc.run(
+            sampling_key, extra_fields=extra_fields, **(model_kwargs or {})
+        )
+        jax.block_until_ready(mcmc.last_state)
+        timings["sampling_including_compilation_seconds"] = (
+            perf_counter() - start
+        )
+    else:
+        mcmc.run(rng_key, extra_fields=extra_fields, **(model_kwargs or {}))
 
     samples = mcmc.get_samples(group_by_chain=True)
     log_likelihood = {
@@ -111,6 +138,7 @@ def run_nuts(
         stats["lp"] = -np.asarray(stats["potential_energy"])
 
     return MCMCResult(
+        timings=timings,
         posterior=_mapping_to_dataset(posterior, num_chains=num_chains),
         sample_stats=(
             _mapping_to_dataset(stats, num_chains=num_chains, prefix="stat_")

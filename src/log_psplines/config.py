@@ -188,10 +188,15 @@ __all__ = ["StationaryConfig", "PowerConfig"]
 
 @dataclass
 class PowerConfig:
-    """WDM power/count prior and NUTS settings, separate from Wishart priors.
+    """Scalar TV and complex GridTV prior/NUTS/reconstruction settings.
 
     ``sigma_time`` and ``sigma_freq`` have HalfNormal priors. The smoothing
-    precisions are derived as ``phi = sigma**-2``.
+    precisions are derived as ``phi = sigma**-2`` for the scalar tensor model.
+    ANOVA uses independent ``sigma_g``/``sigma_eta`` scales. WishartGridData
+    requires structure='anova' and applies that hierarchy to each scalar
+    Cholesky field independently; it retains complex cross-channel data.
+    ``centered=False`` uses standard-Normal coordinates for both TV models;
+    ANOVA retains physical ``g``/``eta`` coefficients as deterministic sites.
     """
 
     roughness_scale: float = 10.0

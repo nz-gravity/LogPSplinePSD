@@ -100,12 +100,14 @@ models in `inference/model.py` share the Wishart likelihood, while
 matrix for density-based knot placement. It does not center the coefficient
 prior.
 
-The scalar time-varying path is transform -> `PowerData` -> `fit_power()` ->
-`PSDResult`, configured by `PowerConfig` and an explicit `LogPSpline`.
+The scalar time-varying path is `wdm_periodogram()` -> `PowerData` ->
+`fit_power()` -> `PSDResult`, configured by `PowerConfig`. `fit()` builds the
+tensor `LogPSpline` or `ANOVALogPSpline` from the configuration unless an
+explicit model is supplied.
 `PowerData` accepts two coordinate geometries:
 
 - Rectangular grid: `power (T, F)`, `time (T,)`, `frequency (F,)`.
-  WDM preprocessing is one possible producer. Model evaluation uses
+  WDM preprocessing is the primary producer. Tensor model evaluation uses
   `Bt @ W @ Bf.T`.
 - Paired ordinates: `power (P,)`, `time (P,)`, `frequency (P,)`.
   A moving periodogram is one possible producer. Model evaluation uses a
@@ -114,7 +116,8 @@ The scalar time-varying path is transform -> `PowerData` -> `fit_power()` ->
 `PowerData` always has time coordinates. Stationary fits use `WishartData`.
 A `PowerPartition` can pool rectangular powers for the likelihood while the
 result remains on the original grid. Both coordinate geometries share the
-power likelihood and tensor P-spline prior.
+power likelihood and tensor P-spline prior; ANOVA additionally supports the
+rectangular grid.
 
 `preprocessing.knot_locator.allocate_components()` places interior knots for
 each named pilot component separately. Supply finite, smooth pilot values
@@ -140,4 +143,25 @@ separation, model component curves, and component knot locations.
 `plotting/preprocessing.py`. Post-fit diagnostics in `diagnostics/` assess
 sampler behaviour and recovery of the fitted spectrum.
 
-Multivariate time-varying inference is not yet implemented.
+The multivariate time-varying path is proper complex coefficients ->
+`WishartGridData` -> `fit_wishart_grid()` -> `PSDResult`. `local_wishart_grid()`
+supplies normalized local FFT coefficients. `PowerConfig(structure="anova")`
+applies the shared ANOVA prior independently to each diagonal log variance and
+signed real/imaginary Cholesky field. Rows use the same `run_nuts()` runner and
+Wishart likelihood as stationary inference. `coarse_grain_wishart_grid()` pools
+summed statistics and counts; reconstruction and ANOVA centring retain the
+reference grids. `wishart_grid_knots()` in `preprocessing/knot_locator.py`
+constructs optional knots from a smoothed training-data pilot, leaving the
+likelihood statistics unchanged.
+
+`inference/power_results.py` reduces scalar and matrix draws in frequency
+chunks. Cached spectral and coherence quantiles use every posterior draw even
+when `spectrum_draws` retains only a preview. Coherence diagnostics reduce
+per-draw coherence, since entrywise spectral quantiles need not be valid
+spectral matrices.
+
+Multivariate WDM remains a separate statistical extension: real WDM powers do
+not identify complex cross-spectrum phase, and real coefficient vectors do
+not obey the proper-complex likelihood. Keep transform normalization and that
+observation-model distinction at the preprocessing/data boundary. Do not
+route WDM arrays through the complex path by casting their dtype.

@@ -28,12 +28,14 @@ from log_psplines.diagnostics.sampling import (
     _tree_depth_hits,
     sampling_diagnostics,
 )
+from log_psplines.diagnostics.spectrum import spectrum_diagnostics
 from log_psplines.inference.anova_power import (
     anova_init_values,
     collect_anova_samples,
     prepare_anova_power_model,
     prepare_anova_prior,
 )
+from log_psplines.inference.power_results import power_result_spectra
 from log_psplines.inference.wishart_grid import (
     prepare_wishart_grid_row,
     row_field_labels,
@@ -398,8 +400,9 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
         assert random_sites == set(init)
     posterior = xr.Dataset(sites)
     for row in range(data.p):
-        for label in row_field_labels(row):
-            posterior = collect_anova_samples(posterior, pair, label=label)
+        posterior = collect_anova_samples(
+            posterior, pair, labels=row_field_labels(row)
+        )
     bt, bf = spline.design()
     np.testing.assert_allclose(bt.mean(axis=0), 0, atol=1e-12)
     full = wishart_grid_draws(posterior, bt, bf, data.p)
@@ -547,6 +550,7 @@ def test_public_nuts_smoke_and_native_results(channels, coherent, outdir):
         4 * (1 + 2 * row) for row in range(channels)
     ]
     assert "posterior" in result.to_arviz().children
+    assert result.to_arviz().attrs["data_type"] == "multivariate_gridtv"
     assert len(sampling_diagnostics(result)["nuts"]) == channels
     for row in range(channels):
         assert (
@@ -556,6 +560,10 @@ def test_public_nuts_smoke_and_native_results(channels, coherent, outdir):
     directory.mkdir(exist_ok=True)
     result.to_netcdf(directory / "result.nc")
     reloaded = PSDResult.from_netcdf(directory / "result.nc")
+    assert reloaded.observed_data.attrs == result.observed_data.attrs
+    assert reloaded.spectrum_summary.attrs == result.spectrum_summary.attrs
+    assert reloaded.metadata["spectrum_draws"] == config.spectrum_draws
+    assert not any("__" in key for key in reloaded.metadata)
     np.testing.assert_array_equal(
         reloaded.observed_data["counts"], pooled.counts
     )
@@ -574,6 +582,41 @@ def test_public_nuts_smoke_and_native_results(channels, coherent, outdir):
     np.testing.assert_allclose(reloaded.quantiles(), result.quantiles())
     plot_posterior_spectrum(reloaded, directory)
     assert (directory / "posterior_spectrum.png").stat().st_size > 0
+
+
+@pytest.mark.parametrize("retained_draws", [None, 1])
+def test_coherence_diagnostics_use_all_draws_before_reduction(retained_draws):
+    """Changing phase can cancel a median cross spectrum despite coherence."""
+    time, frequency = np.arange(2.0), np.arange(5.0)
+    draws = (
+        np.broadcast_to(np.eye(2), (1, 5, 2, 5, 2, 2)).astype(complex).copy()
+    )
+    draws[..., 0, 1] = np.array([0.0, 0.6, -0.6, 0.6, -0.6])[
+        None, :, None, None
+    ]
+    draws[..., 1, 0] = draws[..., 0, 1].conj()
+    posterior = xr.Dataset({"x": (("chain", "draw"), np.zeros((1, 5)))})
+    spectrum, summary = power_result_spectra(
+        posterior,
+        lambda section: draws[:, :, :, section],
+        time,
+        frequency,
+        [0, 1],
+        PowerConfig(spectrum_draws=retained_draws, spectrum_chunk_size=2),
+        matrix=True,
+    )
+    truth = draws[0, 1]
+    result = PSDResult(posterior, spectrum, spectrum_summary=summary)
+    assert np.all(result.quantiles((50.0,)).values[..., 0, 1] == 0)
+    assert spectrum_diagnostics(result, truth=truth)[
+        "coherence_mae"
+    ] == pytest.approx(0)
+    if retained_draws is None:
+        # The uncached stationary path uses the same per-draw definition.
+        stationary = PSDResult(posterior, spectrum.isel(time=0, drop=True))
+        assert spectrum_diagnostics(stationary, truth=truth[0])[
+            "coherence_mae"
+        ] == pytest.approx(0)
 
 
 def test_nuts_step_count_reports_tree_depth_saturation():
@@ -714,9 +757,9 @@ def test_complex_grid_recovery_with_informative_replicates():
     )
 
 
-def test_example_quantile_knots_use_observed_rank_one_data():
+def test_quantile_knots_use_observed_rank_one_data():
     """Adaptive placement preserves sufficient statistics and fixed centring."""
-    from docs.examples.multivariate_gridtv import pilot_quantile_knots
+    from log_psplines.preprocessing.knot_locator import wishart_grid_knots
 
     rng = np.random.default_rng(11)
     time, frequency = np.linspace(0, 1, 21), np.linspace(0.1, 1, 61)
@@ -733,10 +776,10 @@ def test_example_quantile_knots_use_observed_rank_one_data():
     ) * np.sqrt(amplitude[..., None])
     data = WishartGridData.from_coefficients(coefficients, time, frequency)
     original = data.Y.copy()
-    allocated = pilot_quantile_knots(
+    allocated = wishart_grid_knots(
         data, 4, 10, time_spacing=0.05, frequency_spacing=0.025
     )
-    repeated = pilot_quantile_knots(
+    repeated = wishart_grid_knots(
         data, 4, 10, time_spacing=0.05, frequency_spacing=0.025
     )
     np.testing.assert_array_equal(data.Y, original)

@@ -158,9 +158,14 @@ class PSDResult:
             groups["sample_stats"] = self.sample_stats
         if self.log_likelihood is not None:
             groups["log_likelihood"] = self.log_likelihood
-        return from_dict(groups, attrs=self.metadata)
+        return from_dict(groups, attrs={"/": self.metadata})
 
     def _storage_dataset(self) -> xr.Dataset:
+        attrs = {
+            key: safe
+            for key, value in self.metadata.items()
+            if (safe := _netcdf_safe(value)) is not None
+        }
         data_vars: dict[str, xr.DataArray] = {
             "spectral_density": self.spectrum.rename(
                 {"draw": "spectrum_draw"}
@@ -179,6 +184,15 @@ class PSDResult:
         for prefix, dataset in groups:
             if dataset is None:
                 continue
+            # Flatten group attributes alongside variables so normalization,
+            # units and all-draw summary counts survive the native round trip.
+            attrs.update(
+                {
+                    f"{prefix}__{key}": safe
+                    for key, value in dataset.attrs.items()
+                    if (safe := _netcdf_safe(value)) is not None
+                }
+            )
             stored_group = dataset
             if prefix == "observed":
                 rename = {
@@ -188,11 +202,6 @@ class PSDResult:
                 stored_group = dataset.rename(rename)
             for name, var in stored_group.data_vars.items():
                 data_vars[f"{prefix}__{name}"] = var
-        attrs = {
-            key: safe
-            for key, value in self.metadata.items()
-            if (safe := _netcdf_safe(value)) is not None
-        }
         return xr.Dataset(data_vars, attrs=attrs)
 
     def to_netcdf(self, path: str | Path) -> None:
@@ -205,6 +214,7 @@ class PSDResult:
     def from_netcdf(cls, path: str | Path) -> PSDResult:
         """Load a native result written by to_netcdf."""
         stored = xr.load_dataset(Path(path), engine="h5netcdf")
+        metadata = dict(stored.attrs)
 
         def group(prefix: str) -> xr.Dataset | None:
             marker = f"{prefix}__"
@@ -213,8 +223,13 @@ class PSDResult:
             ]
             if not names:
                 return None
+            attrs = {}
+            for key in stored.attrs:
+                if key.startswith(marker):
+                    attrs[key[len(marker) :]] = metadata.pop(key)
             dataset = xr.Dataset(
-                {name[len(marker) :]: stored[name] for name in names}
+                {name[len(marker) :]: stored[name] for name in names},
+                attrs=attrs,
             )
             if prefix == "observed":
                 rename = {
@@ -235,7 +250,7 @@ class PSDResult:
             posterior=posterior,
             sample_stats=group("sample_stats"),
             spectrum=spectrum,
-            metadata=dict(stored.attrs),
+            metadata=metadata,
             log_likelihood=group("log_likelihood"),
             observed_data=group("observed"),
             truth=stored.get("true_psd"),

@@ -11,9 +11,10 @@ Highlights
 
 - Log-domain P-spline models for positive PSDs.
 - Multivariate Wishart likelihoods for spectral matrices.
-- VI warm starts and factorised multivariate NUTS.
+- Stationary NUTS or VI; factorised multivariate sampling.
 - Optional frequency-domain coarse graining.
-- Scalar time-varying fits from WDM and moving-periodogram powers.
+- Scalar time-varying fits from WDM powers, with moving periodograms as an alternative.
+- Multivariate time-varying fits from proper complex coefficient grids.
 - Posterior PSD quantiles, coherence summaries, and diagnostic plots.
 
 Install
@@ -58,6 +59,50 @@ Five-Minute Example
    frequency = result.frequency
    psd_draws = result.psd
 
+Choosing a workflow
+-------------------
+
+All workflows return ``PSDResult`` through ``fit``:
+
+.. list-table:: Supported observations and configurations
+   :header-rows: 1
+
+   * - Estimation
+     - Data
+     - Configuration
+   * - Stationary, one or multiple channels
+     - ``TimeSeries`` or ``WishartData``
+     - ``StationaryConfig``
+   * - Time-varying, one channel (WDM)
+     - ``wdm_periodogram`` → ``PowerData``
+     - ``PowerConfig`` (tensor or ANOVA)
+   * - Time-varying, multiple channels (complex coefficients)
+     - ``local_wishart_grid`` or ``WishartGridData.from_coefficients``
+     - ``PowerConfig(structure="anova")``
+
+WDM is the primary scalar time-varying workflow. Install the optional
+``LogPSplinePSD[wdm]`` dependency to transform a one-channel ``TimeSeries``:
+
+.. code-block:: python
+
+   from log_psplines import PowerConfig, fit, wdm_periodogram
+
+   powers = wdm_periodogram(series, nt=128)
+   result = fit(powers, PowerConfig(structure="anova"))
+
+The sample count must be divisible by ``nt``, and both ``nt`` and the quotient
+must be even. Returned powers are in WDM coefficient-variance units, with
+time divided by the full duration. See the
+`time-varying example <docs/examples/timevarying-example.ipynb>`_ for a complete
+workflow including truth conversion.
+
+**Multivariate WDM inference is not implemented.** The complex GridTV path
+retains cross-spectrum magnitude and phase, but its observation model does
+not apply to real WDM coefficients. Fitting each WDM channel independently
+estimates only diagonal powers. See
+`multivariate GridTV <docs/multivariate-gridtv.rst>`_ for the supported complex
+workflow and its assumptions.
+
 Next Steps
 ----------
 
@@ -70,9 +115,9 @@ Architecture
 ------------
 
 See the `development notes <docs/development.md>`_ for the shared scalar/matrix
-model and time-frequency evaluation. Scalar time-varying power inference is
-available through ``fit()``. Multivariate time-varying inference is not yet
-implemented.
+model and time-frequency evaluation. Transform adapters stay in preprocessing;
+likelihoods consume powers/counts or summed cross-channel statistics. Scalar
+and multivariate TV models share ANOVA fields and spectral reconstruction.
 
 Documentation
 -------------

@@ -14,8 +14,6 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 from numpyro.infer.util import init_to_value, initialize_model
-from scipy.integrate import trapezoid
-from scipy.ndimage import gaussian_filter
 
 from log_psplines import (
     ANOVALogPSpline,
@@ -28,76 +26,13 @@ from log_psplines import (
     fit,
     local_wishart_grid,
 )
-from log_psplines.data.spectral_utils import psd_to_cholesky_components
 from log_psplines.diagnostics import sampling_diagnostics, spectrum_diagnostics
 from log_psplines.example_datasets.tvvar_data import TVVARData
 from log_psplines.inference.wishart_grid import prepare_wishart_grid_row
 from log_psplines.plotting.results import plot_posterior_spectrum
 from log_psplines.preprocessing.knot_locator import (
-    Component,
-    quantile_knots,
-    variation_profiles,
+    wishart_grid_knots,
 )
-
-
-def pilot_quantile_knots(
-    data: WishartGridData,
-    time_count: int,
-    frequency_count: int,
-    *,
-    time_spacing: float,
-    frequency_spacing: float,
-) -> dict[str, np.ndarray]:
-    """Shared knots from smoothed observed Cholesky fields; no truth input.
-
-    Positive Gaussian averaging produces a pilot covariance before Cholesky
-    conversion, because native rank-one observations cannot be inverted.
-    Each field contributes a normalized variation profile; inference retains
-    the original statistics and conditions on the selected, fixed basis.
-    """
-    width = (max(1.0, len(data.time) / 32), 1.0)
-    denominator = gaussian_filter(data.counts, width, mode="nearest")
-    if np.any(denominator <= 0):
-        raise ValueError("pilot needs observed neighbours at every cell")
-    sums = data.Y
-    covariance = (
-        gaussian_filter(sums.real, (*width, 0, 0), mode="nearest")
-        + 1j * gaussian_filter(sums.imag, (*width, 0, 0), mode="nearest")
-    ) / denominator[..., None, None]
-    logs, theta = psd_to_cholesky_components(
-        covariance.reshape(-1, data.p, data.p),
-        cholesky_jitter=0.0,
-        max_cholesky_jitter=0.0,
-    )
-    row, col = np.tril_indices(data.p, k=-1)
-    fields = np.concatenate(
-        [logs, theta[:, row, col].real, theta[:, row, col].imag], axis=-1
-    )
-    fields = fields.reshape(*data.counts.shape, -1)
-    coordinates = {"time": data.time, "frequency": data.frequency}
-    scores = {axis: [] for axis in coordinates}
-    for field in np.moveaxis(fields, -1, 0):
-        profiles = variation_profiles(Component(field, coordinates))
-        for axis, profile in profiles.items():
-            scale = float(trapezoid(profile, coordinates[axis]))
-            if scale > 0:
-                scores[axis].append(profile / scale)
-    return {
-        axis: quantile_knots(
-            coordinate,
-            np.max(scores[axis], axis=0)
-            if scores[axis]
-            else np.zeros_like(coordinate),
-            count,
-            min_spacing=spacing,
-        )
-        for (axis, coordinate), count, spacing in zip(
-            coordinates.items(),
-            (time_count, frequency_count),
-            (time_spacing, frequency_spacing),
-            strict=True,
-        )
-    }
 
 
 def profile_largest_row(
@@ -291,7 +226,7 @@ def run(args: argparse.Namespace) -> None:
     modes = {name: modes[name] for name in args.modes}
     knots = {"time": None, "frequency": None}
     if args.knot_placement == "quantile":
-        knots = pilot_quantile_knots(
+        knots = wishart_grid_knots(
             native,
             args.time_knots,
             args.frequency_knots,

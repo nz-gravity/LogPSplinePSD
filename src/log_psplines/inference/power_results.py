@@ -1,12 +1,25 @@
 """Summarize spectral draws in bounded frequency chunks."""
 
+from collections.abc import Callable, Sequence
+
 import numpy as np
 import xarray as xr
+from jax import Array
+
+from log_psplines.config import PowerConfig
+from log_psplines.models.matrix import SpectralMatrix
 
 
 def power_result_spectra(
-    posterior, evaluate, time, frequency, channels, config, *, matrix=False
-):
+    posterior: xr.Dataset,
+    evaluate: Callable[[slice], Array | np.ndarray],
+    time: np.ndarray,
+    frequency: np.ndarray,
+    channels: Sequence[str | int] | np.ndarray,
+    config: PowerConfig,
+    *,
+    matrix: bool = False,
+) -> tuple[xr.DataArray, xr.Dataset]:
     """Return a draw preview and all-draw summaries of spectra.
 
     evaluate(slice) returns (chain,draw,T,F,C) variances, or (chain,draw,T,F,C,C)
@@ -45,8 +58,6 @@ def power_result_spectra(
                 f"posterior spectrum must be finite and positive with shape {expected}"
             )
         if matrix:
-            from log_psplines.models.matrix import SpectralMatrix
-
             preview[:, :, :, start:stop] = draws[:, indices]
             quantiles[:, :, start:stop] = np.percentile(
                 draws.real, [5, 50, 95], axis=(0, 1)

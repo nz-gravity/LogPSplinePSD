@@ -12,7 +12,7 @@ coordinates with the same conditional prior and learned scales.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import jax.numpy as jnp
 import numpy as np
@@ -208,21 +208,30 @@ def prepare_anova_power_model(
 
 
 def collect_anova_samples(
-    posterior: xr.Dataset, pair: dict[str, np.ndarray], *, label: str = ""
+    posterior: xr.Dataset,
+    pair: dict[str, np.ndarray],
+    *,
+    labels: Sequence[str] = ("",),
 ) -> xr.Dataset:
-    """Expose reconstruction-grid coefficients in the original spline bases."""
-    output = posterior.copy()
-    suffix = f"_{label}" if label else ""
-    g = np.asarray(output[f"g{suffix}"])
-    eta = np.asarray(output[f"eta{suffix}"]).reshape(
-        *g.shape[:2], len(pair["lam_time"]), len(pair["lam_freq"])
-    )
-    output[f"weights_g{suffix}"] = xr.DataArray(
-        np.einsum("ij,cdj->cdi", pair["U_freq"], g),
-        dims=("chain", "draw", "frequency_coefficient"),
-    )
-    output[f"weights_eta{suffix}"] = xr.DataArray(
-        np.einsum("ia,cdab,jb->cdij", pair["U_time"], eta, pair["U_freq"]),
-        dims=("chain", "draw", "time_coefficient", "frequency_coefficient"),
-    )
+    """Add original-basis coefficients without copying existing draw arrays."""
+    output = posterior.copy(deep=False)
+    for label in labels:
+        suffix = f"_{label}" if label else ""
+        g = np.asarray(posterior[f"g{suffix}"])
+        eta = np.asarray(posterior[f"eta{suffix}"]).reshape(
+            *g.shape[:2], len(pair["lam_time"]), len(pair["lam_freq"])
+        )
+        output[f"weights_g{suffix}"] = xr.DataArray(
+            np.einsum("ij,cdj->cdi", pair["U_freq"], g),
+            dims=("chain", "draw", "frequency_coefficient"),
+        )
+        output[f"weights_eta{suffix}"] = xr.DataArray(
+            np.einsum("ia,cdab,jb->cdij", pair["U_time"], eta, pair["U_freq"]),
+            dims=(
+                "chain",
+                "draw",
+                "time_coefficient",
+                "frequency_coefficient",
+            ),
+        )
     return output

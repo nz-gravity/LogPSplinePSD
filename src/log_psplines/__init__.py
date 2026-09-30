@@ -1,4 +1,4 @@
-"""Bayesian PSD estimation with shared scalar spline components."""
+"""P-spline spectral estimation for stationary and time-varying data."""
 
 try:
     from ._version import __commit_id__, __version__
@@ -25,6 +25,7 @@ from .preprocessing.power_partition import (
     mask_power,
     select_power_partition,
 )
+from .preprocessing.wdm import wdm_periodogram
 from .preprocessing.wishart_grid import (
     coarse_grain_wishart_grid,
     local_wishart_grid,
@@ -47,6 +48,7 @@ __all__ = [
     "coarse_grain_wishart_grid",
     "PowerConfig",
     "PowerData",
+    "wdm_periodogram",
     "moving_periodogram",
     "scattered_moving_periodogram",
     "PowerPartition",

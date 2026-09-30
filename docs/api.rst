@@ -41,11 +41,15 @@ Data Containers
 Time-Varying Preprocessing
 --------------------------
 
+Use WDM powers for scalar time-varying estimation. The complex Wishart grid
+helpers support multivariate local-FFT data; they do not accept real WDM
+coefficients.
+
+.. autofunction:: log_psplines.preprocessing.wdm.wdm_periodogram
+
 .. autofunction:: log_psplines.preprocessing.wishart_grid.local_wishart_grid
 
 .. autofunction:: log_psplines.preprocessing.wishart_grid.coarse_grain_wishart_grid
-
-.. autofunction:: log_psplines.preprocessing.wdm.wdm_periodogram
 
 .. autofunction:: log_psplines.preprocessing.moving_periodogram.moving_periodogram
 
@@ -90,6 +94,8 @@ Knot Initialisation
 .. autofunction:: log_psplines.preprocessing.knot_locator.quantile_knots
 
 .. autofunction:: log_psplines.preprocessing.knot_locator.allocate_components
+
+.. autofunction:: log_psplines.preprocessing.knot_locator.wishart_grid_knots
 
 Coarse Graining
 ---------------

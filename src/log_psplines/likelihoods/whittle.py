@@ -20,13 +20,17 @@ def power_whittle_log_likelihood(
     real Gaussian components, not complex Fourier ordinates. A WDM cell
     has P=w**2, count=1. A complex Fourier ordinate has P=2*power/duration,
     count=2. Pool raw powers and counts, never a smoothed pilot spectrum.
-    Omitted cells have both power and count zero, with finite log_psd.
+    Zero-count cells contribute zero value and gradient, including when their
+    omitted powers or log spectra are nonfinite.
 
     This likelihood is unclipped and omits data-only constants. The stationary
     Fourier entry point below keeps its existing clipping, ENBW and tempering
     conventions.
     """
-    return -0.5 * jnp.sum(counts * log_psd + summed_power * jnp.exp(-log_psd))
+    active = counts > 0
+    logs = jnp.where(active, log_psd, 0.0)
+    power = jnp.where(active, summed_power, 0.0)
+    return -0.5 * jnp.sum(counts * logs + power * jnp.exp(-logs))
 
 
 def whittle_log_likelihood(

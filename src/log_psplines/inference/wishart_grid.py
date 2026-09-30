@@ -1,6 +1,7 @@
 """Thin blocked ANOVA integration for rectangular proper complex data."""
 
 from collections.abc import Callable
+from dataclasses import asdict
 from time import perf_counter
 
 import jax
@@ -65,7 +66,12 @@ def prepare_wishart_grid_row(
         design = bt, bf, bt @ pair["U_time"], bf @ pair["U_freq"]
     bt, bf, bt_eig, bf_eig = design
     bt_eig, bf_eig = jnp.asarray(bt_eig), jnp.asarray(bf_eig)
-    factors = jnp.asarray(data.U)
+    # Each independent row needs only itself and preceding channels. Keep the
+    # real/imaginary factors separate rather than rebuilding the full complex U.
+    u_re = jnp.asarray(data.u_re[..., channel, :])
+    u_im = jnp.asarray(data.u_im[..., channel, :])
+    prev_re = jnp.asarray(data.u_re[..., :channel, :])
+    prev_im = jnp.asarray(data.u_im[..., :channel, :])
     counts = jnp.asarray(data.counts)
     labels = row_field_labels(channel)
 
@@ -92,10 +98,10 @@ def prepare_wishart_grid_row(
             logs,
             theta_re,
             theta_im,
-            factors[..., channel, :].real,
-            factors[..., channel, :].imag,
-            factors[..., :channel, :].real,
-            factors[..., :channel, :].imag,
+            u_re,
+            u_im,
+            prev_re,
+            prev_im,
             counts=counts,
             clip_log_psd=False,
         )
@@ -104,7 +110,10 @@ def prepare_wishart_grid_row(
 
     # Reuse scalar log-variance initialization only. The inference observations
     # remain complex multichannel factors, including every cross-spectrum.
-    marginal = np.sum(np.abs(data.U[..., channel, :]) ** 2, axis=-1)
+    marginal = np.sum(
+        data.u_re[..., channel, :] ** 2 + data.u_im[..., channel, :] ** 2,
+        axis=-1,
+    )
     diagonal_init = initialize_anova(
         PowerData(2 * marginal, 2 * data.counts, data.frequency, data.time),
         bt,
@@ -199,10 +208,11 @@ def fit_wishart_grid(
         )
         runtimes.append(perf_counter() - start)
         timings.append(sampled.timings)
-        posterior = sampled.posterior
-        for label in row_field_labels(channel):
-            posterior = collect_anova_samples(posterior, pair, label=label)
-        posterior_parts.append(posterior)
+        posterior_parts.append(
+            collect_anova_samples(
+                sampled.posterior, pair, labels=row_field_labels(channel)
+            )
+        )
         stats_parts.append(_suffix(sampled.sample_stats, channel))
         likelihood_parts.append(sampled.log_likelihood)
     posterior = xr.merge(posterior_parts)
@@ -286,6 +296,7 @@ def fit_wishart_grid(
             coords={"time": output_time, "frequency": output_frequency},
         ),
         metadata={
+            **asdict(config),
             "data_type": "multivariate_gridtv",
             "structure": "anova",
             "units": data.units,
@@ -307,18 +318,7 @@ def fit_wishart_grid(
             ],
             "reconstruction_seconds": reconstruction_seconds,
             "spectrum_bytes": final_bytes,
-            "max_tree_depth": config.max_tree_depth,
-            "seed": config.seed,
-            "roughness_scale": config.roughness_scale,
             "interaction_scale": spline.sigma_eta_prior,
-            "null_precision": config.null_precision,
-            "ridge_eps": config.ridge_eps,
-            "n_warmup": config.n_warmup,
-            "n_samples": config.n_samples,
-            "num_chains": config.num_chains,
-            "target_accept_prob": config.target_accept_prob,
-            "dense_mass": config.dense_mass,
-            "centered": config.centered,
         },
     )
     return result

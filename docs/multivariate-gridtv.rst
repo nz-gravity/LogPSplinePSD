@@ -7,7 +7,9 @@ existing ``PSDResult`` with dimensions
 ``(chain, draw, time, frequency, channel, channel_aux)``. Each modified-Cholesky
 row is sampled independently using the existing NUTS runner. This is a
 rectangular proper-complex path; scattered multivariate data and real WDM
-coefficients require different statistical support.
+coefficients require different statistical support. For scalar time-varying
+work, use ``wdm_periodogram`` and ``PowerData``. The local FFT adapter on this
+page is an additional complex-data workflow, not a multivariate WDM adapter.
 
 Preparation and normalization
 -----------------------------
@@ -132,6 +134,8 @@ uses cached 5/50/95 entrywise summaries over *all* draws; componentwise complex
 quantiles need not themselves be positive-definite matrices. The cached
 ``coherence_quantiles`` are quantiles of coherence computed per full draw.
 ``result.coherence`` refers to the materialized preview draws.
+``spectrum_diagnostics`` uses the cached median of per-draw coherence for its
+coherence error, so reducing the stored preview does not change this metric.
 
 The final complex128 preview still occupies
 ``16*num_chains*retained_draws*T*F*C**2`` bytes. Chunking does not reduce that
@@ -169,7 +173,8 @@ per chain, non-centered coordinates and target acceptance 0.97. The comparison
 plot includes 90% posterior intervals for the first selected mode. These are inference settings,
 not a guarantee of recovery from this short realization.
 
-``--knot-placement quantile`` reuses ``variation_profiles`` and
+``--knot-placement quantile`` uses ``wishart_grid_knots`` from
+``preprocessing.knot_locator``, which reuses ``variation_profiles`` and
 ``quantile_knots`` from the existing knot locator. It first smooths the observed
 matrix sums and counts with positive Gaussian weights, then extracts diagonal
 logs and signed real/imaginary Cholesky fields. Native rank-one cells are never

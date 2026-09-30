@@ -7,7 +7,10 @@ from scipy.integrate import quad
 from scipy.interpolate import BSpline
 
 from log_psplines import SpectralMatrix, SplineBasis
-from log_psplines.likelihoods.whittle import whittle_log_likelihood
+from log_psplines.likelihoods.whittle import (
+    power_whittle_log_likelihood,
+    whittle_log_likelihood,
+)
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 
 
@@ -76,6 +79,19 @@ def test_whittle_likelihood_matches_direct_sum_and_has_finite_gradient():
         lambda value: whittle_log_likelihood(value, power, duration=duration)
     )(log_psd)
     assert np.isfinite(gradient).all()
+
+
+def test_masked_wdm_powers_have_zero_likelihood_and_gradient():
+    logs = jnp.array([np.nan, -1000.0, np.inf, np.log(2.0)])
+    powers = jnp.array([np.nan, 0.0, np.inf, 3.0])
+    counts = jnp.array([0.0, 0.0, 0.0, 1.0])
+
+    def likelihood(logs):
+        return power_whittle_log_likelihood(powers, counts, logs)
+
+    value, gradient = jax.jit(jax.value_and_grad(likelihood))(logs)
+    np.testing.assert_allclose(value, -0.5 * (np.log(2.0) + 1.5))
+    np.testing.assert_allclose(gradient, [0, 0, 0, 0.25])
 
 
 def test_wishart_likelihood_matches_independent_factor_calculation():

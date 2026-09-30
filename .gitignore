@@ -322,3 +322,6 @@ runs
 *.npz
 *.png
 studies
+
+# Retain the compact, reviewed precision study results.
+!/docs/precision_results.csv

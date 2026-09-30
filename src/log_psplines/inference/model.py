@@ -66,10 +66,21 @@ def _sample_pspline_block(
     smoothing_parameterization: str = "centered",
 ) -> jnp.ndarray:
     """Draw spline weights; return shape ``(K,)`` under a HalfNormal scale."""
-    sigma = numpyro.sample(sigma_name, dist.HalfNormal(roughness_scale))
+    # Keep explicitly supplied low-precision operators low precision even
+    # when the process permits float64 arrays.
+    dtype = penalty_matrix.dtype
+    sigma = numpyro.sample(
+        sigma_name, dist.HalfNormal(jnp.asarray(roughness_scale, dtype=dtype))
+    )
 
     k = penalty_matrix.shape[0]
-    base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
+    base_normal = (
+        dist.Normal(
+            jnp.asarray(0.0, dtype=dtype), jnp.asarray(1.0, dtype=dtype)
+        )
+        .expand((k,))
+        .to_event(1)
+    )
     if smoothing_parameterization == "noncentered":
         raw_weights = numpyro.sample(f"{weights_name}_raw", base_normal)
         cholesky = jnp.linalg.cholesky(penalty_matrix)
@@ -183,8 +194,8 @@ def _blocked_channel_model(
         theta_im = jnp.stack(theta_im_components, axis=1)
     else:
         # Channel 0 has no preceding channels; residual equals the observation.
-        theta_re = jnp.zeros((n_freq, 0))
-        theta_im = jnp.zeros((n_freq, 0))
+        theta_re = jnp.zeros((n_freq, 0), dtype=log_delta_sq.dtype)
+        theta_im = jnp.zeros((n_freq, 0), dtype=log_delta_sq.dtype)
 
     log_likelihood = wishart_log_likelihood(
         log_delta_sq,

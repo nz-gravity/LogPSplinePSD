@@ -9,3 +9,4 @@ chapters:
   - file: conventions.rst
   - file: api.rst
   - file: development.md
+  - file: precision.md

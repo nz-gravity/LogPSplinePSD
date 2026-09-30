@@ -122,6 +122,7 @@ testpaths = ["tests"]
 addopts = "--durations=20 -s --import-mode=importlib --jaxtyping-packages=log_psplines,beartype.beartype"
 markers = [
     "slow: slow integration or end-to-end tests",
+    "precision: explicit univariate floating-point precision checks",
     "memory: tests commonly used for memory profiling runs",
 ]
 

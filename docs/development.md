@@ -2,6 +2,9 @@
 
 This page contains notes for developers contributing to LogPSplinePSD.
 
+See the [univariate precision investigation](precision.md) for reproducible
+float32/float64 numerical checks and the bounded inference pilot.
+
 ## Version Control and Releases
 
 ### Commit Types for Releases

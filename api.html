@@ -424,6 +424,10 @@
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PowerConfig"><code class="docutils literal notranslate"><span class="pre">PowerConfig</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#posterior-summary-semantics">Posterior summary semantics</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.reconstruction.compute_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">compute_psd_quantiles()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-containers">Data Containers</a><ul class="nav section-nav flex-column">
@@ -498,6 +502,8 @@
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics">Diagnostics</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.plotting.plot_basis_diagnostics"><code class="docutils literal notranslate"><span class="pre">plot_basis_diagnostics()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.plotting.compute_confidence_intervals"><code class="docutils literal notranslate"><span class="pre">compute_confidence_intervals()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.sampling_diagnostics"><code class="docutils literal notranslate"><span class="pre">sampling_diagnostics()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.spectrum_diagnostics"><code class="docutils literal notranslate"><span class="pre">spectrum_diagnostics()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.save_diagnostics"><code class="docutils literal notranslate"><span class="pre">save_diagnostics()</span></code></a></li>
@@ -521,7 +527,7 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Coarse Graining</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Coarse Graining</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference-spectrum-power-fits">Reference-spectrum power fits</a><ul class="nav section-nav flex-column">
@@ -573,8 +579,11 @@ true_psd is used only for post-fit analysis, never for inference.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="log_psplines.results.PSDResult.quantiles">
-<span class="sig-name descname"><span class="pre">quantiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(5.0,</span> <span class="pre">50.0,</span> <span class="pre">95.0)</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataArray</span></span></span><a class="headerlink" href="#log_psplines.results.PSDResult.quantiles" title="Link to this definition">#</a></dt>
-<dd><p>Posterior spectral quantiles over chain and draw.</p>
+<span class="sig-name descname"><span class="pre">quantiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(5.0,</span> <span class="pre">50.0,</span> <span class="pre">95.0)</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kind</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'complex'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataArray</span></span></span><a class="headerlink" href="#log_psplines.results.PSDResult.quantiles" title="Link to this definition">#</a></dt>
+<dd><p>All-posterior quantiles, using a verified cache or complete draws.</p>
+<p>kind is complex (componentwise real/imaginary), real, imag, magnitude,
+or coherence. Nonlinear transformations are applied to individual
+draws. A spectrum preview alone cannot provide posterior quantiles.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -786,6 +795,47 @@ true_psd is used only for post-fit analysis, never for inference.</p>
 precisions are derived as <code class="docutils literal notranslate"><span class="pre">phi</span> <span class="pre">=</span> <span class="pre">sigma**-2</span></code>.</p>
 </dd></dl>
 
+<section id="posterior-summary-semantics">
+<h3>Posterior summary semantics<a class="headerlink" href="#posterior-summary-semantics" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">result.spectrum</span></code> stores reconstructed draws. Stationary fits currently store
+every draw; <code class="docutils literal notranslate"><span class="pre">PowerConfig.spectrum_draws</span></code> can limit power fits to a preview.
+<code class="docutils literal notranslate"><span class="pre">result.psd</span></code> and <code class="docutils literal notranslate"><span class="pre">result.coherence</span></code> describe those stored draws.
+<code class="docutils literal notranslate"><span class="pre">result.spectrum_summary</span></code> contains all-draw summaries with the posterior chain
+and draw counts attached to each variable, including after a NetCDF round trip.</p>
+<p><code class="docutils literal notranslate"><span class="pre">result.quantiles()</span></code> returns cached all-draw quantiles when available, or
+computes them from complete stored draws. A preview alone raises an error.
+<code class="docutils literal notranslate"><span class="pre">kind=&quot;real&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;imag&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;magnitude&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">&quot;coherence&quot;</span></code> select the
+quantity summarized. Magnitude and coherence require their own cached quantiles
+or complete draws; they cannot be derived from elementwise spectral quantiles.
+Requested percentiles absent from a preview’s cache must be reconstructed from
+the saved posterior and model data. Parametric results also need the original
+forward model.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.models.reconstruction.compute_psd_quantiles">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.models.reconstruction.</span></span><span class="sig-name descname"><span class="pre">compute_psd_quantiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_delta_sq_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Float</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'*samples</span> <span class="pre">N</span> <span class="pre">p'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Float</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'*samples</span> <span class="pre">N</span> <span class="pre">p'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">theta_re_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Float</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'*samples</span> <span class="pre">N</span> <span class="pre">_'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Float</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'*samples</span> <span class="pre">N</span> <span class="pre">_'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">theta_im_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Float</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'*samples</span> <span class="pre">N</span> <span class="pre">_'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Float</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'*samples</span> <span class="pre">N</span> <span class="pre">_'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2048</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_coherence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.models.reconstruction.compute_psd_quantiles" title="Link to this definition">#</a></dt>
+<dd><p>Compute PSD (and optional coherence) percentiles in frequency chunks.</p>
+<p>All chains and draws are used by default. An explicit n_samples_max limits
+the flattened draws and is unsuitable for an all-posterior summary.</p>
+<section id="returns">
+<h4>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h4>
+<dl class="simple">
+<dt>psd_real_percentiles<span class="classifier">np.ndarray</span></dt><dd><p>Percentiles of the real part of the PSD matrix with shape
+<code class="docutils literal notranslate"><span class="pre">(n_percentiles,</span> <span class="pre">N,</span> <span class="pre">p,</span> <span class="pre">p)</span></code>.</p>
+</dd>
+<dt>psd_imag_percentiles<span class="classifier">np.ndarray</span></dt><dd><p>Percentiles of the imaginary part of the PSD matrix with matching shape.</p>
+</dd>
+<dt>coherence_percentiles<span class="classifier">Optional[np.ndarray]</span></dt><dd><p>When <code class="docutils literal notranslate"><span class="pre">compute_coherence</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> and <code class="docutils literal notranslate"><span class="pre">p</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, contains
+percentiles of the coherence matrix; otherwise <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<p>This lower-level routine reconstructs multivariate draws in frequency chunks.
+It uses every chain and draw by default. An explicit <code class="docutils literal notranslate"><span class="pre">n_samples_max</span></code> produces
+a deliberately limited summary. Its real, imaginary, and optional coherence
+quantiles share the same reduction implementation as <code class="docutils literal notranslate"><span class="pre">PSDResult.quantiles</span></code>.</p>
+</section>
 </section>
 <section id="data-containers">
 <h2>Data Containers<a class="headerlink" href="#data-containers" title="Link to this heading">#</a></h2>
@@ -1061,8 +1111,8 @@ ensuring positive definiteness of the estimated PSD matrix.</p>
 <dt class="sig sig-object py" id="log_psplines.inference.components.SpectralComponents.get_all_bases_and_penalties">
 <span class="sig-name descname"><span class="pre">get_all_bases_and_penalties</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Array</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.inference.components.SpectralComponents.get_all_bases_and_penalties" title="Link to this definition">#</a></dt>
 <dd><p>Get basis and penalty matrices for all components (for NumPyro model).</p>
-<section id="returns">
-<h4>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h4>
+<section id="id1">
+<h4>Returns<a class="headerlink" href="#id1" title="Link to this heading">#</a></h4>
 <dl class="simple">
 <dt>Tuple[List[jnp.ndarray], List[jnp.ndarray]]</dt><dd><p>Lists of basis and penalty matrices for all components</p>
 </dd>
@@ -1179,8 +1229,8 @@ consecutive bins J_h, each of constant size Nh (odd).</p>
 </ul>
 </dd>
 </dl>
-<section id="id1">
-<h3>Notes<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
+<section id="id2">
+<h3>Notes<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
 <p>This spec describes consecutive, full-band bins on the retained grid:
 no gaps, no overlaps, and no per-bin sorting.</p>
 </section>
@@ -1207,8 +1257,8 @@ For even Nh, the lower-middle Fourier frequency is used.</p>
 <dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">apply_coarse_grain_multivar_fft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fft</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><span class="pre">CoarseGrainSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="Link to this definition">#</a></dt>
 <dd><p>Coarse-grain a WishartData using equal-sized bins.</p>
-<section id="id2">
-<h3>Notes<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
+<section id="id3">
+<h3>Notes<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
 <ul class="simple">
 <li><p>Y(f_k) is the Wishart matrix built from block FFTs (second-order). We
 form Y_bar by summing Y(f_k) across bins and then re-factorize to obtain
@@ -1220,6 +1270,42 @@ the coarse-grid U factors used by the likelihood.</p></li>
 </section>
 <section id="diagnostics">
 <h2>Diagnostics<a class="headerlink" href="#diagnostics" title="Link to this heading">#</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.plotting.plot_basis_diagnostics">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.plotting.</span></span><span class="sig-name descname"><span class="pre">plot_basis_diagnostics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">basis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.basis.SplineBasis" title="log_psplines.basis.splines.SplineBasis"><span class="pre">SplineBasis</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Figure</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.plotting.plot_basis_diagnostics" title="Link to this definition">#</a></dt>
+<dd><p>Inspect the actual basis (G, K), knots, and derivative penalty (K, K).</p>
+<p>Pass model.frequency or model.time to inspect a fitted component’s basis.
+Coordinates and operators are plotted as stored, without rebuilding them.</p>
+</dd></dl>
+
+<p>Inspect the basis actually used by a model, including its knots and penalty:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.plotting</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_basis_diagnostics</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plot_basis_diagnostics</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">frequency</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"basis.png"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For stationary component models use
+<code class="docutils literal notranslate"><span class="pre">components.diagonal_models[channel].frequency</span></code>; for a tensor model inspect
+<code class="docutils literal notranslate"><span class="pre">model.frequency</span></code> and <code class="docutils literal notranslate"><span class="pre">model.time</span></code> separately. The diagnostic plots these
+stored operators directly and does not construct replacement bases.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.plotting.compute_confidence_intervals">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.plotting.</span></span><span class="sig-name descname"><span class="pre">compute_confidence_intervals</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">quantiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(16,</span> <span class="pre">50,</span> <span class="pre">84)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'percentile'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Array</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Array</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Array</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.plotting.compute_confidence_intervals" title="Link to this definition">#</a></dt>
+<dd><p>Compute confidence intervals from posterior samples.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>samples: Array of posterior samples
+quantiles: Tuple of quantiles to compute (low, median, high)
+method: Method for CI computation (‘percentile’ or ‘uniform’)
+alpha: Significance level for uniform CI</p>
+</dd>
+<dt>Returns:</dt><dd><p>Tuple of (lower_bound, median, upper_bound)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>This generic draw-array helper supports percentile and simultaneous bands.
+It is separate from spectral-matrix summaries; use <code class="docutils literal notranslate"><span class="pre">PSDResult.quantiles</span></code> for
+fitted spectra and their nonlinear transformations.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="log_psplines.diagnostics.sampling_diagnostics">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.diagnostics.</span></span><span class="sig-name descname"><span class="pre">sampling_diagnostics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.results.PSDResult" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elbo_window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#log_psplines.diagnostics.sampling_diagnostics" title="Link to this definition">#</a></dt>
@@ -1491,8 +1577,8 @@ statistic.</p>
 <li><p>Optionally coarse grain the retained grid.</p></li>
 </ol>
 </section>
-<section id="id3">
-<h3>Coarse Graining<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
+<section id="id4">
+<h3>Coarse Graining<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
 <p>Coarse graining sums neighbouring Wishart matrices into equal-size consecutive
 frequency bins. It is useful when the frequency grid is much denser than the
 spectral structure being estimated.</p>
@@ -1716,6 +1802,10 @@ separate lengths of posterior chains and spectral previews.</p>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PowerConfig"><code class="docutils literal notranslate"><span class="pre">PowerConfig</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#posterior-summary-semantics">Posterior summary semantics</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.reconstruction.compute_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">compute_psd_quantiles()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-containers">Data Containers</a><ul class="nav section-nav flex-column">
@@ -1790,6 +1880,8 @@ separate lengths of posterior chains and spectral previews.</p>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics">Diagnostics</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.plotting.plot_basis_diagnostics"><code class="docutils literal notranslate"><span class="pre">plot_basis_diagnostics()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.plotting.compute_confidence_intervals"><code class="docutils literal notranslate"><span class="pre">compute_confidence_intervals()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.sampling_diagnostics"><code class="docutils literal notranslate"><span class="pre">sampling_diagnostics()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.spectrum_diagnostics"><code class="docutils literal notranslate"><span class="pre">spectrum_diagnostics()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.save_diagnostics"><code class="docutils literal notranslate"><span class="pre">save_diagnostics()</span></code></a></li>
@@ -1813,7 +1905,7 @@ separate lengths of posterior chains and spectral previews.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Coarse Graining</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Coarse Graining</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference-spectrum-power-fits">Reference-spectrum power fits</a><ul class="nav section-nav flex-column">

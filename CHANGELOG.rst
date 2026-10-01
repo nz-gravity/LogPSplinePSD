@@ -8,6 +8,15 @@ CHANGELOG
 Unreleased
 ==========
 
+* Use all chains and draws by default for chunked PSD quantiles; preserve the
+  optional explicit draw cap for preview summaries.
+* Route matrix plotting through verified all-draw result summaries, and reject
+  preview-only quantiles. Persist summary chain/draw counts in NetCDF.
+* Add public basis/knots/penalty inspection from the actual model basis,
+  replacing unused legacy raw-array plotting helpers.
+* Enable JAX x64 in scientific CI and documentation execution, and remove
+  forced float32 casts from stationary model preparation.
+
 * Remove optional MorphZ evidence estimation and its dependencies.
   ``StationaryConfig.compute_lnz`` and ``lnz_kwargs`` are no longer accepted.
   Pointwise log-likelihood draws remain available for ArviZ diagnostics.

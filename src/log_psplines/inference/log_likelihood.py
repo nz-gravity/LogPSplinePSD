@@ -24,15 +24,6 @@ def _channel_theta_array(
     param_type: str,
 ) -> np.ndarray:
     """Evaluate per-draw theta spline values for one multivariate channel."""
-    if channel_index <= 0:
-        weights_delta = np.asarray(
-            posterior[f"weights_delta_{channel_index}"].values,
-            dtype=np.float64,
-        )
-        n_chain, n_draw = weights_delta.shape[:2]
-        n_freq = int(np.asarray(basis_list[0]).shape[0]) if basis_list else 0
-        return np.zeros((n_chain, n_draw, n_freq, 0), dtype=np.float64)
-
     theta_parts: list[np.ndarray] = []
     for theta_idx, theta_basis in enumerate(basis_list):
         weights_name = (

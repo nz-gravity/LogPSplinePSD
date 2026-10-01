@@ -224,14 +224,15 @@ def prepare_model(
     )
 
     p = data.p
-    u_re = jnp.asarray(data.u_re, dtype=jnp.float32)
-    u_im = jnp.asarray(data.u_im, dtype=jnp.float32)
+    # Respect configured JAX precision; scientific CI explicitly enables x64.
+    u_re = jnp.asarray(data.u_re)
+    u_im = jnp.asarray(data.u_im)
 
     bases_delta = []
     penalties_delta = []
     for j in range(p):
         m = spline.diagonal_models[j]
-        bases_delta.append(jnp.asarray(m.basis, dtype=jnp.float32))
+        bases_delta.append(jnp.asarray(m.basis))
         penalties_delta.append(jnp.asarray(m.penalty_matrix))
 
     bases_theta_re: list[list] = []
@@ -243,9 +244,9 @@ def prepare_model(
         for previous_channel in range(j):
             m_re = spline.get_theta_model("re", j, previous_channel)
             m_im = spline.get_theta_model("im", j, previous_channel)
-            br.append(jnp.asarray(m_re.basis, dtype=jnp.float32))
+            br.append(jnp.asarray(m_re.basis))
             pr.append(jnp.asarray(m_re.penalty_matrix))
-            bi.append(jnp.asarray(m_im.basis, dtype=jnp.float32))
+            bi.append(jnp.asarray(m_im.basis))
             pi.append(jnp.asarray(m_im.penalty_matrix))
         bases_theta_re.append(br)
         penalties_theta_re.append(pr)

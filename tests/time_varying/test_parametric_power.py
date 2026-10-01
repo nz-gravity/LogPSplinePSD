@@ -59,7 +59,7 @@ def test_parametric_joint_likelihood_and_truth_independence(tmp_path):
     xr.testing.assert_equal(loaded.quantiles(), result.quantiles())
     np.testing.assert_allclose(loaded.truth, template)
     assert np.linalg.eigvalsh(loaded.spectrum).min() > 0
-    with pytest.raises(ValueError, match="Only 5/50/95"):
+    with pytest.raises(ValueError, match="Spectrum is a preview"):
         loaded.quantiles((25.0,))
 
 

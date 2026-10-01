@@ -18,6 +18,24 @@ from log_psplines.data.spectral_utils import (
 )
 
 
+def _regularize_wishart(Y: np.ndarray, fraction: float) -> np.ndarray:
+    """Floor eigenvalues relative to each frequency's own trace, preserving scale."""
+    trace_per_bin = np.real(np.trace(Y, axis1=-2, axis2=-1))
+    wishart_floor = float(fraction) * trace_per_bin
+    lam, v = np.linalg.eigh(Y)
+    lam_real = lam.real
+    # Floor each bin's eigenvalues against its own trace-based threshold
+    needs_clip = lam_real < wishart_floor[:, np.newaxis]
+    if np.any(needs_clip):
+        lam_real = np.where(
+            needs_clip,
+            wishart_floor[:, np.newaxis],
+            lam_real,
+        )
+        Y = (v * lam_real[:, np.newaxis, :]) @ np.conj(np.swapaxes(v, -2, -1))
+    return Y
+
+
 def compute_fft(
     x: Float[np.ndarray, "n p"],
     fs: float = 1.0,
@@ -181,21 +199,7 @@ def compute_wishart(
     # the median trace destroys the eigenvalue structure (and hence
     # coherence) at low-power frequencies far from the nulls.
     if wishart_floor_fraction is not None:
-        trace_per_bin = np.real(np.trace(Y, axis1=-2, axis2=-1))
-        wishart_floor = float(wishart_floor_fraction) * trace_per_bin
-        lam, v = np.linalg.eigh(Y)
-        lam_real = lam.real
-        # Floor each bin's eigenvalues against its own trace-based threshold
-        needs_clip = lam_real < wishart_floor[:, np.newaxis]
-        if np.any(needs_clip):
-            lam_real = np.where(
-                needs_clip,
-                wishart_floor[:, np.newaxis],
-                lam_real,
-            )
-            Y = (v * lam_real[:, np.newaxis, :]) @ np.conj(
-                np.swapaxes(v, -2, -1)
-            )
+        Y = _regularize_wishart(Y, float(wishart_floor_fraction))
 
     U = Y_to_U(Y)
     u_re = U.real

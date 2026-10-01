@@ -3,6 +3,8 @@
 import numpy as np
 import xarray as xr
 
+from log_psplines.models.reconstruction import spectral_quantiles
+
 
 def power_result_spectra(
     posterior, evaluate, time, frequency, channels, config
@@ -37,8 +39,8 @@ def power_result_spectra(
                 f"posterior spectrum must be finite and positive with shape {expected}"
             )
         preview[:, :, :, start:stop, diagonal, diagonal] = draws[:, indices]
-        quantiles[:, :, start:stop, diagonal, diagonal] = np.percentile(
-            draws, [5, 50, 95], axis=(0, 1)
+        quantiles[:, :, start:stop, diagonal, diagonal] = spectral_quantiles(
+            draws, kind="real", axis=(0, 1)
         )
         mean[:, start:stop, diagonal, diagonal] = draws.mean(axis=(0, 1))
         geometric[:, start:stop, diagonal, diagonal] = np.exp(
@@ -71,4 +73,7 @@ def power_result_spectra(
         },
         attrs={"draws_per_chain": nd, "num_chains": nc},
     )
+    # Variable attributes survive PSDResult's flat NetCDF storage format.
+    for variable in summary.data_vars.values():
+        variable.attrs.update(summary.attrs)
     return spectrum, summary

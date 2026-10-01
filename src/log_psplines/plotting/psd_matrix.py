@@ -52,27 +52,6 @@ class PSDMatrixPlotSpec:
     psd_unit_label: str = "1/Hz"
 
 
-def _spectral_quantiles(
-    samples: np.ndarray, kind: str, i: int, j: int
-) -> np.ndarray:
-    """Return 5/50/95 curves for one panel from (chain, draw, F, C, C)."""
-    if kind == "coherence":
-        values = np.asarray(SpectralMatrix.coherence(samples))[..., i, j]
-    else:
-        values = samples[..., i, j]
-        if kind == "real":
-            values = values.real
-        elif kind == "imag":
-            values = values.imag
-        elif kind == "magnitude":
-            values = np.abs(values)
-        else:
-            raise ValueError(f"Unknown panel kind: {kind}")
-    return np.percentile(
-        values.reshape(-1, values.shape[-1]), (5, 50, 95), axis=0
-    )
-
-
 def _panel_kind(i: int, j: int, spec: PSDMatrixPlotSpec) -> str:
     if i == j:
         return "real"
@@ -207,7 +186,7 @@ def _render_panel(
     ax: plt.Axes,
     spec: PSDMatrixPlotSpec,
     frequency: np.ndarray,
-    posterior: np.ndarray,
+    curves: np.ndarray,
     empirical: EmpiricalPSD | None,
     truth: np.ndarray | None,
     scale: np.ndarray,
@@ -224,7 +203,6 @@ def _render_panel(
             zorder=-20,
             label="Excluded band" if i == j == band_index == 0 else None,
         )
-    curves = _spectral_quantiles(posterior, kind, i, j)
     if kind != "coherence":
         curves = curves * scale
     _render_empirical_panel(ax, spec, empirical, kind, i, j, scale)
@@ -329,6 +307,7 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec) -> tuple[plt.Figure, np.ndarray]:
     axes = np.asarray(axes_value, dtype=object).reshape(channels, channels)
     if axes.shape != (channels, channels):
         raise ValueError("Provided axes must match the channel matrix shape")
+    summaries = {}
     for i in range(channels):
         for j in range(channels):
             ax = axes[i, j]
@@ -336,13 +315,15 @@ def plot_psd_matrix(spec: PSDMatrixPlotSpec) -> tuple[plt.Figure, np.ndarray]:
                 ax.axis("off")
                 continue
             kind = _panel_kind(i, j, spec)
+            if kind not in summaries:
+                summaries[kind] = np.asarray(result.quantiles(kind=kind))
             ax.set_xscale(spec.xscale)
             ax.tick_params(which="both", direction="in", top=True, right=True)
             _render_panel(
                 ax,
                 spec,
                 frequency,
-                posterior,
+                summaries[kind][..., i, j],
                 empirical,
                 truth,
                 scale,

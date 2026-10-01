@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import jax
 import numpy as np
+import xarray as xr
 
 from log_psplines.basis import SplineBasis
 from log_psplines.config import PowerConfig, StationaryConfig
@@ -109,6 +110,13 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
         vi=vi,
         log_likelihood=log_likelihood,
         observed_data=observed_wishart_data(data),
+    )
+    result.spectrum_summary = xr.Dataset(
+        {
+            "quantiles": result.quantiles(),
+            "coherence_quantiles": result.quantiles(kind="coherence"),
+            "magnitude_quantiles": result.quantiles(kind="magnitude"),
+        }
     )
     if config.outdir is not None:
         result.save(

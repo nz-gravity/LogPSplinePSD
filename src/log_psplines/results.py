@@ -124,22 +124,74 @@ class PSDResult:
         return SpectralMatrix.coherence(self.spectral_density)
 
     def quantiles(
-        self, percentiles: tuple[float, ...] = (5.0, 50.0, 95.0)
+        self,
+        percentiles: tuple[float, ...] = (5.0, 50.0, 95.0),
+        *,
+        kind: str = "complex",
     ) -> xr.DataArray:
-        """Posterior spectral quantiles over chain and draw."""
+        """All-posterior quantiles, using a verified cache or complete draws.
+
+        kind is complex (componentwise real/imaginary), real, imag, magnitude,
+        or coherence. Nonlinear transformations are applied to individual
+        draws. A spectrum preview alone cannot provide posterior quantiles.
+        """
+        from log_psplines.models.reconstruction import spectral_quantiles
+
+        variables = {
+            "complex": "quantiles",
+            "real": "quantiles",
+            "imag": "quantiles",
+            "magnitude": "magnitude_quantiles",
+            "coherence": "coherence_quantiles",
+        }
+        if kind not in variables:
+            raise ValueError(f"Unknown spectral summary kind: {kind}")
+        nc, nd = self.posterior.sizes["chain"], self.posterior.sizes["draw"]
         if self.spectrum_summary is not None:
-            cached = self.spectrum_summary["quantiles"]
-            if all(q in cached.percentile.values for q in percentiles):
-                return cached.sel(percentile=list(percentiles))
-            if self.spectrum.sizes["draw"] != self.posterior.sizes["draw"]:
-                raise ValueError(
-                    "Only 5/50/95 percentiles are cached from all draws; reconstruct other quantiles from posterior samples"
+            cached = self.spectrum_summary.get(variables[kind])
+            if cached is not None and all(
+                q in cached.percentile.values for q in percentiles
+            ):
+                provenance = {**self.spectrum_summary.attrs, **cached.attrs}
+                if (
+                    provenance.get("num_chains") != nc
+                    or provenance.get("draws_per_chain") != nd
+                ):
+                    raise ValueError(
+                        "Cached spectral summary must identify the full posterior chain/draw counts"
+                    )
+                selected = cached.sel(percentile=list(percentiles))
+                return (
+                    selected.real
+                    if kind == "real"
+                    else selected.imag
+                    if kind == "imag"
+                    else selected
                 )
-        values = np.asarray(self.spectrum)
-        flat = values.reshape(-1, *values.shape[2:])
-        q = np.percentile(flat.real, percentiles, axis=0) + 1j * np.percentile(
-            flat.imag, percentiles, axis=0
+        complete = all(
+            self.spectrum.sizes[dim] == self.posterior.sizes[dim]
+            for dim in ("chain", "draw")
         )
+        complete &= all(
+            np.array_equal(
+                self.spectrum.coords[dim], self.posterior.coords[dim]
+            )
+            for dim in ("chain", "draw")
+            if dim in self.spectrum.coords and dim in self.posterior.coords
+        )
+        if not complete:
+            raise ValueError(
+                "Spectrum is a preview, not all posterior draws. Only cached all-draw percentiles "
+                "and transformations are available. Reconstruct the requested quantiles from "
+                "posterior/model_data with power_draws_from_basis or compute_psd_quantiles; "
+                "parametric models require the saved forward model."
+            )
+        values = np.asarray(self.spectrum)
+        if not np.isfinite(values).all():
+            raise ValueError(
+                "Stored spectrum must contain finite draws for the complete posterior"
+            )
+        q = spectral_quantiles(values, percentiles, kind=kind, axis=(0, 1))
         dims = ("percentile", *self.spectrum.dims[2:])
         coords = {
             name: self.spectrum.coords[name]
@@ -147,7 +199,12 @@ class PSDResult:
             if name in self.spectrum.coords
         }
         coords["percentile"] = np.asarray(percentiles, dtype=float)
-        return xr.DataArray(q, dims=dims, coords=coords)
+        return xr.DataArray(
+            q,
+            dims=dims,
+            coords=coords,
+            attrs={"draws_per_chain": nd, "num_chains": nc},
+        )
 
     def to_arviz(self):
         """Return a minimal ArviZ view for sampling diagnostics."""
@@ -163,7 +220,7 @@ class PSDResult:
     def _storage_dataset(self) -> xr.Dataset:
         data_vars: dict[str, xr.DataArray] = {
             "spectral_density": self.spectrum.rename(
-                {"draw": "spectrum_draw"}
+                {"chain": "spectrum_chain", "draw": "spectrum_draw"}
             ),
         }
         if self.truth is not None:
@@ -229,8 +286,12 @@ class PSDResult:
         if posterior is None:
             raise ValueError("Stored result is missing posterior samples")
         spectrum = stored["spectral_density"]
-        if "spectrum_draw" in spectrum.dims:
-            spectrum = spectrum.rename({"spectrum_draw": "draw"})
+        rename = {
+            f"spectrum_{dim}": dim
+            for dim in ("chain", "draw")
+            if f"spectrum_{dim}" in spectrum.dims
+        }
+        spectrum = spectrum.rename(rename)
         return cls(
             posterior=posterior,
             sample_stats=group("sample_stats"),

@@ -20,6 +20,31 @@ Fitting and results
 .. autoclass:: log_psplines.config.PowerConfig
    :members:
 
+Posterior summary semantics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``result.spectrum`` stores reconstructed draws. Stationary fits currently store
+every draw; ``PowerConfig.spectrum_draws`` can limit power fits to a preview.
+``result.psd`` and ``result.coherence`` describe those stored draws.
+``result.spectrum_summary`` contains all-draw summaries with the posterior chain
+and draw counts attached to each variable, including after a NetCDF round trip.
+
+``result.quantiles()`` returns cached all-draw quantiles when available, or
+computes them from complete stored draws. A preview alone raises an error.
+``kind="real"``, ``"imag"``, ``"magnitude"``, and ``"coherence"`` select the
+quantity summarized. Magnitude and coherence require their own cached quantiles
+or complete draws; they cannot be derived from elementwise spectral quantiles.
+Requested percentiles absent from a preview's cache must be reconstructed from
+the saved posterior and model data. Parametric results also need the original
+forward model.
+
+.. autofunction:: log_psplines.models.reconstruction.compute_psd_quantiles
+
+This lower-level routine reconstructs multivariate draws in frequency chunks.
+It uses every chain and draw by default. An explicit ``n_samples_max`` produces
+a deliberately limited summary. Its real, imaginary, and optional coherence
+quantiles share the same reduction implementation as ``PSDResult.quantiles``.
+
 Data Containers
 ---------------
 
@@ -100,6 +125,27 @@ Coarse Graining
 
 Diagnostics
 -----------
+
+.. autofunction:: log_psplines.plotting.plot_basis_diagnostics
+
+Inspect the basis actually used by a model, including its knots and penalty:
+
+.. code-block:: python
+
+   from log_psplines.plotting import plot_basis_diagnostics
+
+   fig, axes = plot_basis_diagnostics(model.frequency, path="basis.png")
+
+For stationary component models use
+``components.diagonal_models[channel].frequency``; for a tensor model inspect
+``model.frequency`` and ``model.time`` separately. The diagnostic plots these
+stored operators directly and does not construct replacement bases.
+
+.. autofunction:: log_psplines.plotting.compute_confidence_intervals
+
+This generic draw-array helper supports percentile and simultaneous bands.
+It is separate from spectral-matrix summaries; use ``PSDResult.quantiles`` for
+fitted spectra and their nonlinear transformations.
 
 .. autofunction:: log_psplines.diagnostics.sampling_diagnostics
 

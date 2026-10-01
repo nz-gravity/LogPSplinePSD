@@ -14,6 +14,7 @@ from log_psplines.preprocessing.coarse_grain import (
     compute_binning_structure,
 )
 from log_psplines.preprocessing.periodogram import (
+    _regularize_wishart,
     compute_wishart,
     empirical_spectrum,
 )
@@ -126,3 +127,48 @@ def test_truth_alignment_interpolates_complex_spectra_without_changing_data():
     np.testing.assert_array_equal(data.Y, original)
     with pytest.raises(ValueError, match="matching lengths"):
         align_true_psd_to_freq((freq, truth[:1]), data)
+
+
+def test_nearly_singular_wishart_regularization_respects_local_scale():
+    scales = np.array([1e-30, 1e-15, 1.0, 1e5])
+    vector = np.array([1, 1 + 1e-10j, 0.7 - 0.2j])
+    original = scales[:, None, None] * np.outer(vector, vector.conj())
+    matrices = _regularize_wishart(original, 1e-6)
+    assert np.isfinite(matrices).all()
+    normalized = (
+        matrices / np.trace(matrices, axis1=-2, axis2=-1).real[:, None, None]
+    )
+    np.testing.assert_allclose(
+        normalized, normalized.conj().swapaxes(-1, -2), atol=1e-14
+    )
+    assert np.linalg.eigvalsh(normalized).min() > 0
+    np.testing.assert_allclose(
+        normalized,
+        np.broadcast_to(normalized[-1], normalized.shape),
+        atol=1e-14,
+    )
+    recovered_scale = np.trace(matrices, axis1=-2, axis2=-1).real
+    np.testing.assert_allclose(
+        recovered_scale / recovered_scale[-1], scales / scales[-1], rtol=1e-10
+    )
+
+
+@pytest.mark.parametrize("channels", [1, 3])
+def test_known_signal_periodogram_normalization_dc_and_nyquist(channels):
+    n, fs, peak = 128, 128.0, 11.0
+    time = np.arange(n) / fs
+    signal = (
+        2.0 * np.cos(2 * np.pi * peak * time)
+        + 0.5 * (-1.0) ** np.arange(n)
+        + 7.0
+    )
+    x = np.repeat(signal[:, None], channels, axis=1)
+    data = compute_wishart(x, fs=fs, Nb=1, detrend="constant")
+    assert data.raw_psd.shape == (n // 2, channels, channels)
+    assert data.freq[0] == fs / n and data.freq[-1] == fs / 2
+    power = data.raw_psd[:, 0, 0].real
+    assert data.freq[np.argmax(power)] == peak
+    np.testing.assert_allclose(
+        power.sum() * fs / n, 2.0**2 / 2 + 0.5**2, atol=1e-12
+    )
+    np.testing.assert_allclose(power[-1] * fs / n, 0.5**2, atol=1e-12)

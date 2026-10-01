@@ -11,6 +11,10 @@ from scipy.interpolate import BSpline
 from log_psplines import SpectralMatrix, SplineBasis
 from log_psplines.likelihoods.whittle import whittle_log_likelihood
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
+from log_psplines.models.reconstruction import (
+    compute_psd_quantiles,
+    reconstruct_psd_matrix,
+)
 
 
 def test_bspline_basis_and_roughness_penalty_match_definition():
@@ -41,30 +45,43 @@ def test_bspline_basis_and_roughness_penalty_match_definition():
     np.testing.assert_allclose(basis.penalty, penalty, atol=5e-8)
 
 
-def test_spectral_matrix_is_hermitian_positive_and_coherence_is_defined():
-    logs = np.array([[0.2, -0.3], [0.4, 0.1]])
-    theta_re = np.array([[0.25], [-0.1]])
-    theta_im = np.array([[0.15], [0.2]])
-    matrix = SpectralMatrix(2)
-    spectrum = np.asarray(matrix(logs, theta_re, theta_im))
-
-    for f in range(logs.shape[0]):
-        triangular = np.array(
-            [[1, 0], [-theta_re[f, 0] - 1j * theta_im[f, 0], 1]],
-            dtype=complex,
-        )
-        expected = np.linalg.inv(
-            triangular.conj().T @ np.diag(np.exp(-logs[f])) @ triangular
-        )
-        np.testing.assert_allclose(spectrum[f], expected)
-    np.testing.assert_allclose(spectrum, spectrum.conj().swapaxes(-1, -2))
-    assert np.linalg.eigvalsh(spectrum).min() > 0
-    coherence = np.asarray(matrix.coherence(spectrum))
-    expected_coherence = np.abs(spectrum[..., 0, 1]) ** 2 / (
-        spectrum[..., 0, 0].real * spectrum[..., 1, 1].real
+@pytest.mark.parametrize("channels", [1, 2, 3])
+def test_spectral_matrix_is_hermitian_positive_and_coherence_is_defined(
+    channels,
+):
+    rng = np.random.default_rng(23)
+    logs = rng.normal(scale=0.4, size=(2, channels))
+    row, col = np.tril_indices(channels, k=-1)
+    theta_re = rng.normal(scale=0.2, size=(2, len(row)))
+    theta_im = rng.normal(scale=0.2, size=(2, len(row)))
+    matrix = SpectralMatrix(channels)
+    spectrum = matrix(logs, theta_re, theta_im)
+    triangular = np.broadcast_to(
+        np.eye(channels, dtype=complex), spectrum.shape
+    ).copy()
+    triangular[:, row, col] = -theta_re - 1j * theta_im
+    precision = triangular.conj().swapaxes(-1, -2) @ (
+        np.exp(-logs)[..., :, None] * triangular
     )
-    np.testing.assert_allclose(coherence[..., 0, 1], expected_coherence)
-    assert np.all((coherence >= 0) & (coherence <= 1))
+    np.testing.assert_allclose(spectrum, np.linalg.inv(precision), atol=1e-14)
+    np.testing.assert_allclose(
+        spectrum, spectrum.conj().swapaxes(-1, -2), atol=1e-14
+    )
+    assert np.linalg.eigvalsh(spectrum).min() > 0
+    coherence = matrix.coherence(spectrum)
+    diagonal = np.diagonal(spectrum, axis1=-2, axis2=-1).real
+    expected = np.abs(spectrum) ** 2 / (
+        diagonal[..., :, None] * diagonal[..., None, :]
+    )
+    np.testing.assert_allclose(coherence, expected)
+    assert np.all((coherence >= 0) & (coherence <= 1 + 1e-14))
+    zero = matrix(logs, np.zeros_like(theta_re), np.zeros_like(theta_im))
+    np.testing.assert_allclose(
+        zero, np.exp(logs)[..., :, None] * np.eye(channels)
+    )
+    np.testing.assert_allclose(
+        matrix(logs + np.log(3), theta_re, theta_im), 3 * spectrum, atol=1e-14
+    )
 
 
 def test_whittle_likelihood_matches_direct_sum_and_has_finite_gradient():
@@ -141,3 +158,68 @@ def test_pytest_typechecking_rejects_invalid_likelihood_arrays(power):
 def test_pytest_typechecking_rejects_invalid_scalar_type():
     with pytest.raises(TypeCheckError):
         whittle_log_likelihood(jnp.zeros(3), np.ones(3), duration="4")
+
+
+@pytest.fixture
+def cholesky_draws():
+    rng = np.random.default_rng(24)
+    logs = rng.normal(scale=0.4, size=(2, 31, 17, 3))
+    logs[1] += 1.0
+    return (
+        logs,
+        rng.normal(scale=0.2, size=logs.shape),
+        rng.normal(scale=0.2, size=logs.shape),
+    )
+
+
+@pytest.mark.parametrize("chunk_size", [1, 4, 7, 32, None, 0, -1])
+def test_three_channel_chunked_reconstruction(cholesky_draws, chunk_size):
+    logs, real, imag = cholesky_draws
+    expected = SpectralMatrix(3)(logs, real, imag).reshape(62, 17, 3, 3)
+    actual = reconstruct_psd_matrix(
+        logs, real, imag, chunk_size=chunk_size, n_samples_max=None
+    )
+    np.testing.assert_allclose(actual, expected, atol=1e-14)
+    assert actual.shape == (62, 17, 3, 3) and actual.dtype == np.complex128
+    np.testing.assert_allclose(
+        actual, actual.conj().swapaxes(-1, -2), atol=1e-14
+    )
+    assert np.diagonal(actual, axis1=-2, axis2=-1).real.min() > 0
+    assert np.linalg.eigvalsh(actual).min() > 0
+    limited = reconstruct_psd_matrix(
+        logs, real, imag, chunk_size=chunk_size, n_samples_max=5
+    )
+    np.testing.assert_allclose(limited, expected[:5], atol=1e-14)
+
+
+def test_chunked_matrix_quantiles_use_all_chains_and_draws(cholesky_draws):
+    logs, real, imag = cholesky_draws
+    full = SpectralMatrix(3)(logs, real, imag).reshape(62, 17, 3, 3)
+    expected = np.percentile(
+        full.real, [5, 50, 95], axis=0
+    ) + 1j * np.percentile(full.imag, [5, 50, 95], axis=0)
+    diagonal = np.diagonal(full, axis1=-2, axis2=-1).real
+    coherence = np.abs(full) ** 2 / (
+        diagonal[..., :, None] * diagonal[..., None, :]
+    )
+    actual_real, actual_imag, actual_coherence = compute_psd_quantiles(
+        logs, real, imag, chunk_size=4, compute_coherence=True
+    )
+    np.testing.assert_allclose(
+        actual_real + 1j * actual_imag, expected, atol=1e-14
+    )
+    np.testing.assert_allclose(
+        actual_coherence,
+        np.percentile(coherence, [5, 50, 95], axis=0),
+        atol=1e-14,
+    )
+    assert not np.allclose(
+        actual_real, np.percentile(full[:31].real, [5, 50, 95], axis=0)
+    )
+
+
+def test_scientific_environment_uses_float64():
+    assert jax.config.jax_enable_x64, (
+        "Run scientific tests with JAX_ENABLE_X64=true"
+    )
+    assert jnp.asarray([1.0], dtype=jnp.float64).dtype == jnp.float64

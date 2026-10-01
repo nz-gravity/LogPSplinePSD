@@ -29,6 +29,7 @@ To build the documentation locally:
 
 ```bash
 source .venv/bin/activate
+export JAX_ENABLE_X64=true
 cd docs
 # The docs in this repo are RST/Sphinx-based and require Jupyter Book 1.x.
 # Install .[dev,wdm] first; notebook execution needs ipykernel and the WDM extra.
@@ -49,8 +50,8 @@ Use the project environment for all commands:
 ```bash
 source .venv/bin/activate
 python -m pip install -e '.[dev,wdm]'
-python -m pytest -m 'not slow'  # routine CI checks
-python -m pytest               # full release checks, including recovery fits
+JAX_ENABLE_X64=true python -m pytest -m 'not slow'  # routine CI checks
+JAX_ENABLE_X64=true python -m pytest               # full release checks, including recovery fits
 ```
 
 The suite is grouped by behavior:
@@ -108,13 +109,13 @@ incorrect scalar types. These fail if the pytest import hook is disabled.
 Run just those checks with:
 
 ```bash
-.venv/bin/python -m pytest tests/unit/test_core.py -k typechecking
+JAX_ENABLE_X64=true .venv/bin/python -m pytest tests/unit/test_core.py -k typechecking
 ```
 
 Run the suite with:
 
 ```bash
-.venv/bin/python -m pytest tests/
+JAX_ENABLE_X64=true .venv/bin/python -m pytest tests/
 ```
 
 
@@ -175,3 +176,32 @@ separation, model component curves, and component knot locations.
 sampler behaviour and recovery of the fitted spectrum.
 
 Multivariate time-varying inference is not yet implemented.
+
+
+## Scientific precision and posterior summaries
+
+Scientific CI and documentation execution set `JAX_ENABLE_X64=true` before
+Python starts. The precision contract checks both requested JAX float64 arrays
+and the stationary model's prepared data, bases, and penalties. Model
+preparation follows JAX's configured precision, with no forced float32 casts.
+The test suite does not change global JAX precision after import.
+
+The summary audit found these input and reduction paths:
+
+| Path | Input | Draws and memory | Matrix/coherence support | Callers and API |
+| --- | --- | --- | --- | --- |
+| `compute_psd_quantiles` | components `(draw, F, C)` or `(chain, draw, F, C)`; theta has `C*(C-1)/2` components | Reconstructs frequency chunks; originally defaulted to 50 draws and selected the first chain for 4-D inputs. Now defaults to all flattened draws; an explicit cap is labelled a limited summary. | Separate real/imaginary quantiles; optional coherence computed per draw | Documented module function, deterministic reconstruction tests; uses shared `spectral_quantiles` reducer |
+| `PSDResult.quantiles` | spectra `(chain, draw, [T,] F, C, C)` or cached summary | Verified all-draw cache first; otherwise complete spectrum only. Originally could reduce an uncached preview. | Componentwise complex, real, imaginary, magnitude, coherence | Public result API; diagnostics and plotting |
+| `power_result_spectra` | evaluator outputs `(chain, draw, T, frequency_chunk, C)` | Every draw enters quantiles and means; only stored preview is capped. Frequency-chunked. | Scalar/independent-channel diagonal spectra; no full correlated matrix reconstruction | Internal; spline and parametric power inference |
+| Plotting's former `_spectral_quantiles` | stored `(chain, draw, F, C, C)` | Previously reduced stored draws per panel, which could be a preview. Removed. | Transformed each draw for panel-specific quantiles | Matrix plotting now requests each needed kind once through `PSDResult.quantiles` |
+
+One shared reducer in `models/reconstruction.py` takes quantiles after the
+requested per-draw transformation. Power inference retains its separate
+frequency-chunked evaluator and mean/geometric-mean calculations. This avoids
+combining different forward models into a new inference abstraction.
+
+Cached summary variables carry `num_chains` and `draws_per_chain`, which are
+checked against the posterior and preserved in NetCDF. Magnitude and coherence
+quantiles are computed from transformed draws, never from PSD element quantiles.
+The low-level reconstruction routine still defaults to a maximum of 50 output
+draws for preview use; `n_samples_max=None` explicitly reconstructs all draws.

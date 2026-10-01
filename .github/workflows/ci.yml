@@ -10,6 +10,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      JAX_ENABLE_X64: "true"
     steps:
       - uses: actions/checkout@v4
         with:

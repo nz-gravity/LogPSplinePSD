@@ -59,9 +59,7 @@ def compute_confidence_intervals(
         Tuple of (lower_bound, median, upper_bound)
     """
     if method == "percentile":
-        ci = np.asarray(
-            jnp.percentile(samples, q=jnp.array(quantiles), axis=0)
-        )
+        ci = np.percentile(samples, quantiles, axis=0)
         return ci[0], ci[1], ci[2]
     elif method == "uniform":
         return _compute_uniform_ci(samples, alpha)
@@ -87,7 +85,9 @@ def _compute_uniform_ci(samples: np.ndarray, alpha: float = 0.1):
     std = jnp.std(samples, axis=0)
 
     # Compute the max deviation over all samples
-    deviations = (samples - median[None, :]) / std[None, :]
+    # Constant coordinates have zero deviation and a zero-width band.
+    safe_std = jnp.where(std > 0, std, 1.0)
+    deviations = (samples - median[None, :]) / safe_std[None, :]
     max_deviation = jnp.max(jnp.abs(deviations), axis=1)
 
     # Compute the scaling factor using the distribution of max deviations

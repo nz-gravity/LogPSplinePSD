@@ -18,6 +18,45 @@ if TYPE_CHECKING:
     from log_psplines.models.spectrum import LogPSpline
 
 
+def spectral_quantiles(
+    samples: np.ndarray,
+    percentiles: Sequence[float] = (5.0, 50.0, 95.0),
+    *,
+    kind: str = "complex",
+    axis: int | tuple[int, ...] = 0,
+) -> np.ndarray:
+    """Reduce spectral draws, transforming each draw before taking quantiles.
+
+    Matrix inputs end in (..., C, C); axis names only posterior sample axes.
+    Complex quantiles are separate real/imaginary component quantiles.
+    Magnitude and coherence quantiles cannot be inferred from those components.
+    """
+    values = np.asarray(samples)
+    if kind == "complex":
+        return np.percentile(
+            values.real, percentiles, axis=axis
+        ) + 1j * np.percentile(values.imag, percentiles, axis=axis)
+    if kind == "real":
+        values = values.real
+    elif kind == "imag":
+        values = values.imag
+    elif kind == "magnitude":
+        values = np.abs(values)
+    elif kind == "coherence":
+        values = SpectralMatrix.coherence(values)
+    else:
+        raise ValueError(f"Unknown spectral summary kind: {kind}")
+    return np.percentile(values, percentiles, axis=axis)
+
+
+def _component_draws(array: Array | np.ndarray) -> np.ndarray:
+    """Flatten every leading sample axis, retaining (frequency, component)."""
+    values = np.asarray(array)
+    return values.reshape(
+        (int(np.prod(values.shape[:-2])), *values.shape[-2:])
+    )
+
+
 def _psd_chunk_iterator(
     log_delta_sq_samples: np.ndarray,
     theta_re_samples: np.ndarray | None,
@@ -57,8 +96,8 @@ def reconstruct_psd_matrix(
     log_delta_sq_samples: Float[Array | np.ndarray, "*samples N p"],
     theta_re_samples: Float[Array | np.ndarray, "*samples N _"],
     theta_im_samples: Float[Array | np.ndarray, "*samples N _"],
-    n_samples_max: int = 50,
-    chunk_size: int = 2048,
+    n_samples_max: int | None = 50,
+    chunk_size: int | None = 2048,
 ) -> np.ndarray:
     """
     Reconstruct PSD matrices from Cholesky components using NumPy.
@@ -68,20 +107,19 @@ def reconstruct_psd_matrix(
     as a ``complex128`` NumPy array of shape
     ``(n_samps, N, p, p)``.
     """
-    log_delta_sq_arr = np.asarray(log_delta_sq_samples)
-    theta_re_arr = np.asarray(theta_re_samples)
-    theta_im_arr = np.asarray(theta_im_samples)
-
-    if log_delta_sq_arr.ndim == 4:
-        log_delta_sq_arr = log_delta_sq_arr[0]
-    if theta_re_arr.ndim == 4:
-        theta_re_arr = theta_re_arr[0]
-    if theta_im_arr.ndim == 4:
-        theta_im_arr = theta_im_arr[0]
+    log_delta_sq_arr = _component_draws(log_delta_sq_samples)
+    theta_re_arr = _component_draws(theta_re_samples)
+    theta_im_arr = _component_draws(theta_im_samples)
 
     n_samples, N, p = log_delta_sq_arr.shape
     n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
-    n_samps = min(int(n_samples_max), int(n_samples))
+    n_samps = (
+        n_samples
+        if n_samples_max is None
+        else min(int(n_samples_max), n_samples)
+    )
+    if n_samps < 1:
+        raise ValueError("n_samples_max must retain at least one draw")
 
     if chunk_size is None or chunk_size <= 0:
         chunk_size = N
@@ -110,12 +148,15 @@ def compute_psd_quantiles(
     theta_im_samples: Float[Array | np.ndarray, "*samples N _"],
     *,
     percentiles: Sequence[float] | None = None,
-    n_samples_max: int = 50,
-    chunk_size: int = 2048,
+    n_samples_max: int | None = None,
+    chunk_size: int | None = 2048,
     compute_coherence: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
     """
-    Compute PSD (and optional coherence) percentiles without storing all draws.
+    Compute PSD (and optional coherence) percentiles in frequency chunks.
+
+    All chains and draws are used by default. An explicit n_samples_max limits
+    the flattened draws and is unsuitable for an all-posterior summary.
 
     Returns
     -------
@@ -132,20 +173,19 @@ def compute_psd_quantiles(
     if percentiles is None:
         percentiles = [5.0, 50.0, 95.0]
 
-    log_delta_sq_arr = np.asarray(log_delta_sq_samples)
-    theta_re_arr = np.asarray(theta_re_samples)
-    theta_im_arr = np.asarray(theta_im_samples)
-
-    if log_delta_sq_arr.ndim == 4:
-        log_delta_sq_arr = log_delta_sq_arr[0]
-    if theta_re_arr.ndim == 4:
-        theta_re_arr = theta_re_arr[0]
-    if theta_im_arr.ndim == 4:
-        theta_im_arr = theta_im_arr[0]
+    log_delta_sq_arr = _component_draws(log_delta_sq_samples)
+    theta_re_arr = _component_draws(theta_re_samples)
+    theta_im_arr = _component_draws(theta_im_samples)
 
     n_samples, N, p = log_delta_sq_arr.shape
     n_theta = theta_re_arr.shape[2] if theta_re_arr.ndim > 2 else 0
-    n_samps = min(int(n_samples_max), int(n_samples))
+    n_samps = (
+        n_samples
+        if n_samples_max is None
+        else min(int(n_samples_max), n_samples)
+    )
+    if n_samps < 1:
+        raise ValueError("n_samples_max must retain at least one draw")
 
     if chunk_size is None or chunk_size <= 0:
         chunk_size = N
@@ -174,31 +214,14 @@ def compute_psd_quantiles(
         n_samps=n_samps,
         chunk_size=chunk_size,
     ):
-        psd_real = psd_chunk.real
-        psd_imag = psd_chunk.imag
-
-        real_q = np.percentile(psd_real, percentiles, axis=0)
-        imag_q = np.percentile(psd_imag, percentiles, axis=0)
-
-        psd_percentiles[:, start:end] = real_q
-        psd_imag_percentiles[:, start:end] = imag_q
+        quantiles = spectral_quantiles(psd_chunk, percentiles)
+        psd_percentiles[:, start:end] = quantiles.real
+        psd_imag_percentiles[:, start:end] = quantiles.imag
 
         if coherence_percentiles is not None:
-            diag = np.abs(
-                np.diagonal(psd_chunk, axis1=2, axis2=3)
-            )  # (samples, chunk, channels)
-            denom = diag[..., :, None] * diag[..., None, :]
-            denom = np.where(denom > 0.0, denom, np.nan)
-            coh_samples = (np.abs(psd_chunk) ** 2) / denom
-            coh_samples = np.nan_to_num(coh_samples, nan=0.0, posinf=0.0)
-            coh_q = np.percentile(coh_samples, percentiles, axis=0)
-
-            # enforce exact ones on diagonal to avoid numerical drift
-            for idx in range(n_percentiles):
-                for c in range(p):
-                    coh_q[idx, :, c, c] = 1.0
-
-            coherence_percentiles[:, start:end] = coh_q
+            coherence_percentiles[:, start:end] = spectral_quantiles(
+                psd_chunk, percentiles, kind="coherence"
+            )
 
     return psd_percentiles, psd_imag_percentiles, coherence_percentiles
 

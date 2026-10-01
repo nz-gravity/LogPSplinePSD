@@ -31,11 +31,16 @@ To build the documentation locally:
 source .venv/bin/activate
 cd docs
 # The docs in this repo are RST/Sphinx-based and require Jupyter Book 1.x.
-# Ensure you have installed the dev extras (or at least `jupyter-book<2.0`).
+# Install .[dev,wdm] first; notebook execution needs ipykernel and the WDM extra.
 ../.venv/bin/jupyter-book build .
 ```
 
-The built HTML documentation will be in `docs/_build/html/`.
+The built HTML documentation will be in `docs/_build/html/`. Jupyter Book
+executes the tutorial notebooks and caches results for unchanged code cells.
+A fresh CI checkout executes all three tutorials, including the time-varying
+scaling sweep, and fails on execution errors. The Colab installation cells
+carry the standard `skip-execution` tag, so docs builds test the already
+installed checkout. Colab runs those cells normally.
 
 ## Running Tests
 

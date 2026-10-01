@@ -1,5 +1,5 @@
-LogPSplinePSD
-=============
+Home
+====
 
 ``LogPSplinePSD`` estimates power spectral densities (PSDs) with Bayesian
 log-P-splines. It is built around multichannel frequency-domain inference:
@@ -39,15 +39,13 @@ Use the project virtual environment during development:
 Where To Start
 --------------
 
-Follow the pages in this order:
+1. :doc:`Stationary PSD <examples/univar-example>` fits a single-channel spectrum.
+2. :doc:`Multivariate stationary PSD <examples/multivariate-example>` fits spectral matrices and coherence.
+3. :doc:`Time-varying PSD <examples/timevarying-example>` fits scalar WDM and moving-periodogram powers.
 
-1. :doc:`examples/univar-example` runs a univariate analysis.
-2. :doc:`examples/multivariate-example` introduces spectral matrices.
-3. :doc:`examples/timevarying-example` fits scalar time-varying spectra.
-4. :doc:`power-reference` shows reference-based time-varying power fits.
-5. :doc:`conventions` explains units and spectral conventions.
-6. :doc:`development` gives implementation notes, followed by the :doc:`api`
-   reference.
+The :doc:`api` covers configuration, results, spectral conventions and advanced
+reference-spectrum fits. Contributor instructions are in the repository's
+`CONTRIBUTING.md <https://github.com/nz-gravity/LogPSplinePSD/blob/main/CONTRIBUTING.md>`_.
 
 References
 ----------
@@ -62,3 +60,11 @@ penalties*. Statistical Science, 11(2), 89-121.
 
 Maturana-Russel, J., & Meyer, R. (2021). *P-spline spectral density estimation
 with a discrete penalty*. `arXiv:1905.01832 <https://arxiv.org/abs/1905.01832>`_.
+
+Vajpeyi, A., Meyer, R., Maturana-Russel, P., & Liu, J. (2026).
+*Multivariate Bayesian P-spline estimation of spectral density matrices,
+with application to LISA TDI noise*.
+`arXiv:2607.04833 <https://arxiv.org/abs/2607.04833>`_.
+`DOI:10.48550/arXiv.2607.04833 <https://doi.org/10.48550/arXiv.2607.04833>`_.
+
+Download the `BibTeX citation <https://github.com/nz-gravity/LogPSplinePSD/blob/main/CITATION.bib>`_.

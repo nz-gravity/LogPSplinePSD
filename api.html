@@ -60,13 +60,14 @@
     <script async="async" src="_static/sphinx-thebe.js?v=c100c467"></script>
     <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
     <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="icon" href="_static/favicon.png"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Development Guide" href="development.html" />
-    <link rel="prev" title="Conventions" href="conventions.html" />
+    <link rel="prev" title="Time-varying PSD" href="examples/timevarying-example.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -100,8 +101,8 @@
   <input type="search"
          class="form-control"
          name="q"
-         placeholder="Search this book..."
-         aria-label="Search this book..."
+         placeholder="Search..."
+         aria-label="Search..."
          autocomplete="off"
          autocorrect="off"
          autocapitalize="off"
@@ -212,20 +213,26 @@
 </button></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">One-dimensional log-P-spline PSD model</a></li>
-<li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate PSD estimation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD estimation</a></li>
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="intro.html">
+                    Home
+                </a>
+            </li>
+        </ul>
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">Stationary PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate stationary PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD</a></li>
 
 
 
-<li class="toctree-l1"><a class="reference internal" href="power-reference.html">Power data with a reference spectrum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="conventions.html">Conventions</a></li>
-
-
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">API Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
-
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">API</a></li>
 </ul>
 
     </div>
@@ -272,53 +279,6 @@
         <div class="header-article-item">
 
 <div class="article-header-buttons">
-
-
-
-
-
-<div class="dropdown dropdown-source-buttons">
-  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
-    <i class="fab fa-github"></i>
-  </button>
-  <ul class="dropdown-menu">
-      
-      
-      
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD" target="_blank"
-   class="btn btn-sm btn-source-repository-button dropdown-item"
-   title="Source repository"
-   data-bs-placement="left" data-bs-toggle="tooltip"
->
-  
-
-<span class="btn__icon-container">
-  <i class="fab fa-github"></i>
-  </span>
-<span class="btn__text-container">Repository</span>
-</a>
-</li>
-      
-      
-      
-      
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fapi.html&body=Your%20issue%20content%20here." target="_blank"
-   class="btn btn-sm btn-source-issues-button dropdown-item"
-   title="Open an issue"
-   data-bs-placement="left" data-bs-toggle="tooltip"
->
-  
-
-<span class="btn__icon-container">
-  <i class="fas fa-lightbulb"></i>
-  </span>
-<span class="btn__text-container">Open issue</span>
-</a>
-</li>
-      
-  </ul>
-</div>
-
 
 
 
@@ -546,6 +506,33 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.sampling_diagnostics"><code class="docutils literal notranslate"><span class="pre">sampling_diagnostics()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.spectrum_diagnostics"><code class="docutils literal notranslate"><span class="pre">spectrum_diagnostics()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.save_diagnostics"><code class="docutils literal notranslate"><span class="pre">save_diagnostics()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spectral-conventions">Spectral conventions</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#variable-names">Variable names</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#eigendecomposition-conventions">Eigendecomposition conventions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-conventions">Coarse-graining conventions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-terminology">PSD terminology</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#data-flow">Data flow</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#technical-notes">Technical Notes</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#core-invariants">Core Invariants</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#implementation-map">Implementation Map</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-and-preprocessing">Data and Preprocessing</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#accepted-inputs">Accepted Inputs</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Coarse Graining</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference-spectrum-power-fits">Reference-spectrum power fits</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#anova-corrections">ANOVA corrections</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#external-parametric-spectra">External parametric spectra</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#large-grid-results">Large-grid results</a></li>
 </ul>
 </li>
 </ul>
@@ -1271,6 +1258,371 @@ excluded when at least four bins are available.</p>
 </dd></dl>
 
 </section>
+<section id="spectral-conventions">
+<h2>Spectral conventions<a class="headerlink" href="#spectral-conventions" title="Link to this heading">#</a></h2>
+<p>This page records naming conventions used throughout the documentation and codebase.</p>
+<section id="variable-names">
+<h3>Variable names<a class="headerlink" href="#variable-names" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table">
+<colgroup>
+<col style="width: 10.0%" />
+<col style="width: 90.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Symbol</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">T</span></code></p></td>
+<td><p>Total duration.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code></p></td>
+<td><p>Sampling time interval.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">n</span></code></p></td>
+<td><p>Number of time points.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">N</span></code></p></td>
+<td><p>Number of frequency points (from the discrete FFT).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">N_ell</span></code></p></td>
+<td><p>Number of <strong>retained</strong> positive-frequency points (after dropping DC and applying any band limits).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">p</span></code></p></td>
+<td><p>Number of channels.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Nb</span></code></p></td>
+<td><p>Number of blocks.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Lb</span></code></p></td>
+<td><p>Number of samples per block (n//Nb).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Nc</span></code></p></td>
+<td><p>Number of coarse-grain bins.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Nh</span></code></p></td>
+<td><p>Number of frequencies in each coarse-grain bin.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Z</span></code></p></td>
+<td><p>Raw time series data, <span class="math notranslate nohighlight">\(Z = (Z_1, \ldots, Z_n)^\top \in \mathbb{R}^{n \times p}\)</span>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">d_k</span></code></p></td>
+<td><p>Fourier transform (or DFT) vector at frequency <span class="math notranslate nohighlight">\(f_k\)</span>,
+<span class="math notranslate nohighlight">\(d_k = (d_1(f_k), d_2(f_k), \ldots, d_p(f_k))^\top\)</span>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">S(f_k)</span></code></p></td>
+<td><p><span class="math notranslate nohighlight">\(p \times p\)</span> Hermitian positive semidefinite spectral density matrix at <span class="math notranslate nohighlight">\(f_k\)</span>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">I</span></code></p></td>
+<td><p>Periodogram.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Ibar</span></code></p></td>
+<td><p>Block-averaged periodogram.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Y</span></code></p></td>
+<td><p>Summed multivariate periodogram/Wishart statistic,
+<span class="math notranslate nohighlight">\(\mathbf{Y}(f_k)=\sum_{b=1}^{N_b}\mathbf{d}^{(b)}(f_k)\mathbf{d}^{(b)}(f_k)^H\)</span> (not averaged).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="eigendecomposition-conventions">
+<h3>Eigendecomposition conventions<a class="headerlink" href="#eigendecomposition-conventions" title="Link to this heading">#</a></h3>
+<p>For a Hermitian positive semidefinite matrix <span class="math notranslate nohighlight">\(Y(f_k)\)</span> we use</p>
+<div class="math notranslate nohighlight">
+\[Y(f_k) = \sum_{\nu=1}^p \lambda^{(k)}_\nu\, v^{(k)}_\nu v^{(k)*}_\nu
+       = \sum_{\nu=1}^p u^{(k)}_\nu u^{(k)*}_\nu,
+\qquad
+u^{(k)}_\nu = \sqrt{\lambda^{(k)}_\nu}\, v^{(k)}_\nu,\]</div>
+<p>where <span class="math notranslate nohighlight">\((\cdot)^*\)</span> denotes the conjugate transpose.</p>
+</section>
+<section id="coarse-graining-conventions">
+<h3>Coarse-graining conventions<a class="headerlink" href="#coarse-graining-conventions" title="Link to this heading">#</a></h3>
+<p>We “coarse-grain” the Fourier frequencies by dividing them into <span class="math notranslate nohighlight">\(N_c\)</span>
+consecutive disjoint subsets <span class="math notranslate nohighlight">\(J_h\)</span>, each containing <span class="math notranslate nohighlight">\(N_h\)</span>
+frequencies:</p>
+<div class="math notranslate nohighlight">
+\[\{f_1, \ldots, f_N\} = \bigcup_{h=1}^{N_c} J_h.\]</div>
+<p>Let <span class="math notranslate nohighlight">\(\bar{f}_h\)</span> denote the midpoint Fourier frequency of interval <span class="math notranslate nohighlight">\(J_h\)</span>, and define the
+coarse-grained sum</p>
+<div class="math notranslate nohighlight">
+\[\bar{Y}_h = \sum_{f \in J_h} Y(f),
+\qquad h=1,\ldots,N_c.\]</div>
+<p>We also use the eigendecomposition of <span class="math notranslate nohighlight">\(\bar{Y}_h\)</span>:</p>
+<div class="math notranslate nohighlight">
+\[\bar{Y}_h = \sum_{\nu=1}^p \lambda^{(h)}_\nu\, v^{(h)}_\nu v^{(h)*}_\nu
+          = \sum_{\nu=1}^p u^{(h)}_\nu u^{(h)*}_\nu,
+\qquad
+u^{(h)}_\nu = \sqrt{\lambda^{(h)}_\nu}\, v^{(h)}_\nu.\]</div>
+</section>
+<section id="psd-terminology">
+<h3>PSD terminology<a class="headerlink" href="#psd-terminology" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">log_psplines.data.spectral_utils</span></code> centralises the conversion between
+Wishart statistics and PSD matrices. The current conventions are:</p>
+<ul class="simple">
+<li><p><strong>Normalisation</strong> – PSD matrices are <strong>one-sided</strong> and expressed per Hz. The
+helper <code class="xref py py-func docutils literal notranslate"><span class="pre">log_psplines.data.spectral_utils.Y_to_S()</span></code> converts summed
+Wishart matrices into PSD matrices using the stored block count, coarse-bin
+multiplier, duration, and scaling factor.</p></li>
+<li><p><strong>Degrees of freedom</strong> – <code class="docutils literal notranslate"><span class="pre">N_b</span></code> is the block count and <code class="docutils literal notranslate"><span class="pre">N_h</span></code> is the
+(constant) coarse-bin size multiplier.</p></li>
+<li><p><strong>Scaling factor</strong> – The optional <code class="docutils literal notranslate"><span class="pre">scaling_factor</span></code> tracks variance
+adjustments applied during time-domain standardisation and is folded into the
+PSD conversion exactly once.</p></li>
+<li><p><strong>Terminology</strong> – <code class="docutils literal notranslate"><span class="pre">U(f)</span></code> denotes the eigenvector-weighted replicates and
+<code class="docutils literal notranslate"><span class="pre">Y(f)</span> <span class="pre">=</span> <span class="pre">U(f)U(f)^H</span></code> denotes the summed Wishart matrices. Diagonal elements
+represent auto PSDs; off-diagonal elements are cross spectral densities.</p></li>
+</ul>
+<p>These helpers ensure the frequency-domain likelihood, diagnostics, and plotting
+code all consume spectra with the same units and sidedness.</p>
+</section>
+<section id="data-flow">
+<h3>Data flow<a class="headerlink" href="#data-flow" title="Link to this heading">#</a></h3>
+<p>The multivariate pipeline follows a fixed sequence of transformations:</p>
+<ol class="arabic simple">
+<li><p><strong>Timeseries</strong> – raw or standardised time-domain data.</p></li>
+<li><p><strong>WishartData</strong> – <code class="docutils literal notranslate"><span class="pre">to_wishart_stats</span></code> produces frequency grids and
+eigenvector-weighted Wishart factors <code class="docutils literal notranslate"><span class="pre">U(f)</span></code> on the positive-frequency
+grid. The analysis band is controlled by <code class="docutils literal notranslate"><span class="pre">StationaryConfig.fmin</span></code> and
+<code class="docutils literal notranslate"><span class="pre">StationaryConfig.fmax</span></code>.</p></li>
+<li><p><strong>CoarseGrain</strong> – optional <strong>linear, full-band</strong> binning combines nearby
+frequencies by summing <span class="math notranslate nohighlight">\(\bar Y_h = \sum_{f\in J_h} Y(f)\)</span> and assigns each
+bin the member count <span class="math notranslate nohighlight">\(N_h\)</span> for log-determinant scaling. Coarse-grain
+config controls only binning parameters (<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p></li>
+<li><p><strong>Inference stages</strong> – VI and NUTS stages consume the (possibly coarse)
+Wishart stats and spline models.</p></li>
+<li><p><strong>Result construction</strong> – <code class="docutils literal notranslate"><span class="pre">wishart_u_to_psd</span></code> populates
+<code class="docutils literal notranslate"><span class="pre">observed_data['periodogram']</span></code> using the canonical normalisation.</p></li>
+<li><p><strong>Plotting</strong> – visualisers consume the precomputed posterior quantiles and
+empirical PSD without re-deriving spectra.</p></li>
+</ol>
+</section>
+</section>
+<section id="technical-notes">
+<h2>Technical Notes<a class="headerlink" href="#technical-notes" title="Link to this heading">#</a></h2>
+<p>These pages document the assumptions and implementation details that matter for
+maintaining or extending the inference code.</p>
+<section id="core-invariants">
+<h3>Core Invariants<a class="headerlink" href="#core-invariants" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>PSD diagonal entries must stay strictly positive.</p></li>
+<li><p>Multivariate spectral matrices must stay Hermitian positive definite at each
+retained frequency.</p></li>
+<li><p>Coherence is derived from the spectral matrix and should remain bounded by
+<code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">1]</span></code> up to numerical tolerance.</p></li>
+<li><p>Randomness should be controlled through explicit seeds or JAX PRNG keys.</p></li>
+<li><p>Shape conventions should be documented near public functions and checked in
+non-JIT code paths.</p></li>
+</ul>
+</section>
+<section id="implementation-map">
+<h3>Implementation Map<a class="headerlink" href="#implementation-map" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.fit</span></code></dt><dd><p>Canonical high-level <code class="docutils literal notranslate"><span class="pre">fit()</span></code> entry point plus orchestration helpers.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.inference</span></code></dt><dd><p>Model preparation, VI, NUTS, and evidence estimation.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.data</span></code></dt><dd><p>Time-domain and frequency-domain containers.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.psplines</span></code></dt><dd><p>Spline basis construction, P-spline penalties, knot placement, and
+multivariate PSD reconstruction.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.preprocessing</span></code></dt><dd><p>Frequency selection, Wishart preprocessing, and coarse graining.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.results</span></code></dt><dd><p>Native posterior samples, reconstructed spectra, persistence, and summaries.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">log_psplines.diagnostics</span></code> and <code class="docutils literal notranslate"><span class="pre">log_psplines.plotting</span></code></dt><dd><p>Convergence checks, error metrics, and visual summaries.</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="data-and-preprocessing">
+<h2>Data and Preprocessing<a class="headerlink" href="#data-and-preprocessing" title="Link to this heading">#</a></h2>
+<section id="accepted-inputs">
+<h3>Accepted Inputs<a class="headerlink" href="#accepted-inputs" title="Link to this heading">#</a></h3>
+<p>The high-level pipeline accepts either time-domain data or precomputed
+frequency-domain statistics.</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">TimeSeries</span></code></dt><dd><p>Time-domain samples with shape <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">p)</span></code>. A one-dimensional input is
+promoted to <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">1)</span></code>. The sampling frequency is inferred from <code class="docutils literal notranslate"><span class="pre">t</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">WishartData</span></code></dt><dd><p>Frequency-domain Wishart sufficient statistics. Use this when you need
+explicit control over FFT construction before calling the pipeline.</p>
+</dd>
+</dl>
+</section>
+<section id="time-domain-container">
+<h3>Time-Domain Container<a class="headerlink" href="#time-domain-container" title="Link to this heading">#</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeSeries</span>
+
+<span class="n">fs</span> <span class="o">=</span> <span class="mf">64.0</span>
+<span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">512</span><span class="p">)</span> <span class="o">/</span> <span class="n">fs</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="mf">4.0</span> <span class="o">*</span> <span class="n">t</span><span class="p">),</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="mf">8.0</span> <span class="o">*</span> <span class="n">t</span><span class="p">),</span>
+<span class="p">])</span>
+
+<span class="n">ts</span> <span class="o">=</span> <span class="n">TimeSeries</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For PSD estimation, standardising at the boundary is often helpful:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">ts_std</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">standardise_for_psd</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The original channel standard deviations are carried through so exported PSDs
+can be rescaled back to physical units.</p>
+</section>
+<section id="wishart-statistics">
+<h3>Wishart Statistics<a class="headerlink" href="#wishart-statistics" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">TimeSeries.to_wishart_stats</span></code> and
+<code class="docutils literal notranslate"><span class="pre">preprocessing.periodogram.compute_wishart</span></code> split the data into <code class="docutils literal notranslate"><span class="pre">Nb</span></code> contiguous blocks,
+apply optional detrending and tapering, compute one-sided FFTs, drop DC, and
+store a factor <code class="docutils literal notranslate"><span class="pre">U</span></code> such that</p>
+<div class="math notranslate nohighlight">
+\[Y(f_k) = U(f_k) U(f_k)^H.\]</div>
+<p>The pipeline uses <code class="docutils literal notranslate"><span class="pre">Y(f_k)</span></code> as the multivariate Whittle/Wishart sufficient
+statistic.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">fft</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">standardise_for_psd</span><span class="p">()</span><span class="o">.</span><span class="n">to_wishart_stats</span><span class="p">(</span>
+    <span class="n">Nb</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="n">fmin</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">fmax</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span>
+    <span class="n">window</span><span class="o">=</span><span class="s2">"hann"</span><span class="p">,</span>
+    <span class="n">detrend</span><span class="o">=</span><span class="s2">"constant"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="frequency-selection">
+<h3>Frequency Selection<a class="headerlink" href="#frequency-selection" title="Link to this heading">#</a></h3>
+<p>Frequency selection is applied in this order:</p>
+<ol class="arabic simple">
+<li><p>Convert time-domain data to the positive <code class="docutils literal notranslate"><span class="pre">rfft</span></code> grid.</p></li>
+<li><p>Drop the DC bin.</p></li>
+<li><p>Apply <code class="docutils literal notranslate"><span class="pre">fmin</span></code> and <code class="docutils literal notranslate"><span class="pre">fmax</span></code> if provided.</p></li>
+<li><p>Remove any <code class="docutils literal notranslate"><span class="pre">exclude_freq_bands</span></code>.</p></li>
+<li><p>Optionally coarse grain the retained grid.</p></li>
+</ol>
+</section>
+<section id="id3">
+<h3>Coarse Graining<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
+<p>Coarse graining sums neighbouring Wishart matrices into equal-size consecutive
+frequency bins. It is useful when the frequency grid is much denser than the
+spectral structure being estimated.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">StationaryConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.preprocessing.coarse_grain</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoarseGrainConfig</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">StationaryConfig</span><span class="p">(</span>
+    <span class="n">coarse_grain_config</span><span class="o">=</span><span class="n">CoarseGrainConfig</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">Nc</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">Nh</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="#coarse-graining-conventions">Coarse-graining conventions</a> above for the mathematical details.</p>
+</section>
+</section>
+<section id="reference-spectrum-power-fits">
+<h2>Reference-spectrum power fits<a class="headerlink" href="#reference-spectrum-power-fits" title="Link to this heading">#</a></h2>
+<p>Supply a time-frequency power grid, a fixed reference spectrum, and optional
+simulation truth to the public <code class="docutils literal notranslate"><span class="pre">fit</span></code> function. The package builds the scalar
+tensor-product log-P-spline from <code class="docutils literal notranslate"><span class="pre">PowerConfig</span></code>. Domain-specific construction
+of the reference and truth belongs in the calling analysis.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">PowerConfig</span><span class="p">,</span> <span class="n">PowerData</span><span class="p">,</span> <span class="n">PowerPartition</span><span class="p">,</span> <span class="n">fit</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">PowerData</span><span class="p">(</span>
+    <span class="n">power</span><span class="o">=</span><span class="n">summed_power</span><span class="p">,</span>
+    <span class="n">counts</span><span class="o">=</span><span class="n">component_counts</span><span class="p">,</span>
+    <span class="n">time</span><span class="o">=</span><span class="n">time_grid</span><span class="p">,</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="n">frequency_grid</span><span class="p">,</span>
+    <span class="n">units</span><span class="o">=</span><span class="s2">"WDM coefficient variance"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">PowerConfig</span><span class="p">(</span>
+    <span class="n">n_interior_knots_time</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">n_interior_knots_freq</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+    <span class="n">roughness_scale</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+    <span class="n">centered</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">n_warmup</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">n_samples</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">,</span>
+    <span class="n">reference</span><span class="o">=</span><span class="n">reference_power</span><span class="p">,</span>
+    <span class="n">true_psd</span><span class="o">=</span><span class="n">truth_power</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">result</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"results/example"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">reference_power</span></code> and <code class="docutils literal notranslate"><span class="pre">truth_power</span></code> must be positive arrays matching the
+native <code class="docutils literal notranslate"><span class="pre">(time,</span> <span class="pre">frequency)</span></code> grid and the units of <code class="docutils literal notranslate"><span class="pre">data.power</span> <span class="pre">/</span> <span class="pre">data.counts</span></code>.
+The reference is fixed during inference: the spline estimates a smooth log
+correction to it. Truth is excluded from the likelihood and used only for
+posterior checks and plots. The native reference is restored to every posterior
+spectrum draw and truth is retained in <code class="docutils literal notranslate"><span class="pre">result.truth</span></code> and the saved NetCDF.</p>
+<p>With a <code class="docutils literal notranslate"><span class="pre">PowerPartition</span></code>, each native power is divided by its own reference
+value before pooling. The exact component counts are pooled separately. The
+result is reconstructed on the original grid. Use <code class="docutils literal notranslate"><span class="pre">reference=None</span></code> for a
+free log-P-spline surface, or pass an explicit <code class="docutils literal notranslate"><span class="pre">LogPSpline</span></code> or
+<code class="docutils literal notranslate"><span class="pre">ANOVALogPSpline</span></code> model when its basis or decomposition needs to be set by
+the caller.</p>
+<p>The WDM adapter returns coefficient-variance powers, not PSD per Hz. Convert
+the supplied reference and truth to those same units before calling <code class="docutils literal notranslate"><span class="pre">fit</span></code>;
+the package does not infer a transform calibration from an analytic PSD.</p>
+<section id="anova-corrections">
+<h3>ANOVA corrections<a class="headerlink" href="#anova-corrections" title="Link to this heading">#</a></h3>
+<p>Set <code class="docutils literal notranslate"><span class="pre">PowerConfig(structure=&quot;anova&quot;,</span> <span class="pre">interaction_scale=0.5)</span></code> to use
+<code class="docutils literal notranslate"><span class="pre">log</span> <span class="pre">S</span> <span class="pre">=</span> <span class="pre">log</span> <span class="pre">reference</span> <span class="pre">+</span> <span class="pre">g(f)</span> <span class="pre">+</span> <span class="pre">eta(t,</span> <span class="pre">f)</span></code>. The interaction is centered on
+the full native time grid. <code class="docutils literal notranslate"><span class="pre">roughness_scale</span></code> controls the HalfNormal
+smoothing scales; <code class="docutils literal notranslate"><span class="pre">interaction_scale</span></code> controls the interaction amplitude.
+This uses the same <code class="docutils literal notranslate"><span class="pre">fit(data,</span> <span class="pre">config,</span> <span class="pre">reference=...,</span> <span class="pre">true_psd=...)</span></code> call.</p>
+</section>
+<section id="external-parametric-spectra">
+<h3>External parametric spectra<a class="headerlink" href="#external-parametric-spectra" title="Link to this heading">#</a></h3>
+<p>For a physical model, supply a deterministic JAX function and independent
+scalar priors. The package constructs the Bayesian model and power likelihood:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpyro</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">dist</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">ParametricSpectrum</span>
+
+<span class="n">template</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reference_power</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">ParametricSpectrum</span><span class="p">(</span>
+    <span class="n">spectrum</span><span class="o">=</span><span class="k">lambda</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">section</span><span class="p">:</span> <span class="p">(</span>
+        <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">parameters</span><span class="p">[</span><span class="s2">"log_scale"</span><span class="p">])</span> <span class="o">*</span> <span class="n">template</span><span class="p">[:,</span> <span class="n">section</span><span class="p">]</span>
+    <span class="p">),</span>
+    <span class="n">priors</span><span class="o">=</span><span class="p">{</span><span class="s2">"log_scale"</span><span class="p">:</span> <span class="n">dist</span><span class="o">.</span><span class="n">Normal</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)},</span>
+    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"log_scale"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">true_psd</span><span class="o">=</span><span class="n">truth_power</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The function returns a positive variance grid matching <code class="docutils literal notranslate"><span class="pre">PowerData</span></code>.
+<code class="docutils literal notranslate"><span class="pre">(time,</span> <span class="pre">frequency,</span> <span class="pre">channel)</span></code> powers with <code class="docutils literal notranslate"><span class="pre">channels=(&quot;sensor_1&quot;,</span> <span class="pre">&quot;sensor_2&quot;)</span></code>
+use independent channel likelihoods and shared parameters. Off-diagonal
+covariances are not fitted. Data, deterministic templates, response projection
+and pooling must already agree; <code class="docutils literal notranslate"><span class="pre">reference</span></code> and <code class="docutils literal notranslate"><span class="pre">partition</span></code> are therefore
+not accepted with <code class="docutils literal notranslate"><span class="pre">ParametricSpectrum</span></code>. Domain-specific physics stays in
+external scripts. Scalar tensor and ANOVA models still take scalar powers.</p>
+</section>
+<section id="large-grid-results">
+<h3>Large-grid results<a class="headerlink" href="#large-grid-results" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">PowerConfig(spectrum_draws=2,</span> <span class="pre">spectrum_chunk_size=4)</span></code> retains every
+parameter draw but stores only two spectral draws per chain. The 5/50/95
+percentiles, arithmetic mean and geometric mean in <code class="docutils literal notranslate"><span class="pre">result.spectrum_summary</span></code>
+use <strong>all</strong> draws, evaluated in frequency chunks. <code class="docutils literal notranslate"><span class="pre">result.quantiles()</span></code> and
+plots use those summaries. <code class="docutils literal notranslate"><span class="pre">result.psd</span></code> and <code class="docutils literal notranslate"><span class="pre">result.spectrum</span></code> contain the
+preview only. Other percentiles require reconstruction from the saved draws.
+The default <code class="docutils literal notranslate"><span class="pre">spectrum_draws=None</span></code> retains all spectral draws.</p>
+<p>Spline results save their bases and reference in <code class="docutils literal notranslate"><span class="pre">result.model_data</span></code>.
+<code class="docutils literal notranslate"><span class="pre">log_psplines.models.reconstruction.power_draws_from_basis</span></code> reconstructs all
+scalar draws, optionally for a frequency slice. Parametric reconstruction
+requires the caller’s deterministic function and external model inputs, which
+should be saved alongside the result. NetCDF persistence preserves the
+separate lengths of posterior chains and spectral previews.</p>
+</section>
+</section>
 </section>
 
     <script type="text/x-thebe-config">
@@ -1304,22 +1656,13 @@ excluded when at least four bins are available.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="conventions.html"
+       href="examples/timevarying-example.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Conventions</p>
+        <p class="prev-next-title">Time-varying PSD</p>
       </div>
-    </a>
-    <a class="right-next"
-       href="development.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Development Guide</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
     </a>
 </div>
                 </footer>
@@ -1469,6 +1812,33 @@ excluded when at least four bins are available.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.diagnostics.save_diagnostics"><code class="docutils literal notranslate"><span class="pre">save_diagnostics()</span></code></a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#spectral-conventions">Spectral conventions</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#variable-names">Variable names</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#eigendecomposition-conventions">Eigendecomposition conventions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining-conventions">Coarse-graining conventions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#psd-terminology">PSD terminology</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#data-flow">Data flow</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#technical-notes">Technical Notes</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#core-invariants">Core Invariants</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#implementation-map">Implementation Map</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-and-preprocessing">Data and Preprocessing</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#accepted-inputs">Accepted Inputs</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Coarse Graining</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference-spectrum-power-fits">Reference-spectrum power fits</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#anova-corrections">ANOVA corrections</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#external-parametric-spectra">External parametric spectra</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#large-grid-results">Large-grid results</a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
 
@@ -1493,7 +1863,7 @@ By NZ Gravity
 
   <p class="copyright">
     
-      © Copyright 2025.
+      © Copyright 2026.
       <br/>
     
   </p>

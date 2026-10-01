@@ -106,3 +106,17 @@ Diagnostics
 .. autofunction:: log_psplines.diagnostics.spectrum_diagnostics
 
 .. autofunction:: log_psplines.diagnostics.save_diagnostics
+
+
+Spectral conventions
+--------------------
+
+.. include:: conventions.rst
+   :start-line: 3
+
+
+Reference-spectrum power fits
+-----------------------------
+
+.. include:: power-reference.rst
+   :start-line: 3

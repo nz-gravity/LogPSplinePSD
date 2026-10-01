@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>LogPSplinePSD &#8212; LogPSplinePSD</title>
+    <title>Home &#8212; LogPSplinePSD</title>
   
   
   
@@ -67,7 +67,7 @@
     <link rel="icon" href="_static/favicon.png"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="One-dimensional log-P-spline PSD model" href="examples/univar-example.html" />
+    <link rel="next" title="Stationary PSD" href="examples/univar-example.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -101,8 +101,8 @@
   <input type="search"
          class="form-control"
          name="q"
-         placeholder="Search this book..."
-         aria-label="Search this book..."
+         placeholder="Search..."
+         aria-label="Search..."
          autocomplete="off"
          autocorrect="off"
          autocapitalize="off"
@@ -215,20 +215,26 @@
 </button></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">One-dimensional log-P-spline PSD model</a></li>
-<li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate PSD estimation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD estimation</a></li>
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1 current active">
+                <a class="reference internal" href="#">
+                    Home
+                </a>
+            </li>
+        </ul>
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">Stationary PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate stationary PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD</a></li>
 
 
 
-<li class="toctree-l1"><a class="reference internal" href="power-reference.html">Power data with a reference spectrum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="conventions.html">Conventions</a></li>
-
-
-<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="development.html">Development Guide</a></li>
-
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
 </ul>
 
     </div>
@@ -275,53 +281,6 @@
         <div class="header-article-item">
 
 <div class="article-header-buttons">
-
-
-
-
-
-<div class="dropdown dropdown-source-buttons">
-  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
-    <i class="fab fa-github"></i>
-  </button>
-  <ul class="dropdown-menu">
-      
-      
-      
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD" target="_blank"
-   class="btn btn-sm btn-source-repository-button dropdown-item"
-   title="Source repository"
-   data-bs-placement="left" data-bs-toggle="tooltip"
->
-  
-
-<span class="btn__icon-container">
-  <i class="fab fa-github"></i>
-  </span>
-<span class="btn__text-container">Repository</span>
-</a>
-</li>
-      
-      
-      
-      
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fintro.html&body=Your%20issue%20content%20here." target="_blank"
-   class="btn btn-sm btn-source-issues-button dropdown-item"
-   title="Open an issue"
-   data-bs-placement="left" data-bs-toggle="tooltip"
->
-  
-
-<span class="btn__icon-container">
-  <i class="fas fa-lightbulb"></i>
-  </span>
-<span class="btn__text-container">Open issue</span>
-</a>
-</li>
-      
-  </ul>
-</div>
-
 
 
 
@@ -411,7 +370,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>LogPSplinePSD</h1>
+    <h1>Home</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -435,8 +394,8 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="logpsplinepsd">
-<h1>LogPSplinePSD<a class="headerlink" href="#logpsplinepsd" title="Link to this heading">#</a></h1>
+  <section id="home">
+<h1>Home<a class="headerlink" href="#home" title="Link to this heading">#</a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">LogPSplinePSD</span></code> estimates power spectral densities (PSDs) with Bayesian
 log-P-splines. It is built around multichannel frequency-domain inference:
 time series are converted into Wishart sufficient statistics, smooth spline
@@ -458,16 +417,14 @@ python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </sp
 </section>
 <section id="where-to-start">
 <h2>Where To Start<a class="headerlink" href="#where-to-start" title="Link to this heading">#</a></h2>
-<p>Follow the pages in this order:</p>
 <ol class="arabic simple">
-<li><p><a class="reference internal" href="examples/univar-example.html"><span class="doc">One-dimensional log-P-spline PSD model</span></a> runs a univariate analysis.</p></li>
-<li><p><a class="reference internal" href="examples/multivariate-example.html"><span class="doc">Multivariate PSD estimation</span></a> introduces spectral matrices.</p></li>
-<li><p><a class="reference internal" href="examples/timevarying-example.html"><span class="doc">Time-varying PSD estimation</span></a> fits scalar time-varying spectra.</p></li>
-<li><p><a class="reference internal" href="power-reference.html"><span class="doc">Power data with a reference spectrum</span></a> shows reference-based time-varying power fits.</p></li>
-<li><p><a class="reference internal" href="conventions.html"><span class="doc">Conventions</span></a> explains units and spectral conventions.</p></li>
-<li><p><a class="reference internal" href="development.html"><span class="doc">Development Guide</span></a> gives implementation notes, followed by the <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a>
-reference.</p></li>
+<li><p><a class="reference internal" href="examples/univar-example.html"><span class="doc">Stationary PSD</span></a> fits a single-channel spectrum.</p></li>
+<li><p><a class="reference internal" href="examples/multivariate-example.html"><span class="doc">Multivariate stationary PSD</span></a> fits spectral matrices and coherence.</p></li>
+<li><p><a class="reference internal" href="examples/timevarying-example.html"><span class="doc">Time-varying PSD</span></a> fits scalar WDM and moving-periodogram powers.</p></li>
 </ol>
+<p>The <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> covers configuration, results, spectral conventions and advanced
+reference-spectrum fits. Contributor instructions are in the repository’s
+<a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
 </section>
 <section id="references">
 <h2>References<a class="headerlink" href="#references" title="Link to this heading">#</a></h2>
@@ -476,7 +433,15 @@ penalties</em>. Statistical Science, 11(2), 89-121.
 <a class="reference external" href="https://doi.org/10.1214/ss/1038425655">DOI:10.1214/ss/1038425655</a>.</p>
 <p id="maturanarussel2021">Maturana-Russel, J., &amp; Meyer, R. (2021). <em>P-spline spectral density estimation
 with a discrete penalty</em>. <a class="reference external" href="https://arxiv.org/abs/1905.01832">arXiv:1905.01832</a>.</p>
+<p>Vajpeyi, A., Meyer, R., Maturana-Russel, P., &amp; Liu, J. (2026).
+<em>Multivariate Bayesian P-spline estimation of spectral density matrices,
+with application to LISA TDI noise</em>.
+<a class="reference external" href="https://arxiv.org/abs/2607.04833">arXiv:2607.04833</a>.
+<a class="reference external" href="https://doi.org/10.48550/arXiv.2607.04833">DOI:10.48550/arXiv.2607.04833</a>.</p>
+<p>Download the <a class="reference external" href="https://github.com/nz-gravity/LogPSplinePSD/blob/main/CITATION.bib">BibTeX citation</a>.</p>
 </section>
+<div class="toctree-wrapper compound">
+</div>
 <div class="toctree-wrapper compound">
 </div>
 </section>
@@ -516,7 +481,7 @@ with a discrete penalty</em>. <a class="reference external" href="https://arxiv.
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">One-dimensional log-P-spline PSD model</p>
+        <p class="prev-next-title">Stationary PSD</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -565,7 +530,7 @@ By NZ Gravity
 
   <p class="copyright">
     
-      © Copyright 2025.
+      © Copyright 2026.
       <br/>
     
   </p>

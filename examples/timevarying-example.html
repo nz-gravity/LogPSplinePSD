@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Time-varying PSD estimation &#8212; LogPSplinePSD</title>
+    <title>Time-varying PSD &#8212; LogPSplinePSD</title>
   
   
   
@@ -67,8 +67,8 @@
     <link rel="icon" href="../_static/favicon.png"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Power data with a reference spectrum" href="../power-reference.html" />
-    <link rel="prev" title="Multivariate PSD estimation" href="multivariate-example.html" />
+    <link rel="next" title="API Reference" href="../api.html" />
+    <link rel="prev" title="Multivariate stationary PSD" href="multivariate-example.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -102,8 +102,8 @@
   <input type="search"
          class="form-control"
          name="q"
-         placeholder="Search this book..."
-         aria-label="Search this book..."
+         placeholder="Search..."
+         aria-label="Search..."
          autocomplete="off"
          autocorrect="off"
          autocapitalize="off"
@@ -214,20 +214,26 @@
 </button></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="univar-example.html">One-dimensional log-P-spline PSD model</a></li>
-<li class="toctree-l1"><a class="reference internal" href="multivariate-example.html">Multivariate PSD estimation</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Time-varying PSD estimation</a></li>
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../intro.html">
+                    Home
+                </a>
+            </li>
+        </ul>
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="univar-example.html">Stationary PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multivariate-example.html">Multivariate stationary PSD</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Time-varying PSD</a></li>
 
 
 
-<li class="toctree-l1"><a class="reference internal" href="../power-reference.html">Power data with a reference spectrum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../conventions.html">Conventions</a></li>
-
-
-<li class="toctree-l1"><a class="reference internal" href="../api.html">API Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../development.html">Development Guide</a></li>
-
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API</a></li>
 </ul>
 
     </div>
@@ -274,84 +280,6 @@
         <div class="header-article-item">
 
 <div class="article-header-buttons">
-
-
-
-
-
-<div class="dropdown dropdown-launch-buttons">
-  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
-    <i class="fas fa-rocket"></i>
-  </button>
-  <ul class="dropdown-menu">
-      
-      
-      
-      <li><a href="https://colab.research.google.com/github/nz-gravity/LogPSplinePSD/blob/main/docs/examples/timevarying-example.ipynb" target="_blank"
-   class="btn btn-sm dropdown-item"
-   title="Launch on Colab"
-   data-bs-placement="left" data-bs-toggle="tooltip"
->
-  
-
-<span class="btn__icon-container">
-  
-    <img alt="Colab logo" src="../_static/images/logo_colab.png">
-  </span>
-<span class="btn__text-container">Colab</span>
-</a>
-</li>
-      
-  </ul>
-</div>
-
-
-
-
-
-
-<div class="dropdown dropdown-source-buttons">
-  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
-    <i class="fab fa-github"></i>
-  </button>
-  <ul class="dropdown-menu">
-      
-      
-      
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD" target="_blank"
-   class="btn btn-sm btn-source-repository-button dropdown-item"
-   title="Source repository"
-   data-bs-placement="left" data-bs-toggle="tooltip"
->
-  
-
-<span class="btn__icon-container">
-  <i class="fab fa-github"></i>
-  </span>
-<span class="btn__text-container">Repository</span>
-</a>
-</li>
-      
-      
-      
-      
-      <li><a href="https://github.com/nz-gravity/LogPSplinePSD/issues/new?title=Issue%20on%20page%20%2Fexamples/timevarying-example.html&body=Your%20issue%20content%20here." target="_blank"
-   class="btn btn-sm btn-source-issues-button dropdown-item"
-   title="Open an issue"
-   data-bs-placement="left" data-bs-toggle="tooltip"
->
-  
-
-<span class="btn__icon-container">
-  <i class="fas fa-lightbulb"></i>
-  </span>
-<span class="btn__text-container">Open issue</span>
-</a>
-</li>
-      
-  </ul>
-</div>
-
 
 
 
@@ -441,7 +369,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Time-varying PSD estimation</h1>
+    <h1>Time-varying PSD</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -451,20 +379,18 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Time-varying PSD estimation</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Time-varying PSD</a><ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-model">The model</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensor-product-log-p-spline">Tensor-product log-P-spline</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#smoothness-prior">Smoothness prior</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-frequency-observations">Time-frequency observations</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-code">Example code</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#imports-and-data-generation">Imports and data generation</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#data-seen-by-each-likelihood">Data seen by each likelihood</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#run-analysis-with-the-two-likelihoods">Run analysis with the two likelihoods</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-outputs">Compare outputs</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-code">Example code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#imports-and-data-generation">Imports and data generation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-seen-by-each-likelihood">Data seen by each likelihood</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-analysis-with-the-two-likelihoods">Run analysis with the two likelihoods</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-outputs">Compare outputs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulation-study-scaling-with-n">Simulation study: scaling with <span class="math notranslate nohighlight">\(n\)</span></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#moving-periodogram-versus-wdm">Moving periodogram versus WDM</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#observation-geometry">Observation geometry</a></li>
@@ -490,8 +416,8 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="time-varying-psd-estimation">
-<h1>Time-varying PSD estimation<a class="headerlink" href="#time-varying-psd-estimation" title="Link to this heading">#</a></h1>
+  <section class="tex2jax_ignore mathjax_ignore" id="time-varying-psd">
+<h1>Time-varying PSD<a class="headerlink" href="#time-varying-psd" title="Link to this heading">#</a></h1>
 <p>A stationary PSD assumes that the spectral density is constant throughout the observation. For a non-stationary process, we instead model a spectrum that varies with both time and frequency,</p>
 <div class="math notranslate nohighlight">
 \[
@@ -708,8 +634,9 @@ In the next cells, we generate data from this, and analyse it with the WDM and M
 </div>
 </div>
 </div>
+</section>
 <section id="imports-and-data-generation">
-<h3>Imports and data generation<a class="headerlink" href="#imports-and-data-generation" title="Link to this heading">#</a></h3>
+<h2>Imports and data generation<a class="headerlink" href="#imports-and-data-generation" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
@@ -743,7 +670,7 @@ In the next cells, we generate data from this, and analyse it with the WDM and M
 </div>
 </section>
 <section id="data-seen-by-each-likelihood">
-<h3>Data seen by each likelihood<a class="headerlink" href="#data-seen-by-each-likelihood" title="Link to this heading">#</a></h3>
+<h2>Data seen by each likelihood<a class="headerlink" href="#data-seen-by-each-likelihood" title="Link to this heading">#</a></h2>
 <p>Both transforms turn the same series into squared coefficients that feed the
 spline fit directly – they are not smoothed or converted to a PSD
 themselves. WDM fills every retained time/frequency cell; the moving
@@ -863,7 +790,7 @@ Window length: <strong><span class="math notranslate nohighlight">\(N_{\text{win
 </div>
 </section>
 <section id="run-analysis-with-the-two-likelihoods">
-<h3>Run analysis with the two likelihoods<a class="headerlink" href="#run-analysis-with-the-two-likelihoods" title="Link to this heading">#</a></h3>
+<h2>Run analysis with the two likelihoods<a class="headerlink" href="#run-analysis-with-the-two-likelihoods" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Configs</span>
@@ -896,7 +823,7 @@ Window length: <strong><span class="math notranslate nohighlight">\(N_{\text{win
 </div>
 </section>
 <section id="compare-outputs">
-<h3>Compare outputs<a class="headerlink" href="#compare-outputs" title="Link to this heading">#</a></h3>
+<h2>Compare outputs<a class="headerlink" href="#compare-outputs" title="Link to this heading">#</a></h2>
 <p>WDM/moving-periodogram posteriors are in each transform’s own
 coefficient-variance units, only <em>proportional</em> (not equal) to the analytic
 PSD. Fit that constant per method (the median log-ratio to the truth) before
@@ -1060,7 +987,6 @@ error.</p>
 </div>
 </div>
 </div>
-</section>
 </section>
 <section id="simulation-study-scaling-with-n">
 <h2>Simulation study: scaling with <span class="math notranslate nohighlight">\(n\)</span><a class="headerlink" href="#simulation-study-scaling-with-n" title="Link to this heading">#</a></h2>
@@ -1378,15 +1304,15 @@ diagonal WDM likelihood is a locally stationary composite approximation</p>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Multivariate PSD estimation</p>
+        <p class="prev-next-title">Multivariate stationary PSD</p>
       </div>
     </a>
     <a class="right-next"
-       href="../power-reference.html"
+       href="../api.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Power data with a reference spectrum</p>
+        <p class="prev-next-title">API Reference</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1408,20 +1334,18 @@ diagonal WDM likelihood is a locally stationary composite approximation</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Time-varying PSD estimation</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Time-varying PSD</a><ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-model">The model</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensor-product-log-p-spline">Tensor-product log-P-spline</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#smoothness-prior">Smoothness prior</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#time-frequency-observations">Time-frequency observations</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-code">Example code</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#imports-and-data-generation">Imports and data generation</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#data-seen-by-each-likelihood">Data seen by each likelihood</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#run-analysis-with-the-two-likelihoods">Run analysis with the two likelihoods</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-outputs">Compare outputs</a></li>
-</ul>
-</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-code">Example code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#imports-and-data-generation">Imports and data generation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-seen-by-each-likelihood">Data seen by each likelihood</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-analysis-with-the-two-likelihoods">Run analysis with the two likelihoods</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-outputs">Compare outputs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulation-study-scaling-with-n">Simulation study: scaling with <span class="math notranslate nohighlight">\(n\)</span></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#moving-periodogram-versus-wdm">Moving periodogram versus WDM</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#observation-geometry">Observation geometry</a></li>
@@ -1460,7 +1384,7 @@ By NZ Gravity
 
   <p class="copyright">
     
-      © Copyright 2025.
+      © Copyright 2026.
       <br/>
     
   </p>

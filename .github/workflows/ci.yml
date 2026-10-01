@@ -15,11 +15,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run prek
-        uses: j178/prek-action@v3
-        with:
-          extra-args: --all-files
-
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -31,17 +26,22 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      # - name: Lint with Ruff
-      #   run: uv run ruff check . --output-format=github
+      - name: Run prek
+        uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
+        with:
+          extra-args: --all-files
 
-      # - name: Check Formatting
-      #   run: uv run ruff format --check
-
-      - name: Run pytest
+      - name: Run contract tests
         run: |
-          uv run pytest --cov='log_psplines' \
+          uv run python -m pytest --cov='log_psplines' \
             --cov-report=xml \
             -m 'not slow'
+
+      - name: Run recovery fits
+        run: |
+          uv run python -m pytest --cov='log_psplines' --cov-append \
+            --cov-report=xml \
+            -m slow
 
       - name: Coveralls
         uses: coverallsapp/github-action@v2

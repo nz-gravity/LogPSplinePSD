@@ -69,7 +69,7 @@ Next Steps
 Architecture
 ------------
 
-See the `development notes <docs/development.md>`_ for the shared scalar/matrix
+See the `development notes <CONTRIBUTING.md>`_ for the shared scalar/matrix
 model and time-frequency evaluation. Scalar time-varying power inference is
 available through ``fit()``. Multivariate time-varying inference is not yet
 implemented.
@@ -96,3 +96,9 @@ penalties*. Statistical Science, 11(2), 89-121.
 
 Maturana-Russel, J., & Meyer, R. (2021). *P-spline spectral density estimation
 with a discrete penalty*. arXiv:1905.01832.
+
+Vajpeyi, A., Meyer, R., Maturana-Russel, P., & Liu, J. (2026).
+*Multivariate Bayesian P-spline estimation of spectral density matrices,
+with application to LISA TDI noise*.
+`arXiv:2607.04833 <https://arxiv.org/abs/2607.04833>`_.
+`DOI:10.48550/arXiv.2607.04833 <https://doi.org/10.48550/arXiv.2607.04833>`_.

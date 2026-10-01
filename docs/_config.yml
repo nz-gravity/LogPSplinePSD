@@ -1,7 +1,7 @@
 # Book settings
 title: LogPSplinePSD
 author: NZ Gravity
-copyright: "2025"
+copyright: "2026"
 exclude_patterns: [_build, Thumbs.db, .DS_Store, "**.ipynb_checkpoints"]
 only_build_toc_files: true
 logo: _static/logo.png
@@ -15,7 +15,7 @@ html:
   use_repository_button: true
   use_issues_button: true
   use_multitoc_numbering: false
-  home_page_in_navbar: false
+  home_page_in_navbar: true
   favicon: "_static/favicon.png"
   comments:
     hypothesis: false
@@ -43,6 +43,8 @@ sphinx:
 #    'sphinx.ext.matplotlib.plot',
     ]
   config:
+    html_theme_options:
+      home_page_in_toc: true
     html_extra_path:
       - animation/logpspline-hero.webm
     mathjax3_config:

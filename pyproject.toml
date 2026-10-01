@@ -66,9 +66,9 @@ dev = [
 ]
 
 [project.urls]
-"Homepage" = "https://starccato.github.io/log_psplines/"
-"Bug Reports" = "https://github.com/starccato/log_psplines/issues"
-"Source" = "https://github.com/starccato/log_psplines/"
+"Homepage" = "https://nz-gravity.github.io/LogPSplinePSD/"
+"Bug Reports" = "https://github.com/nz-gravity/LogPSplinePSD/issues"
+"Source" = "https://github.com/nz-gravity/LogPSplinePSD/"
 
 [project.scripts]
 log_psplines_benchmark = "log_psplines.benchmark.cli:main"
@@ -119,7 +119,7 @@ known-first-party = ["log_psplines"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--durations=20 -s --import-mode=importlib --jaxtyping-packages=log_psplines,beartype.beartype"
+addopts = "--durations=10 --strict-markers --import-mode=importlib --jaxtyping-packages=log_psplines,beartype.beartype"
 markers = [
     "slow: slow integration or end-to-end tests",
     "memory: tests commonly used for memory profiling runs",

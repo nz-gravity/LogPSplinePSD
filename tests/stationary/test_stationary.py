@@ -9,6 +9,7 @@ from log_psplines import PSDResult, StationaryConfig, fit
 from log_psplines.example_datasets.varma_data import VARMAData
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     ("channels", "method"),
     [(1, "vi"), (1, "nuts"), (2, "vi"), (2, "nuts")],

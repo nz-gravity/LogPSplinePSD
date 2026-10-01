@@ -39,9 +39,28 @@ The built HTML documentation will be in `docs/_build/html/`.
 
 ## Running Tests
 
+Use the project environment for all commands:
+
 ```bash
-.venv/bin/python -m pytest tests/
+source .venv/bin/activate
+python -m pip install -e '.[dev,wdm]'
+python -m pytest -m 'not slow'  # routine CI checks
+python -m pytest               # full release checks, including recovery fits
 ```
+
+The suite is grouped by behavior:
+
+- `tests/unit/`: spline/likelihood definitions, datasets and preprocessing.
+- `tests/stationary/`: stationary priors, public fits and result round trips.
+- `tests/time_varying/`: power geometry, ANOVA, parametric spectra and reconstruction.
+
+`slow` marks the longer stationary and WDM recovery fits. Short inference
+contract tests run first in CI, followed by a separate recovery step. Both
+steps must pass before the release workflow can run. Install the `wdm` extra for full release
+validation; otherwise the WDM recovery test skips. Test outputs use pytest's
+isolated temporary directories, shown in failures. To retain them at a known
+location, pass `--basetemp=tests/test-output/run` (pytest clears this directory
+at the start of each run).
 
 ## Git Hooks
 

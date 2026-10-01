@@ -4,7 +4,7 @@ Conventions
 This page records naming conventions used throughout the documentation and codebase.
 
 Variable names
---------------
+~~~~~~~~~~~~~~
 
 .. list-table::
    :header-rows: 1
@@ -48,7 +48,7 @@ Variable names
        :math:`\mathbf{Y}(f_k)=\sum_{b=1}^{N_b}\mathbf{d}^{(b)}(f_k)\mathbf{d}^{(b)}(f_k)^H` (not averaged).
 
 Eigendecomposition conventions
-------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For a Hermitian positive semidefinite matrix :math:`Y(f_k)` we use
 
@@ -62,7 +62,7 @@ For a Hermitian positive semidefinite matrix :math:`Y(f_k)` we use
 where :math:`(\cdot)^*` denotes the conjugate transpose.
 
 Coarse-graining conventions
----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We “coarse-grain” the Fourier frequencies by dividing them into :math:`N_c`
 consecutive disjoint subsets :math:`J_h`, each containing :math:`N_h`
@@ -90,7 +90,7 @@ We also use the eigendecomposition of :math:`\bar{Y}_h`:
    u^{(h)}_\nu = \sqrt{\lambda^{(h)}_\nu}\, v^{(h)}_\nu.
 
 PSD terminology
----------------
+~~~~~~~~~~~~~~~
 
 ``log_psplines.data.spectral_utils`` centralises the conversion between
 Wishart statistics and PSD matrices. The current conventions are:
@@ -112,7 +112,7 @@ These helpers ensure the frequency-domain likelihood, diagnostics, and plotting
 code all consume spectra with the same units and sidedness.
 
 Data flow
----------
+~~~~~~~~~
 
 The multivariate pipeline follows a fixed sequence of transformations:
 
@@ -135,13 +135,13 @@ The multivariate pipeline follows a fixed sequence of transformations:
 
 
 Technical Notes
-===============
+---------------
 
 These pages document the assumptions and implementation details that matter for
 maintaining or extending the inference code.
 
 Core Invariants
----------------
+~~~~~~~~~~~~~~~
 
 - PSD diagonal entries must stay strictly positive.
 - Multivariate spectral matrices must stay Hermitian positive definite at each
@@ -153,7 +153,7 @@ Core Invariants
   non-JIT code paths.
 
 Implementation Map
-------------------
+~~~~~~~~~~~~~~~~~~
 
 ``log_psplines.fit``
    Canonical high-level ``fit()`` entry point plus orchestration helpers.
@@ -180,10 +180,10 @@ Implementation Map
 
 
 Data and Preprocessing
-======================
+----------------------
 
 Accepted Inputs
----------------
+~~~~~~~~~~~~~~~
 
 The high-level pipeline accepts either time-domain data or precomputed
 frequency-domain statistics.
@@ -197,7 +197,7 @@ frequency-domain statistics.
    explicit control over FFT construction before calling the pipeline.
 
 Time-Domain Container
----------------------
+~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -223,7 +223,7 @@ The original channel standard deviations are carried through so exported PSDs
 can be rescaled back to physical units.
 
 Wishart Statistics
-------------------
+~~~~~~~~~~~~~~~~~~
 
 ``TimeSeries.to_wishart_stats`` and
 ``preprocessing.periodogram.compute_wishart`` split the data into ``Nb`` contiguous blocks,
@@ -248,7 +248,7 @@ statistic.
    )
 
 Frequency Selection
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 Frequency selection is applied in this order:
 
@@ -259,7 +259,7 @@ Frequency selection is applied in this order:
 5. Optionally coarse grain the retained grid.
 
 Coarse Graining
----------------
+~~~~~~~~~~~~~~~
 
 Coarse graining sums neighbouring Wishart matrices into equal-size consecutive
 frequency bins. It is useful when the frequency grid is much denser than the

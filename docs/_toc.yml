@@ -1,11 +1,16 @@
 format: jb-book
-root: intro.rst
+root: intro
 
-chapters:
-  - file: examples/univar-example.ipynb
-  - file: examples/multivariate-example.ipynb
-  - file: examples/timevarying-example.ipynb
-  - file: power-reference.rst
-  - file: conventions.rst
-  - file: api.rst
-  - file: development.md
+parts:
+  - caption: Examples
+    chapters:
+      - file: examples/univar-example
+        title: Stationary PSD
+      - file: examples/multivariate-example
+        title: Multivariate stationary PSD
+      - file: examples/timevarying-example
+        title: Time-varying PSD
+  - caption: Reference
+    chapters:
+      - file: api
+        title: API

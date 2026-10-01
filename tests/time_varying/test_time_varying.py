@@ -286,6 +286,7 @@ def test_scattered_time_frequency_data_reaches_public_fit():
     assert np.all(result.psd > 0)
 
 
+@pytest.mark.slow
 def test_ls2_wdm_posterior_tracks_analytic_surface(outdir):
     pytest.importorskip("wdm_transform")
     example = LS2Data(n_samples=4096, fs=64.0, seed=42)

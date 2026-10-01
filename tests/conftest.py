@@ -1,4 +1,4 @@
-"""Shared pytest setup and persistent local artifact directory."""
+"""Shared pytest setup and isolated output directories."""
 
 import os
 from pathlib import Path
@@ -11,14 +11,10 @@ os.environ.setdefault("MPLCONFIGDIR", str(OUTPUT_DIR / ".matplotlib"))
 
 from log_psplines.logger import set_level  # noqa: E402
 
-os.environ.setdefault(
-    "LOG_PSPLINES_SLOW_TESTS",
-    "0" if os.getenv("GITHUB_ACTIONS") == "true" else "1",
-)
 set_level("WARNING")
 
 
-@pytest.fixture(scope="session")
-def outdir() -> Path:
-    """Return an ignored, persistent directory for fit outputs and plots."""
-    return OUTPUT_DIR
+@pytest.fixture
+def outdir(tmp_path: Path) -> Path:
+    """Give each test an isolated directory for fit outputs and plots."""
+    return tmp_path

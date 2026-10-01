@@ -54,7 +54,7 @@ the supplied reference and truth to those same units before calling ``fit``;
 the package does not infer a transform calibration from an analytic PSD.
 
 ANOVA corrections
------------------
+~~~~~~~~~~~~~~~~~
 
 Set ``PowerConfig(structure="anova", interaction_scale=0.5)`` to use
 ``log S = log reference + g(f) + eta(t, f)``. The interaction is centered on
@@ -63,7 +63,7 @@ smoothing scales; ``interaction_scale`` controls the interaction amplitude.
 This uses the same ``fit(data, config, reference=..., true_psd=...)`` call.
 
 External parametric spectra
----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For a physical model, supply a deterministic JAX function and independent
 scalar priors. The package constructs the Bayesian model and power likelihood:
@@ -93,7 +93,7 @@ not accepted with ``ParametricSpectrum``. Domain-specific physics stays in
 external scripts. Scalar tensor and ANOVA models still take scalar powers.
 
 Large-grid results
-------------------
+~~~~~~~~~~~~~~~~~~
 
 ``PowerConfig(spectrum_draws=2, spectrum_chunk_size=4)`` retains every
 parameter draw but stores only two spectral draws per chain. The 5/50/95

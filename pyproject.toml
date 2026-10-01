@@ -38,7 +38,6 @@ dependencies = [
     "click",
     "ipywidgets",
     "plotly",
-    "morphz",
     "loguru",
     "scikit-fda",
     # scikit-fda's generic operator registrations are incompatible with
@@ -70,9 +69,6 @@ dev = [
 "Homepage" = "https://nz-gravity.github.io/LogPSplinePSD/"
 "Bug Reports" = "https://github.com/nz-gravity/LogPSplinePSD/issues"
 "Source" = "https://github.com/nz-gravity/LogPSplinePSD/"
-
-[project.scripts]
-log_psplines_benchmark = "log_psplines.benchmark.cli:main"
 
 [tool.setuptools_scm]
 version_file = "src/log_psplines/_version.py"

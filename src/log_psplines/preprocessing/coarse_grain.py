@@ -41,17 +41,6 @@ def _closest_divisor(n: int, target: int) -> int:
     return min(divisors, key=lambda d: (abs(d - target), d))
 
 
-def _smallest_divisor_geq(n: int, min_val: int) -> int | None:
-    """Return the smallest divisor of *n* that is >= *min_val*, or None."""
-    divisors = sorted(
-        k for i in range(1, isqrt(n) + 1) if n % i == 0 for k in (i, n // i)
-    )
-    for d in divisors:
-        if d >= min_val:
-            return d
-    return None
-
-
 @dataclass(slots=True)
 class CoarseGrainConfig:
     """Configuration for frequency-domain coarse graining with equal-sized bins.
@@ -157,21 +146,6 @@ def _resolve_equal_bin_params(
         )
     Nh_int = Nl // Nc_int
     return int(Nc_int), int(Nh_int)
-
-
-def _sum_bins_equal(x: np.ndarray, *, Nh: int) -> np.ndarray:
-    """Sum consecutive equal-sized bins of length Nh along axis 0.
-    out[h, ...] = sum_{k = h*Nh}^{(h+1)*Nh - 1} x[k, ...].
-
-    Eg:
-    x = [x0, x1, x2, x3, x4, x5], Nh=2 -> out = [x0+x1, x2+x3, x4+x5]
-    """
-    x = np.asarray(x)
-    Nl = x.shape[0]
-    if Nl % Nh != 0:
-        raise ValueError("Nl must be divisible by Nh")
-    Nc = Nl // Nh
-    return x.reshape(Nc, Nh, *x.shape[1:]).sum(axis=1)
 
 
 def _coarse_grain_wishart_y_to_u(

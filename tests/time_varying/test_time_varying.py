@@ -18,6 +18,7 @@ from log_psplines import (
     mask_power,
     moving_periodogram,
     scattered_moving_periodogram,
+    select_power_partition,
 )
 from log_psplines.basis.penalty import eigen_prior_scale, whiten_penalty_pair
 from log_psplines.example_datasets.ls2_data import LS2Data
@@ -398,3 +399,31 @@ def test_public_moving_periodogram_returns_usable_grid():
     assert np.all(data.counts > 0)
     assert np.all(np.diff(data.time) > 0)
     assert np.all(np.diff(data.frequency) > 0)
+
+
+def test_adaptive_partition_respects_gaps_masks_and_supplied_breaks():
+    time = np.array([0.0, 1.0, 2.0, 8.0, 9.0, 10.0])
+    frequency = np.arange(1.0, 7.0)
+    pilot = np.array([[0.0, 0.0, 0.0, 1.0, 1.0, 1.0]] * 2)
+    counts = np.ones((6, 6))
+    counts[2:, 1] = 0
+    counts[:, 5] = 0
+    breaks = np.array([False, False, False, False, False, True])
+    partition = select_power_partition(
+        pilot,
+        time,
+        time_bin=10,
+        max_frequency_bin=2,
+        max_log_range=0.2,
+        counts=counts,
+        time_breaks=breaks,
+    )
+    np.testing.assert_array_equal(partition.time_starts, [0, 2, 3, 5])
+    np.testing.assert_array_equal(partition.frequency_starts, [0, 2, 3, 5])
+    power = np.where(counts > 0, np.arange(1.0, 37.0).reshape(6, 6), 0.0)
+    native = PowerData(power, counts, frequency, time)
+    pooled = coarse_grain_power(native, partition)
+    np.testing.assert_allclose(pooled.power.sum(), native.power.sum())
+    np.testing.assert_allclose(pooled.counts.sum(), native.counts.sum())
+    np.testing.assert_array_equal(pooled.counts[:, -1], 0.0)
+    np.testing.assert_array_equal(pooled.power[:, -1], 0.0)

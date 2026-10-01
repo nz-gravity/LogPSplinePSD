@@ -97,18 +97,12 @@ Coarse Graining
 ``coarse_grain_config``
    Coarse grain the frequency grid used by the inference run.
 
-Output and Evidence
--------------------
+Output
+------
 
 ``outdir``
    If set, fit writes NetCDF inference data, posterior predictive
    plots, and diagnostic tables/figures.
-
-``compute_lnz``
-   Estimate log evidence with MorphZ when enabled. Defaults to ``False``.
-
-``lnz_kwargs``
-   Optional MorphZ keyword overrides used when ``compute_lnz`` is enabled.
 
 ``true_psd``
    Optional reference PSD used only for diagnostics and error summaries. It can
@@ -163,7 +157,6 @@ class StationaryConfig:
 
     verbose: bool = True
     outdir: str | None = None
-    compute_lnz: bool = False
 
     method: Literal["nuts", "vi"] = "nuts"
     vi_steps: int = 1500
@@ -179,8 +172,6 @@ class StationaryConfig:
     dense_mass: bool = True
 
     eta: float = 1.0
-
-    lnz_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 __all__ = ["StationaryConfig", "PowerConfig"]

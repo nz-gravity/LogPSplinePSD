@@ -159,7 +159,7 @@ Implementation Map
    Canonical high-level ``fit()`` entry point plus orchestration helpers.
 
 ``log_psplines.inference``
-   Model preparation, VI, NUTS, and evidence estimation.
+   Model preparation, VI, NUTS, and pointwise likelihood diagnostics.
 
 ``log_psplines.data``
    Time-domain and frequency-domain containers.

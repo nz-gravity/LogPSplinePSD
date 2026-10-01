@@ -34,13 +34,13 @@ jobs:
       - name: Run contract tests
         run: |
           uv run python -m pytest --cov='log_psplines' \
-            --cov-report=xml \
+            --cov-report=xml --cov-report=term-missing \
             -m 'not slow'
 
       - name: Run recovery fits
         run: |
           uv run python -m pytest --cov='log_psplines' --cov-append \
-            --cov-report=xml \
+            --cov-report=xml --cov-report=term-missing \
             -m slow
 
       - name: Coveralls

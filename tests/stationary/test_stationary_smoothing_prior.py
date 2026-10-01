@@ -6,16 +6,15 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
+import xarray as xr
 from jax.scipy.linalg import solve_triangular
 from numpyro.infer.util import log_density
 from scipy.stats import halfnorm
 
 from log_psplines import StationaryConfig, fit
 from log_psplines.example_datasets.varma_data import VARMAData
-from log_psplines.inference.evidence import (
-    _build_log_posterior,
-    _posterior_param_names,
-)
+from log_psplines.inference.log_likelihood import compute_pointwise_lnl
+from log_psplines.likelihoods.wishart import wishart_log_likelihood
 from log_psplines.inference.model import (
     _blocked_channel_model,
     _sample_pspline_block,
@@ -64,7 +63,7 @@ def test_sigma_controls_the_existing_stationary_penalty():
     np.testing.assert_allclose(density(low) - density(high), expected, atol=1e-6)
 
 
-def test_stationary_pipeline_uses_sigma_and_evidence_density():
+def test_stationary_pipeline_uses_sigma():
     example = VARMAData.ar(order=1, n_samples=512, fs=64.0, seed=8)
     config = StationaryConfig(
         n_knots=5, Nb=4, n_warmup=20, n_samples=20,
@@ -78,18 +77,6 @@ def test_stationary_pipeline_uses_sigma_and_evidence_density():
     assert not any(name.startswith("phi_") for name in result.posterior)
     assert "sigma_delta_0" in result.to_arviz()["posterior"].dataset
 
-    kwargs, _ = prepare_model(data, config)
-    names = _posterior_param_names(result.posterior, channel_index=0)
-    assert names == ["sigma_delta_0", "weights_delta_0"]
-    samples, log_prob, evaluate = _build_log_posterior(
-        result.posterior,
-        model_fn=_blocked_channel_model,
-        model_kwargs=channel_model_kwargs(kwargs, 0),
-        param_names=names,
-    )
-    assert samples.shape[0] == 20
-    assert np.isfinite(log_prob).all()
-    assert np.isfinite(evaluate(samples[0]))
 
 
 def test_multichannel_sigma_keeps_spectral_matrix_invariants():
@@ -107,17 +94,6 @@ def test_multichannel_sigma_keeps_spectral_matrix_invariants():
     np.testing.assert_allclose(spectrum, spectrum.conj().swapaxes(-1, -2))
     assert np.linalg.eigvalsh(spectrum).min() > 0
     assert np.all((result.coherence >= 0) & (result.coherence <= 1 + 1e-10))
-    kwargs, _ = prepare_model(data, config)
-    names = _posterior_param_names(result.posterior, channel_index=1)
-    assert len(names) == 6
-    samples, log_prob, _ = _build_log_posterior(
-        result.posterior,
-        model_fn=_blocked_channel_model,
-        model_kwargs=channel_model_kwargs(kwargs, 1),
-        param_names=names,
-    )
-    assert samples.shape[0] == 20
-    assert np.isfinite(log_prob).all()
 
 
 def test_noncentered_prior_has_same_density_after_jacobian():
@@ -146,7 +122,7 @@ def test_noncentered_prior_has_same_density_after_jacobian():
     np.testing.assert_allclose(differences[0], differences[1], atol=1e-5)
 
 
-def test_noncentered_pipeline_exposes_sampled_coordinates_for_evidence():
+def test_noncentered_pipeline_exposes_sampled_coordinates():
     example = VARMAData.ar(order=1, n_samples=512, fs=64.0, seed=8)
     result = fit(example.ts, StationaryConfig(
         smoothing_parameterization="noncentered", n_knots=5, Nb=4,
@@ -154,9 +130,6 @@ def test_noncentered_pipeline_exposes_sampled_coordinates_for_evidence():
     ))
     assert "weights_delta_0_raw" in result.posterior
     assert "weights_delta_0" in result.posterior
-    assert _posterior_param_names(result.posterior, channel_index=0) == [
-        "sigma_delta_0", "weights_delta_0_raw",
-    ]
     assert np.isfinite(result.psd).all()
 
 
@@ -200,3 +173,83 @@ def test_centered_and_noncentered_full_log_posterior_match():
         log_jacobian = len(weights) * np.log(sigma) - np.log(np.linalg.det(cholesky))
         differences.append(float(density_c - density_n + log_jacobian))
     np.testing.assert_allclose(differences[0], differences[1], atol=0.05)
+
+
+def test_pointwise_likelihood_matches_sampled_channel_likelihoods():
+    config = StationaryConfig(
+        n_knots=5, Nb=4, verbose=False, wishart_window="hann"
+    )
+    data = preprocess_to_freq_domain(
+        VARMAData(n_samples=128, fs=32.0, seed=14).ts, config
+    )
+    kwargs, _ = prepare_model(data, config)
+    rng = np.random.default_rng(15)
+    variables = {}
+    for channel in range(2):
+        name = f"weights_delta_{channel}"
+        basis = kwargs["bases_delta"][channel]
+        variables[name] = (
+            ("chain", "draw", f"k_{name}"),
+            rng.normal(scale=0.1, size=(1, 2, basis.shape[1])),
+        )
+        for kind in ("re", "im"):
+            for index, basis in enumerate(
+                kwargs[f"bases_theta_{kind}"][channel]
+            ):
+                name = f"weights_theta_{kind}_{channel}_{index}"
+                variables[name] = (
+                    ("chain", "draw", f"k_{name}"),
+                    rng.normal(scale=0.1, size=(1, 2, basis.shape[1])),
+                )
+    posterior = xr.Dataset(variables, coords={"chain": [0], "draw": [0, 1]})
+    likelihood = compute_pointwise_lnl(
+        posterior=posterior, data=data, model_kwargs=kwargs
+    )
+    for draw in range(2):
+        total = 0.0
+        for channel in range(2):
+            variance = (
+                kwargs["bases_delta"][channel]
+                @ posterior[f"weights_delta_{channel}"].values[0, draw]
+            )
+            theta = {}
+            for kind in ("re", "im"):
+                parts = [
+                    basis
+                    @ posterior[
+                        f"weights_theta_{kind}_{channel}_{index}"
+                    ].values[0, draw]
+                    for index, basis in enumerate(
+                        kwargs[f"bases_theta_{kind}"][channel]
+                    )
+                ]
+                theta[kind] = (
+                    np.stack(parts, axis=-1)
+                    if parts
+                    else np.zeros((data.N, 0))
+                )
+            expected = float(
+                wishart_log_likelihood(
+                    jnp.asarray(variance),
+                    jnp.asarray(theta["re"]),
+                    jnp.asarray(theta["im"]),
+                    kwargs["u_re"][:, channel, :],
+                    kwargs["u_im"][:, channel, :],
+                    kwargs["u_re"][:, :channel, :],
+                    kwargs["u_im"][:, :channel, :],
+                    Nb=kwargs["Nb"],
+                    Nh=kwargs["Nh"],
+                    duration=kwargs["duration"],
+                    enbw=kwargs["enbw"],
+                )
+            )
+            actual = (
+                likelihood[f"log_likelihood_channel_{channel}"]
+                .values[0, draw]
+                .sum()
+            )
+            np.testing.assert_allclose(actual, expected, rtol=2e-6)
+            total += expected
+        np.testing.assert_allclose(
+            likelihood.log_likelihood.values[0, draw].sum(), total, rtol=2e-6
+        )

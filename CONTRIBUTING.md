@@ -101,7 +101,17 @@ stubs.
 
 Pytest's `--jaxtyping-packages` option applies `beartype` to package functions
 and dataclasses only while tests import them. Normal imports and inference runs
-do not install a type-checking hook or wrap source functions. Run the suite with:
+do not install a type-checking hook or wrap source functions.
+`tests/unit/test_core.py` includes negative checks that require `TypeCheckError`
+for mismatched array shapes, integer arrays where floats are required, and
+incorrect scalar types. These fail if the pytest import hook is disabled.
+Run just those checks with:
+
+```bash
+.venv/bin/python -m pytest tests/unit/test_core.py -k typechecking
+```
+
+Run the suite with:
 
 ```bash
 .venv/bin/python -m pytest tests/

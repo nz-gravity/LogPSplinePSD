@@ -5,6 +5,19 @@ CHANGELOG
 =========
 
 
+Unreleased
+==========
+
+* Remove optional MorphZ evidence estimation and its dependencies.
+  ``StationaryConfig.compute_lnz`` and ``lnz_kwargs`` are no longer accepted.
+  Pointwise log-likelihood draws remain available for ArviZ diagnostics.
+* Remove the obsolete benchmark command that referenced a deleted module.
+* Add checks proving pytest enables runtime shape, dtype, and scalar type
+  validation, and covering gap-aware WDM likelihood partitions.
+* Add preprocessing regression checks for PSD normalization, coarse-graining,
+  frequency masking, and reference-spectrum interpolation.
+
+
 .. _changelog-v0.0.14:
 
 v0.0.14 (2025-11-23)

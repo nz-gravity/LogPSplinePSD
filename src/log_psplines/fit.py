@@ -11,10 +11,7 @@ from log_psplines.data.spectral import (
     PowerData,
     WishartData,
 )
-from log_psplines.inference.evidence import (
-    compute_pointwise_lnl,
-    estimate_pipeline_lnz,
-)
+from log_psplines.inference.log_likelihood import compute_pointwise_lnl
 from log_psplines.inference.model import prepare_model
 from log_psplines.inference.nuts import run_multivariate_nuts
 from log_psplines.inference.power import fit_power
@@ -31,55 +28,6 @@ from log_psplines.preprocessing.spectral import (
 from log_psplines.results import PSDResult, observed_wishart_data
 
 from .logger import logger
-
-
-def _attach_lnz_metadata(
-    result: PSDResult,
-    *,
-    data: WishartData,
-    model_kwargs: dict,
-    config: StationaryConfig,
-) -> None:
-    """Add optional evidence diagnostics to a completed stationary fit."""
-    if not config.compute_lnz:
-        return
-    try:
-        evidence = estimate_pipeline_lnz(
-            posterior=result.posterior,
-            data=data,
-            model_kwargs=model_kwargs,
-            outdir=config.outdir,
-            lnz_kwargs=config.lnz_kwargs,
-            verbose=config.verbose,
-        )
-    except Exception as exc:
-        logger.warning(f"Could not compute lnZ: {exc}", exc_info=True)
-        result.metadata.update(
-            {
-                "lnz": float("nan"),
-                "lnz_err": float("nan"),
-                "lnz_valid": False,
-                "lnz_n_estimations": 0,
-                "lnz_nonconverged_count": 0,
-                "lnz_method": "morphZ",
-            }
-        )
-        return
-
-    result.metadata.update(
-        {
-            "lnz": float(evidence.lnz),
-            "lnz_err": float(evidence.lnz_err),
-            "lnz_valid": bool(evidence.is_valid),
-            "lnz_n_estimations": int(evidence.n_estimations),
-            "lnz_nonconverged_count": int(evidence.nonconverged_count),
-            "lnz_method": "morphZ",
-        }
-    )
-    for index, factor in enumerate(evidence.factor_results):
-        result.metadata[f"lnz_factor_{index}"] = float(factor.lnz)
-        result.metadata[f"lnz_err_factor_{index}"] = float(factor.lnz_err)
-        result.metadata[f"lnz_valid_factor_{index}"] = bool(factor.is_valid)
 
 
 def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
@@ -157,20 +105,11 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
             "max_tree_depth_by_channel": config.max_tree_depth_by_channel,
             "eta": float(config.eta),
             "sampling_eta": float(config.eta),
-            "compute_lnz": config.compute_lnz,
         },
         vi=vi,
         log_likelihood=log_likelihood,
         observed_data=observed_wishart_data(data),
     )
-    if config.method != "vi":
-        _attach_lnz_metadata(
-            result,
-            data=data,
-            model_kwargs={**model_kwargs, "eta": float(config.eta)},
-            config=config,
-        )
-
     if config.outdir is not None:
         result.save(
             config.outdir,

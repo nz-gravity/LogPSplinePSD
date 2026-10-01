@@ -3,6 +3,8 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
+from jaxtyping import TypeCheckError
 from scipy.integrate import quad
 from scipy.interpolate import BSpline
 
@@ -124,3 +126,18 @@ def test_wishart_likelihood_matches_independent_factor_calculation():
         )
     )(logs)
     assert np.isfinite(gradient).all()
+
+
+@pytest.mark.parametrize(
+    "power",
+    [np.ones(4), np.ones((3, 1)), np.ones(3, dtype=np.int64)],
+    ids=["different-length", "different-rank", "integer-dtype"],
+)
+def test_pytest_typechecking_rejects_invalid_likelihood_arrays(power):
+    with pytest.raises(TypeCheckError):
+        whittle_log_likelihood(jnp.zeros(3), power)
+
+
+def test_pytest_typechecking_rejects_invalid_scalar_type():
+    with pytest.raises(TypeCheckError):
+        whittle_log_likelihood(jnp.zeros(3), np.ones(3), duration="4")

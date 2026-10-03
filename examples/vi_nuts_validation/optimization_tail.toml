@@ -1,0 +1,35 @@
+# Exploratory extension chosen after the 18-fit factorial study.
+# Same target, diagonal guide, seeds and first 40000 updates as cosine/p8.
+target = "exact_time_varying"
+guide = "diag"
+optimization_seeds = [7101, 7102, 7103]
+optimization_particles = [8]
+checkpoints = [1000, 5000, 15000, 25000, 30000, 35000, 40000, 50000, 60000, 70000, 80000]
+posterior_draws = 4096
+checkpoint_draw_seed = 8301
+diagnostic_seeds = [8101, 8102, 8103]
+diagnostic_particles = 4096
+diagnostic_chunk = 128
+evaluation_seeds = [8201, 8202, 8203, 8204, 8205, 8206, 8207, 8208]
+evaluation_particles = 256
+mmd_count = 512
+mmd_bandwidth_multipliers = [0.5, 1.0, 2.0]
+stability_steps = [60000, 70000, 80000]
+mean_drift_tolerance_reference_sd = 0.1
+relative_sd_drift_tolerance = 0.05
+event_drift_tolerance = 0.01
+objective_change_tolerance = 0.2
+objective_mcse_multiplier = 2.0
+# Prefix parity is checked offline against this saved experiment.
+prefix_reference = "runs/vi-optimization-exact-tv"
+prefix_schedule = "warmup_cosine"
+prefix_step = 40000
+
+[[schedules]]
+name = "warmup_cosine_tail"
+type = "warmup_cosine"
+peak_lr = 0.01
+initial_lr = 0.001
+warmup_steps = 1000
+decay_steps = 40000
+end_lr = 0.0001

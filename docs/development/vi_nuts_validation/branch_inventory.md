@@ -29,22 +29,23 @@ separate compatibility check.
 
 ## Essential to reproduce and diagnose the current stationary result
 
-The live local-module dependency chain is:
+The active dependency boundary is now small and explicit:
 
 ```text
-stationary_next.py
-  ├── stationary.py: frozen target loading, physical features, MCSE,
-  │                  inherited stability screens and plotting
-  ├── optimize.py: exact inherited learning-rate function and joint draws
-  └── run.py: MMD comparison, packed reference draws, quadrature/JSON helpers
+stationary_next.py -> stationary.py, study_common.py, comparison.py
+extensions.py -> extension_targets.py, study_common.py, comparison.py
 ```
 
-`stationary.py` also imports `optimize.py` and `run.py`; `optimize.py` imports
-`run.py`. Those older files are **not currently dead code**. Removing them
-would break imports or alter the reproduced numerical recipe. First extract
-only their shared helpers into one small local study module, preserving exact
-schedule, density and checkpoint contracts; then retire their old drivers.
-That consolidation has not been performed by the branch move.
+`study_common.py` contains the exact inherited schedule, packed/joint draws,
+MMD, quadrature and persistence functions. `comparison.py` contains the unchanged
+MC-aware accuracy and paired checkpoint formulas, with explicit feature roles
+for the new native cases. Synthetic nontrivial comparisons were bitwise equal
+to the pre-cleanup implementations. Active imports do not load historical drivers.
+
+The former `run.py`, `optimize.py`, report generators, extra-reference repair and
+sweep specifications are retained under `examples/vi_nuts_validation/archive/`.
+The complete old moving-periodogram study is in `archive/dynamic_whittle/`.
+Numerical archives and historical failures were not deleted or rerun.
 
 Keep `tests/unit/test_stationary_vi_investigation.py` and
 `test_stationary_vi_continuation.py`. The `run_nuts(init_strategy=...)` addition
@@ -60,13 +61,13 @@ reference and call it a replay.
 
 ## No longer needed as active development paths
 
-| Item | Current role | Recommended disposition |
+| Item | Current role | Disposition |
 |---|---|---|
-| `examples/vi_nuts_validation/repair_reference.py` | Extra reference repair for the earlier four-target study | Archive. It is not the current stationary repair policy and must not be used to spend an exhausted budget. |
-| `summarize.py`, `optimization_report.py` | Earlier saved-study report generators | Archive with their matching inputs and reports. Neither is imported by the stationary continuation. |
+| `examples/vi_nuts_validation/archive/repair_reference.py` | Extra reference repair for the earlier four-target study | Archived. It is not the current stationary repair policy and must not be used to spend an exhausted budget. |
+| `summarize.py`, `optimization_report.py` | Earlier saved-study report generators | Archived with their matching reports; inputs remain under ignored runs/. Neither is imported by the stationary continuation. |
 | `config.toml`, `optimization.toml`, `optimization_tail.toml` | Earlier target/guide/optimizer sweeps | Keep as historical specifications, not current recipes. No sweep or additional tail is needed for the present question. |
 | Old diagonal, time-varying, particle and schedule sweeps | Explain why the current candidate and controls were selected | Preserve outcomes; do not rerun them as part of stationary validation. |
-| `examples/adaptive_dynamic_whittle/` and matching development reports | Original mixed VI/NUTS moving-periodogram investigation | Historical study on this branch. Its coupled VI backend means moving the complete study is safer than leaving an unusable runner in the primary checkout. |
+| `examples/vi_nuts_validation/archive/dynamic_whittle/` and matching development reports | Original mixed VI/NUTS moving-periodogram investigation | Historical study on this branch. Its coupled VI backend means moving the complete study is safer than leaving an unusable runner in the primary checkout. |
 | `whiten_coefficients` in `diagnostics/variational.py` | Analytic tests for a deferred predictive-adequacy primitive | Not needed for current inference or posterior comparisons. Candidate to move out of the runtime module; tests are its only current consumer. |
 | Noise-aware early stopping | Optional, tested optimization heuristic | Not used by the fixed 60k study. Keep separate from posterior validation and do not present it as an established stopping recipe. |
 | Low-rank and flow guide options | Existing public functionality | Not needed for this study; retain for compatibility rather than deleting unrelated released support. |
@@ -89,14 +90,19 @@ pre-move file/index backup is retained locally under
 `runs/vi-branch-move-20261003/primary-before/`. Original scientific archives are
 untouched. No main/release branch or remote is updated.
 
-## Recommended next cleanup
+## Cleanup completed and remaining work
 
-Keep a small fitting API and opt-in guide/density diagnostics. Keep one current
-stationary study entry point and its exact contracts. Consolidate the helpers
-currently pulled from `run.py` and `optimize.py`, then move the superseded
-experiment drivers and report generators into an explicitly historical study
-folder. Separately diagnose the saved coefficient–roughness dependence before
-calling the hierarchical approximation validated or starting efficiency work.
+The active helper consolidation and historical driver relocation are complete.
+Keep the public fitting engine, opt-in diagnostics, persistence contracts and
+current bounded studies. Preserve public low-rank/flow options for compatibility;
+they are not part of these experiments. The deferred whitening primitive and
+optional early stopping remain separate from posterior validation.
+
+The extension study tests one stationary two-channel VAR record and the archived
+scalar exact-power time-varying control, each with its own fixed/hierarchical
+reference and gate. See `extensions_report.md` for actual outcomes and budgets.
+The earlier AR(4) underdispersion remains a retained finding. No production
+preset or efficiency benchmark is implied by cleanup or stable optimization.
 
 ## Move verification
 
@@ -116,3 +122,14 @@ stayed at `63b5c7a`; its unrelated work remains staged/unstaged as before.
 Move manifests, the original primary files/index and both test logs are saved
 under `runs/vi-branch-move-20261003/`. The branch remains local; no push, merge
 or release was performed.
+
+## Cleanup and extension verification
+
+The cleanup and new native-target contracts passed 176 tests with 28 warnings
+in 64.80 s. Archived CLI help imports passed after relocation. Extracted
+MC statistics, accuracy and stability calculations were bitwise equal to the
+original formulas. The new study verified native/conditional gradients,
+raw-latent health of both accepted references, six guide round trips,
+36 parameter checkpoints and the original 31 stationary source hashes.
+Numerical failures and stop gates are recorded in `extensions_report.md`.
+The public fitting API and native priors/likelihoods were unchanged by cleanup.

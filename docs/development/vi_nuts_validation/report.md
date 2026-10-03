@@ -123,7 +123,7 @@ Exact-model controls generate powers from the intended spline surface using Gamm
 
 Stage D predictive whitening/PIT/held-out adequacy and stage E SBC/repeated coverage were not run. The coefficient-whitening primitive is covered by analytic contract tests, but power observations cannot recover original coefficient signs/phases. Optimizer-state resumption, flow checkpoint reconstruction and large-basis recovery are not implemented or validated. The saved checkpoint is guide-only. No adaptive window selection, parameterization experiment, new flow or remote/OzSTAR execution occurred.
 
-Bulk artifact directory: `/Users/avi/.codex/worktrees/18a1/LogPSplinePSD/runs/vi-nuts-validation-v2`. Reproduction: `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/run.py --previous <prior-artifact-directory> --out <new-directory>`. Reports/field analysis: `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/summarize.py --out <artifact-directory> --fields`.
+Bulk artifact directory: `/Users/avi/.codex/worktrees/18a1/LogPSplinePSD/runs/vi-nuts-validation-v2`. Reproduction: `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/archive/run.py --previous <prior-artifact-directory> --out <new-directory>`. Reports/field analysis: `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/archive/summarize.py --out <artifact-directory> --fields`.
 
 Official APIs checked against installed versions: [NumPyro PSIS](https://num.pyro.ai/en/stable/utilities.html#psis-diagnostic), [NumPyro 0.22.0 release](https://github.com/pyro-ppl/numpyro/releases/tag/0.22.0), [ArviZ array PSIS](https://python.arviz.org/projects/stats/en/stable/api/generated/arviz_stats.base.array_stats.psislw.html).
 

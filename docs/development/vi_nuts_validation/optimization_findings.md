@@ -94,8 +94,8 @@ unexecuted.
 
 - [Primary 18-fit protocol and results](optimization_report.md)
 - [Three-fit low-rate extension](optimization_tail_report.md)
-- [Runner](../../../examples/vi_nuts_validation/optimize.py) and
-  [saved-draw analysis](../../../examples/vi_nuts_validation/optimization_report.py)
+- [Runner](../../../examples/vi_nuts_validation/archive/optimize.py) and
+  [saved-draw analysis](../../../examples/vi_nuts_validation/archive/optimization_report.py)
 - Primary artifacts: `runs/vi-optimization-exact-tv`; extension artifacts:
   `runs/vi-optimization-exact-tv-tail`. Each contains frozen input/reference
   hashes, complete joint draws, numerical guide checkpoints, paired feature

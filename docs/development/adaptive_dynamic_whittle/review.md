@@ -133,15 +133,15 @@ Truth D distinguishes short admissible windows during fast evolution from right-
 ## Reproduction and artifacts
 
 ```bash
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode transforms
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode sweep
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode calibration
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode job --job '{"id":"cal_mixed_m32_nuts_repair","family":"mixed","data_seed":3101,"m":32,"method":"nuts","inference_seed":7101,"calibration":true,"nuts_warmup":1000,"nuts_target_accept":0.99}'
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode job --job '{"id": "cal_slow_m32_vi_diag_long15000", "family": "slow", "data_seed": 3101, "m": 32, "method": "vi", "inference_seed": 7101, "calibration": true, "guide": "diag", "vi_steps": 15000}'
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode job --job '{"id": "cal_slow_m32_vi_lowrank10_long15000", "family": "slow", "data_seed": 3101, "m": 32, "method": "vi", "inference_seed": 7101, "calibration": true, "guide": "lowrank:10", "vi_steps": 15000}'
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode job --job '{"id": "cal_mixed_m32_vi_diag_long15000", "family": "mixed", "data_seed": 3101, "m": 32, "method": "vi", "inference_seed": 7101, "calibration": true, "guide": "diag", "vi_steps": 15000}'
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode job --job '{"id": "cal_mixed_m32_vi_lowrank10_long15000", "family": "mixed", "data_seed": 3101, "m": 32, "method": "vi", "inference_seed": 7101, "calibration": true, "guide": "lowrank:10", "vi_steps": 15000}'
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/summarize.py
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode transforms
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode sweep
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode calibration
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode job --job '{"id":"cal_mixed_m32_nuts_repair","family":"mixed","data_seed":3101,"m":32,"method":"nuts","inference_seed":7101,"calibration":true,"nuts_warmup":1000,"nuts_target_accept":0.99}'
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode job --job '{"id": "cal_slow_m32_vi_diag_long15000", "family": "slow", "data_seed": 3101, "m": 32, "method": "vi", "inference_seed": 7101, "calibration": true, "guide": "diag", "vi_steps": 15000}'
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode job --job '{"id": "cal_slow_m32_vi_lowrank10_long15000", "family": "slow", "data_seed": 3101, "m": 32, "method": "vi", "inference_seed": 7101, "calibration": true, "guide": "lowrank:10", "vi_steps": 15000}'
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode job --job '{"id": "cal_mixed_m32_vi_diag_long15000", "family": "mixed", "data_seed": 3101, "m": 32, "method": "vi", "inference_seed": 7101, "calibration": true, "guide": "diag", "vi_steps": 15000}'
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode job --job '{"id": "cal_mixed_m32_vi_lowrank10_long15000", "family": "mixed", "data_seed": 3101, "m": 32, "method": "vi", "inference_seed": 7101, "calibration": true, "guide": "lowrank:10", "vi_steps": 15000}'
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/summarize.py
 JAX_ENABLE_X64=true .venv/bin/python -m pytest -m 'not slow' -q
 ```
 

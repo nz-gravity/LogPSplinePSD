@@ -67,7 +67,7 @@ the first optimizer chunk as compilation-inclusive, not pure compilation.
 
 ## Frozen first protocol
 
-`examples/adaptive_dynamic_whittle/configs/smoke.toml` is frozen before fits:
+`examples/vi_nuts_validation/archive/dynamic_whittle/configs/smoke.toml` is frozen before fits:
 n=4096, dt=1, m=8/16/32/64, thin=2, paired seeds 3101/3102. Final seeds
 9101–9110 remain unopened. Fixed cubic 16x10 coefficient basis on u=[0,1],
 f=[0,0.5]. Dense grid 129x65; posterior mean spectrum; normalized uniform
@@ -109,7 +109,7 @@ Adaptation is assessed only after the fixed-window landscape and model diagnosti
 
 Reproduce:
 ```bash
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode transforms
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode sweep
-JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode calibration
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode transforms
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode sweep
+JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode calibration
 ```

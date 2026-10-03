@@ -17,8 +17,13 @@ import jax.numpy as jnp
 import numpy as np
 import stationary as old
 import xarray as xr
-from optimize import draw_dataset, learning_rate
-from run import mmd_comparison, packed_reference, write_json
+from study_common import (
+    draw_dataset,
+    learning_rate,
+    mmd_comparison,
+    packed_reference,
+    write_json,
+)
 
 from log_psplines.diagnostics.variational import (
     VIDiagnosticConfig,

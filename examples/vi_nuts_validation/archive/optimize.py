@@ -49,7 +49,11 @@ from log_psplines.inference.power import prepare_power_model
 from log_psplines.inference.vi import fit_vi
 from log_psplines.models.spectrum import LogPSpline
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next(
+    parent
+    for parent in Path(__file__).resolve().parents
+    if (parent / "pyproject.toml").exists()
+)
 DEFAULT_REFERENCE = ROOT / "runs/vi-nuts-validation-v2/exact_time_varying"
 
 

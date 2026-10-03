@@ -433,12 +433,12 @@ def main() -> None:
         "## Reproduction and artifacts",
         "",
         "```bash",
-        "JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode transforms",
-        "JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode sweep",
-        "JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode calibration",
-        'JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode job --job \'{"id":"cal_mixed_m32_nuts_repair","family":"mixed","data_seed":3101,"m":32,"method":"nuts","inference_seed":7101,"calibration":true,"nuts_warmup":1000,"nuts_target_accept":0.99}\'',
+        "JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode transforms",
+        "JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode sweep",
+        "JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode calibration",
+        'JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode job --job \'{"id":"cal_mixed_m32_nuts_repair","family":"mixed","data_seed":3101,"m":32,"method":"nuts","inference_seed":7101,"calibration":true,"nuts_warmup":1000,"nuts_target_accept":0.99}\'',
         *[
-            "JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/run_investigation.py --mode job --job '"
+            "JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/run_investigation.py --mode job --job '"
             + json.dumps(
                 {
                     "id": f"cal_{family}_m32_vi_{guide.replace(':', '')}_long15000",
@@ -456,7 +456,7 @@ def main() -> None:
             for family in ("slow", "mixed")
             for guide in ("diag", "lowrank:10")
         ],
-        "JAX_ENABLE_X64=true .venv/bin/python examples/adaptive_dynamic_whittle/summarize.py",
+        "JAX_ENABLE_X64=true .venv/bin/python examples/vi_nuts_validation/archive/dynamic_whittle/summarize.py",
         "JAX_ENABLE_X64=true .venv/bin/python -m pytest -m 'not slow' -q",
         "```",
         "",

@@ -59,5 +59,5 @@ default) independently of all diagnostic particle counts. `optimizer_lr` may
 be an Optax schedule; supply numerical `optimizer_lr_metadata` to describe the
 schedule in persisted optimization records. This records the schedule's
 configuration and does not serialize or reconstruct callable code. The
-fixed-target experiment in `examples/vi_nuts_validation/optimize.py` uses these
+fixed-target experiment in `examples/vi_nuts_validation/archive/optimize.py` uses these
 options through the existing fitting path.

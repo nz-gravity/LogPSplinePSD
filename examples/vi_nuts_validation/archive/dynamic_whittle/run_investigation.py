@@ -43,7 +43,11 @@ from log_psplines.preprocessing.moving_periodogram import (
 )
 from log_psplines.results import PSDResult
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next(
+    parent
+    for parent in Path(__file__).resolve().parents
+    if (parent / "pyproject.toml").exists()
+)
 DEFAULT_CONFIG = Path(__file__).parent / "configs/smoke.toml"
 DEFAULT_OUTPUT = ROOT / "runs/dynamic-whittle-stages-0-3"
 

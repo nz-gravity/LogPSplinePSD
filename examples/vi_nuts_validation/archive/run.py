@@ -56,7 +56,11 @@ from log_psplines.inference.vi import fit_vi
 from log_psplines.models.spectrum import LogPSpline
 from log_psplines.results import PSDResult
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next(
+    parent
+    for parent in Path(__file__).resolve().parents
+    if (parent / "pyproject.toml").exists()
+)
 DEFAULT_PREVIOUS = Path(
     "/Users/avi/Documents/projects/LogPSplinePSD/runs/dynamic-whittle-stages-0-3"
 )

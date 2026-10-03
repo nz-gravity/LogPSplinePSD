@@ -427,7 +427,7 @@ def write_report(summary, records, out, report):
         "",
         f"Artifacts: `{out.resolve()}`. Total sum of per-job workflow times: {sum(z['wall_seconds'] for z in records.values()):.1f} seconds; medians in the table cover fit initialization/compilation, optimization, checkpoint evaluations, guide draws and final diagnostics. Additional reconstruction/comparison work is saved per checkpoint. Process startup and freezing/report costs are separate. Full joint packed checkpoint draws, final constrained posterior draws and numerical learned guide parameters are retained.",
         "",
-        "Reproduce with `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/optimize.py --reference <saved-exact-target-directory> --out <new-directory>`. Analyze saved fits with `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/optimization_report.py --out <artifact-directory>`.",
+        "Reproduce with `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/archive/optimize.py --reference <saved-exact-target-directory> --out <new-directory>`. Analyze saved fits with `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/archive/optimization_report.py --out <artifact-directory>`.",
         "",
     ]
     verification = out / "verification.json"

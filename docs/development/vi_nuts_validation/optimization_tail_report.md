@@ -44,7 +44,7 @@ This experiment varies two optimization controls jointly in a small factorial de
 
 Artifacts: `/Users/avi/.codex/worktrees/18a1/LogPSplinePSD/runs/vi-optimization-exact-tv-tail`. Total sum of per-job workflow times: 70.5 seconds; medians in the table cover fit initialization/compilation, optimization, checkpoint evaluations, guide draws and final diagnostics. Additional reconstruction/comparison work is saved per checkpoint. Process startup and freezing/report costs are separate. Full joint packed checkpoint draws, final constrained posterior draws and numerical learned guide parameters are retained.
 
-Reproduce with `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/optimize.py --reference <saved-exact-target-directory> --out <new-directory>`. Analyze saved fits with `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/optimization_report.py --out <artifact-directory>`.
+Reproduce with `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/archive/optimize.py --reference <saved-exact-target-directory> --out <new-directory>`. Analyze saved fits with `PYTHONPATH=src JAX_ENABLE_X64=true python examples/vi_nuts_validation/archive/optimization_report.py --out <artifact-directory>`.
 
 ## Verification
 

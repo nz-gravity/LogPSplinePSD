@@ -164,6 +164,8 @@ class StationaryConfig:
     vi_guide: str | None = None
     vi_posterior_draws: int = 50
     vi_progress_bar: bool | None = None
+    vi_early_stopping: bool = True
+    vi_diagnostics: dict[str, Any] | None = None
 
     target_accept_prob: float = 0.8
     target_accept_prob_by_channel: list[float] | None = None
@@ -179,10 +181,13 @@ __all__ = ["StationaryConfig", "PowerConfig"]
 
 @dataclass
 class PowerConfig:
-    """WDM power/count prior and NUTS settings, separate from Wishart priors.
+    """Power/count prior and inference settings, separate from Wishart priors.
 
     ``sigma_time`` and ``sigma_freq`` have HalfNormal priors. The smoothing
     precisions are derived as ``phi = sigma**-2``.
+    ``method="vi"`` uses the same scalar spline model and reconstruction;
+    ``vi_steps``, ``vi_lr`` and ``vi_guide`` control the shared VI engine.
+    VI returns one chain with ``vi_posterior_draws`` constrained draws.
     """
 
     roughness_scale: float = 10.0
@@ -213,8 +218,27 @@ class PowerConfig:
     max_tree_depth: int = 10
     target_accept_prob: float = 0.85
     progress_bar: bool = True
+    method: Literal["nuts", "vi"] = "nuts"
+    vi_steps: int = 1500
+    vi_lr: float = 1e-2
+    vi_guide: str = "diag"
+    vi_posterior_draws: int = 256
+    vi_early_stopping: bool = True
+    vi_diagnostics: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
+        if self.method not in ("nuts", "vi"):
+            raise ValueError("method must be nuts or vi")
+        for name in ("vi_steps", "vi_posterior_draws"):
+            value = getattr(self, name)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 1
+            ):
+                raise ValueError(f"{name} must be a positive integer")
+        if not np.isfinite(self.vi_lr) or self.vi_lr <= 0:
+            raise ValueError("vi_lr must be finite and positive")
         if self.structure not in ("tensor", "anova"):
             raise ValueError("structure must be tensor or anova")
         if (

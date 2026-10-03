@@ -46,6 +46,10 @@ def prepare_parametric_power_model(data, model):
 
 def fit_parametric_power(data, model, config, *, true_psd=None):
     """Sample joint parameters; retain chains and all-draw spectral summaries."""
+    if config.method != "nuts":
+        raise NotImplementedError(
+            "ParametricSpectrum currently supports NUTS only"
+        )
     truth = None
     if true_psd is not None:
         values = np.asarray(true_psd, dtype=float)

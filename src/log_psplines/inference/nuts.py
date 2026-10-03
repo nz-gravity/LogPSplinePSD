@@ -55,6 +55,7 @@ def run_nuts(
     rng_key: jax.Array,
     model_kwargs: dict | None = None,
     init_values: dict | None = None,
+    init_strategy: Callable | None = None,
     n_warmup: int,
     n_samples: int,
     num_chains: int = 1,
@@ -71,6 +72,10 @@ def run_nuts(
         max_tree_depth=max_tree_depth,
         dense_mass=dense_mass,
     )
+    if init_values is not None and init_strategy is not None:
+        raise ValueError("choose init_values or init_strategy")
+    if init_strategy is not None:
+        kernel_options["init_strategy"] = init_strategy
     if init_values is not None:
         kernel_options["init_strategy"] = init_to_value(values=init_values)
     chain_options = (

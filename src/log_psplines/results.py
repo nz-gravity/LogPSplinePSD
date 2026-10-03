@@ -7,6 +7,7 @@ xarray objects. Convert to ArviZ only when sampling diagnostics are required.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -223,6 +224,34 @@ class PSDResult:
                 {"chain": "spectrum_chain", "draw": "spectrum_draw"}
             ),
         }
+        if self.vi is not None:
+            data_vars["vi_losses"] = xr.DataArray(
+                np.asarray(self.vi.losses),
+                dims=("vi_loss_step",),
+                attrs={
+                    "guide_name": self.vi.guide_name,
+                    "timings": json.dumps(self.vi.timings),
+                },
+            )
+            if self.vi.losses_per_block is not None:
+                for block, losses in enumerate(self.vi.losses_per_block):
+                    data_vars[f"vi_block_losses_{block}"] = xr.DataArray(
+                        np.asarray(losses), dims=(f"vi_block_step_{block}",)
+                    )
+        if self.vi is not None:
+            states = [("vi_diagnostics", self.vi.diagnostics)]
+            states.extend(
+                (f"vi_diagnostics_block_{index}", state)
+                for index, state in enumerate(
+                    self.vi.diagnostics_per_block or []
+                )
+            )
+            for prefix, state in states:
+                if state is not None:
+                    for name, value in state.to_dataset().items():
+                        data_vars[f"{prefix}__{name}"] = value.rename(
+                            {dim: f"{prefix}_{dim}" for dim in value.dims}
+                        )
         if self.truth is not None:
             data_vars["true_psd"] = self.truth
         groups = (
@@ -292,13 +321,50 @@ class PSDResult:
             if f"spectrum_{dim}" in spectrum.dims
         }
         spectrum = spectrum.rename(rename)
+        vi = None
+        if "vi_losses" in stored:
+            from log_psplines.inference.vi import VIResult
+
+            losses = stored["vi_losses"]
+            blocks = [
+                stored[name].values
+                for name in stored.data_vars
+                if name.startswith("vi_block_losses_")
+            ]
+            from log_psplines.diagnostics.variational import VIDiagnosticState
+
+            diagnostic_data = group("vi_diagnostics")
+            block_states = []
+            for index in range(len(blocks)):
+                dataset = group(f"vi_diagnostics_block_{index}")
+                if dataset is not None:
+                    block_states.append(
+                        VIDiagnosticState.from_dataset(dataset)
+                    )
+            vi = VIResult(
+                posterior=posterior,
+                losses=losses.values,
+                guide_name=losses.attrs["guide_name"],
+                timings=json.loads(losses.attrs.get("timings", "{}")),
+                losses_per_block=blocks or None,
+                diagnostics=(
+                    VIDiagnosticState.from_dataset(diagnostic_data)
+                    if diagnostic_data is not None
+                    else None
+                ),
+                diagnostics_per_block=block_states or None,
+            )
+        observed = group("observed")
+        if observed is not None and "units" in stored.attrs:
+            observed.attrs["units"] = stored.attrs["units"]
         return cls(
             posterior=posterior,
             sample_stats=group("sample_stats"),
             spectrum=spectrum,
             metadata=dict(stored.attrs),
             log_likelihood=group("log_likelihood"),
-            observed_data=group("observed"),
+            observed_data=observed,
+            vi=vi,
             truth=stored.get("true_psd"),
             spectrum_summary=group("spectrum_summary"),
             model_data=group("model"),
@@ -327,6 +393,10 @@ class PSDResult:
 
         if self.vi is not None and self.vi.losses is not None:
             np.save(Path(outdir) / "vi_losses.npy", np.asarray(self.vi.losses))
+            if self.vi.diagnostics is not None:
+                self.vi.diagnostics.save(Path(outdir) / "vi_guide")
+            for index, state in enumerate(self.vi.diagnostics_per_block or []):
+                state.save(Path(outdir) / f"vi_guide_block_{index}")
 
 
 __all__ = ["PSDResult"]

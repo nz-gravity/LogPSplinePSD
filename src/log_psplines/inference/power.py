@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import asdict, replace
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 import jax
@@ -197,22 +198,27 @@ def initialize_scattered_with_penalized_least_squares(
     Unlike :func:`initialize_with_penalized_least_squares`, ``B_time`` and
     ``B_freq`` are evaluated per-ordinate (``(Q, K_t)``/``(Q, K_f)``), not on a
     shared grid, so the design cannot be factored as a Kronecker product of
-    marginal Grams and is built explicitly instead.
+    marginal Grams. Accumulate the paired design in bounded row chunks.
     """
     floor = power_floor(observed_power)
     target = np.log(observed_power + floor)
     n_time, n_freq = B_time.shape[1], B_freq.shape[1]
     n_basis = n_time * n_freq
-    design = np.einsum("pt,pf->ptf", B_time, B_freq).reshape(-1, n_basis)
     kron_time = np.kron(penalty_time, np.eye(n_freq))
     kron_freq = np.kron(np.eye(n_time), penalty_freq)
     system = (
-        design.T @ design
-        + config.init_penalty_time * kron_time
+        config.init_penalty_time * kron_time
         + config.init_penalty_freq * kron_freq
         + config.ridge_eps * np.eye(n_basis)
     )
-    rhs = design.T @ target
+    rhs = np.zeros(n_basis)
+    for start in range(0, observed_power.size, 512):
+        section = slice(start, start + 512)
+        design = np.einsum(
+            "pt,pf->ptf", B_time[section], B_freq[section]
+        ).reshape(-1, n_basis)
+        system += design.T @ design
+        rhs += design.T @ target[section]
     weights = np.linalg.solve(system, rhs)
     W_fit = weights.reshape(n_time, n_freq)
     fitted = np.einsum("pt,tf,pf->p", B_time, W_fit, B_freq)
@@ -402,6 +408,62 @@ def _collect_power_samples(
     return posterior
 
 
+def power_target_fingerprint(
+    data, spline, config, pair, *, fit_spline=None, reference=None
+):
+    """Identify the prepared target, including custom ANOVA priors/centering."""
+    from inspect import getsource
+
+    from log_psplines.diagnostics.variational import fingerprint
+
+    fit_spline = spline if fit_spline is None else fit_spline
+    anova = isinstance(spline, ANOVALogPSpline)
+    source = [
+        getsource(prepare_power_model),
+        getsource(_sample_precision),
+        getsource(sample_eigen_coefficients),
+        getsource(eigen_prior_scale),
+        getsource(power_whittle_log_likelihood),
+    ]
+    extra = None
+    if anova:
+        from log_psplines.inference.anova_power import (
+            prepare_anova_power_model,
+        )
+
+        source.append(getsource(prepare_anova_power_model))
+        extra = {
+            "sigma_eta_prior": spline.sigma_eta_prior,
+            "time_transform": np.asarray(spline.time_transform),
+            "time_basis": np.asarray(spline.time_basis),
+        }
+    return fingerprint(
+        data.power,
+        data.counts,
+        data.time,
+        data.frequency,
+        np.asarray(fit_spline.frequency.basis),
+        np.asarray(fit_spline.time.basis),
+        pair,
+        {
+            name: getattr(config, name)
+            for name in (
+                "roughness_scale",
+                "null_precision",
+                "ridge_eps",
+                "centered",
+                "structure",
+                "interaction_scale",
+            )
+        },
+        extra,
+        reference,
+        data.units,
+        source,
+        jax.config.x64_enabled,
+    )
+
+
 def fit_power(
     data: PowerData,
     spline: LogPSpline | ANOVALogPSpline,
@@ -415,6 +477,7 @@ def fit_power(
     from log_psplines.preprocessing.power_partition import coarse_grain_power
     from log_psplines.results import PSDResult, observed_power_data
 
+    started = perf_counter()
     anova = isinstance(spline, ANOVALogPSpline)
     if reference is not None and not data.is_grid:
         raise ValueError("reference requires rectangular PowerData")
@@ -505,7 +568,59 @@ def fit_power(
         model, pair, init = prepare_anova_power_model(fit_data, spline, config)
     else:
         model, init, pair = prepare_power_model(fit_data, fit_spline, config)
-    result = _run_power_nuts(model, init, config)
+    target_fingerprint = power_target_fingerprint(
+        fit_data,
+        spline,
+        config,
+        pair,
+        fit_spline=fit_spline,
+        reference=reference,
+    )
+    prepared = perf_counter()
+    vi = None
+    if config.method == "vi":
+        from log_psplines.inference.vi import fit_vi
+
+        guide = config.vi_guide
+        if guide.startswith("lowrank"):
+            rank = int(guide.split(":", 1)[1]) if ":" in guide else 10
+            if rank < 1:
+                raise ValueError("lowrank guide rank must be positive")
+            latent_dim = sum(np.size(value) for value in init.values())
+            guide = f"lowrank:{min(rank, latent_dim)}"
+        diagnostics = None
+        if config.vi_diagnostics is not None:
+            from log_psplines.diagnostics.variational import (
+                VIDiagnosticConfig,
+                require_same_target,
+            )
+
+            options = dict(config.vi_diagnostics)
+            supplied = options.pop("target_fingerprint", None)
+            if supplied is not None:
+                require_same_target(supplied, target_fingerprint)
+            options.setdefault(
+                "parameterization",
+                "centered" if anova or config.centered else "noncentered",
+            )
+            diagnostics = VIDiagnosticConfig(
+                target_fingerprint=target_fingerprint, **options
+            )
+        vi = result = fit_vi(
+            model,
+            rng_key=jax.random.PRNGKey(config.seed),
+            vi_steps=config.vi_steps,
+            optimizer_lr=config.vi_lr,
+            guide=guide,
+            posterior_draws=config.vi_posterior_draws,
+            progress_bar=config.progress_bar,
+            init_values=init,
+            early_stopping=config.vi_early_stopping,
+            diagnostics=diagnostics,
+        )
+    else:
+        result = _run_power_nuts(model, init, config)
+    inferred = perf_counter()
     posterior = (
         collect_anova_samples(result.posterior, pair)
         if anova
@@ -546,7 +661,8 @@ def fit_power(
     )
     fitted = PSDResult(
         posterior=posterior,
-        sample_stats=result.sample_stats,
+        sample_stats=None if vi is not None else result.sample_stats,
+        vi=vi,
         spectrum=spectrum,
         spectrum_summary=spectrum_summary,
         model_data=model_data,
@@ -554,7 +670,11 @@ def fit_power(
             **asdict(config),
             "data_type": "power",
             "likelihood": "power_whittle",
+            "target_fingerprint": target_fingerprint,
             "units": data.units,
+            "preparation_seconds": prepared - started,
+            "inference_seconds": inferred - prepared,
+            "reconstruction_seconds": perf_counter() - inferred,
             "reference_applied": reference is not None,
             "reference_normalization": (
                 "native_power_divided_before_pooling"
@@ -571,7 +691,7 @@ def fit_power(
                 else {}
             ),
         },
-        log_likelihood=result.log_likelihood,
+        log_likelihood=None if vi is not None else result.log_likelihood,
         observed_data=observed_power_data(fit_data),
         truth=(
             None

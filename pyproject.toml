@@ -29,7 +29,7 @@ dependencies = [
     "numpy",
     "matplotlib",
     "tqdm",
-    "numpyro",
+    "numpyro>=0.22.0",
     "h5py",
     "arviz-base[zarr,netcdf4]",
     "arviz-stats",

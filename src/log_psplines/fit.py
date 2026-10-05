@@ -54,6 +54,7 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
             guide=config.vi_guide or "diag",
             posterior_draws=config.vi_posterior_draws,
             eta=float(config.eta),
+            early_stopping=config.vi_early_stopping,
             verbose=(
                 config.verbose
                 if config.vi_progress_bar is None
@@ -137,6 +138,8 @@ def fit(
 ) -> PSDResult:
     """Fit stationary Wishart data or time-frequency powers.
 
+    ``config.method`` selects NUTS (default) or NumPyro VI for spline models.
+    Both use the same likelihood, prior and spectrum reconstruction.
     Scalar powers use the tensor or ANOVA structure in PowerConfig.
     ParametricSpectrum also supports joint independent channel powers.
     A partition may pool rectangular powers while retaining native-grid

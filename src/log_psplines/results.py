@@ -7,6 +7,7 @@ xarray objects. Convert to ArviZ only when sampling diagnostics are required.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -223,6 +224,20 @@ class PSDResult:
                 {"chain": "spectrum_chain", "draw": "spectrum_draw"}
             ),
         }
+        if self.vi is not None:
+            data_vars["vi_losses"] = xr.DataArray(
+                np.asarray(self.vi.losses),
+                dims=("vi_loss_step",),
+                attrs={
+                    "guide_name": self.vi.guide_name,
+                    "timings": json.dumps(self.vi.timings),
+                },
+            )
+            if self.vi.losses_per_block is not None:
+                for block, losses in enumerate(self.vi.losses_per_block):
+                    data_vars[f"vi_block_losses_{block}"] = xr.DataArray(
+                        np.asarray(losses), dims=(f"vi_block_step_{block}",)
+                    )
         if self.truth is not None:
             data_vars["true_psd"] = self.truth
         groups = (
@@ -292,13 +307,34 @@ class PSDResult:
             if f"spectrum_{dim}" in spectrum.dims
         }
         spectrum = spectrum.rename(rename)
+        vi = None
+        if "vi_losses" in stored:
+            from log_psplines.inference.vi import VIResult
+
+            losses = stored["vi_losses"]
+            blocks = [
+                stored[name].values
+                for name in stored.data_vars
+                if name.startswith("vi_block_losses_")
+            ]
+            vi = VIResult(
+                posterior=posterior,
+                losses=losses.values,
+                guide_name=losses.attrs["guide_name"],
+                timings=json.loads(losses.attrs.get("timings", "{}")),
+                losses_per_block=blocks or None,
+            )
+        observed = group("observed")
+        if observed is not None and "units" in stored.attrs:
+            observed.attrs["units"] = stored.attrs["units"]
         return cls(
             posterior=posterior,
             sample_stats=group("sample_stats"),
             spectrum=spectrum,
             metadata=dict(stored.attrs),
             log_likelihood=group("log_likelihood"),
-            observed_data=group("observed"),
+            observed_data=observed,
+            vi=vi,
             truth=stored.get("true_psd"),
             spectrum_summary=group("spectrum_summary"),
             model_data=group("model"),

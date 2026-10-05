@@ -166,3 +166,12 @@ Reference-spectrum power fits
 
 .. include:: power-reference.rst
    :start-line: 3
+
+
+Variational inference
+---------------------
+
+.. autofunction:: log_psplines.inference.vi.fit_vi
+
+.. autoclass:: log_psplines.inference.vi.VIResult
+   :members:

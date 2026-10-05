@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import asdict, replace
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 import jax
@@ -197,22 +198,27 @@ def initialize_scattered_with_penalized_least_squares(
     Unlike :func:`initialize_with_penalized_least_squares`, ``B_time`` and
     ``B_freq`` are evaluated per-ordinate (``(Q, K_t)``/``(Q, K_f)``), not on a
     shared grid, so the design cannot be factored as a Kronecker product of
-    marginal Grams and is built explicitly instead.
+    marginal Grams. Accumulate the paired design in bounded row chunks.
     """
     floor = power_floor(observed_power)
     target = np.log(observed_power + floor)
     n_time, n_freq = B_time.shape[1], B_freq.shape[1]
     n_basis = n_time * n_freq
-    design = np.einsum("pt,pf->ptf", B_time, B_freq).reshape(-1, n_basis)
     kron_time = np.kron(penalty_time, np.eye(n_freq))
     kron_freq = np.kron(np.eye(n_time), penalty_freq)
     system = (
-        design.T @ design
-        + config.init_penalty_time * kron_time
+        config.init_penalty_time * kron_time
         + config.init_penalty_freq * kron_freq
         + config.ridge_eps * np.eye(n_basis)
     )
-    rhs = design.T @ target
+    rhs = np.zeros(n_basis)
+    for start in range(0, observed_power.size, 512):
+        section = slice(start, start + 512)
+        design = np.einsum(
+            "pt,pf->ptf", B_time[section], B_freq[section]
+        ).reshape(-1, n_basis)
+        system += design.T @ design
+        rhs += design.T @ target[section]
     weights = np.linalg.solve(system, rhs)
     W_fit = weights.reshape(n_time, n_freq)
     fitted = np.einsum("pt,tf,pf->p", B_time, W_fit, B_freq)
@@ -415,6 +421,7 @@ def fit_power(
     from log_psplines.preprocessing.power_partition import coarse_grain_power
     from log_psplines.results import PSDResult, observed_power_data
 
+    started = perf_counter()
     anova = isinstance(spline, ANOVALogPSpline)
     if reference is not None and not data.is_grid:
         raise ValueError("reference requires rectangular PowerData")
@@ -505,7 +512,32 @@ def fit_power(
         model, pair, init = prepare_anova_power_model(fit_data, spline, config)
     else:
         model, init, pair = prepare_power_model(fit_data, fit_spline, config)
-    result = _run_power_nuts(model, init, config)
+    prepared = perf_counter()
+    vi = None
+    if config.method == "vi":
+        from log_psplines.inference.vi import fit_vi
+
+        guide = config.vi_guide
+        if guide.startswith("lowrank"):
+            rank = int(guide.split(":", 1)[1]) if ":" in guide else 10
+            if rank < 1:
+                raise ValueError("lowrank guide rank must be positive")
+            latent_dim = sum(np.size(value) for value in init.values())
+            guide = f"lowrank:{min(rank, latent_dim)}"
+        vi = result = fit_vi(
+            model,
+            rng_key=jax.random.PRNGKey(config.seed),
+            vi_steps=config.vi_steps,
+            optimizer_lr=config.vi_lr,
+            guide=guide,
+            posterior_draws=config.vi_posterior_draws,
+            progress_bar=config.progress_bar,
+            init_values=init,
+            early_stopping=config.vi_early_stopping,
+        )
+    else:
+        result = _run_power_nuts(model, init, config)
+    inferred = perf_counter()
     posterior = (
         collect_anova_samples(result.posterior, pair)
         if anova
@@ -546,7 +578,8 @@ def fit_power(
     )
     fitted = PSDResult(
         posterior=posterior,
-        sample_stats=result.sample_stats,
+        sample_stats=None if vi is not None else result.sample_stats,
+        vi=vi,
         spectrum=spectrum,
         spectrum_summary=spectrum_summary,
         model_data=model_data,
@@ -555,6 +588,9 @@ def fit_power(
             "data_type": "power",
             "likelihood": "power_whittle",
             "units": data.units,
+            "preparation_seconds": prepared - started,
+            "inference_seconds": inferred - prepared,
+            "reconstruction_seconds": perf_counter() - inferred,
             "reference_applied": reference is not None,
             "reference_normalization": (
                 "native_power_divided_before_pooling"
@@ -571,7 +607,7 @@ def fit_power(
                 else {}
             ),
         },
-        log_likelihood=result.log_likelihood,
+        log_likelihood=None if vi is not None else result.log_likelihood,
         observed_data=observed_power_data(fit_data),
         truth=(
             None

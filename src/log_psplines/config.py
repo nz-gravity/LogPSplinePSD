@@ -70,12 +70,14 @@ VI and NUTS
    method never executes.
 
 ``method="vi"``
-   Fit with stochastic variational inference only. This is a fast way to
-   check data scaling, frequency selection, and spline flexibility, and to
-   diagnose the model before committing to a full NUTS run.
+   Fit the same model with NumPyro stochastic variational inference. Use
+   approximate curves to explore spline choices, then validate promising
+   choices with NUTS. Cost and accuracy depend on the VI settings.
 
 ``vi_steps``, ``vi_lr``, ``vi_guide``
-   VI optimisation settings, used only when ``method="vi"``.
+   VI optimisation settings, used only when ``method="vi"``. Guides include
+   ``"diag"``, ``"mvn"`` and ``"lowrank:10"``. ``vi_early_stopping=False``
+   runs the full step budget; ``vi_posterior_draws`` controls stored draws.
 
 ``n_warmup``, ``n_samples``, ``num_chains``
    Standard NUTS run length controls, used only when ``method="nuts"``.
@@ -127,7 +129,14 @@ TruePSDInput = None | np.ndarray | tuple[np.ndarray, np.ndarray] | list | dict
 
 @dataclass(frozen=True)
 class StationaryConfig:
-    """Flat configuration for stationary preprocessing and inference."""
+    """Configure stationary preprocessing and NUTS or NumPyro VI fitting.
+
+    ``method="vi"`` uses the same model with ``vi_steps`` updates at ``vi_lr``.
+    ``vi_guide`` selects ``diag`` (default), ``mvn``, ``lowrank:N`` or a flow.
+    ``vi_posterior_draws`` controls constrained draws; set
+    ``vi_early_stopping=False`` to run every update. ``result.vi`` retains
+    losses and timings for approximate model exploration.
+    """
 
     n_samples: int = 1000
     n_warmup: int = 500
@@ -164,6 +173,7 @@ class StationaryConfig:
     vi_guide: str | None = None
     vi_posterior_draws: int = 50
     vi_progress_bar: bool | None = None
+    vi_early_stopping: bool = True
 
     target_accept_prob: float = 0.8
     target_accept_prob_by_channel: list[float] | None = None
@@ -179,10 +189,15 @@ __all__ = ["StationaryConfig", "PowerConfig"]
 
 @dataclass
 class PowerConfig:
-    """WDM power/count prior and NUTS settings, separate from Wishart priors.
+    """Power/count prior and inference settings, separate from Wishart priors.
 
     ``sigma_time`` and ``sigma_freq`` have HalfNormal priors. The smoothing
     precisions are derived as ``phi = sigma**-2``.
+    ``method="vi"`` uses the same scalar spline model and reconstruction;
+    ``vi_steps``, ``vi_lr`` and ``vi_guide`` (``diag``, ``mvn``, ``lowrank:N``)
+    control NumPyro SVI. Disable ``vi_early_stopping`` to run every step.
+    VI returns one chain with ``vi_posterior_draws`` constrained draws and
+    stores losses and timings in ``result.vi``.
     """
 
     roughness_scale: float = 10.0
@@ -213,8 +228,26 @@ class PowerConfig:
     max_tree_depth: int = 10
     target_accept_prob: float = 0.85
     progress_bar: bool = True
+    method: Literal["nuts", "vi"] = "nuts"
+    vi_steps: int = 1500
+    vi_lr: float = 1e-2
+    vi_guide: str = "diag"
+    vi_posterior_draws: int = 256
+    vi_early_stopping: bool = True
 
     def __post_init__(self) -> None:
+        if self.method not in ("nuts", "vi"):
+            raise ValueError("method must be nuts or vi")
+        for name in ("vi_steps", "vi_posterior_draws"):
+            value = getattr(self, name)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 1
+            ):
+                raise ValueError(f"{name} must be a positive integer")
+        if not np.isfinite(self.vi_lr) or self.vi_lr <= 0:
+            raise ValueError("vi_lr must be finite and positive")
         if self.structure not in ("tensor", "anova"):
             raise ValueError("structure must be tensor or anova")
         if (

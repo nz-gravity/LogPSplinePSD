@@ -81,7 +81,7 @@ def _tree_depth_hits(idata: xr.DataTree, max_depth: int | None) -> int:
     if depth.size:
         return int(np.sum(depth >= max_depth))
     steps = _stat(idata, "n_steps")
-    return int(np.sum(steps[np.isfinite(steps)] >= 2**max_depth))
+    return int(np.sum(steps[np.isfinite(steps)] >= 2**max_depth - 1))
 
 
 def _reduction(summary: pd.DataFrame, name: str, reducer: str) -> float:

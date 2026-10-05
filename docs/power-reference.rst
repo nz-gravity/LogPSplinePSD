@@ -124,5 +124,5 @@ VI returns one chain of constrained draws and ``result.vi`` loss/timing
 information, with no fabricated NUTS sample statistics. The VI diagnostics,
 model bases, observations and native units survive ``PSDResult.to_netcdf`` /
 ``PSDResult.from_netcdf``. Guide and optimizer checks against diagnosed NUTS
-are necessary before interpreting VI uncertainty; the development moving
-periodogram study found material differences in interval widths.
+are necessary before interpreting VI uncertainty. See :ref:`vi-diagnostics`
+for opt-in guide-density diagnostics, checkpoints and their limits.

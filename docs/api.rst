@@ -166,3 +166,12 @@ Reference-spectrum power fits
 
 .. include:: power-reference.rst
    :start-line: 3
+
+
+.. _vi-diagnostics:
+
+Variational inference diagnostics
+---------------------------------
+
+.. include:: vi-diagnostics.rst
+   :start-line: 3

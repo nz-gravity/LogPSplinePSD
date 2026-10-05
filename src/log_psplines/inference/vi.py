@@ -65,7 +65,7 @@ class VIResult:
     losses: jnp.ndarray | np.ndarray
     guide_name: str
     losses_per_block: list[jnp.ndarray | np.ndarray] | None = None
-    timings: dict[str, float] = field(default_factory=dict)
+    timings: dict[str, float | int] = field(default_factory=dict)
     diagnostics: VIDiagnosticState | None = None
     diagnostics_per_block: list[VIDiagnosticState] | None = None
 
@@ -147,6 +147,21 @@ def resolve_guide(
     )
 
 
+def _stopping_moments(
+    guide: Any, params: Mapping[str, Any]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Require the posterior moments used by noise-aware stopping."""
+    try:
+        posterior = guide.get_posterior(params)
+        return np.asarray(posterior.mean), np.asarray(posterior.variance)
+    except (AttributeError, NotImplementedError) as error:
+        raise ValueError(
+            "noise-aware stopping requires a guide posterior with implemented "
+            "mean and variance; use stopping_rule='legacy' or disable "
+            "early_stopping for this guide"
+        ) from error
+
+
 def _run_svi_with_early_stop(
     svi: SVI,
     rng_key: jax.Array,
@@ -158,7 +173,7 @@ def _run_svi_with_early_stop(
     chunk_size: int = 100,
     patience: int = 3,
     rtol: float = 1e-4,
-    timings: dict[str, float] | None = None,
+    timings: dict[str, float | int] | None = None,
     early_stopping: bool = True,
     checkpoint_steps: tuple[int, ...] = (),
     checkpoint_callback: Callable | None = None,
@@ -182,13 +197,21 @@ def _run_svi_with_early_stop(
         else "legacy_relative_loss",
     )
     started = perf_counter()
+    state = None
+    if early_stopping and diagnostic_config is not None:
+        state = svi.init(rng_key, *model_args, **model_kwargs)
+        jax.block_until_ready(state)
+        _stopping_moments(svi.guide, svi.get_params(state))
     if vi_steps <= chunk_size and not checkpoint_steps:
+        run_kwargs = dict(model_kwargs)
+        if state is not None:
+            run_kwargs["init_state"] = state
         result = svi.run(
             rng_key,
             vi_steps,
             *model_args,
             progress_bar=progress_bar,
-            **model_kwargs,
+            **run_kwargs,
         )
         jax.block_until_ready(result.losses)
         timings["svi_run_including_compile_seconds"] = perf_counter() - started
@@ -199,8 +222,9 @@ def _run_svi_with_early_stop(
             audit["checkpoint_steps"].append(vi_steps)
         return result.params, jnp.asarray(result.losses), result.state
 
-    state = svi.init(rng_key, *model_args, **model_kwargs)
-    jax.block_until_ready(state)
+    if state is None:
+        state = svi.init(rng_key, *model_args, **model_kwargs)
+        jax.block_until_ready(state)
     timings["initialization_seconds"] = perf_counter() - started
     loop_started = perf_counter()
     all_losses: list[float] = []
@@ -256,16 +280,14 @@ def _run_svi_with_early_stop(
                 model_args=model_args,
                 model_kwargs=model_kwargs,
             )
-            distribution = svi.guide.get_posterior(current_params)
-            location = np.asarray(distribution.mean)
+            location, variance = _stopping_moments(svi.guide, current_params)
             if previous_objective is not None:
                 changes = np.asarray(objective["values"]) - np.asarray(
                     previous_objective["values"]
                 )
                 change_se = changes.std(ddof=1) / np.sqrt(len(changes))
                 location_change = np.max(
-                    np.abs(location - previous_location)
-                    / np.sqrt(np.asarray(distribution.variance))
+                    np.abs(location - previous_location) / np.sqrt(variance)
                 )
                 stable = (
                     abs(changes.mean()) <= 2 * change_se
@@ -329,15 +351,22 @@ def fit_vi(
     that schedule for numerical checkpoints; it does not rebuild executable
     code. optimization_particles controls training, independently of the
     diagnostic and objective-evaluation particle counts.
-    checkpoint_callback receives actual step and numerical parameters before
-    objective/density analysis, allowing an experiment to preserve completed
-    checkpoints even if later analysis fails. It does not resume optimization.
+    checkpoint_callback requires a diagnostics configuration and receives
+    actual step and numerical parameters before objective/density analysis.
+    An empty checkpoint_steps tuple still records the final actual step. This
+    allows completed checkpoints to be preserved if later analysis fails; it
+    does not resume optimization. Noise-aware early stopping requires guide
+    posterior mean and variance; flow guides can use legacy stopping instead.
     """
 
     model_kwargs = {} if model_kwargs is None else dict(model_kwargs)
     model_args = tuple(model_args)
     if isinstance(diagnostics, Mapping):
         diagnostics = VIDiagnosticConfig(**diagnostics)
+    if checkpoint_callback is not None and diagnostics is None:
+        raise ValueError(
+            "checkpoint_callback requires a diagnostics checkpoint configuration"
+        )
     checkpoints, checkpoint_objectives, audit = {}, {}, {}
 
     def record_checkpoint(step, params):
@@ -369,7 +398,7 @@ def fit_vi(
     guide_obj, guide_name = resolve_guide(
         guide, model, init_values=init_values
     )
-    timings: dict[str, float] = {}
+    timings: dict[str, float | int] = {}
     # Gradient clipping helps avoid NaNs when the ELBO has very steep regions
     # (common for spectral models with exp/log transforms).
     optimizer = optax.chain(
@@ -472,7 +501,12 @@ def run_multivariate_vi(
     early_stopping: bool = True,
     diagnostics: VIDiagnosticConfig | Mapping[str, Any] | None = None,
 ) -> VIResult:
-    """Run VI for each Cholesky channel and merge posterior draws."""
+    """Run VI for each Cholesky channel and merge posterior draws.
+
+    Returned timing durations are summed across sequential channel fits.
+    steps_run is the total SVI updates across channels; block_<index>_* keys
+    preserve each channel's durations and actual update count.
+    """
     if isinstance(diagnostics, Mapping):
         diagnostics = VIDiagnosticConfig(**diagnostics)
     block_diagnostics = []
@@ -484,6 +518,7 @@ def run_multivariate_vi(
     posterior_parts: list[xr.Dataset] = []
     losses_per_block: list[jnp.ndarray] = []
     guide_names: list[str] = []
+    block_timings: list[dict[str, float | int]] = []
     for channel_index in range(n_channels):
         result = fit_vi(
             _blocked_channel_model,
@@ -514,6 +549,7 @@ def run_multivariate_vi(
         posterior_parts.append(result.posterior)
         losses_per_block.append(result.losses)
         guide_names.append(result.guide_name)
+        block_timings.append(result.timings)
         if result.diagnostics is not None:
             block_diagnostics.append(result.diagnostics)
 
@@ -531,6 +567,15 @@ def run_multivariate_vi(
     else:
         losses = jnp.asarray([])
     guide_name = guide_names[0] if len(set(guide_names)) == 1 else "mixed"
+    timings = {
+        "steps_run": sum(block.get("steps_run", 0) for block in block_timings),
+        "num_blocks": n_channels,
+    }
+    for index, block in enumerate(block_timings):
+        for name, value in block.items():
+            timings[f"block_{index}_{name}"] = value
+            if name.endswith("_seconds"):
+                timings[name] = timings.get(name, 0) + value
     joint = None
     if block_diagnostics:
         names = [
@@ -568,6 +613,7 @@ def run_multivariate_vi(
         losses=losses,
         guide_name=guide_name,
         losses_per_block=losses_per_block,
+        timings=timings,
         diagnostics=joint,
         diagnostics_per_block=block_diagnostics or None,
     )

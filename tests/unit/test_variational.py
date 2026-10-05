@@ -26,7 +26,12 @@ from log_psplines.diagnostics.variational import (
     whiten_coefficients,
 )
 from log_psplines.inference.model import _sample_pspline_block
-from log_psplines.inference.vi import fit_vi, resolve_guide
+from log_psplines.inference.vi import (
+    VIResult,
+    fit_vi,
+    resolve_guide,
+    run_multivariate_vi,
+)
 
 
 def gaussian_model():
@@ -334,6 +339,146 @@ def test_actual_checkpoint_steps_and_disabled_stopping():
     assert set(result.diagnostics.checkpoints) == {"55", "155", "205"}
 
 
+def test_checkpoint_callback_requires_diagnostics_before_model_initialization():
+    def uncalled_model():
+        raise AssertionError(
+            "configuration must be validated before initialization"
+        )
+
+    with pytest.raises(
+        ValueError, match="checkpoint_callback requires.*diagnostics"
+    ):
+        fit_vi(
+            uncalled_model,
+            rng_key=jax.random.PRNGKey(4),
+            vi_steps=5,
+            optimizer_lr=0.01,
+            checkpoint_callback=lambda step, params: None,
+        )
+
+
+def test_noise_aware_short_run_preserves_rng_and_final_checkpoint():
+    options = dict(
+        rng_key=jax.random.PRNGKey(4),
+        vi_steps=5,
+        optimizer_lr=0.01,
+        posterior_draws=8,
+    )
+    checkpoints = []
+    plain = fit_vi(gaussian_model, **options)
+    audited = fit_vi(
+        gaussian_model,
+        diagnostics=config(stopping_rule="noise_aware"),
+        checkpoint_callback=lambda step, params: checkpoints.append(
+            (step, params)
+        ),
+        **options,
+    )
+    np.testing.assert_array_equal(plain.losses, audited.losses)
+    np.testing.assert_array_equal(plain.posterior.x, audited.posterior.x)
+    assert [step for step, _ in checkpoints] == [5]
+    assert all(
+        np.isfinite(value).all() for value in checkpoints[0][1].values()
+    )
+
+
+@pytest.mark.parametrize("guide", ["flow:1", "flowbnaf:1"])
+@pytest.mark.parametrize("steps", [5, 205])
+def test_noise_aware_stopping_rejects_unsupported_flow_moments_before_updates(
+    guide, steps, monkeypatch
+):
+    from numpyro.infer import SVI
+
+    def uncalled_update(*args, **kwargs):
+        raise AssertionError(
+            "unsupported stopping must be rejected before updates"
+        )
+
+    monkeypatch.setattr(SVI, "update", uncalled_update)
+    with pytest.raises(
+        ValueError,
+        match="noise-aware stopping requires.*mean and variance",
+    ):
+        fit_vi(
+            gaussian_model,
+            rng_key=jax.random.PRNGKey(4),
+            vi_steps=steps,
+            optimizer_lr=0.01,
+            guide=guide,
+            diagnostics=config(stopping_rule="noise_aware"),
+        )
+
+
+@pytest.mark.parametrize("guide", ["flow:1", "flowbnaf:1"])
+def test_ordinary_flow_fits_remain_supported(guide):
+    fitted = fit_vi(
+        gaussian_model,
+        rng_key=jax.random.PRNGKey(4),
+        vi_steps=5,
+        optimizer_lr=0.01,
+        guide=guide,
+        posterior_draws=8,
+    )
+    assert fitted.timings["steps_run"] == 5
+    assert np.isfinite(fitted.losses).all()
+    assert fitted.posterior.x.shape == (1, 8, 2)
+    assert np.isfinite(fitted.posterior.x).all()
+
+
+def test_multivariate_timings_sum_updates_and_keep_each_block(monkeypatch):
+    import importlib
+
+    import xarray as xr
+
+    module = importlib.import_module("log_psplines.inference.vi")
+    calls = []
+
+    def fit_block(model, **kwargs):
+        calls.append(kwargs)
+        index = kwargs["model_kwargs"]["channel"]
+        multiplier = index + 1
+        timings = {
+            "steps_run": 10 * multiplier,
+            "first_chunk_including_compile_seconds": 0.1 * multiplier,
+            "posterior_draw_seconds": 0.01 * multiplier,
+        }
+        if index == 1:
+            timings["remaining_optimization_seconds"] = 0.4
+        return VIResult(
+            posterior=xr.Dataset({f"x_{index}": ("draw", np.arange(3))}),
+            losses=jnp.full(5 + index, multiplier),
+            guide_name="diag",
+            timings=timings,
+        )
+
+    monkeypatch.setattr(module, "fit_vi", fit_block)
+    monkeypatch.setattr(
+        module,
+        "channel_model_kwargs",
+        lambda kwargs, index: {"channel": index},
+    )
+    fitted = run_multivariate_vi(
+        {"n_channels": 2},
+        rng_key=jax.random.PRNGKey(4),
+        steps=50,
+        early_stopping=False,
+    )
+    assert fitted.timings["num_blocks"] == 2
+    assert fitted.timings["steps_run"] == 30
+    assert fitted.timings["block_0_steps_run"] == 10
+    assert fitted.timings["block_1_steps_run"] == 20
+    assert fitted.timings[
+        "first_chunk_including_compile_seconds"
+    ] == pytest.approx(0.3)
+    assert fitted.timings["posterior_draw_seconds"] == pytest.approx(0.03)
+    assert fitted.timings["remaining_optimization_seconds"] == 0.4
+    assert fitted.timings["block_1_remaining_optimization_seconds"] == 0.4
+    assert all(
+        call["vi_steps"] == 50 and not call["early_stopping"] for call in calls
+    )
+    np.testing.assert_array_equal(fitted.losses, np.full(5, 3))
+
+
 def test_legacy_stopping_constant_sensitivity_and_audited_objective():
     def base(constant):
         def model():
@@ -452,6 +597,12 @@ def test_blocked_cholesky_diagnostics_and_persistence(tmp_path):
     )
     states = fitted.vi.diagnostics_per_block
     assert len(states) == 2
+    assert fitted.vi.timings["num_blocks"] == 2
+    assert fitted.vi.timings["steps_run"] == 40
+    for index, state in enumerate(states):
+        assert fitted.vi.timings[f"block_{index}_steps_run"] == 20
+        for name, value in state.metadata["timings"].items():
+            assert fitted.vi.timings[f"block_{index}_{name}"] == value
     combined = fitted.vi.diagnostics.arrays["repeat_0_log_ratios"]
     expected = (
         states[0].arrays["seed_81_log_ratios"]
@@ -465,6 +616,7 @@ def test_blocked_cholesky_diagnostics_and_persistence(tmp_path):
     path = tmp_path / "blocked.nc"
     fitted.to_netcdf(path)
     restored = PSDResult.from_netcdf(path)
+    assert restored.vi.timings == fitted.vi.timings
     assert len(restored.vi.diagnostics_per_block) == 2
     np.testing.assert_array_equal(
         restored.vi.diagnostics.arrays["repeat_0_log_ratios"], combined

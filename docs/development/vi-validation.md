@@ -1,9 +1,0 @@
-# VI validation studies
-
-Exploratory VI/NUTS comparisons are preserved in the separate local `spline_studies` checkout, whose remote is [spline_studies](https://github.com/nz-gravity/spline_studies). The local archive has not yet been published to that remote. The local, byte-verified archive is `/Users/avi/Documents/projects/wdm_psd/spline_studies/snapshots/vi-nuts-20261005`. Its source snapshot includes commit `2e38bc1` and all subsequent working-tree studies, reports, protocols, tests, and local numerical results. The relocation inventory preserves original absolute paths; frozen inference has not been rerun after relocation.
-
-The public package provides scalar power-spectrum VI, stationary multivariate VI, saved guide diagnostics, target fingerprints, and loss/timing persistence. It retains the native smoothing prior and NUTS defaults. Experimental priors, fixed-scale targets, and likelihood-informed coordinates are not public inference options.
-
-Long full-covariance VI agrees with NUTS on the tested fixed multivariate controls. Research coordinates improve the native multivariate and time-varying spectral summaries, while hierarchical smoothing-scale uncertainty still disagrees. No universal VI recipe, accuracy guarantee, or speed advantage is established. GP alternatives are feasible but do not show a consistent improvement over the matched derivative-Gaussian benchmark. See the archive's GP decision and comparison reports before changing a prior or a VI default.
-
-The intended application is quick exploration of model choices such as knot counts, using approximate posterior curves to screen candidates and NUTS to validate promising choices. The next performance study should use the unchanged native models and smaller VI budgets, and measure predictive quality and model-choice ranking alongside wall time. Long validation recipes are accuracy controls, not a demonstrated cheap exploration preset.

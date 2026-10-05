@@ -168,10 +168,10 @@ Reference-spectrum power fits
    :start-line: 3
 
 
-.. _vi-diagnostics:
+Variational inference
+---------------------
 
-Variational inference diagnostics
----------------------------------
+.. autofunction:: log_psplines.inference.vi.fit_vi
 
-.. include:: vi-diagnostics.rst
-   :start-line: 3
+.. autoclass:: log_psplines.inference.vi.VIResult
+   :members:

@@ -109,20 +109,3 @@ scalar draws, optionally for a frequency slice. Parametric reconstruction
 requires the caller's deterministic function and external model inputs, which
 should be saved alongside the result. NetCDF persistence preserves the
 separate lengths of posterior chains and spectral previews.
-
-Scalar variational inference
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Set ``PowerConfig(method="vi", vi_steps=5000, vi_lr=0.01,
-vi_guide="diag", vi_posterior_draws=256)`` for scalar spline powers on a
-rectangular grid or at exact paired coordinates. ``lowrank:10`` is also
-available; its rank is capped at the latent dimension. NUTS remains the
-default. Both methods use the same prepared likelihood, tensor prior and
-coefficient reconstruction. Parametric spectra currently support NUTS only.
-
-VI returns one chain of constrained draws and ``result.vi`` loss/timing
-information, with no fabricated NUTS sample statistics. The VI diagnostics,
-model bases, observations and native units survive ``PSDResult.to_netcdf`` /
-``PSDResult.from_netcdf``. Guide and optimizer checks against diagnosed NUTS
-are necessary before interpreting VI uncertainty. See :ref:`vi-diagnostics`
-for opt-in guide-density diagnostics, checkpoints and their limits.

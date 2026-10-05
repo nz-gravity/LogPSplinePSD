@@ -70,12 +70,14 @@ VI and NUTS
    method never executes.
 
 ``method="vi"``
-   Fit with stochastic variational inference only. This is a fast way to
-   check data scaling, frequency selection, and spline flexibility, and to
-   diagnose the model before committing to a full NUTS run.
+   Fit the same model with NumPyro stochastic variational inference. Use
+   approximate curves to explore spline choices, then validate promising
+   choices with NUTS. Cost and accuracy depend on the VI settings.
 
 ``vi_steps``, ``vi_lr``, ``vi_guide``
-   VI optimisation settings, used only when ``method="vi"``.
+   VI optimisation settings, used only when ``method="vi"``. Guides include
+   ``"diag"``, ``"mvn"`` and ``"lowrank:10"``. ``vi_early_stopping=False``
+   runs the full step budget; ``vi_posterior_draws`` controls stored draws.
 
 ``n_warmup``, ``n_samples``, ``num_chains``
    Standard NUTS run length controls, used only when ``method="nuts"``.
@@ -127,7 +129,14 @@ TruePSDInput = None | np.ndarray | tuple[np.ndarray, np.ndarray] | list | dict
 
 @dataclass(frozen=True)
 class StationaryConfig:
-    """Flat configuration for stationary preprocessing and inference."""
+    """Configure stationary preprocessing and NUTS or NumPyro VI fitting.
+
+    ``method="vi"`` uses the same model with ``vi_steps`` updates at ``vi_lr``.
+    ``vi_guide`` selects ``diag`` (default), ``mvn``, ``lowrank:N`` or a flow.
+    ``vi_posterior_draws`` controls constrained draws; set
+    ``vi_early_stopping=False`` to run every update. ``result.vi`` retains
+    losses and timings for approximate model exploration.
+    """
 
     n_samples: int = 1000
     n_warmup: int = 500
@@ -165,7 +174,6 @@ class StationaryConfig:
     vi_posterior_draws: int = 50
     vi_progress_bar: bool | None = None
     vi_early_stopping: bool = True
-    vi_diagnostics: dict[str, Any] | None = None
 
     target_accept_prob: float = 0.8
     target_accept_prob_by_channel: list[float] | None = None
@@ -186,8 +194,10 @@ class PowerConfig:
     ``sigma_time`` and ``sigma_freq`` have HalfNormal priors. The smoothing
     precisions are derived as ``phi = sigma**-2``.
     ``method="vi"`` uses the same scalar spline model and reconstruction;
-    ``vi_steps``, ``vi_lr`` and ``vi_guide`` control the shared VI engine.
-    VI returns one chain with ``vi_posterior_draws`` constrained draws.
+    ``vi_steps``, ``vi_lr`` and ``vi_guide`` (``diag``, ``mvn``, ``lowrank:N``)
+    control NumPyro SVI. Disable ``vi_early_stopping`` to run every step.
+    VI returns one chain with ``vi_posterior_draws`` constrained draws and
+    stores losses and timings in ``result.vi``.
     """
 
     roughness_scale: float = 10.0
@@ -224,7 +234,6 @@ class PowerConfig:
     vi_guide: str = "diag"
     vi_posterior_draws: int = 256
     vi_early_stopping: bool = True
-    vi_diagnostics: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.method not in ("nuts", "vi"):

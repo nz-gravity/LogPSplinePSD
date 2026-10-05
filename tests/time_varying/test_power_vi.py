@@ -3,12 +3,14 @@
 import numpy as np
 import numpyro
 import pytest
+import xarray as xr
 from jaxtyping import TypeCheckError
 
 from log_psplines import PowerConfig, fit
 from log_psplines.basis import SplineBasis
 from log_psplines.data.spectral import PowerData
 from log_psplines.inference.power import prepare_power_model
+from log_psplines.models.anova import ANOVALogPSpline
 from log_psplines.models.reconstruction import power_draws_from_basis
 from log_psplines.models.spectrum import LogPSpline
 from log_psplines.preprocessing.moving_periodogram import (
@@ -96,6 +98,7 @@ def test_public_power_vi_shared_model_and_round_trip(
         result.psd,
     )
     assert loaded.metadata["units"] == data.units
+    assert loaded.observed_data.attrs["units"] == data.units
     np.testing.assert_array_equal(
         loaded.observed_data.time, result.observed_data.time
     )
@@ -120,7 +123,7 @@ def test_power_config_rejects_invalid_dispatch():
             PowerConfig(**kwargs)
 
 
-def test_diagnostic_state_and_all_joint_draws_roundtrip(tmp_path):
+def test_all_posterior_draws_survive_spectrum_preview_roundtrip(tmp_path):
     time, freq = np.linspace(0, 1, 7), np.linspace(0, 0.5, 8)
     model = LogPSpline(
         SplineBasis.from_grid(freq, 0, degree=1, penalty_order=1),
@@ -134,19 +137,12 @@ def test_diagnostic_state_and_all_joint_draws_roundtrip(tmp_path):
         spectrum_draws=2,
         progress_bar=False,
         vi_early_stopping=False,
-        vi_diagnostics={
-            "num_particles": 64,
-            "chunk_size": 16,
-            "seeds": (81, 82),
-            "evaluation_seeds": (91, 92),
-            "evaluation_particles": 4,
-        },
     )
     result = fit(data, config, model=model)
     result.posterior = result.posterior.assign_coords(
         chain=[3], draw=np.arange(100, 116)
     )
-    path = tmp_path / "diagnosed.nc"
+    path = tmp_path / "preview.nc"
     result.to_netcdf(path)
     restored = PSDResult.from_netcdf(path)
     assert restored.spectrum.sizes["draw"] == 2
@@ -155,35 +151,79 @@ def test_diagnostic_state_and_all_joint_draws_roundtrip(tmp_path):
     np.testing.assert_array_equal(restored.posterior.chain, [3])
     complete = power_draws_from_basis(restored.posterior, restored.model_data)
     assert complete.shape[:2] == (1, 16)
-    assert restored.vi.diagnostics.metadata == result.vi.diagnostics.metadata
-    for name, values in result.vi.diagnostics.arrays.items():
-        np.testing.assert_array_equal(
-            restored.vi.diagnostics.arrays[name], values
-        )
-    from log_psplines.diagnostics.variational import rebuild_guide
-
-    prepared, _, _ = prepare_power_model(data, model, config)
-    rebuilt = rebuild_guide(
-        restored.vi.diagnostics,
-        prepared,
-        target_fingerprint=restored.metadata["target_fingerprint"],
-    )
-    assert rebuilt.latent_dim == 6
+    np.testing.assert_array_equal(restored.vi.losses, result.vi.losses)
+    assert restored.vi.timings == result.vi.timings
 
 
-def test_custom_anova_prior_changes_target_fingerprint():
+def test_public_anova_vi_shared_model_and_roundtrip(tmp_path):
     from log_psplines.inference.anova_power import prepare_anova_power_model
-    from log_psplines.inference.power import power_target_fingerprint
-    from log_psplines.models.anova import ANOVALogPSpline
 
     time, freq = np.linspace(0, 1, 7), np.linspace(0, 0.5, 8)
     bt = SplineBasis.from_grid(time, 0, degree=1, penalty_order=1)
     bf = SplineBasis.from_grid(freq, 0, degree=1, penalty_order=1)
-    first = ANOVALogPSpline(bf, bt, sigma_eta_prior=0.2)
-    second = ANOVALogPSpline(bf, bt, sigma_eta_prior=0.8)
+    model = ANOVALogPSpline(bf, bt, sigma_eta_prior=0.2)
     data = PowerData(np.ones((7, 8)), np.full((7, 8), 2.0), freq, time)
-    config = PowerConfig(progress_bar=False)
-    _, pair, _ = prepare_anova_power_model(data, first, config)
-    assert power_target_fingerprint(
-        data, first, config, pair
-    ) != power_target_fingerprint(data, second, config, pair)
+    config = PowerConfig(
+        method="vi", vi_steps=20, vi_posterior_draws=8, progress_bar=False
+    )
+    result = fit(data, config, model=model)
+    assert result.posterior.sizes["draw"] == 8
+    assert np.isfinite(result.vi.losses).all()
+    assert np.all(result.psd > 0) and np.isfinite(result.psd).all()
+    assert np.all(result.posterior.sigma_g > 0)
+    assert np.all(result.posterior.sigma_eta > 0)
+    logs = model(
+        result.posterior.weights_g.values[0, 0],
+        result.posterior.weights_eta.values[0, 0],
+    )
+    np.testing.assert_allclose(result.psd[0, 0], np.exp(logs), rtol=1e-12)
+    prepared, _, _ = prepare_anova_power_model(data, model, config)
+    params = {
+        name: result.posterior[name].values[0, 0]
+        for name in ("g", "eta", "sigma_g", "sigma_eta")
+    }
+    trace = numpyro.handlers.trace(
+        numpyro.handlers.substitute(prepared, data=params)
+    ).get_trace()
+    np.testing.assert_allclose(
+        trace["log_likelihood"]["value"],
+        -0.5 * np.sum(data.counts * logs + data.power * np.exp(-logs)),
+        rtol=1e-12,
+    )
+    result.to_netcdf(tmp_path / "anova.nc")
+    loaded = PSDResult.from_netcdf(tmp_path / "anova.nc")
+    np.testing.assert_allclose(
+        power_draws_from_basis(loaded.posterior, loaded.model_data)[..., 0],
+        result.psd,
+    )
+    assert loaded.metadata["model"] == "anova"
+    np.testing.assert_array_equal(loaded.vi.losses, result.vi.losses)
+
+
+def test_vi_block_losses_roundtrip(tmp_path):
+    from log_psplines.inference.vi import VIResult
+
+    posterior = xr.Dataset({"s": (("chain", "draw"), [[0.0, 1.0]])})
+    losses = [np.array([4.0, 3.0, 2.0]), np.array([2.0, 1.0])]
+    vi = VIResult(
+        posterior=posterior,
+        losses=np.array([6.0, 4.0, 3.0]),
+        guide_name="mvn",
+        losses_per_block=losses,
+        timings={"steps_run": 5, "num_blocks": 2},
+    )
+    spectrum = xr.DataArray(
+        np.ones((1, 2, 3, 1, 1), dtype=np.complex128),
+        dims=("chain", "draw", "frequency", "channel", "channel_aux"),
+        coords={"frequency": [0.1, 0.2, 0.3]},
+    )
+    result = PSDResult(posterior=posterior, spectrum=spectrum, vi=vi)
+    result.to_netcdf(tmp_path / "blocked.nc")
+    loaded = PSDResult.from_netcdf(tmp_path / "blocked.nc")
+    assert loaded.vi.guide_name == vi.guide_name
+    assert loaded.vi.timings == vi.timings
+    np.testing.assert_array_equal(loaded.vi.losses, vi.losses)
+    for actual, expected in zip(
+        loaded.vi.losses_per_block, losses, strict=True
+    ):
+        np.testing.assert_array_equal(actual, expected)

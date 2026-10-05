@@ -36,45 +36,6 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
     if not isinstance(data, WishartData):
         data = preprocess_to_freq_domain(data, config)
     model_kwargs, spline_model = prepare_model(data, config)
-    from inspect import getsource
-
-    from log_psplines.diagnostics.variational import (
-        VIDiagnosticConfig,
-        fingerprint,
-        require_same_target,
-    )
-    from log_psplines.inference.model import (
-        _blocked_channel_model,
-        _sample_pspline_block,
-    )
-    from log_psplines.likelihoods.whittle import whittle_log_likelihood
-    from log_psplines.likelihoods.wishart import wishart_log_likelihood
-    from log_psplines.models.spectrum import build_spline
-
-    target_fingerprint = fingerprint(
-        model_kwargs,
-        float(config.eta),
-        data.freq,
-        data.channel_stds,
-        data.scaling_factor,
-        getsource(_blocked_channel_model),
-        getsource(_sample_pspline_block),
-        getsource(build_spline),
-        getsource(wishart_log_likelihood),
-        getsource(whittle_log_likelihood),
-    )
-    diagnostics = None
-    if config.vi_diagnostics is not None:
-        options = dict(config.vi_diagnostics)
-        supplied = options.pop("target_fingerprint", None)
-        if supplied is not None:
-            require_same_target(supplied, target_fingerprint)
-        options.setdefault(
-            "parameterization", config.smoothing_parameterization
-        )
-        diagnostics = VIDiagnosticConfig(
-            target_fingerprint=target_fingerprint, **options
-        )
     if config.outdir is not None:
         _save_preprocessing_plot(data, config, spline_model=spline_model)
 
@@ -94,7 +55,6 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
             posterior_draws=config.vi_posterior_draws,
             eta=float(config.eta),
             early_stopping=config.vi_early_stopping,
-            diagnostics=diagnostics,
             verbose=(
                 config.verbose
                 if config.vi_progress_bar is None
@@ -137,7 +97,6 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
         ),
         metadata={
             "data_type": "multivariate",
-            "target_fingerprint": target_fingerprint,
             "scaling_factor": float(data.scaling_factor or 1.0),
             "channel_stds": (
                 None
@@ -179,6 +138,8 @@ def fit(
 ) -> PSDResult:
     """Fit stationary Wishart data or time-frequency powers.
 
+    ``config.method`` selects NUTS (default) or NumPyro VI for spline models.
+    Both use the same likelihood, prior and spectrum reconstruction.
     Scalar powers use the tensor or ANOVA structure in PowerConfig.
     ParametricSpectrum also supports joint independent channel powers.
     A partition may pool rectangular powers while retaining native-grid

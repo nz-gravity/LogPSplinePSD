@@ -174,7 +174,8 @@ def fit(
 
     ``config.method`` selects NUTS (default) or NumPyro VI for spline models.
     Both use the same likelihood, prior and spectrum reconstruction. Complex
-    WishartGridData uses ANOVA fields and currently supports NUTS only.
+    WishartGridData uses ANOVA fields and currently supports NUTS only,
+    on rectangular grids or at exact paired time-frequency coordinates.
     Scalar powers use the tensor or ANOVA structure in PowerConfig.
     ParametricSpectrum also supports joint independent channel powers.
     A partition may pool rectangular powers while retaining native-grid

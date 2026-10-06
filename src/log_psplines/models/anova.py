@@ -14,12 +14,15 @@ def anova_components(
     basis_frequency: Array | np.ndarray,
     weights_g: Array | np.ndarray,
     weights_eta: Array | np.ndarray,
+    *,
+    paired: bool = False,
 ) -> tuple[Array | np.ndarray, Array | np.ndarray]:
     """Evaluate g (...,F), eta (...,T,F) from (...,Kf), (...,Kt,Kf).
 
     Time basis already carries the fixed reference-grid centring transform.
     Matrix products avoid a dense time-frequency Kronecker design.
     Host reconstruction keeps NumPy precision; JAX inputs use JAX throughout.
+    paired=True evaluates matching rows (Q,Kt), (Q,Kf) at Q exact points.
     """
     namespace = (
         jnp
@@ -31,7 +34,11 @@ def anova_components(
     )
     bt, bf = namespace.asarray(basis_time), namespace.asarray(basis_frequency)
     g = namespace.einsum("fj,...j->...f", bf, namespace.asarray(weights_g))
-    deviation = bt @ (namespace.asarray(weights_eta) @ bf.T)
+    deviation = (
+        namespace.einsum("qi,...ij,qj->...q", bt, weights_eta, bf)
+        if paired
+        else bt @ (namespace.asarray(weights_eta) @ bf.T)
+    )
     return g, deviation
 
 

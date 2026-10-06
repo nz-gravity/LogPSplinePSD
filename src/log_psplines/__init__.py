@@ -17,6 +17,7 @@ from .models.parametric import ParametricSpectrum
 from .models.spectrum import LogPSpline
 from .preprocessing.moving_periodogram import (
     moving_periodogram,
+    multivariate_moving_periodogram,
     scattered_moving_periodogram,
 )
 from .preprocessing.power_partition import (
@@ -48,6 +49,7 @@ __all__ = [
     "PowerConfig",
     "PowerData",
     "moving_periodogram",
+    "multivariate_moving_periodogram",
     "scattered_moving_periodogram",
     "PowerPartition",
     "coarse_grain_power",

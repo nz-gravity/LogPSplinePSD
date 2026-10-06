@@ -1,4 +1,4 @@
-"""Thin blocked ANOVA integration for rectangular proper complex data."""
+"""Blocked ANOVA fitting for complex grid or paired-point statistics."""
 
 from collections.abc import Callable
 from dataclasses import asdict
@@ -21,6 +21,7 @@ from log_psplines.inference.anova_power import (
     sample_anova_field,
 )
 from log_psplines.inference.nuts import _suffix, run_nuts
+from log_psplines.inference.power import power_floor
 from log_psplines.inference.power_results import power_result_spectra
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 from log_psplines.logger import logger
@@ -38,6 +39,59 @@ def row_field_labels(channel: int) -> list[str]:
     ]
 
 
+def _initialize_scattered(
+    marginal: np.ndarray,
+    counts: np.ndarray,
+    bt: np.ndarray,
+    bf: np.ndarray,
+    pair: dict[str, np.ndarray],
+    config: PowerConfig,
+) -> dict[str, np.ndarray | float]:
+    """Penalized paired-point initialization with at most 4096 design rows.
+
+    Accumulate coefficient-sized normal equations; no Q-by-Q grid is formed.
+    Only starting values use this approximation, never the model likelihood.
+    """
+    active = counts > 0
+    mean = marginal[active] / counts[active]
+    target = np.log(mean + power_floor(mean))
+    bt, bf = bt[active] @ pair["U_time"], bf[active] @ pair["U_freq"]
+    weights = counts[active] / counts[active].max()
+    kt, kf = bt.shape[1], bf.shape[1]
+    penalty = np.r_[
+        config.init_penalty_freq * pair["lam_freq"],
+        (
+            config.init_penalty_time * pair["lam_time"][:, None]
+            + config.init_penalty_freq * pair["lam_freq"][None, :]
+        ).reshape(-1),
+    ]
+    system = np.diag(penalty + config.ridge_eps)
+    rhs = np.zeros(len(penalty))
+    for start in range(0, len(target), 4096):
+        section = slice(start, start + 4096)
+        design = np.column_stack(
+            (
+                bf[section],
+                (bt[section, :, None] * bf[section, None, :]).reshape(
+                    -1, kt * kf
+                ),
+            )
+        )
+        system += design.T @ (weights[section, None] * design)
+        rhs += design.T @ (weights[section] * target[section])
+    coefficients = np.linalg.solve(system, rhs)
+    g, eta = coefficients[:kf], coefficients[kf:].reshape(kt, kf)
+    _, deviation = anova_components(bt, bf, g, eta, paired=True)
+    return {
+        "g": g,
+        "eta": eta.reshape(-1),
+        "sigma_g": min(
+            10.0, np.sqrt((np.sum(pair["lam_freq"] * g**2) + 1e-6) / kf)
+        ),
+        "sigma_eta": float(np.clip(np.std(deviation), 0.05, 1.0)),
+    }
+
+
 def prepare_wishart_grid_row(
     data: WishartGridData,
     spline: ANOVALogPSpline,
@@ -52,6 +106,7 @@ def prepare_wishart_grid_row(
 
     Shared designs contain raw time/frequency and their penalty-eigenbasis
     versions: (T,Kt), (F,Kf), (T,Kt), (F,Kf).
+    Paired observations instead have Q rows in both coordinate designs.
     Each scalar field samples its own ANOVA coefficients and hyperparameters.
     """
     if not 0 <= channel < data.p:
@@ -81,8 +136,14 @@ def prepare_wishart_grid_row(
             g, eta = sample_anova_field(
                 pair, config, spline.sigma_eta_prior, label=label
             )
-            mean, deviation = anova_components(bt_eig, bf_eig, g, eta)
-            fields.append(mean[None, :] + deviation)
+            mean, deviation = anova_components(
+                bt_eig, bf_eig, g, eta, paired=data.is_scattered
+            )
+            fields.append(
+                mean + deviation
+                if data.is_scattered
+                else mean[None, :] + deviation
+            )
         logs = fields[0]
         theta_re = (
             jnp.stack(fields[1::2], axis=-1)
@@ -114,14 +175,20 @@ def prepare_wishart_grid_row(
         data.u_re[..., channel, :] ** 2 + data.u_im[..., channel, :] ** 2,
         axis=-1,
     )
-    diagonal_init = initialize_anova(
-        PowerData(2 * marginal, 2 * data.counts, data.frequency, data.time),
-        bt,
-        bf,
-        spline.time_penalty,
-        np.asarray(spline.frequency.penalty),
-        pair,
-        config,
+    diagonal_init = (
+        _initialize_scattered(marginal, data.counts, bt, bf, pair, config)
+        if data.is_scattered
+        else initialize_anova(
+            PowerData(
+                2 * marginal, 2 * data.counts, data.frequency, data.time
+            ),
+            bt,
+            bf,
+            spline.time_penalty,
+            np.asarray(spline.frequency.penalty),
+            pair,
+            config,
+        )
     )
     init = anova_init_values(diagonal_init, pair, config, label=labels[0])
     for label in labels[1:]:
@@ -245,6 +312,17 @@ def fit_wishart_grid(
     )
     reconstruction_seconds = perf_counter() - start
     dims = ("time", "frequency", "channel", "channel_aux")
+    observation_dims = (
+        ("time", "frequency") if data.is_grid else ("observation",)
+    )
+    observation_coords = (
+        {"time": data.time, "frequency": data.frequency}
+        if data.is_grid
+        else {
+            "time": ("observation", data.time),
+            "frequency": ("observation", data.frequency),
+        }
+    )
     result = PSDResult(
         posterior=posterior,
         sample_stats=xr.merge(stats_parts),
@@ -261,18 +339,17 @@ def fit_wishart_grid(
         observed_data=xr.Dataset(
             {
                 "u_re": (
-                    ("time", "frequency", "channel", "factor"),
+                    (*observation_dims, "channel", "factor"),
                     data.u_re,
                 ),
                 "u_im": (
-                    ("time", "frequency", "channel", "factor"),
+                    (*observation_dims, "channel", "factor"),
                     data.u_im,
                 ),
-                "counts": (("time", "frequency"), data.counts),
+                "counts": (observation_dims, data.counts),
             },
             coords={
-                "time": data.time,
-                "frequency": data.frequency,
+                **observation_coords,
                 "channel": np.arange(data.p),
             },
             attrs={"units": data.units, "normalization": data.normalization},
@@ -295,6 +372,9 @@ def fit_wishart_grid(
             **asdict(config),
             "data_type": "multivariate_gridtv",
             "structure": "anova",
+            "observation_geometry": "rectangular"
+            if data.is_grid
+            else "paired",
             "units": data.units,
             "normalization": data.normalization,
             "counts_convention": "independent_proper_complex_observations; Y=sum(x x^H)",

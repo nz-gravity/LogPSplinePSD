@@ -62,6 +62,8 @@ def coarse_grain_wishart_grid(
     constant within that bin under the independent-coefficient model.
     Pooling over time loses temporal detail, including cross-spectrum phase.
     """
+    if not data.is_grid:
+        raise ValueError("rectangular pooling requires grid observations")
     time_bin = _as_positive_int("time_bin", time_bin)
     frequency_bin = _as_positive_int("frequency_bin", frequency_bin)
     if time_bin == frequency_bin == 1:

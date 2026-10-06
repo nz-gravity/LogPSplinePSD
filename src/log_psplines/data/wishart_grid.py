@@ -1,4 +1,4 @@
-"""Proper complex coefficient sums on a rectangular time-frequency grid."""
+"""Proper complex coefficient sums on grids or paired time-frequency sites."""
 
 from dataclasses import dataclass, replace
 
@@ -23,7 +23,8 @@ def _grid_axis(values: np.ndarray, name: str) -> np.ndarray:
 class WishartGridData:
     """Normalized proper complex statistics Y=U U^H and observation counts.
 
-    u_re/u_im: (T,F,C,R), counts: scalar or (T,F). Each input coefficient
+    u_re/u_im: (T,F,C,R) on a grid or (Q,C,R) at paired time/frequency
+    sites; counts: scalar or (T,F)/(Q,). Each input coefficient
     has covariance S in the stated PSD units. Y is a SUM, never an average;
     R is factor width, independent of counts. Widths above C are compressed
     once. Rank-one and zero-count cells need no artificial diagonal power.
@@ -44,28 +45,44 @@ class WishartGridData:
     normalization: str = "proper_complex_covariance_psd"
 
     def __post_init__(self) -> None:
-        self.time = _grid_axis(self.time, "time")
-        self.frequency = _grid_axis(self.frequency, "frequency")
         real, imag = np.asarray(self.u_re), np.asarray(self.u_im)
         if np.iscomplexobj(real) or np.iscomplexobj(imag):
             raise ValueError("u_re and u_im must be real arrays")
         if (
             real.shape != imag.shape
-            or real.ndim != 4
-            or real.shape[:2] != (len(self.time), len(self.frequency))
-            or min(real.shape[2:]) < 1
+            or real.ndim not in (3, 4)
+            or min(real.shape) < 1
+        ):
+            raise ValueError("factors must have shape (T,F,C,R) or (Q,C,R)")
+        for name in ("time", "frequency"):
+            axis = np.asarray(getattr(self, name), dtype=float)
+            if real.ndim == 4:
+                axis = _grid_axis(axis, name)
+            elif (
+                axis.ndim != 1
+                or axis.size != real.shape[0]
+                or not np.isfinite(axis).all()
+            ):
+                raise ValueError(f"{name} must be finite with shape (Q,)")
+            setattr(self, name, axis.copy())
+        if real.ndim == 4 and real.shape[:2] != (
+            len(self.time),
+            len(self.frequency),
         ):
             raise ValueError("factors must have shape (T,F,C,R) with C,R >= 1")
+        observation_shape = real.shape[:-2]
         counts = np.asarray(self.counts, dtype=float)
-        if counts.ndim != 0 and counts.shape != real.shape[:2]:
-            raise ValueError("counts must be scalar or have shape (T,F)")
+        if counts.ndim != 0 and counts.shape != observation_shape:
+            raise ValueError(
+                "counts must be scalar or match the observation shape"
+            )
         if (
             not np.isfinite(counts).all()
             or np.any(counts < 0)
             or np.any(counts != np.floor(counts))
         ):
             raise ValueError("counts must be finite nonnegative integers")
-        self.counts = np.broadcast_to(counts, real.shape[:2]).copy()
+        self.counts = np.broadcast_to(counts, observation_shape).copy()
         active = self.counts > 0
         if (
             not np.isfinite(real[active]).all()
@@ -76,17 +93,19 @@ class WishartGridData:
         self.u_im = np.where(active[..., None, None], imag, 0.0).astype(float)
         if real.shape[-1] > real.shape[-2]:
             factors = Y_to_U(self.Y.reshape(-1, self.p, self.p)).reshape(
-                *real.shape[:2], self.p, self.p
+                *observation_shape, self.p, self.p
             )
             self.u_re, self.u_im = factors.real, factors.imag
         for name in ("time", "frequency"):
             reference = getattr(self, f"reference_{name}")
             reference = _grid_axis(
-                getattr(self, name) if reference is None else reference,
+                np.unique(getattr(self, name))
+                if reference is None
+                else reference,
                 f"reference_{name}",
             )
             axis = getattr(self, name)
-            if axis[0] < reference[0] or axis[-1] > reference[-1]:
+            if axis.min() < reference[0] or axis.max() > reference[-1]:
                 raise ValueError(f"{name} must lie inside its reference grid")
             setattr(self, f"reference_{name}", reference)
 
@@ -126,18 +145,62 @@ class WishartGridData:
             normalization=normalization,
         )
 
+    @classmethod
+    def from_scattered_coefficients(
+        cls,
+        coefficients: np.ndarray,
+        time: np.ndarray,
+        frequency: np.ndarray,
+        *,
+        reference_time: np.ndarray | None = None,
+        reference_frequency: np.ndarray | None = None,
+        units: str = "data_unit^2/Hz",
+        normalization: str = "proper_complex_covariance_psd",
+    ) -> "WishartGridData":
+        """Prepare complex (Q,C[,replicate]) vectors at paired finite sites."""
+        values = np.asarray(coefficients)
+        if not np.iscomplexobj(values):
+            raise ValueError(
+                "proper complex coefficients required; real WDM coefficients are unsupported"
+            )
+        if values.ndim == 2:
+            values = values[..., None]
+        if values.ndim != 3:
+            raise ValueError("coefficients must have shape (Q,C[,replicate])")
+        return cls(
+            values.real,
+            values.imag,
+            time,
+            frequency,
+            counts=values.shape[-1],
+            reference_time=reference_time,
+            reference_frequency=reference_frequency,
+            units=units,
+            normalization=normalization,
+        )
+
+    @property
+    def is_grid(self) -> bool:
+        """Whether observations occupy a rectangular time-frequency grid."""
+        return self.u_re.ndim == 4
+
+    @property
+    def is_scattered(self) -> bool:
+        """Whether observations occupy paired time-frequency sites."""
+        return self.u_re.ndim == 3
+
     @property
     def p(self) -> int:
         return self.u_re.shape[-2]
 
     @property
     def U(self) -> np.ndarray:
-        """Compact factors (T,F,C,R); R is not an observation count."""
+        """Compact factors (T,F,C,R) or (Q,C,R); R is not a count."""
         return self.u_re + 1j * self.u_im
 
     @property
     def Y(self) -> np.ndarray:
-        """Summed outer products (T,F,C,C)."""
+        """Summed outer products (T,F,C,C) or (Q,C,C)."""
         factors = self.U
         return factors @ factors.conj().swapaxes(-1, -2)
 
@@ -152,8 +215,8 @@ class WishartGridData:
         )
 
     def mask(self, observed: np.ndarray) -> "WishartGridData":
-        """Keep observed (T,F) cells without changing reference coordinates."""
+        """Keep observed (T,F) cells or (Q,) sites, retaining references."""
         observed = np.asarray(observed)
         if observed.dtype != np.bool_ or observed.shape != self.counts.shape:
-            raise ValueError("observed must be boolean with shape (T,F)")
+            raise ValueError("observed must be boolean and match counts shape")
         return replace(self, counts=np.where(observed, self.counts, 0))

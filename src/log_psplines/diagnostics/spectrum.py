@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.integrate import simpson
 
+from log_psplines.models.matrix import SpectralMatrix
+
 if TYPE_CHECKING:
     from log_psplines.results import PSDResult
 
@@ -19,25 +21,16 @@ def _real_components(values: np.ndarray) -> np.ndarray:
     return np.where(upper, matrix.real, matrix.imag)
 
 
-def _coherence(matrix: np.ndarray) -> np.ndarray:
-    diagonal = np.real(np.diagonal(matrix, axis1=-2, axis2=-1))
-    denominator = diagonal[..., :, None] * diagonal[..., None, :]
-    return np.divide(
-        np.abs(matrix) ** 2,
-        denominator,
-        out=np.zeros_like(denominator, dtype=float),
-        where=denominator > 0,
-    )
-
-
 def spectrum_diagnostics(
     result: PSDResult, *, truth: np.ndarray | None = None
 ) -> dict[str, object]:
     """Compare posterior spectra with truth on the result's native grid.
 
     Stationary truth has shape (F, p, p), or (F,) for a scalar fit.
-    Time-varying scalar truth has shape (T, F). Frequency endpoints are
-    excluded when at least four bins are available.
+    Time-varying truth has shape (T, F, p, p), or (T, F) for a scalar fit.
+    Frequency endpoints are excluded when at least four bins are available.
+    Coherence error uses the median of per-draw coherence, using all-draw
+    cached summaries when only a preview of spectra is retained.
     """
     if truth is None:
         truth = (
@@ -57,7 +50,7 @@ def spectrum_diagnostics(
         quantiles[:, :, selection] if time_varying else quantiles[:, selection]
     )
     median = quantiles[1]
-    reference = np.asarray(truth)
+    reference = np.asarray(truth, dtype=np.complex128)
     if reference.ndim == (2 if time_varying else 1):
         reference = reference[..., None, None]
     elif time_varying and reference.ndim == 3:
@@ -127,9 +120,19 @@ def spectrum_diagnostics(
     metrics["channel_riae"] = channel_riae
     if p > 1 and result.metadata.get("likelihood") != "diagonal_power_whittle":
         offdiag = np.triu(np.ones((p, p), dtype=bool), k=1)
+        summary = result.spectrum_summary
+        if summary is not None and "coherence_quantiles" in summary:
+            coherence = np.asarray(
+                summary["coherence_quantiles"].sel(percentile=50)
+            )
+        else:
+            coherence = np.median(result.coherence, axis=(0, 1))
+        coherence = (
+            coherence[:, selection] if time_varying else coherence[selection]
+        )
         difference = np.abs(
-            _coherence(median)[..., offdiag]
-            - _coherence(reference)[..., offdiag]
+            coherence[..., offdiag]
+            - SpectralMatrix.coherence(reference)[..., offdiag]
         )
         metrics["coherence_mae"] = float(np.mean(difference))
     return metrics

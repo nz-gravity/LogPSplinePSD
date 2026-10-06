@@ -4,10 +4,12 @@ from .spectral import (
     WishartData,
 )
 from .timeseries import TimeSeries
+from .wishart_grid import WishartGridData
 
 __all__ = [
     "TimeSeries",
     "WishartData",
+    "WishartGridData",
     "EmpiricalPSD",
     "PowerData",
 ]

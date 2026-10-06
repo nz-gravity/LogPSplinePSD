@@ -9,6 +9,32 @@ from jax import Array
 from log_psplines.basis import SplineBasis
 
 
+def anova_components(
+    basis_time: Array | np.ndarray,
+    basis_frequency: Array | np.ndarray,
+    weights_g: Array | np.ndarray,
+    weights_eta: Array | np.ndarray,
+) -> tuple[Array | np.ndarray, Array | np.ndarray]:
+    """Evaluate g (...,F), eta (...,T,F) from (...,Kf), (...,Kt,Kf).
+
+    Time basis already carries the fixed reference-grid centring transform.
+    Matrix products avoid a dense time-frequency Kronecker design.
+    Host reconstruction keeps NumPy precision; JAX inputs use JAX throughout.
+    """
+    namespace = (
+        jnp
+        if any(
+            isinstance(value, Array)
+            for value in (basis_time, basis_frequency, weights_g, weights_eta)
+        )
+        else np
+    )
+    bt, bf = namespace.asarray(basis_time), namespace.asarray(basis_frequency)
+    g = namespace.einsum("fj,...j->...f", bf, namespace.asarray(weights_g))
+    deviation = bt @ (namespace.asarray(weights_eta) @ bf.T)
+    return g, deviation
+
+
 def centered_time_basis(
     basis: Array | np.ndarray, penalty: Array | np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -36,7 +62,7 @@ def centered_time_basis(
 class ANOVALogPSpline:
     """GridTV latent correction u(t,f) = g(f) + eta(t,f).
 
-    The centered time basis is fixed on the full reconstruction grid.
+    The centered time basis is fixed on time.grid, the reference grid.
     Reference PSD handling belongs to fitting, not this model.
     """
 
@@ -57,6 +83,36 @@ class ANOVALogPSpline:
         object.__setattr__(self, "time_transform", transform)
         object.__setattr__(self, "time_penalty", penalty)
 
+    def design(
+        self,
+        time: np.ndarray | None = None,
+        frequency: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return (T,Kt-1), (F,Kf) designs with unchanged reference centring.
+
+        Coarse locations or output chunks never define a new time mean.
+        Off-grid evaluation requires clamped bases and stays in-domain.
+        """
+        designs = []
+        for basis, grid in ((self.time, time), (self.frequency, frequency)):
+            if grid is None or np.array_equal(grid, basis.grid):
+                design = np.asarray(basis.basis)
+            else:
+                grid = np.asarray(grid)
+                if basis.knot_convention != "clamped":
+                    raise ValueError(
+                        "off-grid ANOVA requires SplineBasis.from_grid bases"
+                    )
+                if np.any(grid < basis.grid[0]) or np.any(
+                    grid > basis.grid[-1]
+                ):
+                    raise ValueError(
+                        "evaluation coordinates must be inside the reference domain"
+                    )
+                design = np.asarray(basis.design_at(grid))
+            designs.append(design)
+        return designs[0] @ self.time_transform, designs[1]
+
     def components(
         self, weights_g: Array | np.ndarray, weights_eta: Array | np.ndarray
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -66,16 +122,12 @@ class ANOVALogPSpline:
         expected = (self.time_basis.shape[1], self.frequency.basis.shape[1])
         if np.shape(weights_eta) != expected:
             raise ValueError(f"weights_eta must have shape {expected}")
-        bf = jnp.asarray(self.frequency.basis)
-        g = bf @ jnp.asarray(weights_g)
-        eta = jnp.einsum(
-            "ti,ij,fj->tf",
-            self.time_basis,
+        return anova_components(
+            jnp.asarray(self.time_basis),
+            jnp.asarray(self.frequency.basis),
+            weights_g,
             weights_eta,
-            bf,
-            optimize="optimal",
         )
-        return g, eta
 
     def __call__(
         self, weights_g: Array | np.ndarray, weights_eta: Array | np.ndarray

@@ -8,7 +8,7 @@ except ImportError:
 
 from .basis import SplineBasis
 from .config import PowerConfig, StationaryConfig
-from .data import TimeSeries, WishartData
+from .data import TimeSeries, WishartData, WishartGridData
 from .data.spectral import PowerData
 from .fit import fit
 from .models.anova import ANOVALogPSpline
@@ -25,6 +25,10 @@ from .preprocessing.power_partition import (
     mask_power,
     select_power_partition,
 )
+from .preprocessing.wishart_grid import (
+    coarse_grain_wishart_grid,
+    local_wishart_grid,
+)
 from .results import PSDResult
 
 __all__ = [
@@ -38,6 +42,9 @@ __all__ = [
     "SpectralMatrix",
     "TimeSeries",
     "WishartData",
+    "WishartGridData",
+    "local_wishart_grid",
+    "coarse_grain_wishart_grid",
     "PowerConfig",
     "PowerData",
     "moving_periodogram",

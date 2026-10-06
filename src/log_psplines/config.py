@@ -197,7 +197,9 @@ class PowerConfig:
     ``vi_steps``, ``vi_lr`` and ``vi_guide`` (``diag``, ``mvn``, ``lowrank:N``)
     control NumPyro SVI. Disable ``vi_early_stopping`` to run every step.
     VI returns one chain with ``vi_posterior_draws`` constrained draws and
-    stores losses and timings in ``result.vi``.
+    stores losses and timings in ``result.vi``. Complex WishartGridData
+    requires structure='anova' and method='nuts'; its independent Cholesky
+    fields honor ``centered``. Scalar ANOVA retains centered g/eta sites.
     """
 
     roughness_scale: float = 10.0

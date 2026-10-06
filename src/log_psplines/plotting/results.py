@@ -31,7 +31,9 @@ def plot_posterior_spectrum(
             true_psd = np.asarray(result.truth)
         if true_psd is not None:
             true_psd = np.asarray(true_psd)
-            if true_psd.ndim == 2:
+            if true_psd.ndim == 4:
+                true_psd = np.diagonal(true_psd, axis1=-2, axis2=-1).real
+            elif true_psd.ndim == 2:
                 true_psd = true_psd[..., None]
         ncols = 1 if true_psd is None else 3
         fig, axes = plt.subplots(

@@ -1,0 +1,3 @@
+# Generated study data, posterior archives, and source snapshots stay local.
+/*/
+*.log

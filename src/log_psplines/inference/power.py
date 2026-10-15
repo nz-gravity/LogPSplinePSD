@@ -274,15 +274,28 @@ def prepare_power_model(
         bf_raw = np.asarray(spline.frequency.design_at(data.frequency))
         bt_eigen = jnp.asarray(bt_raw @ pair["U_time"])
         bf_eigen = jnp.asarray(bf_raw @ pair["U_freq"])
+        _, first, inverse = np.unique(
+            data.frequency, return_index=True, return_inverse=True
+        )
+        if len(first) < len(data.frequency):
+            # Reuse each frequency projection without pooling paired sites.
+            # Preserve the original rotated basis and PLS initialization.
+            bf_unique = bf_eigen[first]
+            frequency_index = jnp.asarray(inverse)
 
-        def evaluate(coefficients):
-            return jnp.einsum(
-                "pi,ij,pj->p",
-                bt_eigen,
-                coefficients,
-                bf_eigen,
-                optimize="optimal",
-            )
+            def evaluate(coefficients):
+                projected = bf_unique @ coefficients.T
+                return jnp.sum(bt_eigen * projected[frequency_index], axis=1)
+        else:
+
+            def evaluate(coefficients):
+                return jnp.einsum(
+                    "pi,ij,pj->p",
+                    bt_eigen,
+                    coefficients,
+                    bf_eigen,
+                    optimize="optimal",
+                )
 
     def model() -> None:
         phi_time = _sample_precision("sigma_time", config)

@@ -13,8 +13,8 @@ class SpectralMatrix:
 
     log_variance (..., C) and theta (..., C*(C-1)//2) use row-major
     strict-lower-triangle ordering. Leading axes are untouched: frequency,
-    posterior draws, or a future (time, frequency) grid. This algebra does
-    not implement time-varying inference. Reconstruction uses NumPy complex128
+    posterior draws, or a (time, frequency) grid. Inference supplies fields
+    separately from this algebra. Reconstruction uses NumPy complex128
     as before, independently of JAX's inference precision configuration.
     """
 
@@ -30,7 +30,7 @@ class SpectralMatrix:
         theta_re: Float[Array | np.ndarray, "*batch _"] | None = None,
         theta_im: Float[Array | np.ndarray, "*batch _"] | None = None,
     ) -> Complex[np.ndarray, "*batch p p"]:
-        logs = np.asarray(log_variance)
+        logs = np.asarray(log_variance, dtype=np.float64)
         if logs.shape[-1] != self.channels:
             raise ValueError(
                 "log_variance trailing dimension must match channels"

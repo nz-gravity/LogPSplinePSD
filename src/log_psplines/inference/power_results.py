@@ -1,19 +1,30 @@
-"""Summarize every power-spectrum draw in bounded frequency chunks."""
+"""Summarize spectral draws in bounded frequency chunks."""
+
+from collections.abc import Callable, Sequence
 
 import numpy as np
 import xarray as xr
+from jax import Array
 
+from log_psplines.config import PowerConfig
 from log_psplines.models.reconstruction import spectral_quantiles
 
 
 def power_result_spectra(
-    posterior, evaluate, time, frequency, channels, config
-):
-    """Return a draw preview and all-draw summaries of diagonal spectra.
+    posterior: xr.Dataset,
+    evaluate: Callable[[slice], Array | np.ndarray],
+    time: np.ndarray,
+    frequency: np.ndarray,
+    channels: Sequence[str | int] | np.ndarray,
+    config: PowerConfig,
+    *,
+    matrix: bool = False,
+) -> tuple[xr.DataArray, xr.Dataset]:
+    """Return a draw preview and all-draw summaries of spectra.
 
-    evaluate(slice) returns (chain, draw, time, frequency, channel) variances.
-    All posterior draws enter quantiles and both means, regardless of preview
-    size. The caller's scientific forward model is evaluated before reduction.
+    evaluate(slice) returns (chain,draw,T,F,C) variances, or (chain,draw,T,F,C,C)
+    matrices when matrix=True. All draws enter summaries regardless of preview
+    size. Complex entrywise quantiles are not themselves spectral matrices.
     """
     nc, nd = posterior.sizes["chain"], posterior.sizes["draw"]
     keep = (
@@ -24,23 +35,45 @@ def power_result_spectra(
     preview = np.zeros((nc, keep, nt, nf, p, p), dtype=np.complex128)
     quantiles = np.zeros((3, nt, nf, p, p), dtype=np.complex128)
     mean = np.zeros((nt, nf, p, p), dtype=np.complex128)
-    geometric = np.zeros_like(mean)
+    geometric = None if matrix else np.zeros_like(mean)
+    coherence_q = np.zeros((3, nt, nf, p, p)) if matrix else None
+    magnitude_q = np.zeros((3, nt, nf, p, p)) if matrix else None
     diagonal = np.arange(p)
     for start in range(0, nf, config.spectrum_chunk_size):
         stop = min(nf, start + config.spectrum_chunk_size)
-        draws = np.asarray(evaluate(slice(start, stop)), dtype=float)
-        expected = (nc, nd, nt, stop - start, p)
+        draws = np.asarray(evaluate(slice(start, stop)))
+        expected = (
+            (nc, nd, nt, stop - start, p, p)
+            if matrix
+            else (nc, nd, nt, stop - start, p)
+        )
+        positive = (
+            np.diagonal(draws, axis1=-2, axis2=-1).real if matrix else draws
+        )
         if (
             draws.shape != expected
             or not np.isfinite(draws).all()
-            or np.any(draws <= 0)
+            or np.any(positive <= 0)
         ):
             raise ValueError(
                 f"posterior spectrum must be finite and positive with shape {expected}"
             )
+        if matrix:
+            preview[:, :, :, start:stop] = draws[:, indices]
+            quantiles[:, :, start:stop] = spectral_quantiles(
+                draws, axis=(0, 1)
+            )
+            mean[:, start:stop] = draws.mean(axis=(0, 1))
+            coherence_q[:, :, start:stop] = spectral_quantiles(
+                draws, kind="coherence", axis=(0, 1)
+            )
+            magnitude_q[:, :, start:stop] = spectral_quantiles(
+                draws, kind="magnitude", axis=(0, 1)
+            )
+            continue
         preview[:, :, :, start:stop, diagonal, diagonal] = draws[:, indices]
-        quantiles[:, :, start:stop, diagonal, diagonal] = spectral_quantiles(
-            draws, kind="real", axis=(0, 1)
+        quantiles[:, :, start:stop, diagonal, diagonal] = np.percentile(
+            draws, [5, 50, 95], axis=(0, 1)
         )
         mean[:, start:stop, diagonal, diagonal] = draws.mean(axis=(0, 1))
         geometric[:, start:stop, diagonal, diagonal] = np.exp(
@@ -67,13 +100,24 @@ def power_result_spectra(
                 coords={**coords, "percentile": [5.0, 50.0, 95.0]},
             ),
             "mean": xr.DataArray(mean, dims=dims, coords=coords),
-            "geometric_mean": xr.DataArray(
-                geometric, dims=dims, coords=coords
-            ),
         },
         attrs={"draws_per_chain": nd, "num_chains": nc},
     )
-    # Variable attributes survive PSDResult's flat NetCDF storage format.
+    if matrix:
+        summary["coherence_quantiles"] = xr.DataArray(
+            coherence_q,
+            dims=("percentile", *dims),
+            coords={**coords, "percentile": [5.0, 50.0, 95.0]},
+        )
+        summary["magnitude_quantiles"] = xr.DataArray(
+            magnitude_q,
+            dims=("percentile", *dims),
+            coords={**coords, "percentile": [5.0, 50.0, 95.0]},
+        )
+    else:
+        summary["geometric_mean"] = xr.DataArray(
+            geometric, dims=dims, coords=coords
+        )
     for variable in summary.data_vars.values():
         variable.attrs.update(summary.attrs)
     return spectrum, summary

@@ -25,13 +25,58 @@ if TYPE_CHECKING:
     from log_psplines.data.timeseries import TimeSeries
 
 
-class MovingPeriodogram(TypedDict):
-    """Raw scattered moving-periodogram ordinates."""
+class MovingPeriodogramCoordinates(TypedDict):
+    """Paired coordinates, without evaluating any Fourier coefficients."""
 
     u: Float[np.ndarray, "Q"]
     omega: Float[np.ndarray, "Q"]
+
+
+class MovingPeriodogram(MovingPeriodogramCoordinates):
+    """Raw scattered moving-periodogram ordinates."""
+
     coeff: Complex[np.ndarray, "Q ..."]
     mi: Float[np.ndarray, "Q ..."]
+
+
+def _tang_schedule(
+    n: int, *, m: int, thin: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return zero-based window starts and the positive frequency ladder."""
+    for name, value in (("n", n), ("m", m), ("thin", thin)):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, np.integer))
+            or value < 1
+        ):
+            raise ValueError(f"{name} must be a positive integer.")
+    n_blocks = (n - 2 * m) // (thin * m)
+    if n_blocks < 1:
+        raise ValueError("Series too short for these (m, thin).")
+
+    # A cycle visits m consecutive centres. Thinning skips entire cycles;
+    # it never closes up time across the skipped samples or an outage.
+    starts = (
+        thin * m * np.arange(n_blocks)[:, None] + np.arange(m)[None, :]
+    ).reshape(-1)
+    lam = 2.0 * np.arange(1, m + 1) / (2 * m + 1)
+    return starts, lam
+
+
+def tang_moving_periodogram_coordinates(
+    n: int, *, m: int, thin: int = 2
+) -> MovingPeriodogramCoordinates:
+    """Return the exact Tang schedule using only the record length.
+
+    ``u`` is the one-based window centre divided by ``n``; ``omega`` is
+    angular frequency in radians per sample. No data array or transform is
+    needed to determine these coordinates.
+    """
+    starts, lam = _tang_schedule(n, m=m, thin=thin)
+    return {
+        "u": (starts + m + 1) / n,
+        "omega": np.tile(np.pi * lam, starts.size // m),
+    }
 
 
 def tang_moving_periodogram(
@@ -55,21 +100,9 @@ def tang_moving_periodogram(
         )
     if not np.isfinite(x).all():
         raise ValueError("Moving-periodogram input data must be finite.")
-    if isinstance(m, bool) or not isinstance(m, (int, np.integer)) or m < 1:
-        raise ValueError("m must be a positive integer.")
-    if (
-        isinstance(thin, bool)
-        or not isinstance(thin, (int, np.integer))
-        or thin < 1
-    ):
-        raise ValueError("thin must be a positive integer.")
-
     n = x.shape[0]
-    n_blocks = (n - 2 * m) // (thin * m)
-    if n_blocks < 1:
-        raise ValueError("Series too short for these (m, thin).")
-
-    lam = 2.0 * np.arange(1, m + 1) / (2 * m + 1)
+    starts, lam = _tang_schedule(n, m=m, thin=thin)
+    n_blocks = starts.size // m
     omega = np.pi * lam
     nu = np.arange(2 * m + 1)
     phase = np.exp(-1j * np.pi * np.outer(nu, lam))
@@ -77,9 +110,6 @@ def tang_moving_periodogram(
     windows = np.lib.stride_tricks.sliding_window_view(
         channels, 2 * m + 1, axis=0
     )
-    starts = (
-        thin * m * np.arange(n_blocks)[:, None] + np.arange(m)[None, :]
-    ).reshape(-1)
     freq_index = np.tile(np.arange(m), n_blocks)
 
     selected = windows[starts]
@@ -208,11 +238,13 @@ def moving_periodogram(
 
 __all__ = [
     "MovingPeriodogram",
+    "MovingPeriodogramCoordinates",
     "bin_tang_ordinates",
     "moving_periodogram",
     "multivariate_moving_periodogram",
     "scattered_moving_periodogram",
     "tang_moving_periodogram",
+    "tang_moving_periodogram_coordinates",
 ]
 
 

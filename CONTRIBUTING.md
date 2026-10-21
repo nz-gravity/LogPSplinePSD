@@ -2,6 +2,14 @@
 
 This page contains notes for developers contributing to LogPSplinePSD.
 
+Keep moving-periodogram/Dynamic Whittle runners, comparison campaigns and
+their saved study outputs in
+[moving_periodogram_lisa_studies](https://github.com/nz-gravity/moving_periodogram_lisa_studies).
+Reusable algorithms, public examples and API regression tests belong here.
+Historical reports and compact results belong in
+[psd_studies_archive](https://github.com/nz-gravity/psd_studies_archive).
+Keep raw data, posterior draws and generated caches out of both repositories.
+
 ## Version Control and Releases
 
 ### Commit Types for Releases

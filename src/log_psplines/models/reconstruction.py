@@ -9,7 +9,7 @@ import xarray as xr
 from jax import Array
 from jaxtyping import Float
 
-from log_psplines.models.anova import ANOVALogPSpline
+from log_psplines.models.anova import ANOVALogPSpline, anova_components
 from log_psplines.models.matrix import SpectralMatrix
 
 if TYPE_CHECKING:
@@ -380,3 +380,43 @@ def reconstruct_power_spectrum(
         },
         name="spectral_density",
     )
+
+
+def wishart_grid_draws(
+    posterior: xr.Dataset,
+    basis_time: np.ndarray,
+    basis_frequency: np.ndarray,
+    channels: int,
+) -> np.ndarray:
+    """Reconstruct joint draws (chain,draw,T,F,C,C) in one frequency chunk.
+
+    Row fits are independent; pairing the same chain/draw indices gives draws
+    from their product posterior. Only log variances are exponentiated by
+    SpectralMatrix. Theta fields remain signed, in row-major lower order.
+    """
+
+    def field(label: str) -> np.ndarray:
+        g, eta = anova_components(
+            basis_time,
+            basis_frequency,
+            posterior[f"weights_g_{label}"].values,
+            posterior[f"weights_eta_{label}"].values,
+        )
+        return np.asarray(g[..., None, :] + eta)
+
+    logs = np.stack([field(f"delta_{j}") for j in range(channels)], axis=-1)
+    pairs = list(zip(*np.tril_indices(channels, k=-1), strict=True))
+    theta = []
+    for part in ("re", "im"):
+        theta.append(
+            np.stack(
+                [
+                    field(f"theta_{part}_{j}_{previous}")
+                    for j, previous in pairs
+                ],
+                axis=-1,
+            )
+            if pairs
+            else np.empty((*logs.shape[:-1], 0))
+        )
+    return SpectralMatrix(channels)(logs, *theta)

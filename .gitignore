@@ -319,6 +319,12 @@ docs/studies
 
 runs
 
+# Research campaigns are maintained in moving_periodogram_lisa_studies.
+/experiments/
+
+# Tests use isolated temporary directories; local output must stay unversioned.
+/tests/test-output/
+
 *.npz
 *.png
 studies

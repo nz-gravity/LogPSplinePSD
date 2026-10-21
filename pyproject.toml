@@ -127,10 +127,7 @@ branch = true
 source = ["log_psplines"]
 omit = [
     "src/log_psplines/_version.py",
-    "src/log_psplines/logger.py",
-    "src/log_psplines/benchmark/*",
-    "src/log_psplines/example_datasets/lvk_data.py",
-    "src/log_psplines/preprocessing/knots_locator/lvk_knot_allocator.py"
+    "src/log_psplines/logger.py"
 ]
 
 [tool.coverage.report]
@@ -167,28 +164,9 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = [
-    "log_psplines.example_datasets.lisatools_backend",
-    "log_psplines.example_datasets.lisa_data",
-    "log_psplines.example_datasets.lvk_data",
-    "log_psplines.example_datasets.utils",
     "log_psplines.example_datasets.varma_data",
-    "log_psplines.samplers.vi_init.core",
-    "log_psplines.samplers.vi_init.mixin",
-    "log_psplines.samplers.vi_init.adapters",
-    "log_psplines.diagnostics.vi_psis",
-    "log_psplines.diagnostics.plotting",
-    "log_psplines.diagnostics.posterior_diagnostics",
-    "log_psplines.diagnostics.derived_weights",
-    "log_psplines.diagnostics.mcmc",
-    "log_psplines.samplers.univar.univar_base",
-    "log_psplines.samplers.univar.nuts",
-    "log_psplines.samplers.utils",
-    "log_psplines.samplers.base_sampler",
-    "log_psplines.samplers.multivar.multivar_base",
-    "log_psplines.samplers.multivar.multivar_blocked_nuts",
     "log_psplines.inference.initialisation",
     "log_psplines.inference.components",
-    "log_psplines.benchmark.runtime_benchmark",
 ]
 disable_error_code = ["import-untyped", "import-not-found"]
 ignore_errors = true

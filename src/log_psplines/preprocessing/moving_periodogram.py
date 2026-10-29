@@ -13,12 +13,17 @@ the ordinates onto a rectangular ``PowerData`` grid. Use
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
 from jaxtyping import Complex, Float
 
 from log_psplines.data.spectral import PowerData
+from log_psplines.data.wishart_grid import WishartGridData
+from log_psplines.preprocessing.periodogram import _center_channels
+
+if TYPE_CHECKING:
+    from log_psplines.data.timeseries import TimeSeries
 
 
 class MovingPeriodogramCoordinates(TypedDict):
@@ -31,8 +36,8 @@ class MovingPeriodogramCoordinates(TypedDict):
 class MovingPeriodogram(MovingPeriodogramCoordinates):
     """Raw scattered moving-periodogram ordinates."""
 
-    coeff: Complex[np.ndarray, "Q"]
-    mi: Float[np.ndarray, "Q"]
+    coeff: Complex[np.ndarray, "Q ..."]
+    mi: Float[np.ndarray, "Q ..."]
 
 
 def _tang_schedule(
@@ -76,36 +81,49 @@ def tang_moving_periodogram_coordinates(
 
 
 def tang_moving_periodogram(
-    data: Float[np.ndarray, "n"], *, m: int, thin: int = 2
+    data: Float[np.ndarray, "n ..."], *, m: int, thin: int = 2
 ) -> MovingPeriodogram:
     """Return thinned zig-zag moving-periodogram ordinates.
 
-    ``data`` is a real series of length ``T``.  ``m`` is the half-width of
+    ``data`` is real with shape (n,) or (n,C). All channels share the window
+    centres and Fourier phases; coefficient/power shapes are (Q,) or (Q,C).
+    ``m`` is the half-width of
     each window, so each window has length ``2*m+1``.  The returned ``u`` is
     the true one-based window-centre divided by ``T`` and ``omega`` is angular
     frequency in radians per sample.
+    Each channel's global mean is removed once before selecting windows.
     """
+    if np.iscomplexobj(data):
+        raise ValueError("Moving-periodogram input data must be real.")
     x = np.asarray(data, dtype=float)
-    if x.ndim != 1:
+    if x.ndim not in (1, 2) or (x.ndim == 2 and x.shape[1] == 0):
         raise ValueError(
-            "Moving-periodogram input data must be one-dimensional."
+            "Moving-periodogram input data must have shape (n,) or (n,C)."
         )
     if not np.isfinite(x).all():
         raise ValueError("Moving-periodogram input data must be finite.")
-    starts, lam = _tang_schedule(x.size, m=m, thin=thin)
+    n = x.shape[0]
+    starts, lam = _tang_schedule(n, m=m, thin=thin)
     n_blocks = starts.size // m
     omega = np.pi * lam
     nu = np.arange(2 * m + 1)
     phase = np.exp(-1j * np.pi * np.outer(nu, lam))
-    windows = np.lib.stride_tricks.sliding_window_view(x, 2 * m + 1)
+    channels = _center_channels(x[:, None] if x.ndim == 1 else x)
+    windows = np.lib.stride_tricks.sliding_window_view(
+        channels, 2 * m + 1, axis=0
+    )
     freq_index = np.tile(np.arange(m), n_blocks)
 
     selected = windows[starts]
-    coeff = np.einsum("pn,pn->p", selected, phase.T[freq_index], optimize=True)
+    coeff = np.einsum(
+        "pcn,pn->pc", selected, phase.T[freq_index], optimize=True
+    )
     coeff /= np.sqrt(2.0 * np.pi * (2 * m + 1))
+    if x.ndim == 1:
+        coeff = coeff[:, 0]
     centres = starts + m + 1
     return {
-        "u": centres / x.size,
+        "u": centres / n,
         "omega": np.tile(omega, n_blocks),
         "coeff": coeff,
         "mi": np.abs(coeff) ** 2,
@@ -199,6 +217,10 @@ def moving_periodogram(
     """
     if not np.isfinite(dt) or dt <= 0:
         raise ValueError("dt must be strictly positive.")
+    if np.asarray(data).ndim != 1:
+        raise ValueError(
+            "Moving-periodogram input data must be one-dimensional."
+        )
     raw = tang_moving_periodogram(data, m=m, thin=thin)
     pooled = bin_tang_ordinates(raw, time_bin=time_bin, freq_bin=freq_bin)
     n_freq = np.unique(pooled["omega"]).size
@@ -221,6 +243,7 @@ __all__ = [
     "MovingPeriodogramCoordinates",
     "bin_tang_ordinates",
     "moving_periodogram",
+    "multivariate_moving_periodogram",
     "scattered_moving_periodogram",
     "tang_moving_periodogram",
     "tang_moving_periodogram_coordinates",
@@ -240,6 +263,10 @@ def scattered_moving_periodogram(
     """
     if not np.isfinite(dt) or dt <= 0:
         raise ValueError("dt must be strictly positive.")
+    if np.asarray(data).ndim != 1:
+        raise ValueError(
+            "Moving-periodogram input data must be one-dimensional."
+        )
     raw = tang_moving_periodogram(data, m=m, thin=thin)
     return PowerData(
         power=2.0 * raw["mi"],
@@ -247,4 +274,56 @@ def scattered_moving_periodogram(
         time=raw["u"],
         frequency=raw["omega"] / (2.0 * np.pi * dt),
         units="moving-periodogram coefficient variance",
+    )
+
+
+def multivariate_moving_periodogram(
+    series: TimeSeries,
+    *,
+    m: int,
+    thin: int = 2,
+    reference_time: np.ndarray | None = None,
+) -> WishartGridData:
+    """Prepare complex channel vectors at their exact moving-window sites.
+
+    Require finite real (n,C) samples on one uniform time axis. Physical
+    coefficients are sqrt(4*pi*dt) times Tang coefficients, with covariance
+    in one-sided data_unit^2/Hz; each vector has count one. The full-record
+    channel means are removed once; there is no block detrending, pooling
+    or channel standardization. The likelihood uses
+    a composite dynamic-Whittle/local-stationarity approximation, adopting
+    proper complex coefficients rather than guaranteeing transform
+    properness. Thinning does not establish statistical independence.
+    reference_time fixes the spline domain and reconstruction grid, and must
+    cover every observed centre. It defaults to all exact centre times;
+    supply a smaller grid for long records and share it across comparisons.
+    """
+    values, time = np.asarray(series.data), np.asarray(series.t, dtype=float)
+    if (
+        np.iscomplexobj(values)
+        or values.ndim != 2
+        or time.ndim != 1
+        or len(time) != values.shape[0]
+        or len(time) < 2
+        or not np.isfinite(values).all()
+        or not np.isfinite(time).all()
+        or np.any(np.diff(time) <= 0)
+        or not np.allclose(np.diff(time), time[1] - time[0])
+    ):
+        raise ValueError(
+            "moving periodograms require finite real uniformly sampled data"
+        )
+    dt = float(time[1] - time[0])
+    raw = tang_moving_periodogram(values, m=m, thin=thin)
+    centres = np.rint(raw["u"] * len(time)).astype(int) - 1
+    return WishartGridData.from_scattered_coefficients(
+        np.sqrt(4.0 * np.pi * dt) * raw["coeff"],
+        time[centres],
+        raw["omega"] / (2.0 * np.pi * dt),
+        reference_time=reference_time,
+        normalization="sqrt(4*pi*dt)*Tang coefficients; exact paired sites",
+        preprocessing={
+            "mean_removal": "global_per_channel",
+            "window": "rectangular",
+        },
     )

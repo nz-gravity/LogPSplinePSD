@@ -90,12 +90,13 @@ VI and NUTS
    NumPyro NUTS tuning controls. Per-channel values can be supplied with
    ``target_accept_prob_by_channel`` and ``max_tree_depth_by_channel``.
 
-``roughness_scale``, ``smoothing_parameterization``
+``roughness_scale``
    Each stationary spline block draws ``sigma ~ HalfNormal(roughness_scale)``.
    The existing penalty uses precision ``sigma**-2``. Smaller sigma gives
    stronger smoothing. The default scale 1.28 comes from the stationary
    smoothing-prior study and is specific to this penalty normalization.
-   Centered weights are the default; non-centering remains experimental.
+   Coefficient coordinates automatically combine prior scales with expected
+   likelihood information; no parameterization selector is needed.
 
 Coarse Graining
 ---------------
@@ -147,7 +148,6 @@ class StationaryConfig:
     num_chains: int = 1
     chain_method: Literal["parallel", "vectorized", "sequential"] | None = None
     roughness_scale: float = 1.28
-    smoothing_parameterization: Literal["centered", "noncentered"] = "centered"
     rng_key: int = 42
     coarse_grain_config: CoarseGrainConfig | dict | None = None
     Nb: int = 1
@@ -200,7 +200,14 @@ class PowerConfig:
     ``vi_steps``, ``vi_lr`` and ``vi_guide`` (``diag``, ``mvn``, ``lowrank:N``)
     control NumPyro SVI. Disable ``vi_early_stopping`` to run every step.
     VI returns one chain with ``vi_posterior_draws`` constrained draws and
-    stores losses and timings in ``result.vi``.
+    stores losses and timings in ``result.vi``. Complex WishartGridData
+    requires structure='tensor' and method='nuts'. Its plain Cholesky tensor
+    fields use automatic information-scaled coordinates and their supplied frequency penalty, including
+    its ridge, rather than this config's scalar null_precision/ridge_eps options.
+    interaction_scale applies only to scalar ANOVA. All Gaussian spline fields
+    use automatic sampling coordinates while retaining their own priors.
+    An explicit config's roughness_scale defines each matrix smoothing
+    hyperprior; fitting matrix data with no config uses the stationary value 1.28.
     """
 
     roughness_scale: float = 10.0
@@ -222,7 +229,6 @@ class PowerConfig:
     ridge_eps: float = 1e-6
     init_penalty_time: float = 0.05
     init_penalty_freq: float = 0.05
-    centered: bool = False
     dense_mass: bool = False
     n_warmup: int = 250
     n_samples: int = 300

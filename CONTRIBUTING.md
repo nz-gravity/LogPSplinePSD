@@ -46,7 +46,7 @@ cd docs
 
 The built HTML documentation will be in `docs/_build/html/`. Jupyter Book
 executes the tutorial notebooks and caches results for unchanged code cells.
-A fresh CI checkout executes all three tutorials, including the time-varying
+A fresh CI checkout executes all four tutorials, including the time-varying
 scaling sweep, and fails on execution errors. The Colab installation cells
 carry the standard `skip-execution` tag, so docs builds test the already
 installed checkout. Colab runs those cells normally.
@@ -183,7 +183,12 @@ separation, model component curves, and component knot locations.
 `plotting/preprocessing.py`. Post-fit diagnostics in `diagnostics/` assess
 sampler behaviour and recovery of the fitted spectrum.
 
-Multivariate time-varying inference is not yet implemented.
+The multivariate time-varying path uses ``WishartGridData`` from normalized
+proper complex coefficients, local FFTs or paired moving-periodogram
+coefficients. Ordinary ``LogPSpline`` tensor fields parameterize the modified
+Cholesky factors; cross-field coefficients are marginalized jointly and restored
+conditionally after NUTS. See ``docs/examples/multivariate-timevarying-example.ipynb``.
+Matrix-grid VI and a multivariate WDM observation model are not implemented.
 
 
 ## Scientific precision and posterior summaries

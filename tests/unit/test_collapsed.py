@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
+import pytest
 from scipy.linalg import block_diag
 from scipy.stats import multivariate_normal
 
@@ -17,9 +18,10 @@ from log_psplines.inference.collapsed import (
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 
 
-def _example():
+def _example(log_scale=0.0):
     rng = np.random.default_rng(83)
     n, replicates, j = 5, 3, 2
+    scale = np.exp(log_scale / 2)
     bases, penalties = {}, {}
     for part, counts in (("re", (2, 1)), ("im", (3, 2))):
         bases[part] = tuple(rng.normal(size=(n, k)) for k in counts)
@@ -29,10 +31,10 @@ def _example():
             penalties[part].append(m @ m.T + np.eye(k))
     return {
         "channel_index": j,
-        "u_re_channel": jnp.asarray(rng.normal(size=(n, replicates))),
-        "u_im_channel": jnp.asarray(rng.normal(size=(n, replicates))),
-        "u_re_prev": jnp.asarray(rng.normal(size=(n, j, replicates))),
-        "u_im_prev": jnp.asarray(rng.normal(size=(n, j, replicates))),
+        "u_re_channel": jnp.asarray(scale * rng.normal(size=(n, replicates))),
+        "u_im_channel": jnp.asarray(scale * rng.normal(size=(n, replicates))),
+        "u_re_prev": jnp.asarray(scale * rng.normal(size=(n, j, replicates))),
+        "u_im_prev": jnp.asarray(scale * rng.normal(size=(n, j, replicates))),
         "basis_delta": jnp.asarray(rng.normal(size=(n, 3))),
         "penalty_delta": jnp.eye(3),
         "basis_theta_re_by_component": bases["re"],
@@ -76,8 +78,7 @@ def _independent_gaussian(kw, logd, sigmas):
     response = np.concatenate([y.real.ravel(), y.imag.ravel()])
     precision = np.tile(
         np.repeat(
-            kw["eta"]
-            / (kw["enbw"] * kw["duration"] * np.exp(np.clip(logd, -80, 80))),
+            kw["eta"] / (kw["enbw"] * kw["duration"] * np.exp(logd)),
             y.shape[-1],
         ),
         2,
@@ -97,11 +98,14 @@ def _independent_gaussian(kw, logd, sigmas):
     )
 
 
-def test_collapsed_integral_matches_full_joint_and_conditional_density():
-    kw = _example()
+@pytest.mark.parametrize("log_scale", [-100.0, 0.0, 100.0])
+def test_collapsed_integral_matches_full_joint_and_conditional_density(
+    log_scale,
+):
+    kw = _example(log_scale)
     prepared = prepare_collapsed_channel(kw)
     for amplitude in (0.03, 0.7, 4.0):
-        logd = np.linspace(-0.7, 0.8, 5)
+        logd = np.linspace(-0.7, 0.8, 5) + log_scale
         sigmas = amplitude * np.array([1.0, 0.4, 1.3, 0.8])
         expected_mean, covariance, prior, x, y, precision = (
             _independent_gaussian(kw, logd, sigmas)
@@ -134,10 +138,13 @@ def test_collapsed_integral_matches_full_joint_and_conditional_density():
         )
 
 
-def test_marginal_gradients_match_independent_gaussian_identity():
-    kw = _example()
+@pytest.mark.parametrize("log_scale", [-100.0, 0.0, 100.0])
+def test_marginal_gradients_match_independent_gaussian_identity(log_scale):
+    kw = _example(log_scale)
     prepared = prepare_collapsed_channel(kw)
-    point = np.r_[np.linspace(-0.7, 0.8, 5), np.log([0.3, 0.4, 0.8, 0.6])]
+    point = np.r_[
+        np.linspace(-0.7, 0.8, 5) + log_scale, np.log([0.3, 0.4, 0.8, 0.6])
+    ]
 
     def target(v):
         return gaussian_theta_conditional(
@@ -176,10 +183,12 @@ def test_marginal_gradients_match_independent_gaussian_identity():
     )
 
 
-def test_conditional_draws_recover_moments_and_original_likelihood():
-    kw = _example()
+@pytest.mark.parametrize("log_scale", [-100.0, 0.0, 100.0])
+def test_conditional_draws_recover_moments_and_original_likelihood(log_scale):
+    kw = _example(log_scale)
+    kw["basis_delta"] = kw["basis_delta"].at[:, 0].set(1.0)
     prepared = prepare_collapsed_channel(kw)
-    weights = np.array([0.1, -0.3, 0.15])
+    weights = np.array([0.1 + log_scale, -0.3, 0.15])
     sigmas = np.array([0.3, 0.4, 0.8, 0.6])
     shape = (2, 3000)
     posterior = {
@@ -231,6 +240,23 @@ def test_conditional_draws_recover_moments_and_original_likelihood():
         **{key: kw[key] for key in ("Nb", "Nh", "duration", "eta", "enbw")},
     )
     assert output["log_likelihood_block_2"].shape == shape
+    previous = np.asarray(kw["u_re_prev"]) + 1j * np.asarray(kw["u_im_prev"])
+    observed = np.asarray(kw["u_re_channel"]) + 1j * np.asarray(
+        kw["u_im_channel"]
+    )
+    residual = observed - np.einsum(
+        "fj,fjr->fr", theta["re"] + 1j * theta["im"], previous
+    )
+    direct = (
+        -kw["eta"]
+        / kw["enbw"]
+        * (
+            kw["Nb"] * kw["Nh"] * np.sum(logd)
+            + np.sum(np.exp(-logd) * np.sum(abs(residual) ** 2, axis=-1))
+            / kw["duration"]
+        )
+    )
+    np.testing.assert_allclose(expected, direct, atol=1e-10)
     np.testing.assert_allclose(
         output["log_likelihood_block_2"][0, 0], expected, atol=1e-10
     )
@@ -247,7 +273,7 @@ def test_model_samples_same_scales_without_explicit_theta_weights():
         if site["type"] == "sample" and not site.get("is_observed")
     }
     assert sample_names == {
-        "weights_delta_2",
+        "weights_delta_2_raw",
         "sigma_delta_2",
         *(f"sigma_{name}" for name in prepared["theta_names"]),
     }

@@ -380,3 +380,42 @@ def reconstruct_power_spectrum(
         },
         name="spectral_density",
     )
+
+
+def wishart_grid_draws(
+    posterior: xr.Dataset,
+    basis_time: np.ndarray,
+    basis_frequency: np.ndarray,
+    channels: int,
+) -> np.ndarray:
+    """Reconstruct joint draws (chain,draw,T,F,C,C) in one frequency chunk.
+
+    Row fits are independent; pairing the same chain/draw indices gives draws
+    from their product posterior. Only log variances are exponentiated by
+    SpectralMatrix. Theta fields remain signed, in row-major lower order.
+    """
+
+    def field(label: str) -> np.ndarray:
+        return np.einsum(
+            "ti,cdij,fj->cdtf",
+            basis_time,
+            posterior[f"weights_{label}"].values,
+            basis_frequency,
+        )
+
+    logs = np.stack([field(f"delta_{j}") for j in range(channels)], axis=-1)
+    pairs = list(zip(*np.tril_indices(channels, k=-1), strict=True))
+    theta = []
+    for part in ("re", "im"):
+        theta.append(
+            np.stack(
+                [
+                    field(f"theta_{part}_{j}_{previous}")
+                    for j, previous in pairs
+                ],
+                axis=-1,
+            )
+            if pairs
+            else np.empty((*logs.shape[:-1], 0))
+        )
+    return SpectralMatrix(channels)(logs, *theta)

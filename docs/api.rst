@@ -84,8 +84,149 @@ Bayes factors without restoring consistent normalization.
 
 Enable ``JAX_ENABLE_X64=true`` before Python starts for stationary multivariate
 fits. The first Cholesky row has no cross-spectrum coefficients to integrate.
+Log variances are not clipped: stationary and matrix-grid fits use the same
+likelihood, including after a change of physical units. Inputs and calculations
+must remain representable in the chosen floating-point precision.
 See the :doc:`multivariate example <examples/multivariate-example>` for the
 completion-of-the-square derivation and a comparison of NUTS and VI.
+
+Automatic spline coordinates
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every Gaussian spline field that remains numerically sampled uses automatic
+information-scaled coordinates: stationary scalar and multivariate delta
+fields, scalar power tensor/ANOVA fields, and matrix grid/paired delta fields.
+Gaussian cross-spectrum coefficients remain analytically marginalized.
+There is no centered/noncentered selector. Remove the former
+``StationaryConfig.smoothing_parameterization`` and ``PowerConfig.centered``
+arguments; no replacement argument is needed.
+
+In the penalty eigenbasis, let ``a_k`` be a coefficient's current prior
+standard deviation and ``h_k`` its fixed expected log-variance information.
+The model samples
+
+.. math::
+
+   c_k=(a_k^{-2}+h_k)^{-1/2},\qquad
+   z_k\sim N(0,a_k^2/c_k^2),\qquad s_k=c_k z_k.
+
+The physical coefficient still has exactly ``s_k ~ Normal(0, a_k)``. The
+Normal density includes the parameter-dependent transformation Jacobian;
+independent tests check both density and smoothing-scale gradients. Each
+model keeps its own penalty, ridge, null-mode prior and hyperprior.
+
+The information is computed once from squared eigenbasis design entries and
+observation counts. Complex stationary observations use ``Nb*Nh*eta/enbw``;
+matrix cells use ``counts/enbw``; scalar real-power components use
+``counts/2``. Masked cells contribute zero. No truth spectrum or preliminary
+posterior fit is used. Tight prior directions approach noncentering, while
+well-measured directions approach fixed likelihood scaling.
+
+The same coordinates are used by NUTS and supported VI fits. VI still makes
+an approximation: changing coordinates changes what a restricted Gaussian
+guide can represent, so improved VI accuracy is not guaranteed. Physical
+weights and spectra remain in the posterior, alongside sampled coordinates.
+Parametric model parameters without Gaussian spline priors are unchanged.
+
+Multivariate Cholesky splines
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The target is the Hermitian spectral density matrix :math:`S(t,f)`: its
+diagonal entries are channel PSDs, and its off-diagonal entries are complex
+cross-spectra. Write :math:`h_j=\log D_{jj}` and let :math:`T` be unit lower
+triangular with :math:`T_{jl}=-\theta_{jl}` for :math:`j>l`. Then
+
+.. math::
+
+   D=\operatorname{diag}(e^{h_1},\ldots,e^{h_p}),\qquad
+   S^{-1}=T^\dagger D^{-1}T,\qquad S=T^{-1}D(T^{-1})^\dagger.
+
+There are :math:`p^2` real spline fields: :math:`p` log innovation variances
+and the real and imaginary parts of :math:`p(p-1)/2` regression coefficients.
+The regression coefficients are not themselves CSD entries. For two channels,
+
+.. math::
+
+   S=\begin{pmatrix}
+      e^{h_1} & e^{h_1}\theta_{21}^*\\
+      e^{h_1}\theta_{21} & e^{h_2}+e^{h_1}|\theta_{21}|^2
+   \end{pmatrix}.
+
+Every reconstructed draw is positive definite. Elementwise posterior medians
+and quantiles need not themselves form a positive-definite matrix.
+The :doc:`multivariate time-varying tutorial <examples/multivariate-timevarying-example>`
+walks through a simulated complex-coefficient example, reconstruction and
+sampling diagnostics.
+
+``WishartGridData`` uses ordinary ``LogPSpline`` fields: one spline for each
+log innovation variance and each real or imaginary regression coefficient.
+A frequency-only model has ``time=None``. A tensor model evaluates each
+field as ``Bt @ W @ Bf.T``, or at exact paired coordinates. There is no
+multivariate ANOVA decomposition or alternative matrix ANOVA path.
+
+At each observed cell, normalized complex coefficients have covariance
+:math:`S(t,f)`. With :math:`Y=\sum_{r=1}^{n}x_rx_r^\dagger`, the likelihood is
+
+.. math::
+
+   \log L=-\sum_{t,f}\left[n_{tf}\log\det S(t,f)
+           +\operatorname{tr}\{S(t,f)^{-1}Y_{tf}\}\right]+\mathrm{constant}
+
+for independent zero-mean proper complex Gaussian coefficients and unit ENBW.
+The local Fourier frontends use this as a Whittle approximation; tapering,
+leakage and dependence between observations affect that approximation. The
+stored ENBW divides the log-likelihood as described below. Real same-cell WDM
+outer products describe a real covariance, not the full complex CSD. A multivariate WDM observation
+model connecting cross-cell covariances to :math:`S(t,f)` is not implemented.
+
+Conditional on the diagonal field and smoothing scales, cross-spectrum
+coefficients still enter the complex regression linearly. They are integrated
+jointly; NUTS samples diagonal coefficients and smoothing scales. One joint
+conditional Gaussian draw restores every cross-field coefficient for each
+retained draw. There is no explicit cross-coefficient sampling option.
+Enable ``JAX_ENABLE_X64=true``. Matrix grid/paired inference currently
+supports NUTS; its VI path is not implemented.
+
+For time-major vectorized coefficients, the Gaussian precision is
+
+.. math::
+
+   Q = \sigma_t^{-2}(P_t\otimes I_f)
+       + \sigma_f^{-2}(I_t\otimes P_f).
+
+Each field has independent HalfNormal smoothing scales, with the scale
+specified by ``PowerConfig.roughness_scale``. The frequency penalty ``Pf``
+is positive definite and includes its existing ridge; the time penalty
+``Pt`` is positive semidefinite. No additional tensor ridge or special
+null-mode prior is added. The default matrix frequency basis uses the
+stationary max-normalization and ridge convention. A supplied model retains
+its supplied penalty. With no explicit configuration, the matrix entry point
+uses roughness scale 1.28; an explicit
+``PowerConfig`` controls its own settings.
+
+The Gaussian calculation evaluates residual power at the conditional mean
+plus the prior quadratic, avoiding subtraction of large nearly equal terms.
+Original-basis coefficient draws remain in ``result.posterior``. Nonlinear
+spectral summaries use the reconstructed posterior, and saved
+``log_likelihood_block_*`` values are the ordinary row likelihood at these
+draws. ``row_latent_dimensions`` counts sampled parameters;
+``row_coefficient_counts`` also includes reconstructed coefficients.
+
+The exact stationary restriction is ``LogPSpline(frequency_basis, time=None)``:
+the time basis is the constant one, the time penalty is zero, and no unused
+time smoothing parameter is sampled. Its frequency precision is exactly
+``Pf / sigma_f**2``. Equality with a stationary fit also requires matching
+the basis, penalty, smoothing hyperprior, counts, duration normalization
+and ENBW. Tests compare marginal integrals, gradients and conditional
+covariances under that restriction, including masks and non-unit ENBW.
+Increasing a second-order time penalty alone does not enforce stationarity,
+because a linear time trend is also in its null space.
+
+Stationary simulation controls precede time-varying recovery studies.
+Passing algebraic tests or one fitted realization does not establish
+repeated-noise interval calibration. Marginalization reduces the sampled
+dimension but introduces a coefficient-sized Gaussian factorization per
+likelihood evaluation; runtime still depends on basis size and sampler geometry.
 
 Posterior summary semantics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -127,10 +268,34 @@ Data Containers
 .. autoclass:: log_psplines.data.PowerData
    :members:
 
+.. autoclass:: log_psplines.data.WishartGridData
+   :members:
+
 Time-Varying Preprocessing
 --------------------------
 
+Local FFT and moving-periodogram transforms remove each channel's full-record
+mean once before extracting windows. They preserve local mean variation;
+there is no per-window detrending. ``local_wishart_grid`` accepts the ordinary
+``window`` taper specification, defaulting to rectangular windows. Coefficients
+are normalized by ``sqrt(2 / (fs * sum(window**2)))`` in one-sided PSD units;
+DC and an even-length Nyquist ordinate are omitted.
+
+``WishartGridData.enbw`` defaults to one and is computed for local FFT tapers.
+As in the stationary likelihood, ENBW divides both the log-determinant and
+quadratic terms. It changes information weighting, not ``Y/counts`` or the
+integer raw counts. This is an approximation for taper-induced dependence,
+not a proof that adjacent coefficients are independent. ENBW and preprocessing
+history survive masking, pooling and result serialization. Externally supplied
+statistics retain unknown preprocessing history unless it is supplied.
+
 .. autofunction:: log_psplines.preprocessing.wdm.wdm_periodogram
+
+.. autofunction:: log_psplines.preprocessing.wishart_grid.local_wishart_grid
+
+.. autofunction:: log_psplines.preprocessing.moving_periodogram.multivariate_moving_periodogram
+
+.. autofunction:: log_psplines.preprocessing.wishart_grid.coarse_grain_wishart_grid
 
 .. autofunction:: log_psplines.preprocessing.moving_periodogram.moving_periodogram
 

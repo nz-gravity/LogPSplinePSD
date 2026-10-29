@@ -1,10 +1,10 @@
 """Tensor-penalty algebra for time-frequency spline models.
 
 Operate on supplied marginal penalties without constructing a dense Kronecker
-precision or choosing a smoothing hyperprior. The time-frequency prior uses
-trace-normalized penalties before adding a ridge. The existing stationary
-SplineBasis default is max-normalized and already ridged, so it must not be
-silently substituted for the time-frequency prior.
+precision or choosing a smoothing hyperprior. The scalar time-frequency prior
+uses trace-normalized penalties before adding a ridge. Stationary and matrix
+tensor models retain a max-normalized, already-ridged frequency penalty.
+These conventions define different priors and must not be silently interchanged.
 """
 
 import jax.numpy as jnp

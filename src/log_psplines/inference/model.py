@@ -10,11 +10,14 @@ import jax.numpy as jnp
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
-from jax.scipy.linalg import solve_triangular
 
 from log_psplines.config import StationaryConfig
 from log_psplines.data.spectral import WishartData
 from log_psplines.inference.components import SpectralComponents
+from log_psplines.inference.coordinates import (
+    coordinate_scales,
+    spline_coordinates,
+)
 from log_psplines.inference.initialisation import prepare_components
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 from log_psplines.models.spectrum import build_spline
@@ -49,8 +52,13 @@ def channel_model_kwargs(
             model_kwargs["penalties_theta_im"][j]
         ),
         "roughness_scale": model_kwargs["roughness_scale"],
-        "smoothing_parameterization": model_kwargs.get(
-            "smoothing_parameterization", "centered"
+        "delta_coordinates": spline_coordinates(
+            model_kwargs["bases_delta"][j],
+            model_kwargs["penalties_delta"][j],
+            model_kwargs["Nb"]
+            * model_kwargs["Nh"]
+            * model_kwargs.get("eta", 1.0)
+            / model_kwargs.get("enbw", 1.0),
         ),
         "duration": model_kwargs["duration"],
         "Nb": model_kwargs["Nb"],
@@ -63,35 +71,19 @@ def channel_model_kwargs(
 def _sample_pspline_block(
     sigma_name: str,
     weights_name: str,
-    penalty_matrix: jnp.ndarray,
     roughness_scale: float,
-    smoothing_parameterization: str = "centered",
+    coordinates: dict,
 ) -> jnp.ndarray:
-    """Draw spline weights; return shape ``(K,)`` under a HalfNormal scale."""
+    """Return physical weights under the unchanged proper Gaussian prior."""
     sigma = numpyro.sample(sigma_name, dist.HalfNormal(roughness_scale))
-
-    k = penalty_matrix.shape[0]
-    base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
-    if smoothing_parameterization == "noncentered":
-        raw_weights = numpyro.sample(f"{weights_name}_raw", base_normal)
-        cholesky = jnp.linalg.cholesky(penalty_matrix)
-        weights = sigma * solve_triangular(
-            cholesky.T, raw_weights, lower=False
-        )
-        numpyro.deterministic(weights_name, weights)
-    else:
-        weights = numpyro.sample(weights_name, base_normal)
-
-    if smoothing_parameterization == "centered":
-        wPw = jnp.dot(weights, jnp.dot(penalty_matrix, weights))
-        precision = sigma**-2
-        log_prior_w = 0.5 * k * jnp.log(precision) - 0.5 * precision * wPw
-        base_log_prob = base_normal.log_prob(weights)
-        numpyro.factor(
-            f"weights_prior_{weights_name}", log_prior_w - base_log_prob
-        )
-
-    return weights
+    prior_scale = sigma / jnp.sqrt(coordinates["eigenvalues"])
+    scale = coordinate_scales(prior_scale, coordinates["information"])
+    raw = numpyro.sample(
+        f"{weights_name}_raw",
+        dist.Normal(0.0, prior_scale / scale).to_event(1),
+    )
+    weights = coordinates["rotation"] @ (raw * scale)
+    return numpyro.deterministic(weights_name, weights)
 
 
 def _scalar_channel_model(
@@ -106,7 +98,7 @@ def _scalar_channel_model(
     Nb: int,
     Nh: int,
     roughness_scale: float,
-    smoothing_parameterization: str = "centered",
+    delta_coordinates: dict,
     enbw: float = 1.0,
     eta: float = 1.0,
     **unused_theta_kwargs: Any,
@@ -117,9 +109,8 @@ def _scalar_channel_model(
     weights = _sample_pspline_block(
         "sigma_delta_0",
         "weights_delta_0",
-        penalty_delta,
         roughness_scale,
-        smoothing_parameterization,
+        delta_coordinates,
     )
     log_delta_sq = build_spline(basis_delta, weights)
     empty_theta = jnp.zeros((u_re_channel.shape[0], 0))
@@ -141,7 +132,9 @@ def _scalar_channel_model(
     numpyro.deterministic("log_likelihood_block_0", likelihood)
 
 
-def empirical_init_values(kwargs: dict[str, Any], channel: int) -> dict:
+def empirical_init_values(
+    kwargs: dict[str, Any], channel: int, coordinates: dict
+) -> dict:
     """Initialize the reduced state from empirical conditional-spectrum pilots.
 
     The pilot selects starting values only; it does not change any prior.
@@ -178,12 +171,11 @@ def empirical_init_values(kwargs: dict[str, Any], channel: int) -> dict:
         )
         values[f"sigma_{label}"] = sigma
         if label.startswith("delta"):
-            if kwargs.get("smoothing_parameterization") == "noncentered":
-                values[f"weights_{label}_raw"] = jnp.asarray(
-                    np.linalg.cholesky(penalty).T @ weights / sigma
-                )
-            else:
-                values[f"weights_{label}"] = jnp.asarray(weights)
+            prior_scale = sigma / jnp.sqrt(coordinates["eigenvalues"])
+            scale = coordinate_scales(prior_scale, coordinates["information"])
+            values[f"weights_{label}_raw"] = (
+                coordinates["rotation"].T @ weights / scale
+            )
     return values
 
 
@@ -197,7 +189,9 @@ def prepare_channel_model(
     The first row remains a scalar log-spectrum model.
     """
     kwargs = channel_model_kwargs(model_kwargs, channel_index)
-    initial = empirical_init_values(model_kwargs, channel_index)
+    initial = empirical_init_values(
+        model_kwargs, channel_index, kwargs["delta_coordinates"]
+    )
     if channel_index == 0:
         return _scalar_channel_model, kwargs, initial
     # Local import keeps the spline-prior helper available to collapsed.py
@@ -216,8 +210,6 @@ def prepare_model(
 ) -> tuple[dict, SpectralComponents]:
     if not np.isfinite(config.roughness_scale) or config.roughness_scale <= 0:
         raise ValueError("roughness_scale must be finite and positive")
-    if config.smoothing_parameterization not in ("centered", "noncentered"):
-        raise ValueError("Unknown smoothing_parameterization")
     if data.p > 1 and not jax.config.x64_enabled:
         raise ValueError(
             "Multivariate Gaussian marginalization requires JAX_ENABLE_X64=true"
@@ -272,7 +264,6 @@ def prepare_model(
         "bases_theta_im": bases_theta_im,
         "penalties_theta_im": penalties_theta_im,
         "roughness_scale": float(config.roughness_scale),
-        "smoothing_parameterization": config.smoothing_parameterization,
         "initial_weights_delta": tuple(
             m.weights for m in spline.diagonal_models
         ),

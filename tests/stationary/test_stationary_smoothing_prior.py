@@ -1,247 +1,229 @@
-"""Regression checks for stationary HalfNormal spline smoothing."""
-
-from dataclasses import replace
+"""Independent prior and likelihood checks for automatic stationary coordinates."""
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import numpyro
+import numpyro.distributions as dist
+import pytest
 import xarray as xr
-from jax.scipy.linalg import solve_triangular
 from numpyro.infer.util import log_density
 from scipy.stats import halfnorm
 
 from log_psplines import StationaryConfig, TimeSeries, fit
 from log_psplines.example_datasets.varma_data import VARMAData
+from log_psplines.inference.coordinates import (
+    coordinate_scales,
+    spline_coordinates,
+)
 from log_psplines.inference.log_likelihood import compute_pointwise_lnl
 from log_psplines.inference.model import (
     _sample_pspline_block,
     _scalar_channel_model,
     channel_model_kwargs,
+    prepare_channel_model,
     prepare_model,
 )
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 from log_psplines.preprocessing.spectral import preprocess_to_freq_domain
 
 
-def test_stationary_model_samples_sigma():
+def test_stationary_model_samples_sigma_and_scaled_coordinates():
     assert StationaryConfig().roughness_scale == 1.28
+    coordinates = spline_coordinates(np.eye(3), np.eye(3), 4.0)
 
     def model():
         _sample_pspline_block(
-            "sigma_delta_0", "weights_delta_0", jnp.eye(3), 1.28
+            "sigma_delta_0", "weights_delta_0", 1.28, coordinates
         )
 
-    trace = numpyro.handlers.trace(
-        numpyro.handlers.seed(model, jax.random.PRNGKey(2))
-    ).get_trace()
-    assert {"sigma_delta_0", "weights_delta_0"} <= trace.keys()
-    assert np.isfinite(
-        log_density(
-            model,
-            (),
-            {},
-            {
-                "sigma_delta_0": jnp.array(1.0),
-                "weights_delta_0": jnp.zeros(3),
-            },
-        )[0]
+    density, trace = log_density(
+        model,
+        (),
+        {},
+        {
+            "sigma_delta_0": 1.0,
+            "weights_delta_0_raw": jnp.zeros(3),
+        },
+    )
+    assert np.isfinite(density)
+    assert trace["weights_delta_0_raw"]["type"] == "sample"
+    assert trace["weights_delta_0"]["type"] == "deterministic"
+
+
+@pytest.mark.parametrize("sigma", [1e-7, 0.4, 10.0])
+@pytest.mark.parametrize("information_weight", [0.0, 2.0, 1e6])
+def test_stationary_prior_density_and_scale_gradient(
+    sigma, information_weight
+):
+    penalty = np.array([[2.0, 0.2], [0.2, 1.0]])
+    coordinates = spline_coordinates(
+        np.array([[1.0, 0.1], [0.2, 1.0], [0.4, 0.6]]),
+        penalty,
+        information_weight,
+    )
+    z = jnp.array([0.3, -0.5])
+
+    def model():
+        _sample_pspline_block("sigma", "weights", 1.28, coordinates)
+
+    def difference(log_sigma):
+        sf = jnp.exp(log_sigma)
+        density, trace = log_density(
+            model, (), {}, {"sigma": sf, "weights_raw": z}
+        )
+        physical = trace["weights"]["value"]
+        scale = coordinate_scales(
+            sf / jnp.sqrt(coordinates["eigenvalues"]),
+            coordinates["information"],
+        )
+        # Independent physical-basis normal density, including its normalization.
+        reference = dist.MultivariateNormal(
+            jnp.zeros(2), precision_matrix=jnp.asarray(penalty) / sf**2
+        ).log_prob(physical)
+        reference += dist.HalfNormal(1.28).log_prob(sf)
+        return density - reference - jnp.log(scale).sum()
+
+    np.testing.assert_allclose(difference(jnp.log(sigma)), 0, atol=3e-11)
+    np.testing.assert_allclose(
+        jax.grad(difference)(jnp.log(sigma)), 0, atol=3e-11
     )
 
 
 def test_sigma_controls_the_existing_stationary_penalty():
-    penalty = jnp.array([[2.0, 0.2], [0.2, 1.0]])
-    weights = jnp.array([0.5, -0.3])
+    penalty = np.array([[2.0, 0.2], [0.2, 1.0]])
+    weights = np.array([0.5, -0.3])
+    coordinates = spline_coordinates(np.eye(2), penalty, 3.0)
 
     def model():
-        _sample_pspline_block(
-            "sigma_delta_0", "weights_delta_0", penalty, 1.28
-        )
+        _sample_pspline_block("sigma", "weights", 1.28, coordinates)
 
-    def density(sigma: float) -> float:
+    def density(sigma):
+        scale = coordinate_scales(
+            sigma / jnp.sqrt(coordinates["eigenvalues"]),
+            coordinates["information"],
+        )
+        raw = coordinates["rotation"].T @ weights / scale
         return float(
-            log_density(
-                model,
-                (),
-                {},
-                {
-                    "sigma_delta_0": jnp.array(sigma),
-                    "weights_delta_0": weights,
-                },
-            )[0]
+            log_density(model, (), {}, {"sigma": sigma, "weights_raw": raw})[0]
+            - jnp.log(scale).sum()
         )
 
     low, high = 0.5, 2.0
-    roughness = float(weights @ penalty @ weights)
     expected = (
         halfnorm.logpdf(low, scale=1.28)
         - halfnorm.logpdf(high, scale=1.28)
         - len(weights) * np.log(low / high)
-        - 0.5 * roughness * (low**-2 - high**-2)
+        - 0.5 * (weights @ penalty @ weights) * (low**-2 - high**-2)
     )
     np.testing.assert_allclose(
-        density(low) - density(high), expected, atol=1e-6
+        density(low) - density(high), expected, atol=1e-10
     )
 
 
-def test_stationary_pipeline_uses_sigma():
-    example = VARMAData.ar(order=1, n_samples=512, fs=64.0, seed=8)
-    config = StationaryConfig(
-        n_knots=5,
-        Nb=4,
-        n_warmup=20,
-        n_samples=20,
-        rng_key=11,
-        verbose=False,
-    )
-    data = preprocess_to_freq_domain(example.ts, config)
-    result = fit(data, config)
-    assert np.isfinite(result.psd).all() and (result.psd > 0).all()
-    assert "sigma_delta_0" in result.posterior
-    assert "delta_0" not in result.posterior
-    assert not any(name.startswith("phi_") for name in result.posterior)
-    assert "sigma_delta_0" in result.to_arviz()["posterior"].dataset
-
-
-def test_multichannel_sigma_keeps_spectral_matrix_invariants():
-    example = VARMAData(n_samples=512, fs=64.0, seed=9)
-    config = StationaryConfig(
-        n_knots=5,
-        Nb=4,
-        n_warmup=20,
-        n_samples=20,
-        rng_key=12,
-        verbose=False,
-    )
-    data = preprocess_to_freq_domain(example.ts, config)
-    result = fit(data, config)
-    for name in ("sigma_delta_1", "sigma_theta_re_1_0", "sigma_theta_im_1_0"):
-        assert name in result.posterior
-    assert "delta_1" not in result.posterior
-    spectrum = np.asarray(result.spectral_density)
-    np.testing.assert_allclose(spectrum, spectrum.conj().swapaxes(-1, -2))
-    assert np.linalg.eigvalsh(spectrum).min() > 0
-    assert np.all((result.coherence >= 0) & (result.coherence <= 1 + 1e-10))
-
-
-def test_noncentered_prior_has_same_density_after_jacobian():
-    penalty = jnp.array([[2.0, 0.2], [0.2, 1.0]])
-
-    def model(parameterization: str):
-        _sample_pspline_block(
-            "sigma_delta_0",
-            "weights_delta_0",
-            penalty,
-            1.28,
-            smoothing_parameterization=parameterization,
-        )
-
-    cholesky = np.linalg.cholesky(np.asarray(penalty))
-    differences = []
-    for sigma, z in (
-        (0.3, np.array([0.5, -1.0])),
-        (2.0, np.array([-0.2, 0.7])),
-    ):
-        weights = sigma * np.linalg.solve(cholesky.T, z)
-        centered = log_density(
-            model,
-            ("centered",),
-            {},
-            {
-                "sigma_delta_0": jnp.array(sigma),
-                "weights_delta_0": jnp.asarray(weights),
-            },
-        )[0]
-        noncentered = log_density(
-            model,
-            ("noncentered",),
-            {},
-            {
-                "sigma_delta_0": jnp.array(sigma),
-                "weights_delta_0_raw": jnp.asarray(z),
-            },
-        )[0]
-        log_jacobian = 2 * np.log(sigma) - np.log(np.linalg.det(cholesky))
-        differences.append(float(centered - noncentered + log_jacobian))
-    np.testing.assert_allclose(differences[0], differences[1], atol=1e-5)
-
-
-def test_noncentered_pipeline_exposes_sampled_coordinates():
-    example = VARMAData.ar(order=1, n_samples=512, fs=64.0, seed=8)
+@pytest.mark.parametrize("channels", [1, 2])
+def test_stationary_nuts_retains_physical_and_sampled_coordinates(channels):
+    rng = np.random.default_rng(9)
+    example = TimeSeries(rng.normal(size=(512, channels)), np.arange(512) / 64)
     result = fit(
-        example.ts,
+        example,
         StationaryConfig(
-            smoothing_parameterization="noncentered",
             n_knots=5,
             Nb=4,
             n_warmup=20,
             n_samples=20,
-            rng_key=11,
+            rng_key=12,
             verbose=False,
         ),
     )
-    assert "weights_delta_0_raw" in result.posterior
-    assert "weights_delta_0" in result.posterior
-    assert np.isfinite(result.psd).all()
+    for j in range(channels):
+        assert f"sigma_delta_{j}" in result.posterior
+        assert f"weights_delta_{j}_raw" in result.posterior
+        assert f"weights_delta_{j}" in result.posterior
+    spectrum = np.asarray(result.spectral_density)
+    np.testing.assert_allclose(spectrum, spectrum.conj().swapaxes(-1, -2))
+    assert (
+        np.isfinite(spectrum).all() and np.linalg.eigvalsh(spectrum).min() > 0
+    )
+    assert result.metadata["delta_coordinates"].startswith(
+        "information_scaled"
+    )
 
 
-def test_stationary_ridged_penalty_whitening_preserves_quadratic_form():
+@pytest.mark.parametrize("eta", [0.3, 1.0])
+def test_stationary_coordinates_keep_full_scalar_posterior_and_tempering(eta):
     example = VARMAData.ar(order=1, n_samples=512, fs=64.0, seed=8)
-    config = StationaryConfig(n_knots=5, Nb=4, verbose=False)
+    config = StationaryConfig(
+        n_knots=5, Nb=4, wishart_window="hann", verbose=False
+    )
     data = preprocess_to_freq_domain(example.ts, config)
-    _, spline = prepare_model(data, config)
-    penalty = jnp.asarray(spline.diagonal_models[0].penalty_matrix)
-    z = jnp.arange(1, penalty.shape[0] + 1, dtype=penalty.dtype) / 5
-    weights = solve_triangular(jnp.linalg.cholesky(penalty).T, z, lower=False)
+    kwargs, _ = prepare_model(data, config)
+    kwargs["eta"] = eta
+    channel = channel_model_kwargs(kwargs, 0)
+    coordinates = channel["delta_coordinates"]
+    B = np.asarray(channel["basis_delta"]) @ np.asarray(
+        coordinates["rotation"]
+    )
+    expected_info = (
+        kwargs["Nb"]
+        * kwargs["Nh"]
+        * eta
+        / kwargs["enbw"]
+        * np.sum(B**2, axis=0)
+    )
     np.testing.assert_allclose(
-        float(weights @ penalty @ weights), float(z @ z), rtol=5e-3
+        coordinates["information"], expected_info, rtol=1e-13
     )
-
-
-def test_centered_and_noncentered_full_log_posterior_match():
-    example = VARMAData.ar(order=1, n_samples=512, fs=64.0, seed=8)
-    centered = StationaryConfig(n_knots=5, Nb=4, verbose=False)
-    data = preprocess_to_freq_domain(example.ts, centered)
-    kwargs_c, _ = prepare_model(data, centered)
-    kwargs_n, _ = prepare_model(
-        data, replace(centered, smoothing_parameterization="noncentered")
-    )
-    penalty = np.asarray(kwargs_c["penalties_delta"][0])
-    cholesky = np.linalg.cholesky(penalty)
-    differences = []
-    for sigma, weights in (
-        (0.4, np.zeros(penalty.shape[0])),
-        (0.8, np.linspace(-0.1, 0.1, penalty.shape[0])),
-    ):
-        raw = cholesky.T @ weights / sigma
-        params_c = {
-            "sigma_delta_0": jnp.array(sigma),
-            "weights_delta_0": jnp.asarray(weights),
-        }
-        params_n = {
-            "sigma_delta_0": jnp.array(sigma),
-            "weights_delta_0_raw": jnp.asarray(raw),
-        }
-        density_c = log_density(
-            _scalar_channel_model,
-            (),
-            channel_model_kwargs(kwargs_c, 0),
-            params_c,
-        )[0]
-        density_n = log_density(
-            _scalar_channel_model,
-            (),
-            channel_model_kwargs(kwargs_n, 0),
-            params_n,
-        )[0]
-        log_jacobian = len(weights) * np.log(sigma) - np.log(
-            np.linalg.det(cholesky)
+    penalty = np.asarray(channel["penalty_delta"])
+    for sigma in (0.01, 0.4):
+        weights = np.linspace(-0.1, 0.1, len(penalty))
+        scale = coordinate_scales(
+            sigma / jnp.sqrt(coordinates["eigenvalues"]),
+            coordinates["information"],
         )
-        differences.append(float(density_c - density_n + log_jacobian))
-    np.testing.assert_allclose(differences[0], differences[1], atol=0.05)
+        raw = coordinates["rotation"].T @ weights / scale
+        density = log_density(
+            _scalar_channel_model,
+            (),
+            channel,
+            {"sigma_delta_0": sigma, "weights_delta_0_raw": raw},
+        )[0]
+        prior = dist.MultivariateNormal(
+            jnp.zeros(len(weights)),
+            precision_matrix=jnp.asarray(penalty) / sigma**2,
+        ).log_prob(weights)
+        empty = jnp.zeros((data.N, 0))
+        likelihood = wishart_log_likelihood(
+            channel["basis_delta"] @ weights,
+            empty,
+            empty,
+            channel["u_re_channel"],
+            channel["u_im_channel"],
+            channel["u_re_prev"],
+            channel["u_im_prev"],
+            Nb=channel["Nb"],
+            Nh=channel["Nh"],
+            duration=channel["duration"],
+            enbw=channel["enbw"],
+            eta=eta,
+        )
+        np.testing.assert_allclose(
+            density - jnp.log(scale).sum(),
+            prior + dist.HalfNormal(1.28).log_prob(sigma) + likelihood,
+            atol=1e-7,
+        )
+    model, prepared, initial = prepare_channel_model(kwargs, 0)
+    _, trace = log_density(model, (), prepared, initial)
+    np.testing.assert_allclose(
+        trace["weights_delta_0"]["value"],
+        kwargs["initial_weights_delta"][0],
+        atol=1e-12,
+    )
 
 
-def test_pointwise_likelihood_matches_sampled_channel_likelihoods():
+@pytest.mark.parametrize("log_power_shift", [-100.0, 0.0, 100.0])
+def test_pointwise_likelihood_matches_sampled_channel_likelihoods(
+    log_power_shift,
+):
     config = StationaryConfig(
         n_knots=5, Nb=4, verbose=False, wishart_window="hann"
     )
@@ -277,9 +259,31 @@ def test_pointwise_likelihood_matches_sampled_channel_likelihoods():
                     rng.normal(scale=0.1, size=(1, 2, basis.shape[1])),
                 )
     posterior = xr.Dataset(variables, coords={"chain": [0], "draw": [0, 1]})
+    baseline = compute_pointwise_lnl(
+        posterior=posterior, data=data, model_kwargs=kwargs
+    )
+    for channel in range(data.p):
+        posterior[f"weights_delta_{channel}"] += log_power_shift
+    amplitude_scale = np.exp(log_power_shift / 2)
+    kwargs = {
+        **kwargs,
+        "u_re": kwargs["u_re"] * amplitude_scale,
+        "u_im": kwargs["u_im"] * amplitude_scale,
+    }
     likelihood = compute_pointwise_lnl(
         posterior=posterior, data=data, model_kwargs=kwargs
     )
+    determinant_shift = (
+        kwargs["Nb"] * kwargs["Nh"] * log_power_shift / kwargs["enbw"]
+    )
+    for name in likelihood:
+        channel_count = data.p if name == "log_likelihood" else 1
+        np.testing.assert_allclose(
+            likelihood[name],
+            baseline[name] - channel_count * determinant_shift,
+            rtol=2e-12,
+            atol=2e-10,
+        )
     for draw in range(2):
         total = 0.0
         for channel in range(data.p):

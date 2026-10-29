@@ -20,6 +20,7 @@ from log_psplines.inference.anova_power import (
     initialize_anova,
     prepare_anova_power_model,
 )
+from log_psplines.inference.coordinates import coordinate_scales
 from log_psplines.inference.power import fit_power
 from log_psplines.models.reconstruction import reconstruct_power_spectrum
 
@@ -226,7 +227,7 @@ def test_anova_prior_scales_match_old_nested_hierarchy():
         model.frequency.grid,
         model.time.grid,
     )
-    sample_model, _, init = prepare_anova_power_model(
+    sample_model, information_pair, init = prepare_anova_power_model(
         data, model, PowerConfig()
     )
     for sigma_eta in (0.5, 1e-5):
@@ -234,9 +235,18 @@ def test_anova_prior_scales_match_old_nested_hierarchy():
         trace = handlers.trace(
             handlers.substitute(handlers.seed(sample_model, 8), data=sites)
         ).get_trace()
-        np.testing.assert_allclose(trace["g"]["fn"].scale, g_scale, rtol=1e-6)
         np.testing.assert_allclose(
-            trace["eta"]["fn"].scale,
+            trace["z_g"]["fn"].base_dist.scale
+            * coordinate_scales(g_scale, information_pair["information_g"]),
+            g_scale,
+            rtol=1e-6,
+        )
+        np.testing.assert_allclose(
+            trace["z_eta"]["fn"].base_dist.scale
+            * coordinate_scales(
+                (sigma_eta * eta_shape).reshape(-1),
+                information_pair["information_eta"].reshape(-1),
+            ),
             (sigma_eta * eta_shape).reshape(-1),
             rtol=1e-6,
         )
@@ -255,13 +265,15 @@ def test_native_likelihood_uses_supplied_basis_matrices():
         data, model, PowerConfig()
     )
     rng = np.random.default_rng(9)
-    g = rng.normal(size=init["g"].shape) * 0.1
-    eta = rng.normal(size=init["eta"].shape) * 0.1
+    g = rng.normal(size=init["z_g"].shape) * 0.1
+    eta = rng.normal(size=init["z_eta"].shape) * 0.1
     trace = handlers.trace(
         handlers.substitute(
-            handlers.seed(sample_model, 9), data={**init, "g": g, "eta": eta}
+            handlers.seed(sample_model, 9),
+            data={**init, "z_g": g, "z_eta": eta},
         )
     ).get_trace()
+    g, eta = trace["g"]["value"], trace["eta"]["value"]
     correction = np.asarray(
         model(
             pair["U_freq"] @ g,

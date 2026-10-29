@@ -1,4 +1,4 @@
-"""Exact Gaussian integration of stationary Cholesky regression coefficients.
+"""Exact Gaussian integration of complex Cholesky regression coefficients.
 
 Conditional on a row's log innovation spectrum and smoothing scales, its
 complex regression coefficients form a Gaussian linear model. Integrating
@@ -20,8 +20,8 @@ import numpyro.distributions as dist
 from jax.scipy.linalg import solve_triangular
 from scipy.linalg import block_diag
 
+from log_psplines.inference.coordinates import spline_coordinates
 from log_psplines.inference.model import _sample_pspline_block
-from log_psplines.likelihoods.whittle import LOG_SPECTRUM_LIMIT
 
 
 def prepare_collapsed_channel(channel_kwargs: Mapping[str, Any]) -> dict:
@@ -76,8 +76,14 @@ def prepare_collapsed_channel(channel_kwargs: Mapping[str, Any]) -> dict:
         "basis_delta": channel_kwargs["basis_delta"],
         "penalty_delta": channel_kwargs["penalty_delta"],
         "roughness_scale": channel_kwargs["roughness_scale"],
-        "smoothing_parameterization": channel_kwargs.get(
-            "smoothing_parameterization", "centered"
+        "delta_coordinates": channel_kwargs.get("delta_coordinates")
+        or spline_coordinates(
+            channel_kwargs["basis_delta"],
+            channel_kwargs["penalty_delta"],
+            channel_kwargs["Nb"]
+            * channel_kwargs["Nh"]
+            * channel_kwargs.get("eta", 1.0)
+            / channel_kwargs.get("enbw", 1.0),
         ),
         "duration": channel_kwargs["duration"],
         "Nb": channel_kwargs["Nb"],
@@ -126,11 +132,6 @@ def gaussian_theta_conditional(
     power plus prior quadratic. This avoids subtracting two large quadratic
     forms when a LISA channel is almost determined by preceding channels.
     """
-    log_variance = jnp.clip(
-        log_delta_sq, -LOG_SPECTRUM_LIMIT, LOG_SPECTRUM_LIMIT
-    )
-    likelihood_scale = eta / enbw
-    frequency_precision = likelihood_scale * jnp.exp(-log_variance) / duration
     expanded_sigma = jnp.repeat(
         sigmas,
         jnp.asarray(theta_sizes),
@@ -139,38 +140,81 @@ def gaussian_theta_conditional(
     prior_precision = theta_penalty / (
         expanded_sigma[:, None] * expanded_sigma[None, :]
     )
-    gram = jnp.einsum(
-        "frk,frl,f->kl", design_re, design_re, frequency_precision
-    ) + jnp.einsum("frk,frl,f->kl", design_im, design_im, frequency_precision)
-    linear = 2 * (
-        jnp.einsum("frk,fr,f->k", design_re, observed_re, frequency_precision)
-        + jnp.einsum(
-            "frk,fr,f->k", design_im, observed_im, frequency_precision
-        )
+    prior_whitener = theta_penalty_cholesky.T / expanded_sigma[None, :]
+    logdet_prior = theta_logdet_penalty - 2 * jnp.sum(
+        jnp.asarray(theta_sizes) * jnp.log(sigmas)
     )
-    precision = prior_precision + 2 * gram
-    scale = jnp.sqrt(jnp.diag(precision))
-    balanced = precision / (scale[:, None] * scale[None, :])
+    likelihood_scale = eta / enbw
+    return gaussian_linear_conditional(
+        log_delta_sq,
+        likelihood_scale * Nb * Nh,
+        design_re=design_re,
+        design_im=design_im,
+        observed_re=observed_re,
+        observed_im=observed_im,
+        prior_precision=prior_precision,
+        prior_whitener=prior_whitener,
+        prior_logdet=logdet_prior,
+        precision_multiplier=likelihood_scale / duration,
+    )
+
+
+def gaussian_linear_conditional(
+    log_variance: jax.Array,
+    counts: jax.Array | float,
+    *,
+    design_re: jax.Array,
+    design_im: jax.Array,
+    observed_re: jax.Array,
+    observed_im: jax.Array,
+    prior_precision: jax.Array,
+    prior_whitener: jax.Array,
+    prior_logdet: jax.Array,
+    precision_multiplier: jax.Array | float = 1.0,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Integrate a real Gaussian coefficient vector in a complex regression.
+
+    Designs are (observation, factor, coefficient), with real/imaginary data
+    shaped (observation, factor). Counts multiply log variances only: factors
+    already contain summed cross products. ``prior_whitener.T @ prior_whitener``
+    is the prior precision. Zero-count observations are neutralized before
+    exponentiation and multiplication. Returned conditional covariance is
+    D^-1 L^-T L^-1 D^-1 for the returned balanced Cholesky L and diagonal D.
+    """
+    logs = jnp.asarray(log_variance).reshape(-1)
+    count = jnp.broadcast_to(jnp.asarray(counts), logs.shape)
+    active = count > 0
+    logs = jnp.where(active, logs, 0.0)
+    design_re = jnp.where(active[:, None, None], design_re, 0.0)
+    design_im = jnp.where(active[:, None, None], design_im, 0.0)
+    observed_re = jnp.where(active[:, None], observed_re, 0.0)
+    observed_im = jnp.where(active[:, None], observed_im, 0.0)
+    precision = jnp.where(active, precision_multiplier * jnp.exp(-logs), 0.0)
+    gram = jnp.einsum("frk,frl,f->kl", design_re, design_re, precision)
+    gram += jnp.einsum("frk,frl,f->kl", design_im, design_im, precision)
+    linear = 2 * (
+        jnp.einsum("frk,fr,f->k", design_re, observed_re, precision)
+        + jnp.einsum("frk,fr,f->k", design_im, observed_im, precision)
+    )
+    conditional_precision = prior_precision + 2 * gram
+    scale = jnp.sqrt(jnp.diag(conditional_precision))
+    balanced = conditional_precision / (scale[:, None] * scale[None, :])
     cholesky = jnp.linalg.cholesky(balanced)
     intermediate = solve_triangular(cholesky, linear / scale, lower=True)
     mean = solve_triangular(cholesky.T, intermediate, lower=False) / scale
     residual_re = observed_re - jnp.einsum("frk,k->fr", design_re, mean)
     residual_im = observed_im - jnp.einsum("frk,k->fr", design_im, mean)
     residual_power = jnp.sum(
-        (residual_re**2 + residual_im**2) * frequency_precision[:, None]
-    )
-    logdet_prior = theta_logdet_penalty - 2 * jnp.sum(
-        jnp.asarray(theta_sizes) * jnp.log(sigmas)
+        (residual_re**2 + residual_im**2) * precision[:, None]
     )
     logdet_conditional = 2 * (
         jnp.sum(jnp.log(scale)) + jnp.sum(jnp.log(jnp.diag(cholesky)))
     )
     marginal = (
-        -likelihood_scale * Nb * Nh * jnp.sum(log_variance)
+        -jnp.sum(count * logs)
         - residual_power
-        - 0.5
-        * jnp.sum((theta_penalty_cholesky.T @ (mean / expanded_sigma)) ** 2)
-        + 0.5 * (logdet_prior - logdet_conditional)
+        - 0.5 * jnp.sum((prior_whitener @ mean) ** 2)
+        + 0.5 * (prior_logdet - logdet_conditional)
     )
     return marginal, mean, cholesky, scale
 
@@ -202,16 +246,15 @@ def collapsed_channel_model(
     penalty_delta: jax.Array,
     roughness_scale: float,
     theta_names: tuple[str, ...],
-    smoothing_parameterization: str = "centered",
+    delta_coordinates: dict,
     **conditional_kwargs: Any,
 ) -> None:
     """Sample delta coefficients and all scales, integrating theta weights."""
     weights = _sample_pspline_block(
         f"sigma_delta_{channel_index}",
         f"weights_delta_{channel_index}",
-        penalty_delta,
         roughness_scale,
-        smoothing_parameterization,
+        delta_coordinates,
     )
     sigmas = jnp.stack(
         [
@@ -273,7 +316,6 @@ def sample_conditional_theta(
         residual_im = prepared_kwargs["observed_im"] - jnp.einsum(
             "frk,k->fr", prepared_kwargs["design_im"], beta
         )
-        logd = jnp.clip(logd, -LOG_SPECTRUM_LIMIT, LOG_SPECTRUM_LIMIT)
         full_log_likelihood = (
             (
                 -prepared_kwargs["Nb"] * prepared_kwargs["Nh"] * jnp.sum(logd)

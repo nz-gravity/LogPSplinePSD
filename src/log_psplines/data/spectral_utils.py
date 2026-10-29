@@ -5,6 +5,9 @@ from __future__ import annotations
 import numpy as np
 from jaxtyping import Complex, Float
 
+# Conservative backward-error bound for Hermitian factorization in float64.
+FACTOR_ROUNDOFF_MULTIPLIER = 64.0
+
 
 def _as_positive_int(name: str, value: int) -> int:
     """Validate positive integer inputs used in spectral scaling."""
@@ -138,13 +141,25 @@ def U_to_Y(
 def Y_to_U(
     Y: Complex[np.ndarray, "N p p"] | Float[np.ndarray, "N p p"],
 ) -> Complex[np.ndarray, "N p p"]:
-    """Return U factors for Wishart matrices where Y[f] = U[f] U[f]^H."""
+    """Factor PSD statistics (N,p,p), retaining rank deficiency without jitter.
+
+    Only eigenvalues within floating-point roundoff of zero are clipped.
+    Materially indefinite or nonfinite statistics are rejected.
+    """
     Y = np.asarray(Y, dtype=np.complex128)
     if Y.ndim != 3:
         raise ValueError("Y must have shape (N, p, p)")
-    if not _ishermitian(Y):
+    if not np.isfinite(Y).all():
+        raise ValueError("Y must be finite for Wishart factorization.")
+    scale = np.max(np.abs(Y), axis=(-2, -1), keepdims=True)
+    tolerance = FACTOR_ROUNDOFF_MULTIPLIER * np.finfo(float).eps * Y.shape[-1]
+    if np.any(np.abs(Y - Y.conj().swapaxes(-1, -2)) > tolerance * scale):
         raise ValueError("Y must be Hermitian for Wishart factorization.")
     lam, v = np.linalg.eigh(Y)
+    # Backward error of a Hermitian eigensolve scales with matrix size/norm.
+    tolerance = tolerance * np.max(np.abs(lam), axis=-1, keepdims=True)
+    if np.any(lam < -tolerance):
+        raise ValueError("Y must be positive semidefinite.")
     lam = np.clip(lam.real, a_min=0.0, a_max=None)
     sqrt_lam = np.sqrt(lam, dtype=np.float64)[:, None, :]
     return v * sqrt_lam

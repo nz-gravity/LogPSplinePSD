@@ -20,16 +20,14 @@ from log_psplines.results import PSDResult
 
 
 @pytest.mark.parametrize(
-    "centered,grid,guide",
+    "grid,guide",
     [
-        (False, False, "diag"),
-        (True, False, "lowrank:10"),
-        (False, True, "diag"),
+        (False, "diag"),
+        (False, "lowrank:10"),
+        (True, "diag"),
     ],
 )
-def test_public_power_vi_shared_model_and_round_trip(
-    tmp_path, centered, grid, guide
-):
+def test_public_power_vi_shared_model_and_round_trip(tmp_path, grid, guide):
     data = scattered_moving_periodogram(
         np.random.default_rng(4).normal(size=128), dt=1.0, m=4
     )
@@ -46,7 +44,6 @@ def test_public_power_vi_shared_model_and_round_trip(
         method="vi",
         vi_steps=30,
         vi_posterior_draws=8,
-        centered=centered,
         vi_guide=guide,
         progress_bar=False,
     )
@@ -70,7 +67,7 @@ def test_public_power_vi_shared_model_and_round_trip(
     params = {
         name: value.values[0, 0]
         for name, value in result.posterior.items()
-        if name in ("s", "sigma_time", "sigma_freq")
+        if name in ("z_s", "sigma_time", "sigma_freq")
     }
     trace = numpyro.handlers.trace(
         numpyro.handlers.substitute(prepared, data=params)
@@ -180,7 +177,7 @@ def test_public_anova_vi_shared_model_and_roundtrip(tmp_path):
     prepared, _, _ = prepare_anova_power_model(data, model, config)
     params = {
         name: result.posterior[name].values[0, 0]
-        for name in ("g", "eta", "sigma_g", "sigma_eta")
+        for name in ("z_g", "z_eta", "sigma_g", "sigma_eta")
     }
     trace = numpyro.handlers.trace(
         numpyro.handlers.substitute(prepared, data=params)

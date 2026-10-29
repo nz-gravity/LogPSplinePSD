@@ -1,13 +1,11 @@
 """Public marginalized fits retain full complex-matrix posterior outputs."""
 
 import numpy as np
-import pytest
 
 from log_psplines import PSDResult, StationaryConfig, WishartData, fit
 
 
-@pytest.mark.parametrize("parameterization", ["centered", "noncentered"])
-def test_marginalized_three_channel_roundtrip(parameterization, tmp_path):
+def test_marginalized_three_channel_roundtrip(tmp_path):
     rng = np.random.default_rng(29)
     n, replicates = 24, 8
     covariance = np.full((3, 3), -0.45)
@@ -29,7 +27,6 @@ def test_marginalized_three_channel_roundtrip(parameterization, tmp_path):
     result = fit(
         data,
         StationaryConfig(
-            smoothing_parameterization=parameterization,
             n_knots={"delta": 5, "theta_re": 4, "theta_im": 3},
             degree=2,
             knot_kwargs={"method": "uniform"},

@@ -22,6 +22,7 @@ from jaxtyping import Float
 from log_psplines.basis.penalty import eigen_prior_scale, whiten_penalty_pair
 from log_psplines.config import PowerConfig
 from log_psplines.data.spectral import PowerData
+from log_psplines.inference.coordinates import coordinate_scales
 from log_psplines.inference.nuts import run_nuts
 from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
 from log_psplines.models.anova import ANOVALogPSpline
@@ -54,24 +55,18 @@ def sample_eigen_coefficients(
     name: str,
     scale: jnp.ndarray,
     shape: tuple[int, ...],
-    config: PowerConfig,
-) -> jax.Array | np.ndarray:
-    """Sample eigen-coefficients while honoring ``config.centered``.
-
-    In centered form the sampling site is the coefficient itself and has prior
-    ``Normal(0, scale)``. In non-centered form the site is standard Normal and
-    is multiplied by ``scale`` before being returned.
-    """
-    n_weights = int(np.prod(shape))
+    information: jnp.ndarray | np.ndarray,
+) -> jax.Array:
+    """Sample physical eigen-coefficients in exact information-scaled coordinates."""
     flat_scale = jnp.broadcast_to(scale, shape).reshape(-1)
-    with numpyro.plate(f"{name}_plate", n_weights):
-        if config.centered:
-            site = numpyro.sample(name, dist.Normal(0.0, flat_scale))
-            coeffs = site
-        else:
-            site = numpyro.sample(name, dist.Normal(0.0, 1.0))
-            coeffs = site * flat_scale
-    return coeffs.reshape(shape)
+    coordinates = coordinate_scales(
+        flat_scale, jnp.asarray(information).reshape(-1)
+    )
+    raw = numpyro.sample(
+        f"z_{name}", dist.Normal(0.0, flat_scale / coordinates).to_event(1)
+    )
+    coefficients = numpyro.deterministic(name, raw * coordinates)
+    return coefficients.reshape(shape)
 
 
 def initialize_with_penalized_least_squares(
@@ -124,7 +119,7 @@ def whitened_init_values(
     whitened: dict[str, np.ndarray],
     config: PowerConfig,
 ) -> dict[str, np.ndarray]:
-    """Map least-squares coefficients to the whitened sampling sites."""
+    """Map least-squares coefficients to information-scaled sampling sites."""
     U_t = whitened["U_time"]
     U_f = whitened["U_freq"]
     lam_t = whitened["lam_time"]
@@ -135,18 +130,18 @@ def whitened_init_values(
     phi_freq = float(pls_init["phi_freq"])
     eig_coeffs = U_t.T @ np.asarray(pls_init["W"]) @ U_f  # Z in the eigenbasis
 
-    if config.centered:
-        s = eig_coeffs
-    else:
-        d = phi_time * lam_t[:, None] + phi_freq * lam_f[None, :]
-        inv_scale = np.where(
-            joint_null,
-            np.sqrt(config.null_precision),
-            np.sqrt(d + config.ridge_eps),
-        )
-        s = eig_coeffs * inv_scale
+    scales = eigen_prior_scale(
+        phi_time,
+        phi_freq,
+        jnp.asarray(lam_t),
+        jnp.asarray(lam_f),
+        jnp.asarray(joint_null),
+        null_precision=config.null_precision,
+        ridge_eps=config.ridge_eps,
+    )
+    coordinates = coordinate_scales(scales, whitened["information"])
     return {
-        "s": s.reshape(-1),
+        "z_s": (eig_coeffs / np.asarray(coordinates)).reshape(-1),
         "sigma_time": float(phi_time**-0.5),
         "sigma_freq": float(phi_freq**-0.5),
     }
@@ -269,20 +264,44 @@ def prepare_power_model(
             ),
         )
         evaluate = eigen_spline
+        bt_eigen = eigen_spline.time.basis
+        bf_eigen = eigen_spline.frequency.basis
     else:
         bt_raw = np.asarray(spline.time.design_at(data.time))
         bf_raw = np.asarray(spline.frequency.design_at(data.frequency))
         bt_eigen = jnp.asarray(bt_raw @ pair["U_time"])
         bf_eigen = jnp.asarray(bf_raw @ pair["U_freq"])
+        _, first, inverse = np.unique(
+            data.frequency, return_index=True, return_inverse=True
+        )
+        if len(first) < len(data.frequency):
+            # Reuse each frequency projection without pooling paired sites.
+            # Preserve the original rotated basis and PLS initialization.
+            bf_unique = bf_eigen[first]
+            frequency_index = jnp.asarray(inverse)
 
-        def evaluate(coefficients):
-            return jnp.einsum(
-                "pi,ij,pj->p",
-                bt_eigen,
-                coefficients,
-                bf_eigen,
-                optimize="optimal",
-            )
+            def evaluate(coefficients):
+                projected = bf_unique @ coefficients.T
+                return jnp.sum(bt_eigen * projected[frequency_index], axis=1)
+        else:
+
+            def evaluate(coefficients):
+                return jnp.einsum(
+                    "pi,ij,pj->p",
+                    bt_eigen,
+                    coefficients,
+                    bf_eigen,
+                    optimize="optimal",
+                )
+
+    # Each real Gaussian component contributes 1/2 expected information in
+    # its log variance. Zero-count cells contribute nothing to this fixed map.
+    information = (
+        0.5 * (bt_eigen**2).T @ counts @ (bf_eigen**2)
+        if data.is_grid
+        else 0.5 * jnp.einsum("p,pi,pj->ij", counts, bt_eigen**2, bf_eigen**2)
+    )
+    pair["information"] = np.asarray(information)
 
     def model() -> None:
         phi_time = _sample_precision("sigma_time", config)
@@ -297,7 +316,7 @@ def prepare_power_model(
             ridge_eps=config.ridge_eps,
         )
         coefficients = sample_eigen_coefficients(
-            "s", scale, scale.shape, config
+            "s", scale, scale.shape, information
         )
         log_like = power_whittle_log_likelihood(
             power, counts, evaluate(coefficients)
@@ -359,9 +378,7 @@ def _run_power_nuts(model: Callable, init: dict, config: PowerConfig):
     )
 
 
-def _collect_power_samples(
-    result, pair: dict[str, np.ndarray], config: PowerConfig
-):
+def _collect_power_samples(result, pair: dict[str, np.ndarray]):
     """Rotate sampled eigen-coefficients to spline weights."""
     import xarray as xr
 
@@ -373,21 +390,6 @@ def _collect_power_samples(
     coefficients = samples["s"].reshape(
         *samples["s"].shape[:2], len(pair["lam_time"]), len(pair["lam_freq"])
     )
-    if not config.centered:
-        scale = jax.vmap(
-            jax.vmap(
-                lambda pt, pf: eigen_prior_scale(
-                    pt**-2,
-                    pf**-2,
-                    jnp.asarray(pair["lam_time"]),
-                    jnp.asarray(pair["lam_freq"]),
-                    jnp.asarray(pair["joint_null"]),
-                    null_precision=config.null_precision,
-                    ridge_eps=config.ridge_eps,
-                )
-            )
-        )(samples["sigma_time"], samples["sigma_freq"])
-        coefficients = coefficients * np.asarray(scale)
 
     weights = np.einsum(
         "ia,cdab,jb->cdij",
@@ -541,7 +543,7 @@ def fit_power(
     posterior = (
         collect_anova_samples(result.posterior, pair)
         if anova
-        else _collect_power_samples(result, pair, config)
+        else _collect_power_samples(result, pair)
     )
     from log_psplines.inference.power_results import power_result_spectra
     from log_psplines.models.reconstruction import power_draws_from_basis
@@ -587,6 +589,7 @@ def fit_power(
             **asdict(config),
             "data_type": "power",
             "likelihood": "power_whittle",
+            "coefficient_coordinates": "information_scaled; exact Gaussian prior",
             "units": data.units,
             "preparation_seconds": prepared - started,
             "inference_seconds": inferred - prepared,
@@ -600,7 +603,6 @@ def fit_power(
             **(
                 {
                     "model": "anova",
-                    "centered": True,
                     "sigma_eta_prior": spline.sigma_eta_prior,
                 }
                 if anova

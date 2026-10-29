@@ -52,6 +52,8 @@ there is no replacement selector. Pass ``wishart_floor_fraction`` by keyword
 if used. In ``StationaryConfig``, fields following ``wishart_window`` are now
 keyword-only so old positional calls cannot silently shift their meaning.
 The window selection is unchanged.
+``fit`` does not reprocess supplied ``WishartData``. Regenerate statistics
+previously constructed with per-block detrending to use the new convention.
 
 ``WishartData.preprocessing`` records the applied ``mean_removal`` and
 ``window``. These descriptions survive masking and coarse-graining and are

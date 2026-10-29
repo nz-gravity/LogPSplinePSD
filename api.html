@@ -425,6 +425,7 @@
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PowerConfig"><code class="docutils literal notranslate"><span class="pre">PowerConfig</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#stationary-gaussian-marginalization">Stationary Gaussian marginalization</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#posterior-summary-semantics">Posterior summary semantics</a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.reconstruction.compute_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">compute_psd_quantiles()</span></code></a></li>
 </ul>
@@ -565,7 +566,9 @@ stable user surface.</p>
 <span class="sig-prename descclassname"><span class="pre">log_psplines.fit.</span></span><span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">partition</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_psd</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.results.PSDResult" title="log_psplines.results.PSDResult"><span class="pre">PSDResult</span></a></span></span><a class="headerlink" href="#log_psplines.fit.fit" title="Link to this definition">#</a></dt>
 <dd><p>Fit stationary Wishart data or time-frequency powers.</p>
 <p><code class="docutils literal notranslate"><span class="pre">config.method</span></code> selects NUTS (default) or NumPyro VI for spline models.
-Both use the same likelihood, prior and spectrum reconstruction.
+Both integrate Gaussian stationary cross-spectrum coefficients and restore
+their full conditional draws for spectrum reconstruction. Multivariate
+stationary fits require JAX_ENABLE_X64=true.
 Scalar powers use the tensor or ANOVA structure in PowerConfig.
 ParametricSpectrum also supports joint independent channel powers.
 A partition may pool rectangular powers while retaining native-grid
@@ -818,6 +821,31 @@ VI returns one chain with <code class="docutils literal notranslate"><span class
 stores losses and timings in <code class="docutils literal notranslate"><span class="pre">result.vi</span></code>.</p>
 </dd></dl>
 
+<section id="stationary-gaussian-marginalization">
+<h3>Stationary Gaussian marginalization<a class="headerlink" href="#stationary-gaussian-marginalization" title="Link to this heading">#</a></h3>
+<p>Both stationary NUTS and VI integrate the Gaussian cross-spectrum spline
+coefficients out of the numerical fit. The diagonal-spectrum coefficients
+and all smoothing scales remain unknown. Each retained draw restores the
+cross-spectrum coefficients from their joint conditional Gaussian before
+reconstructing the spectral matrix, so <code class="docutils literal notranslate"><span class="pre">weights_theta_*</span></code> and their
+uncertainty remain available in <code class="docutils literal notranslate"><span class="pre">result.posterior</span></code>. This is the only
+stationary multivariate inference path; no configuration switch is needed.</p>
+<p>VI approximates the remaining marginal posterior and restores the same exact
+conditional Gaussian. It does not become an exact posterior method. With
+<code class="docutils literal notranslate"><span class="pre">vi_posterior_draws</span> <span class="pre">&lt;=</span> <span class="pre">0</span></code>, the multivariate result contains one guide-median
+point for the remaining parameters and one conditional cross-spectrum draw;
+this is not a joint posterior median or an uncertainty summary.</p>
+<p>Marginalization preserves the posterior, but raw VI losses need not match
+those from the previous explicit implementation: the integrated Gaussian
+includes fixed normalization constants previously omitted by the centered
+coefficient prior. The Whittle likelihood also omits data-only constants.
+Do not interpret these losses as directly comparable model evidence or
+Bayes factors without restoring consistent normalization.</p>
+<p>Enable <code class="docutils literal notranslate"><span class="pre">JAX_ENABLE_X64=true</span></code> before Python starts for stationary multivariate
+fits. The first Cholesky row has no cross-spectrum coefficients to integrate.
+See the <a class="reference internal" href="examples/multivariate-example.html"><span class="doc">multivariate example</span></a> for the
+completion-of-the-square derivation and a comparison of NUTS and VI.</p>
+</section>
 <section id="posterior-summary-semantics">
 <h3>Posterior summary semantics<a class="headerlink" href="#posterior-summary-semantics" title="Link to this heading">#</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">result.spectrum</span></code> stores reconstructed draws. Stationary fits currently store
@@ -1849,6 +1877,7 @@ A flat loss trace alone does not establish posterior accuracy.</p>
 </ul>
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.config.PowerConfig"><code class="docutils literal notranslate"><span class="pre">PowerConfig</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#stationary-gaussian-marginalization">Stationary Gaussian marginalization</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#posterior-summary-semantics">Posterior summary semantics</a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.models.reconstruction.compute_psd_quantiles"><code class="docutils literal notranslate"><span class="pre">compute_psd_quantiles()</span></code></a></li>
 </ul>

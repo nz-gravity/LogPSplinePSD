@@ -20,6 +20,35 @@ Fitting and results
 .. autoclass:: log_psplines.config.PowerConfig
    :members:
 
+Stationary Gaussian marginalization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Both stationary NUTS and VI integrate the Gaussian cross-spectrum spline
+coefficients out of the numerical fit. The diagonal-spectrum coefficients
+and all smoothing scales remain unknown. Each retained draw restores the
+cross-spectrum coefficients from their joint conditional Gaussian before
+reconstructing the spectral matrix, so ``weights_theta_*`` and their
+uncertainty remain available in ``result.posterior``. This is the only
+stationary multivariate inference path; no configuration switch is needed.
+
+VI approximates the remaining marginal posterior and restores the same exact
+conditional Gaussian. It does not become an exact posterior method. With
+``vi_posterior_draws <= 0``, the multivariate result contains one guide-median
+point for the remaining parameters and one conditional cross-spectrum draw;
+this is not a joint posterior median or an uncertainty summary.
+
+Marginalization preserves the posterior, but raw VI losses need not match
+those from the previous explicit implementation: the integrated Gaussian
+includes fixed normalization constants previously omitted by the centered
+coefficient prior. The Whittle likelihood also omits data-only constants.
+Do not interpret these losses as directly comparable model evidence or
+Bayes factors without restoring consistent normalization.
+
+Enable ``JAX_ENABLE_X64=true`` before Python starts for stationary multivariate
+fits. The first Cholesky row has no cross-spectrum coefficients to integrate.
+See the :doc:`multivariate example <examples/multivariate-example>` for the
+completion-of-the-square derivation and a comparison of NUTS and VI.
+
 Posterior summary semantics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

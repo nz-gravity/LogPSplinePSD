@@ -381,6 +381,12 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#p-spline-model">P-spline model</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#smoothness-prior">Smoothness prior</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#factorisation-by-cholesky-row">Factorisation by Cholesky row</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gaussian-marginalization-integrate-the-cross-spectrum-coefficients">Gaussian marginalization: integrate the cross-spectrum coefficients</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#start-with-one-real-coefficient">Start with one real coefficient</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-same-calculation-for-complex-p-splines">The same calculation for complex P-splines</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-nuts-and-vi-do-afterward">What NUTS and VI do afterward</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse-graining</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validity-of-coarse-graining">Validity of coarse-graining</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example">Example</a></li>
@@ -632,7 +638,7 @@ rows of <span class="math notranslate nohighlight">\(\mathbf{T}\)</span>.</p>
 \[
 \boxed{
 \log \mathcal{L}_j
-\propto
+=\mathrm{const}
 -
 N_b
 \sum_k
@@ -673,6 +679,152 @@ T\,\delta_j(f_k)^2
 <p>respectively.</p>
 <p>This factorisation allows the Cholesky rows to be sampled separately when
 independent priors are placed on their parameter blocks.</p>
+</section>
+<section id="gaussian-marginalization-integrate-the-cross-spectrum-coefficients">
+<h2>Gaussian marginalization: integrate the cross-spectrum coefficients<a class="headerlink" href="#gaussian-marginalization-integrate-the-cross-spectrum-coefficients" title="Link to this heading">#</a></h2>
+<p>The useful observation is that, <strong>if we hold the diagonal spectra and smoothing
+scales fixed</strong>, the likelihood has a Gaussian quadratic form in the
+cross-spectrum spline coefficients. Combined with their Gaussian prior, this
+gives a Gaussian conditional posterior. We still infer the diagonal spectra;
+we are only holding them fixed while doing one integral.</p>
+<section id="start-with-one-real-coefficient">
+<h3>Start with one real coefficient<a class="headerlink" href="#start-with-one-real-coefficient" title="Link to this heading">#</a></h3>
+<p>For a single real coefficient <span class="math notranslate nohighlight">\(\theta\)</span>, a residual has the form <span class="math notranslate nohighlight">\(u-v\theta\)</span>.
+Its likelihood contribution is</p>
+<div class="math notranslate nohighlight">
+\[
+\mathcal L(\theta;\delta)
+= C(\delta)\exp\left[-\frac{(u-v\theta)^2}{c}\right],
+\qquad c&gt;0.
+\]</div>
+<p>The <strong>minus sign and the square</strong> are essential. For the Cholesky likelihood,
+<span class="math notranslate nohighlight">\(c\)</span> contains the conditional power <span class="math notranslate nohighlight">\(T\delta^2\)</span>; <span class="math notranslate nohighlight">\(C(\delta)\)</span> contains the
+log-determinant terms. These depend on <span class="math notranslate nohighlight">\(\delta\)</span>, so we must retain them when
+we later infer <span class="math notranslate nohighlight">\(\delta\)</span>.</p>
+<p>Now give <span class="math notranslate nohighlight">\(\theta\)</span> a Gaussian prior, <span class="math notranslate nohighlight">\(\theta\sim\mathcal N(0,s^2)\)</span>. Multiplying
+likelihood and prior adds their quadratic terms:</p>
+<div class="math notranslate nohighlight">
+\[
+\frac{(u-v\theta)^2}{c}+\frac{\theta^2}{2s^2}
+=
+\frac{A}{2}\theta^2-b\theta+\frac{u^2}{c},
+\qquad
+A=\frac{2v^2}{c}+\frac{1}{s^2},
+\quad b=\frac{2uv}{c}.
+\]</div>
+<p>Complete the square by setting <span class="math notranslate nohighlight">\(m=b/A\)</span>:</p>
+<div class="math notranslate nohighlight">
+\[
+\frac{A}{2}\theta^2-b\theta+\frac{u^2}{c}
+=
+\frac{A}{2}(\theta-m)^2+\frac{u^2}{c}-\frac{b^2}{2A}.
+\]</div>
+<p>The only remaining dependence on <span class="math notranslate nohighlight">\(\theta\)</span> is the familiar Gaussian shape
+<span class="math notranslate nohighlight">\(\exp[-A(\theta-m)^2/2]\)</span>. Its integral is <span class="math notranslate nohighlight">\(\sqrt{2\pi/A}\)</span>. Including the
+prior’s normalization gives</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\mathcal L_{\rm marg}(\delta,s)
+=\int\mathcal L(\theta;\delta)p(\theta\mid s)\,d\theta
+=\frac{C(\delta)}{s\sqrt A}
+\exp\left[-\frac{u^2}{c}+\frac{b^2}{2A}\right].
+}
+\]</div>
+<p>There is now no <span class="math notranslate nohighlight">\(\theta\)</span> left to sample or optimize. The integral is exact.
+Both <span class="math notranslate nohighlight">\(\delta\)</span> and the prior scale <span class="math notranslate nohighlight">\(s\)</span> remain unknown, and they still affect
+the answer through <span class="math notranslate nohighlight">\(c\)</span>, <span class="math notranslate nohighlight">\(C\)</span>, <span class="math notranslate nohighlight">\(A\)</span> and <span class="math notranslate nohighlight">\(b\)</span>. In particular, we cannot discard
+<span class="math notranslate nohighlight">\(1/(s\sqrt A)\)</span> as a constant.</p>
+<p>We have also obtained the conditional posterior for free:</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{\theta\mid\delta,s,\mathrm{data}\sim\mathcal N(m,A^{-1}).}
+\]</div>
+</section>
+<section id="the-same-calculation-for-complex-p-splines">
+<h3>The same calculation for complex P-splines<a class="headerlink" href="#the-same-calculation-for-complex-p-splines" title="Link to this heading">#</a></h3>
+<p>In the actual model, the quantities we integrate are the <strong>real spline
+weights</strong> defining all real and imaginary parts of <span class="math notranslate nohighlight">\(\theta_{jl}(f)\)</span> in one
+Cholesky row. Collect these weights into a vector <span class="math notranslate nohighlight">\(\boldsymbol\beta\)</span>.
+The functions <span class="math notranslate nohighlight">\(\theta_{jl}(f)\)</span> are linear in these weights.</p>
+<p>Complex residuals do not prevent the Gaussian calculation. For example,
+writing <span class="math notranslate nohighlight">\(v=v_R+iv_I\)</span> and <span class="math notranslate nohighlight">\(\theta=a+ib\)</span> gives</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\begin{pmatrix}\Re(v\theta)\\\Im(v\theta)\end{pmatrix}
+=
+\begin{pmatrix}v_R&amp;-v_I\\v_I&amp;v_R\end{pmatrix}
+\begin{pmatrix}a\\b\end{pmatrix}.
+\end{split}\]</div>
+<p>Stacking real and imaginary parts across frequencies turns the complex
+regression into an ordinary real linear regression. Including the spline
+bases in its design matrix <span class="math notranslate nohighlight">\(X\)</span>, the log likelihood becomes</p>
+<div class="math notranslate nohighlight">
+\[
+\ell(\boldsymbol\beta;z)
+=d(z)-(y-X\boldsymbol\beta)^T W(z)(y-X\boldsymbol\beta).
+\]</div>
+<p>Here <span class="math notranslate nohighlight">\(z\)</span> collects the diagonal-spectrum weights and all smoothing scales.
+The vector <span class="math notranslate nohighlight">\(y\)</span> contains the observed row, <span class="math notranslate nohighlight">\(W\)</span> contains the inverse conditional
+powers, and <span class="math notranslate nohighlight">\(d\)</span> contains the log-determinant term. For coarse-grained data,
+<span class="math notranslate nohighlight">\(d\)</span> includes <span class="math notranslate nohighlight">\(N_bN_h\)</span>; any likelihood temperature multiplies both <span class="math notranslate nohighlight">\(d\)</span> and <span class="math notranslate nohighlight">\(W\)</span>,
+not the prior.</p>
+<p>The Gaussian P-spline prior has precision</p>
+<div class="math notranslate nohighlight">
+\[
+\boldsymbol\beta\mid z\sim\mathcal N(0,Q^{-1}),
+\qquad
+Q=\operatorname{blockdiag}\left(P_r/\sigma_r^2\right).
+\]</div>
+<p>The matrix versions of <span class="math notranslate nohighlight">\(A\)</span> and <span class="math notranslate nohighlight">\(m\)</span> are</p>
+<div class="math notranslate nohighlight">
+\[
+H=Q+2X^TWX,
+\qquad
+\mu=H^{-1}(2X^TWy).
+\]</div>
+<p>The factors of two appear because our log likelihood is
+<span class="math notranslate nohighlight">\(-(y-X\boldsymbol\beta)^TW(y-X\boldsymbol\beta)\)</span> rather than minus one-half
+of that quadratic. Completing the square gives</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\log\mathcal L_{\rm marg}(z)
+=d-(y-X\mu)^TW(y-X\mu)-\frac12\mu^TQ\mu
++\frac12\log|Q|-\frac12\log|H|.
+}
+\]</div>
+<p>This is the same integral as the scalar example. The determinant terms account
+for the widths of the prior and conditional Gaussian; they depend on the
+remaining parameters and must stay in the model. Evaluating the residual at
+<span class="math notranslate nohighlight">\(\mu\)</span> also avoids subtracting two large, nearly equal quadratic forms.</p>
+</section>
+<section id="what-nuts-and-vi-do-afterward">
+<h3>What NUTS and VI do afterward<a class="headerlink" href="#what-nuts-and-vi-do-afterward" title="Link to this heading">#</a></h3>
+<p>Stationary multivariate fits use this marginalization automatically for both
+<code class="docutils literal notranslate"><span class="pre">method=&quot;nuts&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">method=&quot;vi&quot;</span></code>; there is no separate non-marginalized mode.
+The first Cholesky row has no cross-spectrum coefficients, so it needs no
+Gaussian integral.</p>
+<p>NUTS samples the remaining <span class="math notranslate nohighlight">\(z\)</span>. VI fits a guide <span class="math notranslate nohighlight">\(q(z)\)</span> to its marginal posterior.
+For every retained <span class="math notranslate nohighlight">\(z\)</span>, both methods then restore one <strong>joint</strong> draw</p>
+<div class="math notranslate nohighlight">
+\[
+\boldsymbol\beta\mid z,\mathrm{data}\sim\mathcal N(\mu,H^{-1})
+\]</div>
+<p>and reconstruct the full spectral matrix. The data can correlate different
+coefficient blocks, so this draw uses the full covariance <span class="math notranslate nohighlight">\(H^{-1}\)</span>. The returned
+<code class="docutils literal notranslate"><span class="pre">weights_theta_*</span></code> variables therefore remain available. Using only <span class="math notranslate nohighlight">\(\mu\)</span> would discard the
+conditional variance <span class="math notranslate nohighlight">\(H^{-1}\)</span> and make uncertainty too small.</p>
+<p>For VI, the resulting joint approximation is
+<span class="math notranslate nohighlight">\(q(z)p(\boldsymbol\beta\mid z,\mathrm{data})\)</span>: the conditional Gaussian part
+is exact, while the approximation in <span class="math notranslate nohighlight">\(q(z)\)</span> remains. Marginalization does not
+make VI exact or establish calibrated intervals.</p>
+<p>This reduces the number of numerical latent variables and removes their direct
+coupling to the smoothing scales. It can improve sampling and optimization,
+but it is not a universal speed guarantee: each likelihood evaluation must
+factorize a matrix whose size is the number of integrated coefficients.
+Stationary multivariate inference requires JAX float64, enabled below.</p>
+</section>
 </section>
 <section id="coarse-graining">
 <h2>Coarse-graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
@@ -855,12 +1007,13 @@ No repository checkout or virtual environment activation is needed.</p>
 </div>
 <div class="cell_output docutils container">
 <img alt="../_images/803e8a1f79592c96cddeaf172e7293545a16498ee073f7938743038bd646b488.png" src="../_images/803e8a1f79592c96cddeaf172e7293545a16498ee073f7938743038bd646b488.png" />
-<img alt="../_images/91ba10f9f01e6b5e3a638350013117f4450fed26c7e406bdc4051dcbd4130c13.png" src="../_images/91ba10f9f01e6b5e3a638350013117f4450fed26c7e406bdc4051dcbd4130c13.png" />
+<img alt="../_images/185ec29f2677a70cb908a50b4a9cb4d4f99cc436872f19e8f2ffb8603ccfb9a4.png" src="../_images/185ec29f2677a70cb908a50b4a9cb4d4f99cc436872f19e8f2ffb8603ccfb9a4.png" />
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">spectrum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">spectral_density</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"theta_parameterization"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"marginalized"</span>
+<span class="n">spectrum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">spectral_density</span><span class="p">)</span>
 <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">spectrum</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 <span class="n">np</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_allclose</span><span class="p">(</span><span class="n">spectrum</span><span class="p">,</span> <span class="n">spectrum</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">))</span>
 <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigvalsh</span><span class="p">(</span><span class="n">spectrum</span><span class="p">)</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span>
@@ -869,6 +1022,9 @@ No repository checkout or virtual environment activation is needed.</p>
     <span class="s2">"Sampled roughness scales:"</span><span class="p">,</span>
     <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">posterior</span> <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"sigma_"</span><span class="p">)],</span>
 <span class="p">)</span>
+<span class="c1"># These coefficients were restored from their joint conditional Gaussian.</span>
+<span class="k">assert</span> <span class="s2">"weights_theta_re_1_0"</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">posterior</span>
+<span class="k">assert</span> <span class="s2">"weights_theta_im_1_0"</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">posterior</span>
 </pre></div>
 </div>
 </div>
@@ -882,8 +1038,11 @@ No repository checkout or virtual environment activation is needed.</p>
 <section id="explore-with-vi">
 <h2>Explore with VI<a class="headerlink" href="#explore-with-vi" title="Link to this heading">#</a></h2>
 <p>Use the same data, knots and smoothing prior with a Gaussian variational
-approximation. This short run illustrates the API; its intervals need not agree
-with NUTS. Check promising model choices with NUTS before drawing conclusions.</p>
+approximation for the remaining diagonal weights and smoothing scales. The
+cross-spectrum weights are marginalized during optimization and restored
+conditionally afterward, just as for NUTS.</p>
+<p>This short run illustrates the API; its intervals need not agree with NUTS.
+Check promising model choices with NUTS before drawing conclusions.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">replace</span>
@@ -899,6 +1058,10 @@ with NUTS. Check promising model choices with NUTS before drawing conclusions.</
         <span class="n">vi_early_stopping</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">),</span>
 <span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">vi_result</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"theta_parameterization"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"marginalized"</span>
+<span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"weights_theta_re_1_0"</span><span class="p">,</span> <span class="s2">"weights_theta_im_1_0"</span><span class="p">):</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">vi_result</span><span class="o">.</span><span class="n">posterior</span><span class="p">[</span><span class="n">name</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 
 <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">))</span>
 <span class="k">for</span> <span class="n">fitted</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">color</span> <span class="ow">in</span> <span class="p">((</span><span class="n">result</span><span class="p">,</span> <span class="s2">"NUTS"</span><span class="p">,</span> <span class="s2">"C0"</span><span class="p">),</span> <span class="p">(</span><span class="n">vi_result</span><span class="p">,</span> <span class="s2">"VI"</span><span class="p">,</span> <span class="s2">"C1"</span><span class="p">)):</span>
@@ -934,7 +1097,7 @@ with NUTS. Check promising model choices with NUTS before drawing conclusions.</
 </div>
 </div>
 <div class="cell_output docutils container">
-<img alt="../_images/4c2dd56a81e06089a217bb5777622f56fab14d42f9260e239ec9d1df287e5a3a.png" src="../_images/4c2dd56a81e06089a217bb5777622f56fab14d42f9260e239ec9d1df287e5a3a.png" />
+<img alt="../_images/00ae000526c5bbbbb7044f8a6ebc9da2c81b33d26905e3bd3837123eaae8e4df.png" src="../_images/00ae000526c5bbbbb7044f8a6ebc9da2c81b33d26905e3bd3837123eaae8e4df.png" />
 </div>
 </div>
 </section>
@@ -1011,6 +1174,12 @@ with NUTS. Check promising model choices with NUTS before drawing conclusions.</
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#p-spline-model">P-spline model</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#smoothness-prior">Smoothness prior</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#factorisation-by-cholesky-row">Factorisation by Cholesky row</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gaussian-marginalization-integrate-the-cross-spectrum-coefficients">Gaussian marginalization: integrate the cross-spectrum coefficients</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#start-with-one-real-coefficient">Start with one real coefficient</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-same-calculation-for-complex-p-splines">The same calculation for complex P-splines</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-nuts-and-vi-do-afterward">What NUTS and VI do afterward</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse-graining</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validity-of-coarse-graining">Validity of coarse-graining</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example">Example</a></li>

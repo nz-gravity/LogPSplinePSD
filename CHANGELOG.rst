@@ -5,6 +5,53 @@ CHANGELOG
 =========
 
 
+.. _changelog-v1.0.1:
+
+v1.0.1 (2026-10-29)
+===================
+
+Bug Fixes
+---------
+
+* fix: stabilize spline sampling across stationary and matrix models (`ef04c24`_)
+
+Documentation
+-------------
+
+* docs: align multivariate time-varying notation and clarify transforms (`27d1d1a`_)
+
+* docs: add multivariate time-varying spectral matrix tutorial (`2b63ee9`_)
+
+Unknown
+-------
+
+* Merge pull request #53 from nz-gravity/hacking-tv-multivar
+
+fix: stabilize spline sampling across stationary and matrix models (`287f125`_)
+
+* Scale matrix spline coordinates by prior and likelihood information (`cd5a356`_)
+
+* Replace multivariate ANOVA with tensor Cholesky splines
+
+Retain joint Gaussian marginalization and global centering. Preserve the supplied frequency penalty in the constant-time limit, omit unused time scales, and use a single unclipped likelihood for stationary and grid statistics. Validate matrix reconstruction, priors, gradients and conditional recovery across physical unit rescalings. (`c1ea517`_)
+
+* Report progress for each time-varying Cholesky row (`393ed6a`_)
+
+* Fix API documentation heading markup (`61be849`_)
+
+* Merge main and marginalize multivariate time-varying cross spectra (`d0b3aab`_)
+
+.. _ef04c24: https://github.com/nz-gravity/LogPSplinePSD/commit/ef04c24f5c15c0dae8864e419f06c43e9687c50f
+.. _27d1d1a: https://github.com/nz-gravity/LogPSplinePSD/commit/27d1d1a9e2f43cd5f52c250f5409bb349a4ef0c6
+.. _2b63ee9: https://github.com/nz-gravity/LogPSplinePSD/commit/2b63ee9572dc8b716ff0d8227fa8f649da92d98c
+.. _287f125: https://github.com/nz-gravity/LogPSplinePSD/commit/287f1257084c30f9579dfcb0b43c47e1d61163da
+.. _cd5a356: https://github.com/nz-gravity/LogPSplinePSD/commit/cd5a3569368fb26d3775b3baf28bfaeccd634e98
+.. _c1ea517: https://github.com/nz-gravity/LogPSplinePSD/commit/c1ea517291ac00a10a4a80ea1828e18656a59024
+.. _393ed6a: https://github.com/nz-gravity/LogPSplinePSD/commit/393ed6a21d26c8c5d6aaf49648fbd308707edcd1
+.. _61be849: https://github.com/nz-gravity/LogPSplinePSD/commit/61be849cbf0569e8f2d7d24877a3124ac8ac9b95
+.. _d0b3aab: https://github.com/nz-gravity/LogPSplinePSD/commit/d0b3aab6a615ef5ff47468d7e92be850466203a9
+
+
 .. _changelog-v1.0.0:
 
 v1.0.0 (2026-10-29)
@@ -19,12 +66,18 @@ Remove per-block detrending and its configuration arguments. Use one full-record
 
 Preserve actual preprocessing provenance through masking, pooling and saved results. Document the API change and verify the Fourier construction, quiet-spectrum leakage regression and result round trips. (`efd0c7d`_)
 
+Chores
+------
+
+* chore(release): 1.0.0 (`aac1b80`_)
+
 Unknown
 -------
 
 * Update README.rst (`0416ea0`_)
 
 .. _efd0c7d: https://github.com/nz-gravity/LogPSplinePSD/commit/efd0c7d8abe6fbb090ed8eb1a83da3481b623a8f
+.. _aac1b80: https://github.com/nz-gravity/LogPSplinePSD/commit/aac1b802371d1001314150a5c20cea9666dd7cb6
 .. _0416ea0: https://github.com/nz-gravity/LogPSplinePSD/commit/0416ea052c953eb44b72f15619c5811f78a71ea0
 
 
@@ -67,6 +120,12 @@ Link the dedicated study repositories and ignore local research and test outputs
 
 Validation: all 150 tests passed, Ruff checks passed, and documentation built with warnings treated as errors after executing all three tutorials. Tang coordinates, coefficients and powers match the previous main exactly across four schedules, with exact likelihood equality across 12 states. (`1059dec`_)
 
+* chore: move research studies out of the package repository
+
+Remove archived Dynamic Whittle and LISA experiment runners, link the dedicated study repositories, and ignore local research and test outputs. Remove the obsolete manuscript submodule and configuration entries for retired package modules.
+
+Validation: all 195 tests passed, Ruff checks passed, and the documentation built with warnings treated as errors after executing all three tutorials. Verified local documentation targets and archived file checksums. (`638e6ba`_)
+
 * chore: enable tagged releases (`63b5c7a`_)
 
 Performance Improvements
@@ -74,8 +133,30 @@ Performance Improvements
 
 * perf: compute Tang coordinates without a dummy transform (`18ac7e3`_)
 
+* perf: compute Tang coordinates without a dummy transform (`35c8de8`_)
+
 Unknown
 -------
+
+* Add matched Hann and WDM studies with reproducible analysis scripts
+
+Include all-bin LS2 comparisons, paired gap audits, compact manuscript figures, and regression checks. Reuse repeated frequency projections without changing paired sites or the physical prior. Keep generated study data and posterior archives local. (`aed4b19`_)
+
+* Add paired multivariate moving-periodogram fitting
+
+Retain aligned complex channel vectors at exact moving-window time and frequency locations in physical one-sided PSD units. Extend the existing Wishart statistics and ANOVA Cholesky row model to paired observations, preserving the grid path, priors, scalar VI, and shared NUTS runner.
+
+Accumulate coefficient-sized initialization equations in bounded chunks. Keep reference-grid centering separate from observation locations, preserve paired coordinates in native results, and reject rectangular pooling of scattered data.
+
+Validation: 182 fast tests passed, with six longer recovery tests deselected; Ruff and formatting checks passed. New contracts cover DFT scaling, cross-spectrum phase, scalar and matrix likelihood gradients, paired/grid parity, initialization and native round trips. Exploratory recovery curves are comparable with local FFTs, but both methods retain NUTS divergences. (`ffce954`_)
+
+* Add complex FFT multivariate time-varying fitting
+
+Port the existing rectangular GridTV route onto current main. Fit independent ANOVA modified-Cholesky rows through the shared NUTS runner, preserve count and reference-grid conventions, and retain all-draw spectral and coherence summaries.
+
+Keep scalar VI behavior intact and reject unsupported matrix GridTV VI explicitly. Leave adaptive stationarity diagnostics, window experiments, split-phase timing, and WDM cross-spectral research outside the package.
+
+Validation: 161 fast tests passed before removing the split-phase timing path; 34 affected matrix and sampler tests passed afterward. Ruff, formatting, and diff checks passed. (`79d61ca`_)
 
 * Add scalar VI fitting and notebook examples (#52)
 
@@ -87,8 +168,13 @@ Validated with the full package tests, notebook and documentation build, and wra
 
 .. _781bc56: https://github.com/nz-gravity/LogPSplinePSD/commit/781bc56e562d6f75f416fdccdec01ff624f98af9
 .. _1059dec: https://github.com/nz-gravity/LogPSplinePSD/commit/1059dec082fc48de4142d7a2f3a0796eff71a9a3
+.. _638e6ba: https://github.com/nz-gravity/LogPSplinePSD/commit/638e6ba6a25acc62832a8ca7d6ab5a62c452aa2d
 .. _63b5c7a: https://github.com/nz-gravity/LogPSplinePSD/commit/63b5c7a10d8bd4a3dfed8f1df05b02112321fd1b
 .. _18ac7e3: https://github.com/nz-gravity/LogPSplinePSD/commit/18ac7e3cf9e0d0c3e60df225d85d467bdd2d8b63
+.. _35c8de8: https://github.com/nz-gravity/LogPSplinePSD/commit/35c8de80120bc06cd8c2f4b8d2c0e6081a92e542
+.. _aed4b19: https://github.com/nz-gravity/LogPSplinePSD/commit/aed4b19c42e26f84b83ef2c1201feeae30ea31c6
+.. _ffce954: https://github.com/nz-gravity/LogPSplinePSD/commit/ffce9547f4c45ac3c2c113f1fcfa463c1e2b9e8d
+.. _79d61ca: https://github.com/nz-gravity/LogPSplinePSD/commit/79d61cafa4e05624ff5507df6df98da5c3bc67ac
 .. _0e5c087: https://github.com/nz-gravity/LogPSplinePSD/commit/0e5c087fef211a7a89765b77220c651e83bb5f8e
 
 

@@ -220,6 +220,7 @@
 <li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">Stationary PSD</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate stationary PSD</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/multivariate-timevarying-example.html">Multivariate time-varying PSD</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul class="nav bd-sidenav">
@@ -386,14 +387,16 @@
 </li>
       <li><a href="api.html#log_psplines.preprocessing.power_partition.coarse_grain_power">coarse_grain_power() (in module log_psplines.preprocessing.power_partition)</a>
 </li>
+      <li><a href="api.html#log_psplines.preprocessing.wishart_grid.coarse_grain_wishart_grid">coarse_grain_wishart_grid() (in module log_psplines.preprocessing.wishart_grid)</a>
+</li>
       <li><a href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig">CoarseGrainConfig (class in log_psplines.preprocessing.coarse_grain)</a>
 </li>
       <li><a href="api.html#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec">CoarseGrainSpec (class in log_psplines.preprocessing.coarse_grain)</a>
 </li>
-      <li><a href="api.html#log_psplines.models.matrix.SpectralMatrix.coherence">coherence() (log_psplines.models.matrix.SpectralMatrix static method)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#log_psplines.models.matrix.SpectralMatrix.coherence">coherence() (log_psplines.models.matrix.SpectralMatrix static method)</a>
+</li>
       <li><a href="api.html#log_psplines.preprocessing.knot_locator.Component">Component (class in log_psplines.preprocessing.knot_locator)</a>
 </li>
       <li><a href="api.html#log_psplines.preprocessing.coarse_grain.compute_binning_structure">compute_binning_structure() (in module log_psplines.preprocessing.coarse_grain)</a>
@@ -428,12 +431,14 @@
 <h2 id="E">E</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#log_psplines.data.EmpiricalPSD">EmpiricalPSD (class in log_psplines.data)</a>
+      <li><a href="api.html#log_psplines.data.WishartGridData.empirical_spectrum">empirical_spectrum (log_psplines.data.WishartGridData property)</a>
 </li>
-      <li><a href="api.html#log_psplines.config.StationaryConfig.eta">eta (log_psplines.config.StationaryConfig attribute)</a>
+      <li><a href="api.html#log_psplines.data.EmpiricalPSD">EmpiricalPSD (class in log_psplines.data)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#log_psplines.config.StationaryConfig.eta">eta (log_psplines.config.StationaryConfig attribute)</a>
+</li>
       <li><a href="api.html#log_psplines.config.StationaryConfig.exclude_freq_bands">exclude_freq_bands (log_psplines.config.StationaryConfig attribute)</a>
 </li>
       <li><a href="api.html#log_psplines.data.WishartData.exclude_frequency_bands">exclude_frequency_bands() (log_psplines.data.WishartData method)</a>
@@ -450,13 +455,17 @@
 </li>
       <li><a href="api.html#log_psplines.config.StationaryConfig.fmax">fmax (log_psplines.config.StationaryConfig attribute)</a>
 </li>
+      <li><a href="api.html#log_psplines.config.StationaryConfig.fmin">fmin (log_psplines.config.StationaryConfig attribute)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#log_psplines.config.StationaryConfig.fmin">fmin (log_psplines.config.StationaryConfig attribute)</a>
+      <li><a href="api.html#log_psplines.data.WishartGridData.from_coefficients">from_coefficients() (log_psplines.data.WishartGridData class method)</a>
 </li>
       <li><a href="api.html#log_psplines.basis.SplineBasis.from_grid">from_grid() (log_psplines.basis.SplineBasis class method)</a>
 </li>
       <li><a href="api.html#log_psplines.results.PSDResult.from_netcdf">from_netcdf() (log_psplines.results.PSDResult class method)</a>
+</li>
+      <li><a href="api.html#log_psplines.data.WishartGridData.from_scattered_coefficients">from_scattered_coefficients() (log_psplines.data.WishartGridData class method)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -478,12 +487,20 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.preprocessing.knot_locator.init_knots">init_knots() (in module log_psplines.preprocessing.knot_locator)</a>
 </li>
+      <li><a href="api.html#log_psplines.data.PowerData.is_grid">is_grid (log_psplines.data.PowerData property)</a>
+
+      <ul>
+        <li><a href="api.html#log_psplines.data.WishartGridData.is_grid">(log_psplines.data.WishartGridData property)</a>
+</li>
+      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#log_psplines.data.PowerData.is_grid">is_grid (log_psplines.data.PowerData property)</a>
-</li>
       <li><a href="api.html#log_psplines.data.PowerData.is_scattered">is_scattered (log_psplines.data.PowerData property)</a>
+
+      <ul>
+        <li><a href="api.html#log_psplines.data.WishartGridData.is_scattered">(log_psplines.data.WishartGridData property)</a>
 </li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -498,6 +515,10 @@
 <h2 id="L">L</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#log_psplines.preprocessing.wishart_grid.local_wishart_grid">local_wishart_grid() (in module log_psplines.preprocessing.wishart_grid)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.models.spectrum.LogPSpline">LogPSpline (class in log_psplines.models.spectrum)</a>
 </li>
   </ul></td>
@@ -506,6 +527,8 @@
 <h2 id="M">M</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#log_psplines.data.WishartGridData.mask">mask() (log_psplines.data.WishartGridData method)</a>
+</li>
       <li><a href="api.html#log_psplines.preprocessing.power_partition.mask_power">mask_power() (in module log_psplines.preprocessing.power_partition)</a>
 </li>
       <li><a href="api.html#log_psplines.config.StationaryConfig.max_tree_depth">max_tree_depth (log_psplines.config.StationaryConfig attribute)</a>
@@ -517,6 +540,8 @@
       <li><a href="api.html#log_psplines.config.StationaryConfig.method">method (log_psplines.config.StationaryConfig attribute)</a>
 </li>
       <li><a href="api.html#log_psplines.preprocessing.moving_periodogram.moving_periodogram">moving_periodogram() (in module log_psplines.preprocessing.moving_periodogram)</a>
+</li>
+      <li><a href="api.html#log_psplines.preprocessing.moving_periodogram.multivariate_moving_periodogram">multivariate_moving_periodogram() (in module log_psplines.preprocessing.moving_periodogram)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -610,8 +635,6 @@
 </li>
       <li><a href="api.html#log_psplines.preprocessing.power_partition.select_power_partition">select_power_partition() (in module log_psplines.preprocessing.power_partition)</a>
 </li>
-      <li><a href="api.html#log_psplines.config.StationaryConfig.smoothing_parameterization">smoothing_parameterization (log_psplines.config.StationaryConfig attribute)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.inference.components.SpectralComponents">SpectralComponents (class in log_psplines.inference.components)</a>
@@ -659,7 +682,11 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.data.WishartData.U">U (log_psplines.data.WishartData property)</a>
+
+      <ul>
+        <li><a href="api.html#log_psplines.data.WishartGridData.U">(log_psplines.data.WishartGridData property)</a>
 </li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -702,6 +729,8 @@
 </li>
       <li><a href="api.html#log_psplines.data.WishartData">WishartData (class in log_psplines.data)</a>
 </li>
+      <li><a href="api.html#log_psplines.data.WishartGridData">WishartGridData (class in log_psplines.data)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -709,7 +738,11 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#log_psplines.data.WishartData.Y">Y (log_psplines.data.WishartData property)</a>
+
+      <ul>
+        <li><a href="api.html#log_psplines.data.WishartGridData.Y">(log_psplines.data.WishartGridData property)</a>
 </li>
+      </ul></li>
   </ul></td>
 </tr></table>
 

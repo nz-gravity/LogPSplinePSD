@@ -1,0 +1,1152 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Multivariate time-varying PSD &#8212; LogPSplinePSD</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=55c26ed414f5f8a31ebb"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb" />
+
+    <script src="../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=b8b12719"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="../_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"tex": {"macros": {"d": "\\mathbf{d}", "S": "\\mathbf{S}", "Y": "\\mathbf{Y}", "Z": "\\mathbf{Z}", "u": "\\mathbf{u}", "I": "\\mathbf{I}", "tr": "\\operatorname{tr}", "btheta": "\\boldsymbol{\\theta}", "bdelta": "\\boldsymbol{\\delta}", "bold": ["\\mathbf{#1}", 1]}}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/multivariate-timevarying-example';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="icon" href="../_static/favicon.png"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="API Reference" href="../api.html" />
+    <link rel="prev" title="Time-varying PSD" href="timevarying-example.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../intro.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt="LogPSplinePSD - Home"/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt="LogPSplinePSD - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../intro.html">
+                    Home
+                </a>
+            </li>
+        </ul>
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="univar-example.html">Stationary PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multivariate-example.html">Multivariate stationary PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="timevarying-example.html">Time-varying PSD</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Multivariate time-varying PSD</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/examples/multivariate-timevarying-example.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Multivariate time-varying PSD</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#add-time-dependence-to-the-same-cholesky-model">1. Add time dependence to the same Cholesky model</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#replace-each-frequency-spline-with-a-tensor-spline">Replace each frequency spline with a tensor spline</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-coefficients-in-the-likelihood-s-units">2. Generate coefficients in the likelihood’s units</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#use-the-same-row-likelihood-and-gaussian-marginalization">3. Use the same row likelihood and Gaussian marginalization</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#implementation-choices-for-this-run">Implementation choices for this run</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#check-the-sampler-before-interpreting-the-spectra">4. Check the sampler before interpreting the spectra</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-the-recovered-spectra-with-the-truth">5. Compare the recovered spectra with the truth</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#from-this-simulation-to-a-time-series">From this simulation to a time series</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-does-complex-fourier-coefficient-mean-here">What does “complex Fourier coefficient” mean here?</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#why-not-use-wdm">Why not use WDM?</a></li>
+</ul>
+</li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="multivariate-time-varying-psd">
+<h1>Multivariate time-varying PSD<a class="headerlink" href="#multivariate-time-varying-psd" title="Link to this heading">#</a></h1>
+<p>This is the <a class="reference internal" href="multivariate-example.html"><span class="std std-doc">stationary multivariate model</span></a>, with the time basis from the <a class="reference internal" href="timevarying-example.html"><span class="std std-doc">scalar time-varying example</span></a> added to each spline. The Cholesky decomposition stays the same. Each frequency-dependent curve becomes a surface depending on both time and frequency:</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf S(f)\quad\longrightarrow\quad\mathbf S(t,f).
+\]</div>
+<p>The diagonal entries are the channels’ PSDs; the off-diagonal entries are their complex cross-spectra. We will fit a two-channel example in which both change with time.</p>
+<p>To check the inference calculation first, we generate independent Gaussian coefficient vectors directly. We do not generate a time series or apply a transform in this example. The saved run has zero divergences, no maximum-depth hits, and maximum <span class="math notranslate nohighlight">\(\widehat R=1.0039\)</span>. One successful simulation does not establish interval calibration or validate a LISA analysis.</p>
+<p>Run the cells in order. The fit uses four NUTS chains, each with 1,000 warmup iterations and 1,000 retained draws. Allow a few minutes including compilation. For a fresh environment, install the core revision used for this tutorial before starting the kernel:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"LogPSplinePSD @ git+https://github.com/nz-gravity/LogPSplinePSD.git@ef04c24f5c15c0dae8864e419f06c43e9687c50f"</span>
+</pre></div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">timer</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">"XLA_FLAGS"</span><span class="p">,</span> <span class="s2">"--xla_force_host_platform_device_count=1"</span><span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>
+<span class="n">jax</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">"jax_enable_x64"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">arviz_stats</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">azs</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+<span class="n">get_ipython</span><span class="p">()</span><span class="o">.</span><span class="n">run_line_magic</span><span class="p">(</span><span class="s2">"matplotlib"</span><span class="p">,</span> <span class="s2">"inline"</span><span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogPSpline</span><span class="p">,</span> <span class="n">PowerConfig</span><span class="p">,</span> <span class="n">SplineBasis</span><span class="p">,</span> <span class="n">WishartGridData</span><span class="p">,</span> <span class="n">fit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.diagnostics.sampling</span><span class="w"> </span><span class="kn">import</span> <span class="n">sampling_diagnostics</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_level</span>
+
+<span class="n">set_level</span><span class="p">(</span><span class="s2">"WARNING"</span><span class="p">)</span>
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span>
+    <span class="s2">"ignore"</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">"There are not enough devices to run parallel chains.*"</span><span class="p">,</span>
+    <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span> <span class="n">module</span><span class="o">=</span><span class="s2">"log_psplines.inference.nuts"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">"figure.dpi"</span><span class="p">:</span> <span class="mi">115</span><span class="p">,</span> <span class="s2">"font.size"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">"axes.spines.top"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                     <span class="s2">"axes.spines.right"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">"savefig.bbox"</span><span class="p">:</span> <span class="s2">"tight"</span><span class="p">})</span>
+<span class="n">SEED</span> <span class="o">=</span> <span class="mi">31415</span>
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">SEED</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"JAX: </span><span class="si">{</span><span class="n">jax</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2">; float64: </span><span class="si">{</span><span class="n">jax</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">x64_enabled</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Fixed simulation and sampler seed: </span><span class="si">{</span><span class="n">SEED</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Four chains run sequentially on one JAX device."</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>JAX: 0.12.0.1; float64: True
+Fixed simulation and sampler seed: 31415
+Four chains run sequentially on one JAX device.
+</pre></div>
+</div>
+</div>
+</div>
+<section id="add-time-dependence-to-the-same-cholesky-model">
+<h2>1. Add time dependence to the same Cholesky model<a class="headerlink" href="#add-time-dependence-to-the-same-cholesky-model" title="Link to this heading">#</a></h2>
+<p>In the stationary example, we wrote</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf S(f)^{-1}=\mathbf T(f)^H\mathbf D(f)^{-1}\mathbf T(f).
+\]</div>
+<p>Here we use exactly the same expression at each time and frequency:</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\mathbf S(t,f)^{-1}
+=\mathbf T(t,f)^H\mathbf D(t,f)^{-1}\mathbf T(t,f)
+}
+\]</div>
+<p>For our two channels,</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\mathbf D(t,f)=
+\begin{pmatrix}\delta_1(t,f)^2&amp;0\\0&amp;\delta_2(t,f)^2\end{pmatrix},
+\end{split}\]</div>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\mathbf T(t,f)=
+\begin{pmatrix}1&amp;0\\-\theta_{21}(t,f)&amp;1\end{pmatrix}.
+\end{split}\]</div>
+<p>We recover the spectral matrix using</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\mathbf S(t,f)=\mathbf T(t,f)^{-1}\mathbf D(t,f)\mathbf T(t,f)^{-H}.
+}
+\]</div>
+<p>Positive <span class="math notranslate nohighlight">\(\delta_j(t,f)^2\)</span> ensure that this matrix is positive definite. As before, <span class="math notranslate nohighlight">\(\delta_j^2\)</span> are the conditional spectra in the Cholesky decomposition, and <span class="math notranslate nohighlight">\(\theta_{21}\)</span> is a regression coefficient. They are not all entries of <span class="math notranslate nohighlight">\(\mathbf S\)</span>. For example, suppressing <span class="math notranslate nohighlight">\((t,f)\)</span> briefly,</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\begin{aligned}
+S_{11}&amp;=\delta_1^2,\\
+S_{12}&amp;=\delta_1^2\overline{\theta_{21}},\\
+S_{22}&amp;=\delta_2^2+|\theta_{21}|^2\delta_1^2.
+\end{aligned}
+\end{split}\]</div>
+<section id="replace-each-frequency-spline-with-a-tensor-spline">
+<h3>Replace each frequency spline with a tensor spline<a class="headerlink" href="#replace-each-frequency-spline-with-a-tensor-spline" title="Link to this heading">#</a></h3>
+<p>The stationary diagonal spline was</p>
+<div class="math notranslate nohighlight">
+\[
+\log\delta_j(f)^2
+=\sum_m B_{j,m}(f)\,w^{(\delta)}_{j,m}.
+\]</div>
+<p>Now use the row vectors of time and frequency B-splines, <span class="math notranslate nohighlight">\(\mathbf b_t(t)\)</span> and <span class="math notranslate nohighlight">\(\mathbf b_f(f)\)</span>, from the scalar time-varying example. Replace the coefficient vector by a <span class="math notranslate nohighlight">\(K_t\times K_f\)</span> coefficient matrix:</p>
+<div class="math notranslate nohighlight">
+\[
+\boxed{
+\log\delta_j(t,f)^2
+=\mathbf b_t(t)\,\mathbf W_j^{(\delta)}\,\mathbf b_f(f)^\mathsf T.
+}
+\]</div>
+<p>The real and imaginary parts of each off-diagonal coefficient get the same treatment:</p>
+<div class="math notranslate nohighlight">
+\[
+\theta_{jl}^{(\mathrm R)}(t,f)
+=\mathbf b_t(t)\,\mathbf W_{jl}^{(\mathrm R)}\,\mathbf b_f(f)^\mathsf T,
+\]</div>
+<div class="math notranslate nohighlight">
+\[
+\theta_{jl}^{(\mathrm I)}(t,f)
+=\mathbf b_t(t)\,\mathbf W_{jl}^{(\mathrm I)}\,\mathbf b_f(f)^\mathsf T,
+\qquad l&lt;j.
+\]</div>
+<p>For two channels there are therefore four real spline surfaces: <span class="math notranslate nohighlight">\(\log\delta_1^2\)</span>, <span class="math notranslate nohighlight">\(\log\delta_2^2\)</span>, <span class="math notranslate nohighlight">\(\theta_{21}^{(\mathrm R)}\)</span> and <span class="math notranslate nohighlight">\(\theta_{21}^{(\mathrm I)}\)</span>. For <span class="math notranslate nohighlight">\(p\)</span> channels there are <span class="math notranslate nohighlight">\(p^2\)</span>. No ANOVA decomposition is needed.</p>
+<p>In the simulation code below, <code class="docutils literal notranslate"><span class="pre">h1</span></code> and <code class="docutils literal notranslate"><span class="pre">h2</span></code> hold <span class="math notranslate nohighlight">\(\log\delta_1(t,f)^2\)</span> and <span class="math notranslate nohighlight">\(\log\delta_2(t,f)^2\)</span>, and <code class="docutils literal notranslate"><span class="pre">theta</span></code> holds <span class="math notranslate nohighlight">\(\theta_{21}(t,f)\)</span>. Thus <code class="docutils literal notranslate"><span class="pre">np.exp(h1)</span></code> gives <span class="math notranslate nohighlight">\(\delta_1^2\)</span>, not <span class="math notranslate nohighlight">\(\delta_1\)</span>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Smooth analytic truth, constructed independently of the package reconstruction.</span>
+<span class="n">time</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+<span class="n">frequency</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.47</span><span class="p">,</span> <span class="mi">24</span><span class="p">)</span>
+<span class="n">t</span><span class="p">,</span> <span class="n">f</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">"ij"</span><span class="p">)</span>
+<span class="n">u</span> <span class="o">=</span> <span class="n">t</span> <span class="o">-</span> <span class="mf">0.5</span>
+<span class="n">v</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="n">f</span> <span class="o">-</span> <span class="n">frequency</span><span class="o">.</span><span class="n">min</span><span class="p">())</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">ptp</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+<span class="n">h1</span> <span class="o">=</span> <span class="mf">0.9</span> <span class="o">*</span> <span class="n">u</span> <span class="o">+</span> <span class="mf">0.8</span> <span class="o">*</span> <span class="n">v</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="mf">0.35</span> <span class="o">*</span> <span class="n">t</span> <span class="o">*</span> <span class="n">v</span>
+<span class="n">h2</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.3</span> <span class="o">-</span> <span class="mf">0.65</span> <span class="o">*</span> <span class="n">u</span> <span class="o">+</span> <span class="mf">0.45</span> <span class="o">*</span> <span class="n">v</span> <span class="o">+</span> <span class="mf">0.4</span> <span class="o">*</span> <span class="n">u</span> <span class="o">*</span> <span class="n">v</span>
+<span class="n">theta</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.35</span> <span class="o">+</span> <span class="mf">0.30</span> <span class="o">*</span> <span class="n">u</span> <span class="o">-</span> <span class="mf">0.15</span> <span class="o">*</span> <span class="n">v</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="p">(</span><span class="mf">0.20</span> <span class="o">-</span> <span class="mf">0.16</span> <span class="o">*</span> <span class="n">u</span> <span class="o">+</span> <span class="mf">0.10</span> <span class="o">*</span> <span class="n">v</span> <span class="o">+</span> <span class="mf">0.10</span> <span class="o">*</span> <span class="n">u</span> <span class="o">*</span> <span class="n">v</span><span class="p">)</span>
+<span class="n">d1</span><span class="p">,</span> <span class="n">d2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">h1</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">h2</span><span class="p">)</span>
+<span class="n">truth</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="o">*</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+<span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">d1</span>
+<span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">d1</span> <span class="o">*</span> <span class="n">theta</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span>
+<span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span>
+<span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">d2</span> <span class="o">+</span> <span class="nb">abs</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">d1</span>
+<span class="n">truth_coherence</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="p">(</span><span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">real</span> <span class="o">*</span> <span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">real</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigvalsh</span><span class="p">(</span><span class="n">truth</span><span class="p">)</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span>
+<span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">truth</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">truth</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="o">&gt;</span> <span class="mf">0.5</span>
+<span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">real</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">0</span>
+<span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">imag</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">0</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Truth: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">time</span><span class="p">)</span><span class="si">}</span><span class="s2"> times × </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span><span class="si">}</span><span class="s2"> frequencies × 2 channels"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Minimum eigenvalue: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigvalsh</span><span class="p">(</span><span class="n">truth</span><span class="p">)</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Squared coherence range: </span><span class="si">{</span><span class="n">truth_coherence</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">–</span><span class="si">{</span><span class="n">truth_coherence</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Truth: 8 times × 24 frequencies × 2 channels
+Minimum eigenvalue: 0.192
+Squared coherence range: 0.064–0.788
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="generate-coefficients-in-the-likelihood-s-units">
+<h2>2. Generate coefficients in the likelihood’s units<a class="headerlink" href="#generate-coefficients-in-the-likelihood-s-units" title="Link to this heading">#</a></h2>
+<p>The stationary notebook uses Fourier coefficients with covariance <span class="math notranslate nohighlight">\(T\mathbf S(f)\)</span>, where <span class="math notranslate nohighlight">\(T\)</span> is the block duration. Dividing those coefficients by <span class="math notranslate nohighlight">\(\sqrt T\)</span> would give</p>
+<div class="math notranslate nohighlight">
+\[
+\widetilde{\mathbf d}=\frac{\mathbf d}{\sqrt T},
+\qquad
+\widetilde{\mathbf d}\sim\mathcal{CN}(\mathbf0,\mathbf S).
+\]</div>
+<p>We work directly in this normalized convention. At each <span class="math notranslate nohighlight">\((t,f)\)</span> we generate 32 independent, zero-mean proper complex Gaussian vectors,</p>
+<div class="math notranslate nohighlight">
+\[
+\widetilde{\mathbf d}_r(t,f)
+\sim\mathcal{CN}\!\left(\mathbf0,\mathbf S(t,f)\right),
+\]</div>
+<p>independently across cells too. These are simulated vectors, not Fourier coefficients extracted from a record. The code generates unit-covariance complex noise and multiplies it by a Cholesky factor of the known <span class="math notranslate nohighlight">\(\mathbf S(t,f)\)</span>.</p>
+<p>The data object stores the sufficient statistic</p>
+<div class="math notranslate nohighlight">
+\[
+\widetilde{\mathbf Y}(t,f)
+=\sum_{r=1}^{n_{tf}}
+\widetilde{\mathbf d}_r(t,f)\widetilde{\mathbf d}_r(t,f)^H
+\]</div>
+<p>and its count <span class="math notranslate nohighlight">\(n_{tf}=32\)</span>. This is a <strong>sum</strong>, not an average. We assign the covariance one-sided PSD units directly; there is no transform normalization or two-sided conversion to perform in this simulation. ENBW is one.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">n_replicates</span> <span class="o">=</span> <span class="mi">32</span>
+<span class="n">z</span> <span class="o">=</span> <span class="p">(</span><span class="n">rng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">n_replicates</span><span class="p">))</span>
+     <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">rng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">n_replicates</span><span class="p">)))</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">coefficients</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">cholesky</span><span class="p">(</span><span class="n">truth</span><span class="p">)</span> <span class="o">@</span> <span class="n">z</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">WishartGridData</span><span class="o">.</span><span class="n">from_coefficients</span><span class="p">(</span>
+    <span class="n">coefficients</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">"arbitrary_unit^2/Hz"</span><span class="p">,</span>
+    <span class="n">preprocessing</span><span class="o">=</span><span class="p">{</span><span class="s2">"source"</span><span class="p">:</span> <span class="s2">"independent zero-mean proper complex Gaussian simulation"</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">counts</span> <span class="o">==</span> <span class="n">n_replicates</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">data</span><span class="o">.</span><span class="n">enbw</span> <span class="o">==</span> <span class="mf">1.0</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Independent vectors: </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">; observations per cell: </span><span class="si">{</span><span class="n">n_replicates</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Stored factor width: </span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">u_re</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> (compression preserves Y and counts)"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Independent vectors: 6,144; observations per cell: 32
+Stored factor width: 2 (compression preserves Y and counts)
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="use-the-same-row-likelihood-and-gaussian-marginalization">
+<h2>3. Use the same row likelihood and Gaussian marginalization<a class="headerlink" href="#use-the-same-row-likelihood-and-gaussian-marginalization" title="Link to this heading">#</a></h2>
+<p>As in the stationary notebook, factor the sufficient statistic as</p>
+<div class="math notranslate nohighlight">
+\[
+\widetilde{\mathbf Y}(t,f)=\mathbf U(t,f)\mathbf U(t,f)^H
+\]</div>
+<p>and let <span class="math notranslate nohighlight">\(\mathbf u_j(t,f)\)</span> be row <span class="math notranslate nohighlight">\(j\)</span> of <span class="math notranslate nohighlight">\(\mathbf U(t,f)\)</span>. The row residual is</p>
+<div class="math notranslate nohighlight">
+\[
+\mathbf r_j(t,f)
+=\mathbf u_j(t,f)-\sum_{l&lt;j}\theta_{jl}(t,f)\,\mathbf u_l(t,f).
+\]</div>
+<p>Its log likelihood is</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\boxed{
+\begin{aligned}
+\log\mathcal L_j
+&amp;=\mathrm{const}
+-\sum_{t,f}n_{tf}\log\delta_j(t,f)^2\\
+&amp;\quad-\sum_{t,f}\frac{\|\mathbf r_j(t,f)\|_2^2}{\delta_j(t,f)^2}.
+\end{aligned}
+}
+\end{split}\]</div>
+<p>This is the stationary row likelihood summed over time as well as frequency. There is no <span class="math notranslate nohighlight">\(T\)</span> in the denominator because we have already normalized the coefficients by <span class="math notranslate nohighlight">\(\sqrt T\)</span>. The norm is squared, just as in the stationary example.</p>
+<p>Hold <span class="math notranslate nohighlight">\(\delta_j(t,f)^2\)</span> and the smoothing scales fixed for a moment. The residual is linear in the real spline coefficients defining <span class="math notranslate nohighlight">\(\theta_{jl}(t,f)\)</span>, so its squared norm is quadratic in those coefficients. Combined with their Gaussian prior, this gives the same Gaussian integral derived in the <a class="reference internal" href="multivariate-example.html"><span class="std std-doc">stationary multivariate example</span></a>.</p>
+<p>The code integrates these coefficients out while NUTS samples the remaining parameters. For each retained sample, it restores one <strong>joint Gaussian draw</strong> of the real and imaginary cross-coefficients and reconstructs <span class="math notranslate nohighlight">\(\mathbf S(t,f)\)</span>. Keeping this correlated draw, rather than only its conditional mean, preserves their uncertainty.</p>
+<section id="implementation-choices-for-this-run">
+<h3>Implementation choices for this run<a class="headerlink" href="#implementation-choices-for-this-run" title="Link to this heading">#</a></h3>
+<p>We use three time coefficients and four frequency coefficients for each surface. This small basis can represent the simulated fields. The fit receives the observations and model, never the truth.</p>
+<p>Each surface has its own time and frequency smoothing scales, with independent <span class="math notranslate nohighlight">\(\operatorname{HalfNormal}(1.28)\)</span> priors. As in the scalar tutorial, the Gaussian coefficient prior penalizes roughness in both directions. The matrix implementation uses maximum-entry-normalized derivative penalties, a <span class="math notranslate nohighlight">\(10^{-6}\)</span> ridge in the frequency penalty, and no separate null-space prior; these details differ from the scalar tutorial’s prior. See the <a class="reference internal" href="../api.html"><span class="std std-doc">API reference</span></a> for the precise matrix prior.</p>
+<p>Coefficient sampling scales are chosen automatically from the prior and fixed likelihood information. This changes sampling coordinates while preserving the physical prior. No extra scaling settings are needed. This time-varying matrix path currently supports NUTS.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">basis_time</span> <span class="o">=</span> <span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span>
+    <span class="n">time</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">degree</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">penalty_order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="s2">"max"</span><span class="p">,</span> <span class="n">ridge</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">basis_frequency</span> <span class="o">=</span> <span class="n">SplineBasis</span><span class="o">.</span><span class="n">from_grid</span><span class="p">(</span>
+    <span class="n">frequency</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">degree</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">penalty_order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="s2">"max"</span><span class="p">,</span> <span class="n">ridge</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">LogPSpline</span><span class="p">(</span><span class="n">frequency</span><span class="o">=</span><span class="n">basis_frequency</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="n">basis_time</span><span class="p">)</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">PowerConfig</span><span class="p">(</span>
+    <span class="n">structure</span><span class="o">=</span><span class="s2">"tensor"</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"nuts"</span><span class="p">,</span> <span class="n">roughness_scale</span><span class="o">=</span><span class="mf">1.28</span><span class="p">,</span>
+    <span class="n">n_warmup</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">num_chains</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">SEED</span><span class="p">,</span>
+    <span class="n">target_accept_prob</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">max_tree_depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">dense_mass</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">spectrum_draws</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">spectrum_chunk_size</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">progress_bar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Basis per field: </span><span class="si">{</span><span class="n">basis_time</span><span class="o">.</span><span class="n">basis</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> × </span><span class="si">{</span><span class="n">basis_frequency</span><span class="o">.</span><span class="n">basis</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">started</span> <span class="o">=</span> <span class="n">timer</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+<span class="n">elapsed_seconds</span> <span class="o">=</span> <span class="n">timer</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">started</span>
+<span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"theta_parameterization"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"marginalized"</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Fit and reconstruction: </span><span class="si">{</span><span class="n">elapsed_seconds</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> seconds"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"NUTS dimensions per Cholesky row: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s1">'row_latent_dimensions'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Retained posterior: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">posterior</span><span class="o">.</span><span class="n">sizes</span><span class="p">[</span><span class="s1">'chain'</span><span class="p">]</span><span class="si">}</span><span class="s2"> chains × </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">posterior</span><span class="o">.</span><span class="n">sizes</span><span class="p">[</span><span class="s1">'draw'</span><span class="p">]</span><span class="si">}</span><span class="s2"> draws"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Basis per field: 3 × 4
+</pre></div>
+</div>
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Fit and reconstruction: 50.7 seconds
+NUTS dimensions per Cholesky row: [14, 18]
+Retained posterior: 4 chains × 1000 draws
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="check-the-sampler-before-interpreting-the-spectra">
+<h2>4. Check the sampler before interpreting the spectra<a class="headerlink" href="#check-the-sampler-before-interpreting-the-spectra" title="Link to this heading">#</a></h2>
+<p>The two Cholesky rows are sampled separately, as in the stationary example. First check that no divergences or maximum-depth hits occurred. Then check agreement between chains using <span class="math notranslate nohighlight">\(\widehat R\)</span>, the effective sample sizes (ESS), and energy BFMI.</p>
+<p>The code requires finite diagnostics, <span class="math notranslate nohighlight">\(\widehat R&lt;1.01\)</span>, bulk and tail ESS of at least 400, BFMI of at least 0.3, and no divergences or depth hits. Passing these checks supports this run’s sampling reliability. It does not establish interval calibration or rule out model bias.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">row_diagnostics</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">sampling_diagnostics</span><span class="p">(</span><span class="n">result</span><span class="p">)[</span><span class="s2">"nuts"</span><span class="p">])</span>
+<span class="n">display</span><span class="p">(</span><span class="n">row_diagnostics</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"step_size"</span><span class="p">,</span> <span class="s2">"n_draws"</span><span class="p">]))</span>
+<span class="n">diagnostics</span> <span class="o">=</span> <span class="n">azs</span><span class="o">.</span><span class="n">summary</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">to_arviz</span><span class="p">(),</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"diagnostics"</span><span class="p">,</span> <span class="n">round_to</span><span class="o">=</span><span class="s2">"none"</span><span class="p">)</span>
+<span class="n">bfmi_by_row</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">sample_stats</span><span class="p">[</span><span class="sa">f</span><span class="s2">"energy_channel_</span><span class="si">{</span><span class="n">row</span><span class="si">}</span><span class="s2">"</span><span class="p">])</span>
+    <span class="n">bfmi_by_row</span><span class="p">[</span><span class="n">row</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ddof</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">diagnostics_finite</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">diagnostics</span><span class="p">[[</span><span class="s2">"r_hat"</span><span class="p">,</span> <span class="s2">"ess_bulk"</span><span class="p">,</span> <span class="s2">"ess_tail"</span><span class="p">]]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">())</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+    <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">bfmi_by_row</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="p">)</span>
+<span class="n">diagnostic_values</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"Maximum R-hat"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">diagnostics</span><span class="p">[</span><span class="s2">"r_hat"</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span>
+    <span class="s2">"Minimum bulk ESS"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">diagnostics</span><span class="p">[</span><span class="s2">"ess_bulk"</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span>
+    <span class="s2">"Minimum tail ESS"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">diagnostics</span><span class="p">[</span><span class="s2">"ess_tail"</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span>
+    <span class="s2">"Minimum BFMI"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">bfmi_by_row</span><span class="o">.</span><span class="n">values</span><span class="p">()))),</span>
+    <span class="s2">"Divergences"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">row_diagnostics</span><span class="o">.</span><span class="n">divergences</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+    <span class="s2">"Maximum-depth hits"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">row_diagnostics</span><span class="o">.</span><span class="n">max_treedepth_hits</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+<span class="p">}</span>
+<span class="n">display</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">diagnostic_values</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"Observed value"</span><span class="p">)</span><span class="o">.</span><span class="n">to_frame</span><span class="p">())</span>
+<span class="n">convergence_passed</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">diagnostics_finite</span>
+    <span class="ow">and</span> <span class="n">diagnostic_values</span><span class="p">[</span><span class="s2">"Maximum R-hat"</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">1.01</span>
+    <span class="ow">and</span> <span class="n">diagnostic_values</span><span class="p">[</span><span class="s2">"Minimum bulk ESS"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">400</span>
+    <span class="ow">and</span> <span class="n">diagnostic_values</span><span class="p">[</span><span class="s2">"Minimum tail ESS"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">400</span>
+    <span class="ow">and</span> <span class="n">diagnostic_values</span><span class="p">[</span><span class="s2">"Minimum BFMI"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mf">0.3</span>
+    <span class="ow">and</span> <span class="n">diagnostic_values</span><span class="p">[</span><span class="s2">"Divergences"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+    <span class="ow">and</span> <span class="n">diagnostic_values</span><span class="p">[</span><span class="s2">"Maximum-depth hits"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"All R-hat, ESS and BFMI values finite:"</span><span class="p">,</span> <span class="n">diagnostics_finite</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Convergence checks:"</span><span class="p">,</span> <span class="s2">"PASS"</span> <span class="k">if</span> <span class="n">convergence_passed</span> <span class="k">else</span> <span class="s2">"NOT ALL PASSED — inspect before interpreting"</span><span class="p">)</span>
+
+<span class="c1"># Percentiles use every retained draw; spectrum_draws controls only a stored preview.</span>
+<span class="n">real_q</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">quantiles</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s2">"real"</span><span class="p">)</span><span class="o">.</span><span class="n">values</span>
+<span class="n">imag_q</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">quantiles</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s2">"imag"</span><span class="p">)</span><span class="o">.</span><span class="n">values</span>
+<span class="n">coherence_q</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">quantiles</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s2">"coherence"</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="n">median</span> <span class="o">=</span> <span class="n">real_q</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">imag_q</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="n">preview</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">spectral_density</span>
+<span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">preview</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="n">np</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_allclose</span><span class="p">(</span><span class="n">preview</span><span class="p">,</span> <span class="n">preview</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigvalsh</span><span class="p">(</span><span class="n">preview</span><span class="p">)</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Stored </span><span class="si">{</span><span class="n">preview</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> × </span><span class="si">{</span><span class="n">preview</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">-draw matrix preview is finite, Hermitian and positive definite."</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>factor</th>
+      <th>divergences</th>
+      <th>rhat_max</th>
+      <th>ess_bulk_min</th>
+      <th>ess_tail_min</th>
+      <th>max_treedepth_hits</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0</td>
+      <td>0</td>
+      <td>1.002279</td>
+      <td>3565.027998</td>
+      <td>2020.794420</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>1</td>
+      <td>0</td>
+      <td>1.004482</td>
+      <td>3394.114316</td>
+      <td>2189.936272</td>
+      <td>0</td>
+    </tr>
+  </tbody>
+</table>
+</div></div><div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Observed value</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>Maximum R-hat</th>
+      <td>1.004482</td>
+    </tr>
+    <tr>
+      <th>Minimum bulk ESS</th>
+      <td>3394.114316</td>
+    </tr>
+    <tr>
+      <th>Minimum tail ESS</th>
+      <td>2020.794420</td>
+    </tr>
+    <tr>
+      <th>Minimum BFMI</th>
+      <td>0.962445</td>
+    </tr>
+    <tr>
+      <th>Divergences</th>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <th>Maximum-depth hits</th>
+      <td>0.000000</td>
+    </tr>
+  </tbody>
+</table>
+</div></div><div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>All R-hat, ESS and BFMI values finite: True
+Convergence checks: PASS
+Stored 4 × 50-draw matrix preview is finite, Hermitian and positive definite.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="compare-the-recovered-spectra-with-the-truth">
+<h2>5. Compare the recovered spectra with the truth<a class="headerlink" href="#compare-the-recovered-spectra-with-the-truth" title="Link to this heading">#</a></h2>
+<p>We now reconstruct <span class="math notranslate nohighlight">\(\mathbf S(t,f)\)</span> from each posterior draw. The first plot compares the two PSDs, <span class="math notranslate nohighlight">\(S_{11}(t,f)\)</span> and <span class="math notranslate nohighlight">\(S_{22}(t,f)\)</span>, with their truths. The next plot compares the real and imaginary parts of <span class="math notranslate nohighlight">\(S_{12}(t,f)\)</span> and the squared coherence,</p>
+<div class="math notranslate nohighlight">
+\[
+\gamma_{12}^2(t,f)
+=\frac{|S_{12}(t,f)|^2}{S_{11}(t,f)S_{22}(t,f)}.
+\]</div>
+<p>Each truth/median pair shares a color scale. We use <span class="math notranslate nohighlight">\(S_{12}=E[\widetilde d_1\widetilde d_2^*]\)</span>, so its imaginary part has the opposite sign to that of <span class="math notranslate nohighlight">\(\theta_{21}\)</span>. Coherence is computed for each draw before taking percentiles, rather than from the median matrix.</p>
+<p>The final plot shows a preselected time slice with pointwise 90% credible intervals. These are marginal summaries, not simultaneous bands; componentwise matrix medians are not themselves posterior matrix draws.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mf">6.2</span><span class="p">),</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">layout</span><span class="o">=</span><span class="s2">"constrained"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+    <span class="n">panels</span> <span class="o">=</span> <span class="p">[</span><span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">channel</span><span class="p">]</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">median</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">channel</span><span class="p">]</span><span class="o">.</span><span class="n">real</span><span class="p">]</span>
+    <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">panels</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">panels</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">column</span><span class="p">,</span> <span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">([</span><span class="s2">"Truth"</span><span class="p">,</span> <span class="s2">"Posterior median"</span><span class="p">],</span> <span class="n">panels</span><span class="p">)):</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="n">channel</span><span class="p">,</span> <span class="n">column</span><span class="p">]</span>
+        <span class="n">mesh</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">values</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s2">"viridis"</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">low</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">high</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">: S</span><span class="si">{</span><span class="n">channel</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}{</span><span class="n">channel</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"Frequency [Hz]"</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="n">channel</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="s2">"PSD [arbitrary unit²/Hz]"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">axes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"Normalized time"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/3be854d97eadddd6d3608765b633b515e898d60f52eca42eb6cc23e66baf9087.png" src="../_images/3be854d97eadddd6d3608765b633b515e898d60f52eca42eb6cc23e66baf9087.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">fields</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="sa">r</span><span class="s2">"Re $S_</span><span class="si">{12}</span><span class="s2">$"</span><span class="p">,</span> <span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">real_q</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="s2">"CSD [arbitrary unit²/Hz]"</span><span class="p">),</span>
+    <span class="p">(</span><span class="sa">r</span><span class="s2">"Im $S_</span><span class="si">{12}</span><span class="s2">$"</span><span class="p">,</span> <span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">imag</span><span class="p">,</span> <span class="n">imag_q</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="s2">"CSD [arbitrary unit²/Hz]"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"Squared coherence"</span><span class="p">,</span> <span class="n">truth_coherence</span><span class="p">,</span> <span class="n">coherence_q</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s2">"Dimensionless"</span><span class="p">),</span>
+<span class="p">]</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mf">8.7</span><span class="p">),</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">layout</span><span class="o">=</span><span class="s2">"constrained"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">actual</span><span class="p">,</span> <span class="n">estimated</span><span class="p">,</span> <span class="n">units</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">fields</span><span class="p">):</span>
+    <span class="n">bound</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">actual</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">estimated</span><span class="p">)))</span>
+    <span class="n">limits</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s2">"viridis"</span><span class="p">)</span> <span class="k">if</span> <span class="n">row</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">vmin</span><span class="o">=-</span><span class="n">bound</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">bound</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s2">"RdBu_r"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">column</span><span class="p">,</span> <span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">([</span><span class="s2">"Truth"</span><span class="p">,</span> <span class="s2">"Posterior median"</span><span class="p">],</span> <span class="p">[</span><span class="n">actual</span><span class="p">,</span> <span class="n">estimated</span><span class="p">])):</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="n">row</span><span class="p">,</span> <span class="n">column</span><span class="p">]</span>
+        <span class="n">mesh</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">pcolormesh</span><span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">values</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">shading</span><span class="o">=</span><span class="s2">"nearest"</span><span class="p">,</span> <span class="o">**</span><span class="n">limits</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"Frequency [Hz]"</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="n">row</span><span class="p">,</span> <span class="p">:],</span> <span class="n">label</span><span class="o">=</span><span class="n">units</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">axes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"Normalized time"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/e419e6eb2998c38bff0f8a24f7a69c5b3157d3e6d4945ae8296c340c94a3f62e.png" src="../_images/e419e6eb2998c38bff0f8a24f7a69c5b3157d3e6d4945ae8296c340c94a3f62e.png" />
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Preselected late-time slice; bands are marginal, equal-tailed 90% intervals.</span>
+<span class="n">slice_index</span> <span class="o">=</span> <span class="mi">6</span>
+<span class="n">slice_fields</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="sa">r</span><span class="s2">"$S_</span><span class="si">{11}</span><span class="s2">$"</span><span class="p">,</span> <span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">real_q</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>
+    <span class="p">(</span><span class="sa">r</span><span class="s2">"$S_</span><span class="si">{22}</span><span class="s2">$"</span><span class="p">,</span> <span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">real_q</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+    <span class="p">(</span><span class="sa">r</span><span class="s2">"Re $S_</span><span class="si">{12}</span><span class="s2">$"</span><span class="p">,</span> <span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">real_q</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+    <span class="p">(</span><span class="sa">r</span><span class="s2">"Im $S_</span><span class="si">{12}</span><span class="s2">$"</span><span class="p">,</span> <span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">imag</span><span class="p">,</span> <span class="n">imag_q</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+    <span class="p">(</span><span class="s2">"Squared coherence"</span><span class="p">,</span> <span class="n">truth_coherence</span><span class="p">,</span> <span class="n">coherence_q</span><span class="p">),</span>
+<span class="p">]</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">layout</span><span class="o">=</span><span class="s2">"constrained"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">ax</span><span class="p">,</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">actual</span><span class="p">,</span> <span class="n">quantiles</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axes</span><span class="o">.</span><span class="n">flat</span><span class="p">,</span> <span class="n">slice_fields</span><span class="p">):</span>
+    <span class="n">lower</span><span class="p">,</span> <span class="n">center</span><span class="p">,</span> <span class="n">upper</span> <span class="o">=</span> <span class="n">quantiles</span><span class="p">[:,</span> <span class="n">slice_index</span><span class="p">]</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">frequency</span><span class="p">,</span> <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"#4C78A8"</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.22</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"Pointwise 90</span><span class="si">% i</span><span class="s2">nterval"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">frequency</span><span class="p">,</span> <span class="n">center</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"#2A5783"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"Posterior median"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">frequency</span><span class="p">,</span> <span class="n">actual</span><span class="p">[</span><span class="n">slice_index</span><span class="p">],</span> <span class="s2">"--"</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"Truth"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">xlabel</span><span class="o">=</span><span class="s2">"Frequency [Hz]"</span><span class="p">,</span> <span class="n">ylabel</span><span class="o">=</span><span class="s2">"Dimensionless"</span> <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"Squared coherence"</span> <span class="k">else</span> <span class="s2">"Power / Hz"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="n">handles</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_legend_handles_labels</span><span class="p">()</span>
+<span class="n">axes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s2">"off"</span><span class="p">)</span>
+<span class="n">axes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">handles</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Time = </span><span class="si">{</span><span class="n">time</span><span class="p">[</span><span class="n">slice_index</span><span class="p">]</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">; all 4,000 posterior draws"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="n">true_psd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">truth</span><span class="p">,</span> <span class="n">axis1</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis2</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">real</span>
+<span class="n">median_psd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">median</span><span class="p">,</span> <span class="n">axis1</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis2</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">real</span>
+<span class="n">csd_residual</span> <span class="o">=</span> <span class="p">(</span><span class="n">median</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">truth</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">true_psd</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span>
+<span class="n">recovery</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"PSD log-ratio RMSE"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">median_psd</span> <span class="o">/</span> <span class="n">true_psd</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">))),</span>
+    <span class="s2">"Normalized complex-CSD RMSE"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">csd_residual</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">))),</span>
+    <span class="s2">"Squared-coherence RMSE"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">coherence_q</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">truth_coherence</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">))),</span>
+<span class="p">}</span>
+<span class="n">display</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">recovery</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"This realization only"</span><span class="p">)</span><span class="o">.</span><span class="n">to_frame</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/83c53c5f63e094fc7fca8da7e3fe268233d2150e89b660603528acd4ab426b45.png" src="../_images/83c53c5f63e094fc7fca8da7e3fe268233d2150e89b660603528acd4ab426b45.png" />
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>This realization only</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>PSD log-ratio RMSE</th>
+      <td>0.020151</td>
+    </tr>
+    <tr>
+      <th>Normalized complex-CSD RMSE</th>
+      <td>0.022515</td>
+    </tr>
+    <tr>
+      <th>Squared-coherence RMSE</th>
+      <td>0.007903</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+</section>
+<section id="from-this-simulation-to-a-time-series">
+<h2>From this simulation to a time series<a class="headerlink" href="#from-this-simulation-to-a-time-series" title="Link to this heading">#</a></h2>
+<p>The example above checks the inference calculation using independent simulated vectors. It computes <strong>neither an STFT nor a WDM transform</strong>. It cannot tell us which transform gives the better likelihood for an actual record. The truth is smooth, lies in the chosen spline space, and has many independent observations per cell; repeated simulations remain necessary to assess interval coverage.</p>
+<section id="what-does-complex-fourier-coefficient-mean-here">
+<h3>What does “complex Fourier coefficient” mean here?<a class="headerlink" href="#what-does-complex-fourier-coefficient-mean-here" title="Link to this heading">#</a></h3>
+<p>An FFT coefficient is a complex number: its real and imaginary parts store the cosine and sine components at a frequency. Keeping both lets the cross-product between channels retain their relative phase, including the imaginary part of the CSD.</p>
+<p>The real-data adapter <code class="docutils literal notranslate"><span class="pre">local_wishart_grid</span></code> computes a <strong>nonoverlapping short-time Fourier transform (STFT)</strong>. It removes one full-record mean per channel, divides the record into equal-length segments, applies an optional window, and takes an FFT of each segment. The hop is the segment length. It retains interior positive frequencies and normalizes the coefficients to one-sided PSD units. With <code class="docutils literal notranslate"><span class="pre">window=None</span></code>, each segment has a rectangular window.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeSeries</span><span class="p">,</span> <span class="n">local_wishart_grid</span>
+
+<span class="n">series</span> <span class="o">=</span> <span class="n">TimeSeries</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="n">sample_times</span><span class="p">)</span>  <span class="c1"># values.shape == (N, 2)</span>
+<span class="n">observations</span> <span class="o">=</span> <span class="n">local_wishart_grid</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">segment_length</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span> <span class="n">window</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This is a recipe for your own <code class="docutils literal notranslate"><span class="pre">values</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_times</span></code>, not an executed part of the simulation. The record must contain complete segments. Each native time-frequency cell has one coefficient vector, unlike the 32 independent replicates above. Choose the spline bases on the resulting time and frequency coordinates. There is no per-segment mean removal or channel standardization.</p>
+<p>For a finite colored or time-varying record, treating these local FFT coefficients as independent proper complex Gaussian observations is a <strong>local Whittle approximation</strong>. It requires the spectrum to change sufficiently slowly over the window and the inter-coefficient dependence to be small enough for the intended inference. Tapering and ENBW weighting do not make this approximation exact.</p>
+</section>
+<section id="why-not-use-wdm">
+<h3>Why not use WDM?<a class="headerlink" href="#why-not-use-wdm" title="Link to this heading">#</a></h3>
+<p>WDM is a reasonable candidate for the real-data extension. Its localized orthogonal basis has a useful statistical motivation. Orthogonality decorrelates white noise; for colored or changing noise, independent WDM tiles require additional assumptions about variation across <strong>both time and frequency</strong>. The full covariance likelihood and the independent-tile approximation are distinct. See <a class="reference external" href="https://arxiv.org/html/2511.10632v2">Cornish’s covariance analysis</a> for the conditions and corrections.</p>
+<p>The extra issue here is <strong>multivariate phase information</strong>. A full WDM transform preserves the data, including phase. But the WDM coefficients are real, so products of two channels at the same tile form a real covariance matrix. Those products alone cannot identify a general complex CSD. Phase information can appear in correlations between different WDM tiles. The <a class="reference external" href="https://arxiv.org/html/2606.20269v2#S3.SS1">WDM transform paper</a> describes the full transformed covariance; its introduction also explains how phase is distributed across WDM coefficients.</p>
+<p>Consequently, a multivariate WDM likelihood needs a covariance model connecting the spline spectral matrix to the relevant WDM coefficients, including the correlations that carry cross-channel phase. That derivation is not implemented by substituting real WDM powers into the present complex-Gaussian likelihood. The scalar WDM example only fits one-channel powers, so it does not address this extra step.</p>
+<p>The Cholesky and tensor-spline model above remains the starting point for either observation model. A useful next comparison would use known time-series simulations with nonzero cross-channel phase, check the predicted transform covariances, and measure repeated-simulation coverage before a long LISA analysis. The exact stationary restriction of the current spline model is <code class="docutils literal notranslate"><span class="pre">LogPSpline(frequency=basis_frequency,</span> <span class="pre">time=None)</span></code>; fitting stationary data with a flexible time basis is a separate check.</p>
+</section>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./examples"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="timevarying-example.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Time-varying PSD</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../api.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#add-time-dependence-to-the-same-cholesky-model">1. Add time dependence to the same Cholesky model</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#replace-each-frequency-spline-with-a-tensor-spline">Replace each frequency spline with a tensor spline</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-coefficients-in-the-likelihood-s-units">2. Generate coefficients in the likelihood’s units</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#use-the-same-row-likelihood-and-gaussian-marginalization">3. Use the same row likelihood and Gaussian marginalization</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#implementation-choices-for-this-run">Implementation choices for this run</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#check-the-sampler-before-interpreting-the-spectra">4. Check the sampler before interpreting the spectra</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#compare-the-recovered-spectra-with-the-truth">5. Compare the recovered spectra with the truth</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#from-this-simulation-to-a-time-series">From this simulation to a time series</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-does-complex-fourier-coefficient-mean-here">What does “complex Fourier coefficient” mean here?</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#why-not-use-wdm">Why not use WDM?</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By NZ Gravity
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2026.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

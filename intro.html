@@ -228,6 +228,7 @@
 <li class="toctree-l1"><a class="reference internal" href="examples/univar-example.html">Stationary PSD</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/multivariate-example.html">Multivariate stationary PSD</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples/timevarying-example.html">Time-varying PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/multivariate-timevarying-example.html">Multivariate time-varying PSD</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul class="nav bd-sidenav">
@@ -395,9 +396,9 @@
 <h1>Home<a class="headerlink" href="#home" title="Link to this heading">#</a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">LogPSplinePSD</span></code> estimates power spectral densities (PSDs) with Bayesian
 log-P-splines. It is built around multichannel frequency-domain inference:
-time series are converted into Wishart sufficient statistics, smooth spline
-models are fitted with NumPyro/JAX. Scalar time-varying inference is also
-available for WDM and moving-periodogram powers.</p>
+time series are converted into Wishart sufficient statistics, and smooth spline
+models are fitted with NumPyro/JAX. Time-varying inference supports scalar WDM
+and moving-periodogram powers, and multivariate complex Fourier statistics.</p>
 <video autoplay muted loop playsinline preload="metadata">
    <source src="logpspline-hero.webm" type="video/webm">
 </video><section id="install">
@@ -418,6 +419,7 @@ python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </sp
 <li><p><a class="reference internal" href="examples/univar-example.html"><span class="doc">Stationary PSD</span></a> fits a single-channel spectrum.</p></li>
 <li><p><a class="reference internal" href="examples/multivariate-example.html"><span class="doc">Multivariate stationary PSD</span></a> fits spectral matrices and coherence.</p></li>
 <li><p><a class="reference internal" href="examples/timevarying-example.html"><span class="doc">Time-varying PSD</span></a> fits scalar WDM and moving-periodogram powers.</p></li>
+<li><p><a class="reference internal" href="examples/multivariate-timevarying-example.html"><span class="doc">Multivariate time-varying PSD</span></a> fits PSDs, complex cross-spectra and coherence on a time-frequency grid.</p></li>
 </ol>
 <p>The <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> covers configuration, results, spectral conventions and advanced
 reference-spectrum fits. Contributor instructions are in the repository’s

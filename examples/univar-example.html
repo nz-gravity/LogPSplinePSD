@@ -227,6 +227,7 @@
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Stationary PSD</a></li>
 <li class="toctree-l1"><a class="reference internal" href="multivariate-example.html">Multivariate stationary PSD</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timevarying-example.html">Time-varying PSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multivariate-timevarying-example.html">Multivariate time-varying PSD</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Reference</span></p>
 <ul class="nav bd-sidenav">
@@ -535,9 +536,11 @@ including its small ridge. The current model samples a roughness scale:</p>
 The equivalent precision is <span class="math notranslate nohighlight">\(\phi=\sigma^{-2}\)</span>, a derived quantity rather
 than a separately sampled parameter. The former Gamma hierarchy on
 <span class="math notranslate nohighlight">\(\phi\)</span> and a hyperparameter <span class="math notranslate nohighlight">\(\delta\)</span> is no longer used.</p>
-<p>The default <code class="docutils literal notranslate"><span class="pre">smoothing_parameterization=&quot;centered&quot;</span></code> samples the coefficients
-directly. <code class="docutils literal notranslate"><span class="pre">&quot;noncentered&quot;</span></code> samples standard-normal coordinates and maps them
-through the penalty Cholesky factor. Both express the same prior.</p>
+<p>Sampling coordinates are chosen automatically from the prior width and the
+expected information in the observations. This keeps the Gaussian prior above
+exactly unchanged, while scaling weakly and strongly measured spline modes
+differently. There is no centered/noncentered configuration switch. The same
+coordinates are used by NUTS and VI; VI remains an approximation.</p>
 </section>
 <section id="posterior">
 <h2>Posterior<a class="headerlink" href="#posterior" title="Link to this heading">#</a></h2>
@@ -665,7 +668,7 @@ No repository checkout or virtual environment activation is needed.</p>
 </div>
 </div>
 <div class="cell_output docutils container">
-<img alt="../_images/492d7387b53d5e117c457c610bc389ee6d15a577458cb7a23ca5c3b0cff27614.png" src="../_images/492d7387b53d5e117c457c610bc389ee6d15a577458cb7a23ca5c3b0cff27614.png" />
+<img alt="../_images/560431d8b37f1aacee74f358db8946280603035cebd5bd3a15f9ebc17be3f3f9.png" src="../_images/560431d8b37f1aacee74f358db8946280603035cebd5bd3a15f9ebc17be3f3f9.png" />
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Sampled roughness scales: ['sigma_delta_0']
 </pre></div>
 </div>

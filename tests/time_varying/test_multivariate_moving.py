@@ -219,7 +219,7 @@ def test_lagged_cross_phase_and_exact_white_noise_gram():
 def test_paired_rows_match_rectangular_likelihood_and_full_gradients(row):
     grid = _grid().mask(np.arange(12).reshape(3, 4) != 5)
     paired, spline = _paired(grid), _spline(grid)
-    config = PowerConfig(structure="tensor", centered=True)
+    config = PowerConfig(structure="tensor")
     grid_model, params = prepare_wishart_grid_row(grid, spline, config, row)
     paired_model, _ = prepare_wishart_grid_row(paired, spline, config, row)
     rng = np.random.default_rng(380 + row)

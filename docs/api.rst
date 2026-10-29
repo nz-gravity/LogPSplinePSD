@@ -90,6 +90,44 @@ must remain representable in the chosen floating-point precision.
 See the :doc:`multivariate example <examples/multivariate-example>` for the
 completion-of-the-square derivation and a comparison of NUTS and VI.
 
+Automatic spline coordinates
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every Gaussian spline field that remains numerically sampled uses automatic
+information-scaled coordinates: stationary scalar and multivariate delta
+fields, scalar power tensor/ANOVA fields, and matrix grid/paired delta fields.
+Gaussian cross-spectrum coefficients remain analytically marginalized.
+There is no centered/noncentered selector. Remove the former
+``StationaryConfig.smoothing_parameterization`` and ``PowerConfig.centered``
+arguments; no replacement argument is needed.
+
+In the penalty eigenbasis, let ``a_k`` be a coefficient's current prior
+standard deviation and ``h_k`` its fixed expected log-variance information.
+The model samples
+
+.. math::
+
+   c_k=(a_k^{-2}+h_k)^{-1/2},\qquad
+   z_k\sim N(0,a_k^2/c_k^2),\qquad s_k=c_k z_k.
+
+The physical coefficient still has exactly ``s_k ~ Normal(0, a_k)``. The
+Normal density includes the parameter-dependent transformation Jacobian;
+independent tests check both density and smoothing-scale gradients. Each
+model keeps its own penalty, ridge, null-mode prior and hyperprior.
+
+The information is computed once from squared eigenbasis design entries and
+observation counts. Complex stationary observations use ``Nb*Nh*eta/enbw``;
+matrix cells use ``counts/enbw``; scalar real-power components use
+``counts/2``. Masked cells contribute zero. No truth spectrum or preliminary
+posterior fit is used. Tight prior directions approach noncentering, while
+well-measured directions approach fixed likelihood scaling.
+
+The same coordinates are used by NUTS and supported VI fits. VI still makes
+an approximation: changing coordinates changes what a restricted Gaussian
+guide can represent, so improved VI accuracy is not guaranteed. Physical
+weights and spectra remain in the posterior, alongside sampled coordinates.
+Parametric model parameters without Gaussian spline priors are unchanged.
+
 Multivariate Cholesky splines
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -123,23 +161,6 @@ stationary max-normalization and ridge convention. A supplied model retains
 its supplied penalty. With no explicit configuration, the matrix entry point
 uses roughness scale 1.28; an explicit
 ``PowerConfig`` controls its own settings.
-
-Matrix delta coefficients always use information-scaled coordinates. For
-penalty eigenmode ``k``, let its prior standard deviation be ``a_k`` and let
-``h_k = sum(counts * basis_k**2) / enbw``. The sampler uses
-
-.. math::
-
-   c_k=(a_k^{-2}+h_k)^{-1/2},\qquad
-   z_k\sim N(0,a_k^2/c_k^2),\qquad s_k=c_k z_k.
-
-Thus ``s_k`` retains exactly its original Gaussian prior. Weakly measured
-curvature modes approach noncentered coordinates as the smoothing scale
-shrinks, while well-measured modes approach fixed likelihood scaling. This
-avoids forcing the same parameterization onto level, slope and curvature.
-The Normal density includes the parameter-dependent transformation Jacobian;
-tests check both densities and gradients. The shared scalar configuration's
-``centered`` switch does not control matrix coordinates.
 
 The Gaussian calculation evaluates residual power at the conditional mean
 plus the prior quadratic, avoiding subtraction of large nearly equal terms.

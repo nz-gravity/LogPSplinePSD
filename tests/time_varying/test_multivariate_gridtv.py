@@ -361,7 +361,7 @@ def test_matrix_sign_conjugation_and_time_leading_axes():
 def test_tensor_partition_chunked_evaluation_and_independent_row_sites():
     data, _, _ = _fixture(channels=2)
     spline = _spline(data)
-    config = PowerConfig(structure="tensor", centered=True)
+    config = PowerConfig(structure="tensor")
     pair = prepare_grid_prior(spline)
     pooled = coarse_grain_wishart_grid(data, time_bin=2, frequency_bin=3)
     rng = np.random.default_rng(55)
@@ -476,9 +476,7 @@ def test_constant_time_rows_have_stationary_prior_and_no_time_scale_sites():
     data, _, _ = _fixture(channels=3, stationary=True)
     spline = LogPSpline(_spline(data).frequency)
     pair = prepare_grid_prior(spline)
-    config = PowerConfig(
-        structure="tensor", centered=True, roughness_scale=1.28
-    )
+    config = PowerConfig(structure="tensor", roughness_scale=1.28)
     size = spline.frequency.basis.shape[1]
     sites = {}
     for row in range(3):
@@ -940,9 +938,8 @@ def test_gridtv_rejects_vi_before_sampling(monkeypatch):
         wishart_grid.fit_wishart_grid(data, _spline(data), config)
 
 
-@pytest.mark.parametrize("centered", [False, True])
-def test_scalar_anova_retains_centered_sample_sites(centered):
-    """Matrix coordinates do not alter the existing scalar VI model."""
+def test_scalar_anova_uses_automatic_coordinates():
+    """Scalar ANOVA uses the same automatic scaling with its own prior."""
     from log_psplines import PowerData
 
     data, _, _ = _fixture(channels=1)
@@ -952,11 +949,11 @@ def test_scalar_anova_retains_centered_sample_sites(centered):
     model, _, init = prepare_anova_power_model(
         powers,
         ANOVALogPSpline(_spline(data).frequency, _spline(data).time),
-        PowerConfig(centered=centered),
+        PowerConfig(),
     )
     _, trace = log_density(model, (), {}, init)
-    assert trace["g"]["type"] == trace["eta"]["type"] == "sample"
-    assert "z_g" not in trace and "z_eta" not in trace
+    assert trace["g"]["type"] == trace["eta"]["type"] == "deterministic"
+    assert trace["z_g"]["type"] == trace["z_eta"]["type"] == "sample"
 
 
 def test_matrix_preview_preserves_all_chain_nonlinear_summaries(tmp_path):

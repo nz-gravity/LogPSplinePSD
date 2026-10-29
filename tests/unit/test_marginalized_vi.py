@@ -6,6 +6,7 @@ from dataclasses import replace
 import jax
 import numpy as np
 import pytest
+from numpyro.infer.util import log_density
 from scipy.linalg import block_diag
 
 from log_psplines import PSDResult, StationaryConfig, WishartData, fit
@@ -50,9 +51,8 @@ def _example(channels=3):
     return data, config
 
 
-@pytest.mark.parametrize("parameterization", ["centered", "noncentered"])
 def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
-    parameterization, monkeypatch, tmp_path
+    monkeypatch, tmp_path
 ):
     module = importlib.import_module("log_psplines.inference.vi")
     original = module.resolve_guide
@@ -65,7 +65,6 @@ def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
 
     monkeypatch.setattr(module, "resolve_guide", collect_guide)
     data, config = _example()
-    config = replace(config, smoothing_parameterization=parameterization)
     result = fit(data, config)
     model_kwargs, _ = prepare_model(data, config)
     assert len(guides) == data.p
@@ -75,9 +74,7 @@ def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
             for name, site in guide.prototype_trace.items()
             if site["type"] == "sample" and not site.get("is_observed")
         }
-        weight_name = f"weights_delta_{j}"
-        if parameterization == "noncentered":
-            weight_name += "_raw"
+        weight_name = f"weights_delta_{j}_raw"
         assert sample_names == {
             weight_name,
             f"sigma_delta_{j}",
@@ -136,9 +133,17 @@ def _freeze_reduced_guide(monkeypatch, n_draws):
     module = importlib.import_module("log_psplines.inference.vi")
 
     def fixed_guide(model, **kwargs):
+        _, trace = log_density(
+            model, (), kwargs["model_kwargs"], kwargs["init_values"]
+        )
+        physical = {
+            name: site["value"]
+            for name, site in trace.items()
+            if site["type"] == "deterministic"
+        }
         values = {
             name: np.broadcast_to(value, (n_draws, *np.shape(value)))
-            for name, value in kwargs["init_values"].items()
+            for name, value in {**kwargs["init_values"], **physical}.items()
         }
         return VIResult(
             module._values_to_dataset(values),

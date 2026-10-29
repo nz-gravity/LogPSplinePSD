@@ -16,6 +16,9 @@ from log_psplines.basis.penalty import whiten_penalty_pair
 from log_psplines.config import PowerConfig
 from log_psplines.data.wishart_grid import WishartGridData
 from log_psplines.inference.collapsed import gaussian_linear_conditional
+from log_psplines.inference.coordinates import (
+    coordinate_scales as grid_coordinate_scales,
+)
 from log_psplines.models.spectrum import LogPSpline
 
 
@@ -104,16 +107,6 @@ def sample_grid_scales(pair, config, label):
             f"sigma_time_{label}", dist.HalfNormal(config.roughness_scale)
         )
     return sigma_freq, sigma_time
-
-
-def grid_coordinate_scales(prior_scales, information):
-    """Smoothly interpolate between prior and likelihood scales per mode.
-
-    The fixed information is the diagonal expected log-variance Fisher
-    information, sum(count * basis**2) / enbw. This is only a change of
-    sampling coordinates: the normal density below includes its Jacobian.
-    """
-    return jax.lax.rsqrt(prior_scales**-2 + information)
 
 
 def sample_grid_field(pair, config, label, information):

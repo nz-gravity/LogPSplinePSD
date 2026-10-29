@@ -20,6 +20,7 @@ import numpyro.distributions as dist
 from jax.scipy.linalg import solve_triangular
 from scipy.linalg import block_diag
 
+from log_psplines.inference.coordinates import spline_coordinates
 from log_psplines.inference.model import _sample_pspline_block
 
 
@@ -75,8 +76,14 @@ def prepare_collapsed_channel(channel_kwargs: Mapping[str, Any]) -> dict:
         "basis_delta": channel_kwargs["basis_delta"],
         "penalty_delta": channel_kwargs["penalty_delta"],
         "roughness_scale": channel_kwargs["roughness_scale"],
-        "smoothing_parameterization": channel_kwargs.get(
-            "smoothing_parameterization", "centered"
+        "delta_coordinates": channel_kwargs.get("delta_coordinates")
+        or spline_coordinates(
+            channel_kwargs["basis_delta"],
+            channel_kwargs["penalty_delta"],
+            channel_kwargs["Nb"]
+            * channel_kwargs["Nh"]
+            * channel_kwargs.get("eta", 1.0)
+            / channel_kwargs.get("enbw", 1.0),
         ),
         "duration": channel_kwargs["duration"],
         "Nb": channel_kwargs["Nb"],
@@ -239,16 +246,15 @@ def collapsed_channel_model(
     penalty_delta: jax.Array,
     roughness_scale: float,
     theta_names: tuple[str, ...],
-    smoothing_parameterization: str = "centered",
+    delta_coordinates: dict,
     **conditional_kwargs: Any,
 ) -> None:
     """Sample delta coefficients and all scales, integrating theta weights."""
     weights = _sample_pspline_block(
         f"sigma_delta_{channel_index}",
         f"weights_delta_{channel_index}",
-        penalty_delta,
         roughness_scale,
-        smoothing_parameterization,
+        delta_coordinates,
     )
     sigmas = jnp.stack(
         [

@@ -273,7 +273,7 @@ def test_model_samples_same_scales_without_explicit_theta_weights():
         if site["type"] == "sample" and not site.get("is_observed")
     }
     assert sample_names == {
-        "weights_delta_2",
+        "weights_delta_2_raw",
         "sigma_delta_2",
         *(f"sigma_{name}" for name in prepared["theta_names"]),
     }

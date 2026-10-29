@@ -6,14 +6,13 @@ by default. Frequency mean coefficients have standard deviation
 modes use ``null_precision**-1/2``. Deviation coefficients have standard
 deviation ``sigma_eta * (lambda_t + lambda_f + ridge_eps)**-1/2``; joint null
 modes use ``sigma_eta``. ``sigma_eta ~ HalfNormal(0.5)`` by default.
-Scalar ANOVA retains centered g/eta sites. Multivariate Cholesky fields use
-the separate plain tensor-spline model in ``wishart_grid``.
+Scalar ANOVA uses automatic information-scaled g/eta coordinates. Multivariate
+Cholesky fields use the separate plain tensor-spline model in ``wishart_grid``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import replace
 
 import jax.numpy as jnp
 import numpy as np
@@ -24,6 +23,7 @@ import xarray as xr
 from log_psplines.basis.penalty import whiten_penalty_pair
 from log_psplines.config import PowerConfig
 from log_psplines.data.spectral import PowerData
+from log_psplines.inference.coordinates import coordinate_scales
 from log_psplines.inference.power import (
     _mean_power_for_masked_initialization,
     power_floor,
@@ -71,16 +71,20 @@ def anova_init_values(
     *,
     label: str = "",
 ) -> dict[str, np.ndarray | float]:
-    """Map physical eigen-coefficients into the selected sampling coordinates."""
+    """Map physical eigen-coefficients into automatic sampling coordinates."""
     suffix = f"_{label}" if label else ""
     values = dict(init)
-    if not config.centered:
-        values["z_g"] = values.pop("g") / np.asarray(
-            _mean_scale(pair, config, init["sigma_g"])
+    values["z_g"] = values.pop("g") / np.asarray(
+        coordinate_scales(
+            _mean_scale(pair, config, init["sigma_g"]), pair["information_g"]
         )
-        values["z_eta"] = values.pop("eta") / (
-            init["sigma_eta"] * pair["eta_scale"].reshape(-1)
+    )
+    values["z_eta"] = values.pop("eta") / np.asarray(
+        coordinate_scales(
+            init["sigma_eta"] * pair["eta_scale"].reshape(-1),
+            pair["information_eta"].reshape(-1),
         )
+    )
     return {f"{name}{suffix}": value for name, value in values.items()}
 
 
@@ -93,8 +97,8 @@ def sample_anova_field(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Sample one independent scalar field in the existing ANOVA eigenbasis.
 
-    Returns g (Kf,), eta (Kt,Kf). Labels suffix every random site and plate;
-    only deterministic penalties/designs are shared between Cholesky fields.
+    Returns g (Kf,), eta (Kt,Kf). Labels suffix every sample and deterministic
+    site; physical prior scales retain the scalar ANOVA convention.
     """
     suffix = f"_{label}" if label else ""
     sigma_g = numpyro.sample(
@@ -102,25 +106,21 @@ def sample_anova_field(
     )
     scale_g = _mean_scale(pair, config, sigma_g)
     g = sample_eigen_coefficients(
-        f"{'g' if config.centered else 'z_g'}{suffix}",
+        f"g{suffix}",
         scale_g,
         (len(pair["lam_freq"]),),
-        config,
+        pair["information_g"],
     )
-    if not config.centered:
-        numpyro.deterministic(f"g{suffix}", g)
     sigma_eta = numpyro.sample(
         f"sigma_eta{suffix}", dist.HalfNormal(interaction_scale)
     )
     scale_eta = jnp.asarray(pair["eta_scale"])
     eta = sample_eigen_coefficients(
-        f"{'eta' if config.centered else 'z_eta'}{suffix}",
+        f"eta{suffix}",
         (sigma_eta * scale_eta).reshape(-1),
         (scale_eta.size,),
-        config,
+        pair["information_eta"],
     )
-    if not config.centered:
-        numpyro.deterministic(f"eta{suffix}", eta)
     return jnp.asarray(g), jnp.asarray(eta).reshape(scale_eta.shape)
 
 
@@ -176,7 +176,7 @@ def initialize_anova(
 def prepare_anova_power_model(
     data: PowerData, spline: ANOVALogPSpline, config: PowerConfig
 ) -> tuple[Callable, dict[str, np.ndarray], dict[str, np.ndarray | float]]:
-    """Build the scalar GridTV model, retaining centered g/eta sample sites."""
+    """Build the scalar GridTV model with automatic coefficient coordinates."""
     if not data.is_grid:
         raise ValueError(
             "ANOVALogPSpline requires rectangular GridTV PowerData"
@@ -188,12 +188,15 @@ def prepare_anova_power_model(
     power = jnp.asarray(data.power)
     counts = jnp.asarray(data.counts)
 
-    scalar_config = replace(config, centered=True)
+    pair["information_g"] = np.asarray(
+        0.5 * jnp.sum(counts, axis=0) @ (bf_eig**2)
+    )
+    pair["information_eta"] = np.asarray(
+        0.5 * (bt_eig**2).T @ counts @ (bf_eig**2)
+    )
 
     def model() -> None:
-        g, eta = sample_anova_field(
-            pair, scalar_config, spline.sigma_eta_prior
-        )
+        g, eta = sample_anova_field(pair, config, spline.sigma_eta_prior)
         mean, deviation = anova_components(bt_eig, bf_eig, g, eta)
         correction = mean[None, :] + deviation
         log_like = power_whittle_log_likelihood(power, counts, correction)
@@ -209,7 +212,7 @@ def prepare_anova_power_model(
         pair,
         config,
     )
-    return model, pair, init
+    return model, pair, anova_init_values(init, pair, config)
 
 
 def collect_anova_samples(

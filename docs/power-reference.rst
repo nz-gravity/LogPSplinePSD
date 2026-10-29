@@ -23,7 +23,6 @@ of the reference and truth belongs in the calling analysis.
        n_interior_knots_time=8,
        n_interior_knots_freq=12,
        roughness_scale=10.0,
-       centered=True,
        n_warmup=500,
        n_samples=1000,
    )

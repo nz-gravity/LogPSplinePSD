@@ -109,6 +109,7 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
             "sampling_eta": float(config.eta),
             "method": config.method,
             "theta_parameterization": "marginalized",
+            "delta_coordinates": "information_scaled; exact Gaussian prior",
             "inference_dtype": str(model_kwargs["u_re"].dtype),
             "mean_removal": data.preprocessing.get("mean_removal", "unknown"),
             "window": data.preprocessing.get("window", "unknown"),
@@ -204,9 +205,7 @@ def fit(
     """
     if isinstance(data, WishartGridData):
         config = (
-            PowerConfig(roughness_scale=1.28, centered=True)
-            if config is None
-            else config
+            PowerConfig(roughness_scale=1.28) if config is None else config
         )
         if not isinstance(config, PowerConfig):
             raise TypeError(

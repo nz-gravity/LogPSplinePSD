@@ -403,8 +403,7 @@ def test_recovered_joint_draws_have_correct_covariance_and_original_likelihood(
         np.testing.assert_allclose(
             recovered["log_likelihood_block_2"][0, index], expected, atol=2e-12
         )
-    # Noncentered recovery additionally exposes the standardized coefficients.
-    assert not config.centered
+    # Conditional recovery also exposes standardized theta coefficients.
     for field, label in enumerate(prepared["theta_labels"]):
         z = recovered[f"z_{label}"][0]
         np.testing.assert_allclose(

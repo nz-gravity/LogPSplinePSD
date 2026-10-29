@@ -66,16 +66,6 @@ Next Steps
 - Try the `time-varying example <docs/examples/timevarying-example.ipynb>`_.
 - Read the `spectral conventions <docs/conventions.rst>`_.
 
-Research studies
----------------
-
-Moving-periodogram, Dynamic Whittle and LISA comparison studies live in the
-separate `moving_periodogram_lisa_studies repository
-<https://github.com/nz-gravity/moving_periodogram_lisa_studies>`_.
-Historical PSD reports and compact results live in the
-`psd_studies_archive repository
-<https://github.com/nz-gravity/psd_studies_archive>`_.
-This package retains the reusable transforms, models, inference and API tests.
 
 Architecture
 ------------

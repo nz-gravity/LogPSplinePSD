@@ -63,7 +63,6 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
         )
         posterior = vi.posterior
         sample_stats = None
-        log_likelihood = None
     else:
         logger.info(f"Spline model: {spline_model}")
         mcmc = run_multivariate_nuts(
@@ -81,14 +80,14 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
             max_tree_depth_by_channel=config.max_tree_depth_by_channel,
             verbose=config.verbose,
         )
-        log_likelihood = compute_pointwise_lnl(
-            posterior=mcmc.posterior,
-            data=data,
-            model_kwargs=model_kwargs,
-        )
         posterior = mcmc.posterior
         sample_stats = mcmc.sample_stats
         vi = None
+    log_likelihood = compute_pointwise_lnl(
+        posterior=posterior,
+        data=data,
+        model_kwargs=model_kwargs,
+    )
     result = PSDResult(
         posterior=posterior,
         sample_stats=sample_stats,
@@ -107,6 +106,9 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
             "max_tree_depth_by_channel": config.max_tree_depth_by_channel,
             "eta": float(config.eta),
             "sampling_eta": float(config.eta),
+            "method": config.method,
+            "theta_parameterization": "marginalized",
+            "inference_dtype": str(model_kwargs["u_re"].dtype),
         },
         vi=vi,
         log_likelihood=log_likelihood,
@@ -139,7 +141,9 @@ def fit(
     """Fit stationary Wishart data or time-frequency powers.
 
     ``config.method`` selects NUTS (default) or NumPyro VI for spline models.
-    Both use the same likelihood, prior and spectrum reconstruction.
+    Both integrate Gaussian stationary cross-spectrum coefficients and restore
+    their full conditional draws for spectrum reconstruction. Multivariate
+    stationary fits require JAX_ENABLE_X64=true.
     Scalar powers use the tensor or ANOVA structure in PowerConfig.
     ParametricSpectrum also supports joint independent channel powers.
     A partition may pool rectangular powers while retaining native-grid

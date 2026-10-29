@@ -15,8 +15,8 @@ from log_psplines import StationaryConfig, TimeSeries, fit
 from log_psplines.example_datasets.varma_data import VARMAData
 from log_psplines.inference.log_likelihood import compute_pointwise_lnl
 from log_psplines.inference.model import (
-    _blocked_channel_model,
     _sample_pspline_block,
+    _scalar_channel_model,
     channel_model_kwargs,
     prepare_model,
 )
@@ -223,13 +223,13 @@ def test_centered_and_noncentered_full_log_posterior_match():
             "weights_delta_0_raw": jnp.asarray(raw),
         }
         density_c = log_density(
-            _blocked_channel_model,
+            _scalar_channel_model,
             (),
             channel_model_kwargs(kwargs_c, 0),
             params_c,
         )[0]
         density_n = log_density(
-            _blocked_channel_model,
+            _scalar_channel_model,
             (),
             channel_model_kwargs(kwargs_n, 0),
             params_n,

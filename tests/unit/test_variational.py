@@ -150,10 +150,12 @@ def test_multivariate_timings_and_loss_aggregation(monkeypatch):
     module = importlib.import_module("log_psplines.inference.vi")
 
     def fit_block(model, **kwargs):
-        index = kwargs["model_kwargs"]["channel"]
+        index = kwargs["model_kwargs"]["channel_index"]
         assert not kwargs["early_stopping"]
         return VIResult(
-            posterior=xr.Dataset({f"x_{index}": ("draw", np.arange(3))}),
+            posterior=xr.Dataset(
+                {f"x_{index}": (("chain", "draw"), np.arange(3)[None, :])}
+            ),
             losses=jnp.full(5 + index, index + 1),
             guide_name="diag",
             timings={
@@ -165,8 +167,20 @@ def test_multivariate_timings_and_loss_aggregation(monkeypatch):
     monkeypatch.setattr(module, "fit_vi", fit_block)
     monkeypatch.setattr(
         module,
-        "channel_model_kwargs",
-        lambda kwargs, index: {"channel": index},
+        "prepare_channel_model",
+        lambda kwargs, index: (
+            gaussian_model,
+            {"channel_index": index},
+            {},
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "sample_conditional_theta",
+        lambda posterior, kwargs, key: {
+            "log_likelihood_block_1": jnp.zeros((1, 3)),
+            "weights_theta_re_1_0": jnp.zeros((1, 3, 2)),
+        },
     )
     result = run_multivariate_vi(
         {"n_channels": 2}, rng_key=jax.random.PRNGKey(4), early_stopping=False

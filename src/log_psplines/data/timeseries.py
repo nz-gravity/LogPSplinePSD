@@ -95,7 +95,6 @@ class TimeSeries:
         fmin: float | int | None = None,
         fmax: float | int | None = None,
         window: str | tuple | None = None,
-        *,
         wishart_floor_fraction: float | None = None,
     ) -> WishartData:
         """Center each full channel, then form tapered block FFT statistics."""

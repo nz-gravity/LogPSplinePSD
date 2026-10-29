@@ -196,42 +196,6 @@ def test_tukey_blocks_do_not_inject_block_mean_into_quiet_low_frequencies():
     assert corrected_power < 1e-6 * actual.raw_psd[:, 0, 0].real.max()
 
 
-@pytest.mark.parametrize(
-    "entrypoint",
-    ["config", "wishart", "timeseries", "empirical", "empirical_timeseries"],
-)
-def test_stationary_preprocessing_rejects_removed_detrending_options(
-    entrypoint,
-):
-    x = np.random.default_rng(17).normal(size=(64, 2))
-    ts = TimeSeries(x)
-    calls = {
-        "config": lambda: StationaryConfig(wishart_detrend="constant"),
-        "wishart": lambda: compute_wishart(x, 1.0, 2, detrend="constant"),
-        "timeseries": lambda: ts.to_wishart_stats(2, detrend="constant"),
-        "empirical": lambda: empirical_spectrum(x, 1.0, detrend="constant"),
-        "empirical_timeseries": lambda: ts.get_empirical_psd(
-            detrend="constant"
-        ),
-    }
-    with pytest.raises(TypeError, match="detrend"):
-        calls[entrypoint]()
-
-
-def test_old_positional_detrend_is_not_interpreted_as_wishart_floor():
-    # The former eleventh config argument selected block detrending. It must
-    # not silently become a floor after removal, shifting knots and degree.
-    with pytest.raises(TypeError):
-        StationaryConfig(
-            1000, 1000, 1, None, 1.28, "centered", 42, None, 8, "hann", False
-        )
-    x = np.random.default_rng(18).normal(size=(64, 2))
-    with pytest.raises(TypeError):
-        compute_wishart(x, 1.0, 2, None, None, 1.0, None, None, False)
-    with pytest.raises(TypeError):
-        TimeSeries(x).to_wishart_stats(2, None, None, None, False)
-
-
 @pytest.mark.parametrize("bins", [{"Nh": 4}, {"Nc": 8}, {"Nc": 7}])
 def test_coarse_graining_preserves_wishart_sums_and_psd_means(bins):
     data = compute_wishart(

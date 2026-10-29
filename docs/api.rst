@@ -48,10 +48,7 @@ ordinary spectral leakage and bin-averaging effects of the analysis window.
 ``detrend`` from calls to ``compute_wishart``, ``TimeSeries.to_wishart_stats``
 and ``empirical_spectrum`` (including ``get_empirical_psd`` forwarding).
 These arguments have been removed, including their former ``False`` value;
-there is no replacement selector. Pass ``wishart_floor_fraction`` by keyword
-if used. In ``StationaryConfig``, fields following ``wishart_window`` are now
-keyword-only so old positional calls cannot silently shift their meaning.
-The window selection is unchanged.
+there is no replacement selector. The window selection is unchanged.
 ``fit`` does not reprocess supplied ``WishartData``. Regenerate statistics
 previously constructed with per-block detrending to use the new convention.
 

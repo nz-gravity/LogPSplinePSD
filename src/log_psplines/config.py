@@ -121,7 +121,7 @@ Output
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
@@ -152,7 +152,6 @@ class StationaryConfig:
     coarse_grain_config: CoarseGrainConfig | dict | None = None
     Nb: int = 1
     wishart_window: str | tuple | None = None
-    _: KW_ONLY
     wishart_floor_fraction: float | None = None
 
     n_knots: int | dict[str, int] = 10

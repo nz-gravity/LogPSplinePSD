@@ -71,7 +71,6 @@ def compute_wishart(
     scaling_factor: float | None = 1.0,
     channel_stds: np.ndarray | None = None,
     window: str | tuple | None = None,
-    *,
     wishart_floor_fraction: float | None = None,
 ) -> "WishartData":
     """
@@ -124,7 +123,6 @@ def _compute_wishart_from_centered(
     scaling_factor: float | None = 1.0,
     channel_stds: np.ndarray | None = None,
     window: str | tuple | None = None,
-    *,
     wishart_floor_fraction: float | None = None,
 ) -> "WishartData":
     """Form spectra after the public entry point has centered the full record."""

@@ -226,9 +226,9 @@ Wishart Statistics
 ~~~~~~~~~~~~~~~~~~
 
 ``TimeSeries.to_wishart_stats`` and
-``preprocessing.periodogram.compute_wishart`` split the data into ``Nb`` contiguous blocks,
-apply optional detrending and tapering, compute one-sided FFTs, drop DC, and
-store a factor ``U`` such that
+``preprocessing.periodogram.compute_wishart`` remove each channel's full-record
+mean, split the centered data into ``Nb`` contiguous blocks, apply the chosen
+taper, compute one-sided FFTs, drop DC, and store a factor ``U`` such that
 
 .. math::
 
@@ -237,14 +237,19 @@ store a factor ``U`` such that
 The pipeline uses ``Y(f_k)`` as the multivariate Whittle/Wishart sufficient
 statistic.
 
+Global centering is the only stationary mean-removal convention. Individual
+blocks retain their fluctuations about the global mean; there is no
+per-block constant or linear detrending option. The empirical Welch/CSD
+helpers follow the same rule. See :doc:`api` for the taper interaction and
+migration from the removed detrending arguments.
+
 .. code-block:: python
 
-   fft = ts.standardise_for_psd().to_wishart_stats(
+   fft = ts.to_wishart_stats(
        Nb=4,
        fmin=1.0,
        fmax=30.0,
        window="hann",
-       detrend="constant",
    )
 
 Frequency Selection

@@ -45,6 +45,8 @@ def test_fit_result_roundtrip_and_scientific_invariants(
     result = fit(example.ts, config)
 
     assert isinstance(result, PSDResult)
+    assert result.metadata["mean_removal"] == "global_per_channel"
+    assert result.metadata["window"] == "rectangular"
     assert result.posterior is not None
     chains = 2 if method == "nuts" else 1
     draws = 100 if method == "nuts" else 80
@@ -73,6 +75,8 @@ def test_fit_result_roundtrip_and_scientific_invariants(
     assert float(summary["coverage"]) > 0.4
 
     restored = PSDResult.from_netcdf(saved_result)
+    assert restored.metadata["mean_removal"] == "global_per_channel"
+    assert restored.metadata["window"] == "rectangular"
     np.testing.assert_allclose(restored.spectral_density, spectrum)
     assert restored.posterior is not None
     assert restored.posterior.sizes["draw"] == result.posterior.sizes["draw"]

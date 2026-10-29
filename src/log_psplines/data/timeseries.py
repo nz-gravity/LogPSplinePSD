@@ -6,6 +6,7 @@ import numpy as np
 
 from log_psplines.data.spectral import EmpiricalPSD, WishartData
 from log_psplines.preprocessing.periodogram import (
+    _center_channels,
     compute_fft,
     compute_wishart,
     empirical_spectrum,
@@ -61,11 +62,10 @@ class TimeSeries:
         return TimeSeries(y, self.t, self.std)
 
     def standardise_for_psd(self):
+        """Remove the full-record channel means and scale to unit variance."""
         if self.original_stds is None:
             self.original_stds = np.std(self.data, axis=0)
-        y_standardized = (
-            self.data - np.mean(self.data, axis=0)
-        ) / self.original_stds
+        y_standardized = _center_channels(self.data) / self.original_stds
         psd_scaling_factor = np.std(self.data) ** 2.0
         return TimeSeries(
             data=y_standardized,
@@ -95,9 +95,9 @@ class TimeSeries:
         fmin: float | int | None = None,
         fmax: float | int | None = None,
         window: str | tuple | None = None,
-        detrend: str | bool = "constant",
         wishart_floor_fraction: float | None = None,
     ) -> WishartData:
+        """Center each full channel, then form tapered block FFT statistics."""
         n = self.data.shape[0]
         if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):
             raise TypeError("Nb must be a positive integer.")
@@ -117,7 +117,6 @@ class TimeSeries:
             scaling_factor=self.scaling_factor,
             channel_stds=self.original_stds,
             window=window,
-            detrend=detrend,
             wishart_floor_fraction=wishart_floor_fraction,
         )
         log_msg = (

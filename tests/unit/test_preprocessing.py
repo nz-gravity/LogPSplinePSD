@@ -219,6 +219,12 @@ def test_stationary_preprocessing_rejects_removed_detrending_options(
 
 
 def test_old_positional_detrend_is_not_interpreted_as_wishart_floor():
+    # The former eleventh config argument selected block detrending. It must
+    # not silently become a floor after removal, shifting knots and degree.
+    with pytest.raises(TypeError):
+        StationaryConfig(
+            1000, 1000, 1, None, 1.28, "centered", 42, None, 8, "hann", False
+        )
     x = np.random.default_rng(18).normal(size=(64, 2))
     with pytest.raises(TypeError):
         compute_wishart(x, 1.0, 2, None, None, 1.0, None, None, False)

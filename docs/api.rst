@@ -49,7 +49,9 @@ ordinary spectral leakage and bin-averaging effects of the analysis window.
 and ``empirical_spectrum`` (including ``get_empirical_psd`` forwarding).
 These arguments have been removed, including their former ``False`` value;
 there is no replacement selector. Pass ``wishart_floor_fraction`` by keyword
-if used. The window selection is unchanged.
+if used. In ``StationaryConfig``, fields following ``wishart_window`` are now
+keyword-only so old positional calls cannot silently shift their meaning.
+The window selection is unchanged.
 
 ``WishartData.preprocessing`` records the applied ``mean_removal`` and
 ``window``. These descriptions survive masking and coarse-graining and are

@@ -5,6 +5,23 @@ CHANGELOG
 =========
 
 
+.. _changelog-v0.3.0:
+
+v0.3.0 (2026-10-29)
+===================
+
+Features
+--------
+
+* feat: marginalize Gaussian cross-spectrum coefficients (#54)
+
+Integrate stationary cross-spectrum spline weights analytically for both NUTS and VI, then restore full joint conditional draws for spectral reconstruction. Share reduced-state initialization and require float64 for multivariate fits.
+
+Add scalar and matrix completion-of-the-square explanations to the multivariate tutorial, with tests for Gaussian identities, gradients, covariance recovery, and inference outputs. (`0167b8d`_)
+
+.. _0167b8d: https://github.com/nz-gravity/LogPSplinePSD/commit/0167b8d8b9969c467a284fefa2b933f69d9fbc00
+
+
 .. _changelog-v0.2.1:
 
 v0.2.1 (2026-10-21)
@@ -12,6 +29,8 @@ v0.2.1 (2026-10-21)
 
 Chores
 ------
+
+* chore(release): 0.2.1 (`781bc56`_)
 
 * chore: move research studies out of the package repository
 
@@ -37,6 +56,7 @@ Demonstrate VI and NUTS curve comparisons in the existing multivariate and time-
 
 Validated with the full package tests, notebook and documentation build, and wrapper parity comparisons. (`0e5c087`_)
 
+.. _781bc56: https://github.com/nz-gravity/LogPSplinePSD/commit/781bc56e562d6f75f416fdccdec01ff624f98af9
 .. _1059dec: https://github.com/nz-gravity/LogPSplinePSD/commit/1059dec082fc48de4142d7a2f3a0796eff71a9a3
 .. _63b5c7a: https://github.com/nz-gravity/LogPSplinePSD/commit/63b5c7a10d8bd4a3dfed8f1df05b02112321fd1b
 .. _18ac7e3: https://github.com/nz-gravity/LogPSplinePSD/commit/18ac7e3cf9e0d0c3e60df225d85d467bdd2d8b63

@@ -121,8 +121,25 @@ is positive definite and includes its existing ridge; the time penalty
 null-mode prior is added. The default matrix frequency basis uses the
 stationary max-normalization and ridge convention. A supplied model retains
 its supplied penalty. With no explicit configuration, the matrix entry point
-uses roughness scale 1.28 and centered coefficient coordinates; an explicit
+uses roughness scale 1.28; an explicit
 ``PowerConfig`` controls its own settings.
+
+Matrix delta coefficients always use information-scaled coordinates. For
+penalty eigenmode ``k``, let its prior standard deviation be ``a_k`` and let
+``h_k = sum(counts * basis_k**2) / enbw``. The sampler uses
+
+.. math::
+
+   c_k=(a_k^{-2}+h_k)^{-1/2},\qquad
+   z_k\sim N(0,a_k^2/c_k^2),\qquad s_k=c_k z_k.
+
+Thus ``s_k`` retains exactly its original Gaussian prior. Weakly measured
+curvature modes approach noncentered coordinates as the smoothing scale
+shrinks, while well-measured modes approach fixed likelihood scaling. This
+avoids forcing the same parameterization onto level, slope and curvature.
+The Normal density includes the parameter-dependent transformation Jacobian;
+tests check both densities and gradients. The shared scalar configuration's
+``centered`` switch does not control matrix coordinates.
 
 The Gaussian calculation evaluates residual power at the conditional mean
 plus the prior quadratic, avoiding subtraction of large nearly equal terms.

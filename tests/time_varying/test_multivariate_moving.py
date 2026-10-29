@@ -225,8 +225,8 @@ def test_paired_rows_match_rectangular_likelihood_and_full_gradients(row):
     rng = np.random.default_rng(380 + row)
     for label in row_field_labels(row):
         if label == f"delta_{row}":
-            params[f"s_{label}"] = (
-                rng.normal(size=params[f"s_{label}"].shape) * 0.15
+            params[f"z_{label}"] = (
+                rng.normal(size=params[f"z_{label}"].shape) * 0.15
             )
         else:
             assert f"s_{label}" not in params

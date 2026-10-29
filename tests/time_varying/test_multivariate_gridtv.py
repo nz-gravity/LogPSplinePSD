@@ -34,7 +34,12 @@ from log_psplines.diagnostics.spectrum import spectrum_diagnostics
 from log_psplines.inference.anova_power import (
     prepare_anova_power_model,
 )
-from log_psplines.inference.collapsed_grid import grid_field_scales
+from log_psplines.inference.collapsed_grid import (
+    grid_coordinate_scales,
+    grid_field_design,
+    grid_field_scales,
+    sample_grid_field,
+)
 from log_psplines.inference.power_results import power_result_spectra
 from log_psplines.inference.wishart_grid import (
     collect_grid_samples,
@@ -365,7 +370,7 @@ def test_tensor_partition_chunked_evaluation_and_independent_row_sites():
         model, init = prepare_wishart_grid_row(
             pooled, spline, config, row, pair=pair
         )
-        init[f"s_delta_{row}"] = rng.normal(size=4) * 0.1
+        init[f"z_delta_{row}"] = rng.normal(size=4) * 0.1
         trace = handlers.trace(
             handlers.substitute(handlers.seed(model, row), data=init)
         ).get_trace()
@@ -383,6 +388,7 @@ def test_tensor_partition_chunked_evaluation_and_independent_row_sites():
         assert np.isfinite(
             likelihood_site["fn"].log_prob(likelihood_site["value"])
         ).all()
+        init[f"s_delta_{row}"] = trace[f"s_delta_{row}"]["value"]
         # Synthetic coefficients exercise reconstruction independently of the integral.
         for label in row_field_labels(row)[1:]:
             init[f"s_{label}"] = rng.normal(size=4) * 0.1
@@ -477,7 +483,7 @@ def test_constant_time_rows_have_stationary_prior_and_no_time_scale_sites():
     sites = {}
     for row in range(3):
         model, init = prepare_wishart_grid_row(data, spline, config, row)
-        init[f"s_delta_{row}"] = np.linspace(-0.15, 0.2, size)
+        init[f"z_delta_{row}"] = np.linspace(-0.15, 0.2, size)
         _, trace = log_density(model, (), {}, init)
         random_sites = {
             name
@@ -485,10 +491,11 @@ def test_constant_time_rows_have_stationary_prior_and_no_time_scale_sites():
             if site["type"] == "sample" and not site.get("is_observed", False)
         }
         assert random_sites == {
-            f"s_delta_{row}",
+            f"z_delta_{row}",
             *[f"sigma_freq_{label}" for label in row_field_labels(row)],
         }
-        eigen_coefficients = init[f"s_delta_{row}"]
+        eigen_coefficients = trace[f"s_delta_{row}"]["value"]
+        init[f"s_delta_{row}"] = eigen_coefficients
         physical = pair["U_freq"] @ eigen_coefficients
         precision = (
             spline.frequency.penalty / init[f"sigma_freq_delta_{row}"] ** 2
@@ -498,8 +505,16 @@ def test_constant_time_rows_have_stationary_prior_and_no_time_scale_sites():
             - np.linalg.slogdet(precision)[1]
             + physical @ precision @ physical
         )
-        actual_prior = trace[f"s_delta_{row}"]["fn"].log_prob(
-            eigen_coefficients
+        design = grid_design(data, spline, pair)
+        field = grid_field_design(design[2], design[3], paired=False)
+        information = (
+            np.sum(data.counts.reshape(-1, 1) * field**2, axis=0) / data.enbw
+        )
+        scales = grid_field_scales(pair, init[f"sigma_freq_delta_{row}"])
+        coordinate = grid_coordinate_scales(scales, information)
+        actual_prior = (
+            trace[f"z_delta_{row}"]["fn"].log_prob(init[f"z_delta_{row}"])
+            - np.log(coordinate).sum()
         )
         np.testing.assert_allclose(actual_prior, expected_prior, atol=2e-10)
         for label in row_field_labels(row)[1:]:
@@ -815,51 +830,45 @@ def test_host_reconstruction_keeps_float64_physical_range():
     np.testing.assert_allclose(spectrum.real, np.exp(-110), rtol=1e-12, atol=0)
 
 
-@pytest.mark.parametrize("sigma_time", [0.4, 1e-5])
-def test_tensor_noncentering_preserves_fields_and_prior_density(sigma_time):
-    """Physical eigen-coefficients agree even for narrow time directions."""
+@pytest.mark.parametrize("sigma", [1e-7, 0.4, 10.0])
+@pytest.mark.parametrize("information_scale", [0.0, 1.0, 1e6])
+def test_information_coordinates_preserve_gaussian_density_and_gradient(
+    sigma, information_scale
+):
+    """Independent physical-prior density including the parameter-dependent Jacobian."""
     data, _, _ = _fixture(channels=2)
-    spline = _spline(data)
-    config = PowerConfig(structure="tensor", centered=True)
-    pair = prepare_grid_prior(spline)
-    centered, init = prepare_wishart_grid_row(data, spline, config, 1)
-    noncentered, _ = prepare_wishart_grid_row(
-        data, spline, replace(config, centered=False), 1
-    )
-    for label in row_field_labels(1):
-        init[f"sigma_time_{label}"] = sigma_time
-        init[f"sigma_freq_{label}"] = 0.7
-    scale = np.asarray(grid_field_scales(pair, 0.7, sigma_time)).reshape(-1)
-    init["s_delta_1"] = np.linspace(-0.2, 0.2, len(scale)) * np.minimum(
-        scale, 1.0
-    )
-    raw = {
-        name: value
-        for name, value in init.items()
-        if name.startswith("sigma_")
-    }
-    raw["z_delta_1"] = init["s_delta_1"] / scale
-    centered_density, centered_trace = log_density(centered, (), {}, init)
-    raw_density, raw_trace = log_density(noncentered, (), {}, raw)
+    pair = prepare_grid_prior(_spline(data))
+    config = PowerConfig(structure="tensor")
+    information = information_scale * jnp.arange(1.0, 5.0)
+    z = jnp.array([-0.2, 0.1, 0.15, -0.1])
+
+    def model():
+        sample_grid_field(pair, config, "delta_0", information)
+
+    def difference(log_sigma):
+        sf, st = jnp.exp(log_sigma), 0.3
+        params = {
+            "sigma_freq_delta_0": sf,
+            "sigma_time_delta_0": st,
+            "z_delta_0": z,
+        }
+        density, trace = log_density(model, (), {}, params)
+        prior_scale = grid_field_scales(pair, sf, st)
+        coordinate = grid_coordinate_scales(prior_scale, information)
+        physical = z * coordinate
+        reference = jnp.sum(
+            -0.5 * (physical / prior_scale) ** 2
+            - jnp.log(prior_scale)
+            - 0.5 * jnp.log(2 * jnp.pi)
+        )
+        # Smoothing-scale priors are unchanged by the coefficient transform.
+        for name in ("sigma_freq_delta_0", "sigma_time_delta_0"):
+            reference += trace[name]["fn"].log_prob(params[name])
+        return density - reference - jnp.log(coordinate).sum()
+
+    np.testing.assert_allclose(difference(jnp.log(sigma)), 0.0, atol=3e-11)
     np.testing.assert_allclose(
-        raw_trace["s_delta_1"]["value"],
-        centered_trace["s_delta_1"]["value"],
-        rtol=2e-13,
-    )
-    site = raw_trace["z_delta_1"]
-    np.testing.assert_allclose(
-        site["fn"].log_prob(site["value"]),
-        np.sum(
-            -0.5 * np.asarray(site["value"]) ** 2 - 0.5 * np.log(2 * np.pi)
-        ),
-        rtol=2e-13,
-    )
-    # Integrated theta fields contribute no coordinate-transformation Jacobian.
-    np.testing.assert_allclose(
-        raw_density,
-        centered_density + np.log(scale).sum(),
-        atol=2e-10,
-        rtol=2e-12,
+        jax.grad(difference)(jnp.log(sigma)), 0.0, atol=3e-11
     )
 
 

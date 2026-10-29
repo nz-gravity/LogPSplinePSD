@@ -14,6 +14,7 @@ from log_psplines.config import PowerConfig
 from log_psplines.data.wishart_grid import WishartGridData
 from log_psplines.inference.collapsed_grid import (
     collect_grid_samples,
+    grid_coordinate_scales,
     grid_design,
     grid_field_design,
     grid_field_scales,
@@ -72,14 +73,14 @@ def _initialize_field(marginal, counts, field_design, pair, config):
     return result
 
 
-def _initial_sampling_values(init, pair, config, label):
+def _initial_sampling_values(init, pair, information, label):
     values = dict(init)
-    if not config.centered:
-        values["z"] = values.pop("s") / np.asarray(
-            grid_field_scales(
-                pair, values["sigma_freq"], values.get("sigma_time")
-            )
-        )
+    scales = grid_field_scales(
+        pair, values["sigma_freq"], values.get("sigma_time")
+    )
+    values["z"] = values.pop("s") / np.asarray(
+        grid_coordinate_scales(scales, information)
+    )
     return {f"{name}_{label}": value for name, value in values.items()}
 
 
@@ -102,13 +103,14 @@ def prepare_wishart_grid_row(
     real = jnp.asarray(data.u_re.reshape(-1, data.p, data.u_re.shape[-1]))
     imag = jnp.asarray(data.u_im.reshape(real.shape))
     counts = jnp.asarray(data.counts.reshape(-1))
+    information = jnp.sum(counts[:, None] * basis**2, axis=0) / data.enbw
     labels = row_field_labels(channel)
     prepared = (
         prepare_grid_theta(data, pair, design, channel) if channel else None
     )
 
     def model() -> None:
-        coefficients = sample_grid_field(pair, config, labels[0])
+        coefficients = sample_grid_field(pair, config, labels[0], information)
         logs = basis @ coefficients
         if channel:
             sigmas_freq, sigmas_time = [], []
@@ -164,7 +166,7 @@ def prepare_wishart_grid_row(
         initial = _initialize_field(
             innovation, data.counts, field, pair, config
         )
-    init = _initial_sampling_values(initial, pair, config, labels[0])
+    init = _initial_sampling_values(initial, pair, information, labels[0])
     for label in labels[1:]:
         init[f"sigma_freq_{label}"] = config.roughness_scale
         if pair["time_active"]:
@@ -375,7 +377,12 @@ def fit_wishart_grid(
                 key: value
                 for key, value in asdict(config).items()
                 if key
-                not in ("interaction_scale", "null_precision", "ridge_eps")
+                not in (
+                    "interaction_scale",
+                    "null_precision",
+                    "ridge_eps",
+                    "centered",
+                )
             },
             "data_type": "multivariate_gridtv",
             "structure": "tensor",
@@ -387,6 +394,7 @@ def fit_wishart_grid(
             "counts_convention": "independent_proper_complex_observations; Y=sum(x x^H)",
             "tensor_prior": "Pt/sigma_time^2 kron I + I kron Pf/sigma_freq^2; supplied Pf includes its stationary ridge",
             "time_smoothing_active": pair["time_active"],
+            "delta_coordinates": "information_scaled; exact Gaussian prior",
             "row_coefficient_counts": row_sizes,
             "row_latent_dimensions": [
                 coefficient_size + (1 + int(pair["time_active"])) * (1 + 2 * j)

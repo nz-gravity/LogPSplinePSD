@@ -106,18 +106,25 @@ def sample_grid_scales(pair, config, label):
     return sigma_freq, sigma_time
 
 
-def sample_grid_field(pair, config, label):
-    """Sample one delta field; theta uses the same prior analytically."""
+def grid_coordinate_scales(prior_scales, information):
+    """Smoothly interpolate between prior and likelihood scales per mode.
+
+    The fixed information is the diagonal expected log-variance Fisher
+    information, sum(count * basis**2) / enbw. This is only a change of
+    sampling coordinates: the normal density below includes its Jacobian.
+    """
+    return jax.lax.rsqrt(prior_scales**-2 + information)
+
+
+def sample_grid_field(pair, config, label, information):
+    """Sample delta in information-scaled coordinates with its exact prior."""
     sigma_freq, sigma_time = sample_grid_scales(pair, config, label)
     scales = grid_field_scales(pair, sigma_freq, sigma_time)
-    if config.centered:
-        return numpyro.sample(
-            f"s_{label}", dist.Normal(0.0, scales).to_event(1)
-        )
+    coordinate_scales = grid_coordinate_scales(scales, information)
     z = numpyro.sample(
-        f"z_{label}", dist.Normal(0.0, 1.0).expand(scales.shape).to_event(1)
+        f"z_{label}", dist.Normal(0.0, scales / coordinate_scales).to_event(1)
     )
-    return numpyro.deterministic(f"s_{label}", z * scales)
+    return numpyro.deterministic(f"s_{label}", z * coordinate_scales)
 
 
 def grid_theta_scales(pair, sigma_freq, sigma_time=None):
@@ -264,10 +271,9 @@ def recover_grid_theta(
         output[f"s_{label}"] = beta[
             :, index * size : (index + 1) * size
         ].reshape(*shape, size)
-        if not config.centered:
-            output[f"z_{label}"] = standardized[
-                :, index * size : (index + 1) * size
-            ].reshape(*shape, size)
+        output[f"z_{label}"] = standardized[
+            :, index * size : (index + 1) * size
+        ].reshape(*shape, size)
     return output
 
 

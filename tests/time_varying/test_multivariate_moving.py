@@ -81,6 +81,7 @@ def test_direct_multichannel_dft_physical_times_and_unused_tail(
 ):
     rng = np.random.default_rng(180 + channels)
     values = rng.normal(size=(n, channels)) * np.arange(1, channels + 1)
+    centered = values - values.mean(axis=0, keepdims=True)
     dt, offset, length = 0.3, 17.8, 2 * m + 1
     time = offset + dt * np.arange(n)
     starts, frequencies, expected = [], [], []
@@ -90,7 +91,7 @@ def test_direct_multichannel_dft_physical_times_and_unused_tail(
             phase = np.exp(-2j * np.pi * rung * np.arange(length) / length)
             expected.append(
                 np.sqrt(2 * dt / length)
-                * (phase @ values[start : start + length])
+                * (phase @ centered[start : start + length])
             )
             starts.append(start)
             frequencies.append(rung / (length * dt))
@@ -104,15 +105,38 @@ def test_direct_multichannel_dft_physical_times_and_unused_tail(
     np.testing.assert_allclose(observed.frequency, frequencies, rtol=2e-14)
     assert np.all(observed.counts == 1)
     altered = values.copy()
-    altered[max(starts) + length :] = 1e8
+    altered[max(starts) + length :] = 1e3
     trailing = multivariate_moving_periodogram(
         TimeSeries(altered, time), m=m, thin=thin
     )
-    np.testing.assert_array_equal(trailing.U, observed.U)
+    # The unused tail changes the global mean. Interior rectangular Fourier
+    # modes annihilate that constant, up to roundoff, without recentering blocks.
+    np.testing.assert_allclose(trailing.U, observed.U, atol=2e-12, rtol=2e-12)
+    assert observed.preprocessing == {
+        "mean_removal": "global_per_channel",
+        "window": "rectangular",
+    }
     raw = tang_moving_periodogram(values, m=m, thin=thin)
     np.testing.assert_allclose(
         raw["coeff"] * np.sqrt(4 * np.pi * dt), observed.U[..., 0], atol=3e-13
     )
+
+
+def test_moving_global_offsets_and_preprocessing_provenance():
+    rng = np.random.default_rng(893)
+    values = rng.normal(size=(129, 3))
+    time = np.arange(len(values)) * 0.25
+    original = multivariate_moving_periodogram(TimeSeries(values, time), m=8)
+    shifted = multivariate_moving_periodogram(
+        TimeSeries(values + np.array([17.0, -22.0, 43.0]), time), m=8
+    )
+    np.testing.assert_allclose(shifted.U, original.U, atol=2e-14, rtol=2e-14)
+    masked = original.mask(np.arange(len(original.counts)) % 2 == 0)
+    assert masked.preprocessing == original.preprocessing
+    external = WishartGridData.from_scattered_coefficients(
+        original.U, original.time, original.frequency
+    )
+    assert external.preprocessing == {}
 
 
 def test_complex_scalar_likelihood_and_gradients_use_physical_psd_units():
@@ -196,9 +220,12 @@ def test_paired_rows_match_rectangular_likelihood_and_full_gradients(row):
     rng = np.random.default_rng(380 + row)
     for label in row_field_labels(row):
         for field in ("g", "eta"):
-            params[f"{field}_{label}"] = (
-                rng.normal(size=params[f"{field}_{label}"].shape) * 0.15
-            )
+            if label == f"delta_{row}":
+                params[f"{field}_{label}"] = (
+                    rng.normal(size=params[f"{field}_{label}"].shape) * 0.15
+                )
+            else:
+                assert f"{field}_{label}" not in params
         params[f"sigma_g_{label}"], params[f"sigma_eta_{label}"] = 0.7, 0.3
 
     def grid_density(p):

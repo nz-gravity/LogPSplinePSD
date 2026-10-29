@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
+import numpyro.distributions as dist
 import xarray as xr
 
 from log_psplines.config import PowerConfig
@@ -20,7 +21,13 @@ from log_psplines.inference.anova_power import (
     prepare_anova_prior,
     sample_anova_field,
 )
-from log_psplines.inference.nuts import _suffix, run_nuts
+from log_psplines.inference.collapsed_grid import (
+    grid_theta_conditional,
+    grid_theta_scales,
+    prepare_grid_theta,
+    recover_grid_theta,
+)
+from log_psplines.inference.nuts import _mapping_to_dataset, _suffix, run_nuts
 from log_psplines.inference.power import power_floor
 from log_psplines.inference.power_results import power_result_spectra
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
@@ -107,7 +114,8 @@ def prepare_wishart_grid_row(
     Shared designs contain raw time/frequency and their penalty-eigenbasis
     versions: (T,Kt), (F,Kf), (T,Kt), (F,Kf).
     Paired observations instead have Q rows in both coordinate designs.
-    Each scalar field samples its own ANOVA coefficients and hyperparameters.
+    Delta samples ANOVA coefficients; theta coefficients are integrated exactly.
+    Every field retains its own smoothing hyperparameters.
     """
     if not 0 <= channel < data.p:
         raise ValueError("channel must index a Cholesky row")
@@ -130,43 +138,58 @@ def prepare_wishart_grid_row(
     counts = jnp.asarray(data.counts)
     labels = row_field_labels(channel)
 
+    prepared = (
+        prepare_grid_theta(data, pair, design, channel) if channel else None
+    )
+
     def model() -> None:
-        fields = []
-        for label in labels:
-            g, eta = sample_anova_field(
-                pair, config, spline.sigma_eta_prior, label=label
-            )
-            mean, deviation = anova_components(
-                bt_eig, bf_eig, g, eta, paired=data.is_scattered
-            )
-            fields.append(
-                mean + deviation
-                if data.is_scattered
-                else mean[None, :] + deviation
-            )
-        logs = fields[0]
-        theta_re = (
-            jnp.stack(fields[1::2], axis=-1)
-            if channel
-            else jnp.empty((*logs.shape, 0))
+        g, interaction = sample_anova_field(
+            pair, config, spline.sigma_eta_prior, label=labels[0]
         )
-        theta_im = (
-            jnp.stack(fields[2::2], axis=-1)
-            if channel
-            else jnp.empty((*logs.shape, 0))
+        mean, deviation = anova_components(
+            bt_eig, bf_eig, g, interaction, paired=data.is_scattered
         )
-        likelihood = wishart_log_likelihood(
-            logs,
-            theta_re,
-            theta_im,
-            u_re,
-            u_im,
-            prev_re,
-            prev_im,
-            counts=counts,
-            clip_log_psd=False,
+        logs = (
+            mean + deviation
+            if data.is_scattered
+            else mean[None, :] + deviation
         )
-        numpyro.deterministic(f"log_likelihood_block_{channel}", likelihood)
+        if channel:
+            sigmas_g, sigmas_eta = [], []
+            for label in labels[1:]:
+                sigmas_g.append(
+                    numpyro.sample(
+                        f"sigma_g_{label}",
+                        dist.HalfNormal(config.roughness_scale),
+                    )
+                )
+                sigmas_eta.append(
+                    numpyro.sample(
+                        f"sigma_eta_{label}",
+                        dist.HalfNormal(spline.sigma_eta_prior),
+                    )
+                )
+            scales = grid_theta_scales(pair, config, sigmas_g, sigmas_eta)
+            likelihood, _, _, _ = grid_theta_conditional(
+                logs, scales, prepared
+            )
+        else:
+            empty = jnp.empty((*logs.shape, 0))
+            likelihood = wishart_log_likelihood(
+                logs,
+                empty,
+                empty,
+                u_re,
+                u_im,
+                prev_re,
+                prev_im,
+                counts=counts,
+                enbw=data.enbw,
+                clip_log_psd=False,
+            )
+            numpyro.deterministic(
+                f"log_likelihood_block_{channel}", likelihood
+            )
         numpyro.factor(f"wishart_{channel}", likelihood)
 
     # Reuse scalar log-variance initialization only. The inference observations
@@ -190,21 +213,56 @@ def prepare_wishart_grid_row(
             config,
         )
     )
-    init = anova_init_values(diagonal_init, pair, config, label=labels[0])
-    for label in labels[1:]:
-        init.update(
-            anova_init_values(
-                {
-                    "g": np.zeros(len(pair["lam_freq"])),
-                    "eta": np.zeros(pair["eta_scale"].size),
-                    "sigma_g": float(diagonal_init["sigma_g"]),
-                    "sigma_eta": float(diagonal_init["sigma_eta"]),
-                },
+    theta_sigma_g = float(diagonal_init["sigma_g"])
+    theta_sigma_eta = float(diagonal_init["sigma_eta"])
+    if channel:
+        # Initialize the innovation spectrum from a regularized conditional
+        # regression, not the often much larger marginal channel spectrum.
+        # A single rank-one cell cannot identify a conditional variance, so
+        # theta is fitted jointly across its whole spline design here.
+        delta = np.concatenate((diagonal_init["g"], diagonal_init["eta"]))
+        scales = grid_theta_scales(
+            pair,
+            config,
+            np.full(2 * channel, theta_sigma_g),
+            np.full(2 * channel, theta_sigma_eta),
+        )
+        _, beta, _, _ = grid_theta_conditional(
+            prepared["field_basis"] @ delta, scales, prepared
+        )
+        residual_re = np.asarray(
+            prepared["observed_re"]
+            - jnp.einsum("frk,k->fr", prepared["design_re"], beta)
+        )
+        residual_im = np.asarray(
+            prepared["observed_im"]
+            - jnp.einsum("frk,k->fr", prepared["design_im"], beta)
+        )
+        innovation = np.sum(residual_re**2 + residual_im**2, axis=-1).reshape(
+            data.counts.shape
+        )
+        diagonal_init = (
+            _initialize_scattered(
+                innovation, data.counts, bt, bf, pair, config
+            )
+            if data.is_scattered
+            else initialize_anova(
+                PowerData(
+                    2 * innovation, 2 * data.counts, data.frequency, data.time
+                ),
+                bt,
+                bf,
+                spline.time_penalty,
+                np.asarray(spline.frequency.penalty),
                 pair,
                 config,
-                label=label,
             )
         )
+    init = anova_init_values(diagonal_init, pair, config, label=labels[0])
+    for label in labels[1:]:
+        init[f"sigma_g_{label}"] = theta_sigma_g
+        init[f"sigma_eta_{label}"] = theta_sigma_eta
+
     return model, init
 
 
@@ -242,10 +300,11 @@ def fit_wishart_grid(
     coefficient_size = len(pair["lam_freq"]) * (1 + len(pair["lam_time"]))
     row_sizes = [coefficient_size * (1 + 2 * j) for j in range(data.p)]
     logger.info(
-        f"GridTV coefficients per row: {row_sizes}; total={sum(row_sizes)} (plus {2 * data.p**2} hyperparameters)"
+        f"GridTV reconstructed coefficients per row: {row_sizes}; marginal sampling retains {coefficient_size} delta coefficients per row (plus smoothing scales)"
     )
     posterior_parts, stats_parts, likelihood_parts, runtimes = [], [], [], []
-    for channel, key in enumerate(keys):
+    for channel, row_key in enumerate(keys):
+        key, conditional_key = jax.random.split(row_key)
         model, init = prepare_wishart_grid_row(
             data, spline, config, channel, pair=pair, design=design
         )
@@ -270,6 +329,31 @@ def fit_wishart_grid(
                 "diverging",
             ),
         )
+        if channel:
+            prepared = prepare_grid_theta(data, pair, design, channel)
+            recovered = recover_grid_theta(
+                {
+                    name: value.values
+                    for name, value in sampled.posterior.data_vars.items()
+                },
+                pair,
+                config,
+                prepared,
+                conditional_key,
+            )
+            likelihood_name = f"log_likelihood_block_{channel}"
+            sampled.log_likelihood = _mapping_to_dataset(
+                {likelihood_name: recovered.pop(likelihood_name)},
+                num_chains=config.num_chains,
+            )
+            sampled.posterior = xr.merge(
+                [
+                    sampled.posterior,
+                    _mapping_to_dataset(
+                        recovered, num_chains=config.num_chains
+                    ),
+                ]
+            )
         runtimes.append(perf_counter() - start)
         posterior_parts.append(
             collect_anova_samples(
@@ -352,7 +436,12 @@ def fit_wishart_grid(
                 **observation_coords,
                 "channel": np.arange(data.p),
             },
-            attrs={"units": data.units, "normalization": data.normalization},
+            attrs={
+                "units": data.units,
+                "normalization": data.normalization,
+                "enbw": data.enbw,
+                **data.preprocessing,
+            },
         ),
         model_data=xr.Dataset(
             {
@@ -381,8 +470,15 @@ def fit_wishart_grid(
             "centring": "fixed_reference_time_grid_before_masking_and_pooling",
             "row_coefficient_counts": row_sizes,
             "row_latent_dimensions": [
-                size + 2 * (1 + 2 * j) for j, size in enumerate(row_sizes)
+                coefficient_size + 2 * (1 + 2 * j) for j in range(data.p)
             ],
+            "theta_parameterization": "marginalized",
+            "inference_dtype": "float64"
+            if jax.config.x64_enabled
+            else "float32",
+            "enbw": data.enbw,
+            "mean_removal": data.preprocessing.get("mean_removal", "unknown"),
+            "window": data.preprocessing.get("window", "unknown"),
             "row_fit_seconds": runtimes,
             "reconstruction_seconds": reconstruction_seconds,
             "spectrum_bytes": final_bytes,

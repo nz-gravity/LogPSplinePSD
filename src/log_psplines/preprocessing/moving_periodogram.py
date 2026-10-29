@@ -20,6 +20,7 @@ from jaxtyping import Complex, Float
 
 from log_psplines.data.spectral import PowerData
 from log_psplines.data.wishart_grid import WishartGridData
+from log_psplines.preprocessing.periodogram import _center_channels
 
 if TYPE_CHECKING:
     from log_psplines.data.timeseries import TimeSeries
@@ -90,6 +91,7 @@ def tang_moving_periodogram(
     each window, so each window has length ``2*m+1``.  The returned ``u`` is
     the true one-based window-centre divided by ``T`` and ``omega`` is angular
     frequency in radians per sample.
+    Each channel's global mean is removed once before selecting windows.
     """
     if np.iscomplexobj(data):
         raise ValueError("Moving-periodogram input data must be real.")
@@ -106,7 +108,7 @@ def tang_moving_periodogram(
     omega = np.pi * lam
     nu = np.arange(2 * m + 1)
     phase = np.exp(-1j * np.pi * np.outer(nu, lam))
-    channels = x[:, None] if x.ndim == 1 else x
+    channels = _center_channels(x[:, None] if x.ndim == 1 else x)
     windows = np.lib.stride_tricks.sliding_window_view(
         channels, 2 * m + 1, axis=0
     )
@@ -286,8 +288,9 @@ def multivariate_moving_periodogram(
 
     Require finite real (n,C) samples on one uniform time axis. Physical
     coefficients are sqrt(4*pi*dt) times Tang coefficients, with covariance
-    in one-sided data_unit^2/Hz; each vector has count one. No pooling,
-    detrending or channel standardization is applied. The likelihood uses
+    in one-sided data_unit^2/Hz; each vector has count one. The full-record
+    channel means are removed once; there is no block detrending, pooling
+    or channel standardization. The likelihood uses
     a composite dynamic-Whittle/local-stationarity approximation, adopting
     proper complex coefficients rather than guaranteeing transform
     properness. Thinning does not establish statistical independence.
@@ -319,4 +322,8 @@ def multivariate_moving_periodogram(
         raw["omega"] / (2.0 * np.pi * dt),
         reference_time=reference_time,
         normalization="sqrt(4*pi*dt)*Tang coefficients; exact paired sites",
+        preprocessing={
+            "mean_removal": "global_per_channel",
+            "window": "rectangular",
+        },
     )

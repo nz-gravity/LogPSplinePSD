@@ -1,30 +1,37 @@
-"""Local rectangular FFT coefficients and fixed rectangular statistic bins."""
+"""Local FFT coefficients and fixed rectangular statistic bins."""
 
 from dataclasses import replace
 
 import numpy as np
+from scipy.signal.windows import get_window
 
 from log_psplines.data.spectral_utils import Y_to_U, _as_positive_int
 from log_psplines.data.timeseries import TimeSeries
 from log_psplines.data.wishart_grid import WishartGridData
+from log_psplines.preprocessing.periodogram import _center_channels
 
 
 def local_wishart_grid(
     series: TimeSeries,
     segment_length: int,
     *,
+    window: str | tuple | None = None,
     units: str = "data_unit^2/Hz",
 ) -> WishartGridData:
-    """Nonoverlapping rectangular FFTs, in physical one-sided PSD units.
+    """Nonoverlapping local FFTs, in physical one-sided PSD units.
 
-    x=sqrt(2/(fs*L))*rfft(segment); E[x x^H] approximates S(t,f).
-    There is no standardization, taper, overlap, detrending, or extra ENBW
-    correction. DC and even-L Nyquist are excluded because they are real.
+    x=sqrt(2/(fs*sum(w**2)))*rfft(w*segment); E[x x^H] approximates S(t,f).
+    Remove each channel's full-record mean once before forming segments.
+    ``window=None`` uses a rectangular taper. There is no standardization,
+    overlap or block detrending. The dimensionless ENBW is recorded for the
+    same likelihood weighting used by stationary spectral fits.
+    DC and even-L Nyquist are excluded because they are real.
     Time is the arithmetic mean of sample times in each segment; frequency
     is k*fs/L. Require full segments and uniform sampling. Independent,
     proper complex ordinates and local stationarity are Whittle assumptions,
-    exact for interior Fourier bins of white Gaussian data, approximate for
-    finite colored/time-varying records. Each native cell has count one.
+    exact for rectangular interior Fourier bins of white Gaussian data,
+    approximate for finite colored/time-varying or tapered records. Tapering
+    changes leakage, dependence and properness; each native cell has count one.
     """
     length = _as_positive_int("segment_length", segment_length)
     values, time = np.asarray(series.data), np.asarray(series.t)
@@ -38,16 +45,32 @@ def local_wishart_grid(
     ):
         raise ValueError("local FFTs require finite uniformly sampled data")
     fs = series.fs
-    segments = values.reshape(-1, length, series.p)
+    segments = _center_channels(values).reshape(-1, length, series.p)
+    taper = (
+        np.ones(length)
+        if window is None
+        else get_window(window, length, fftbins=True)
+    )
+    energy = float(np.sum(taper**2))
+    if energy <= 0:
+        raise ValueError("window energy must be positive")
+    enbw = length * energy / float(np.sum(taper)) ** 2
     stop = -1 if length % 2 == 0 else None
-    coefficients = np.fft.rfft(segments, axis=1)[:, 1:stop]
-    coefficients *= np.sqrt(2.0 / (fs * length))
+    coefficients = np.fft.rfft(segments * taper[None, :, None], axis=1)[
+        :, 1:stop
+    ]
+    coefficients *= np.sqrt(2.0 / (fs * energy))
     return WishartGridData.from_coefficients(
         coefficients,
         time.reshape(-1, length).mean(axis=1),
         np.fft.rfftfreq(length, d=1.0 / fs)[1:stop],
         units=units,
-        normalization="sqrt(2/(fs*segment_length))*rfft; boxcar; interior bins",
+        normalization="sqrt(2/(fs*sum(window**2)))*rfft(window*segment); interior bins",
+        preprocessing={
+            "mean_removal": "global_per_channel",
+            "window": "rectangular" if window is None else str(window),
+        },
+        enbw=enbw,
     )
 
 

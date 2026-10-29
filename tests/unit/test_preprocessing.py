@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from scipy.signal import csd, welch
+from scipy.signal import csd, welch, windows
 
 from log_psplines import StationaryConfig
 from log_psplines.data.timeseries import TimeSeries
@@ -15,6 +15,7 @@ from log_psplines.preprocessing.coarse_grain import (
 )
 from log_psplines.preprocessing.periodogram import (
     _regularize_wishart,
+    compute_fft,
     compute_wishart,
     empirical_spectrum,
 )
@@ -24,39 +25,175 @@ from log_psplines.preprocessing.spectral import (
 )
 
 
-@pytest.mark.parametrize(
-    "window,detrend", [(None, False), ("hann", "constant"), ("hann", "linear")]
-)
-def test_wishart_auto_spectra_match_welch(window, detrend):
+@pytest.mark.parametrize("window", [None, "hann", ("tukey", 0.1)])
+def test_wishart_auto_spectra_match_globally_centered_welch(window):
     x = np.random.default_rng(8).normal(size=(256, 2))
-    data = compute_wishart(x, fs=32.0, Nb=4, window=window, detrend=detrend)
+    data = compute_wishart(x, fs=32.0, Nb=4, window=window)
+    centered = x - x.mean(axis=0)
     for channel in range(2):
         freq, expected = welch(
-            x[:, channel],
+            centered[:, channel],
             fs=32.0,
             nperseg=64,
             noverlap=0,
             window="boxcar" if window is None else window,
-            detrend=detrend,
+            detrend=False,
         )
         np.testing.assert_allclose(data.freq, freq[1:])
         np.testing.assert_allclose(
             data.raw_psd[:, channel, channel].real, expected[1:], rtol=1e-12
         )
-    np.testing.assert_allclose(data.enbw, 1.0 if window is None else 1.5)
+    taper = windows.get_window("boxcar" if window is None else window, 64)
+    np.testing.assert_allclose(
+        data.enbw, 64 * np.sum(taper**2) / taper.sum() ** 2
+    )
 
 
 def test_empirical_cross_spectrum_matches_scipy():
     x = np.random.default_rng(9).normal(size=(128, 2))
     x[:, 1] += 0.5 * x[:, 0]
+    x += [25.0, -50.0]
+    original = x.copy()
     empirical = empirical_spectrum(x, fs=32.0, nperseg=32, noverlap=16)
-    freq, expected = csd(x[:, 0], x[:, 1], fs=32.0, nperseg=32, noverlap=16)
+    centered = x - x.mean(axis=0)
+    freq, expected = csd(
+        centered[:, 0],
+        centered[:, 1],
+        fs=32.0,
+        nperseg=32,
+        noverlap=16,
+        detrend=False,
+    )
     np.testing.assert_allclose(empirical.freq, freq)
     np.testing.assert_allclose(empirical.psd[:, 0, 1], expected)
     np.testing.assert_allclose(
         empirical.psd, empirical.psd.conj().swapaxes(-1, -2)
     )
     assert np.all((empirical.coherence >= 0) & (empirical.coherence <= 1))
+    for channel in range(2):
+        _, expected_auto = welch(
+            centered[:, channel],
+            fs=32.0,
+            nperseg=32,
+            noverlap=16,
+            detrend=False,
+        )
+        np.testing.assert_allclose(
+            empirical.psd[:, channel, channel], expected_auto
+        )
+    through_timeseries = TimeSeries(
+        x, np.arange(len(x)) / 32.0
+    ).get_empirical_psd(
+        nperseg=32,
+        noverlap=16,
+    )
+    np.testing.assert_allclose(through_timeseries.psd, empirical.psd)
+    np.testing.assert_array_equal(x, original)
+
+
+def _fft_density_reference(centered, fs, blocks, window):
+    """Independent one-sided matrix periodogram for already centered data."""
+    length = len(centered) // blocks
+    taper = windows.get_window("boxcar" if window is None else window, length)
+    transforms = np.fft.rfft(
+        centered.reshape(blocks, length, -1) * taper[None, :, None], axis=1
+    )
+    outer = transforms[..., :, None] * transforms[..., None, :].conj()
+    density = outer.mean(axis=0) / (fs * np.sum(taper**2))
+    density[1 : -1 if length % 2 == 0 else None] *= 2
+    return np.fft.rfftfreq(length, 1 / fs)[1:], density[1:]
+
+
+@pytest.mark.parametrize("length", [63, 64])
+@pytest.mark.parametrize("window", [None, "hann", ("tukey", 0.1)])
+def test_public_wishart_paths_use_global_centered_fft_matrix(length, window):
+    blocks, fs = 4, 32.0
+    x = np.random.default_rng(15).normal(size=(blocks * length, 3))
+    x[:, 1] += 0.7 * np.roll(x[:, 0], 2)
+    x *= [1.0, 0.4, 2.0]
+    offset = x + [100.0, -250.0, 33.0]
+    original = offset.copy()
+    centered = offset - offset.mean(axis=0)
+    freq, expected = _fft_density_reference(centered, fs, blocks, window)
+    ts = TimeSeries(offset, np.arange(len(x)) / fs)
+
+    for actual in (
+        compute_wishart(offset, fs, blocks, window=window),
+        ts.to_wishart_stats(blocks, window=window),
+        compute_wishart(x, fs, blocks, window=window),
+    ):
+        np.testing.assert_allclose(actual.freq, freq)
+        np.testing.assert_allclose(
+            actual.raw_psd, expected, rtol=1e-11, atol=1e-13
+        )
+        np.testing.assert_allclose(
+            actual.Y,
+            expected * blocks * length / fs,
+            rtol=1e-11,
+            atol=1e-12,
+        )
+
+    # The fit path standardizes each channel after the same single centering.
+    processed = preprocess_to_freq_domain(
+        ts, StationaryConfig(Nb=blocks, wishart_window=window, verbose=False)
+    )
+    std = offset.std(axis=0)
+    standardized = expected / (std[:, None] * std[None, :])
+    np.testing.assert_allclose(
+        processed.Y,
+        standardized * blocks * length / fs,
+        rtol=1e-11,
+        atol=1e-12,
+    )
+    np.testing.assert_array_equal(offset, original)
+
+
+@pytest.mark.parametrize("window", [None, "hann", ("tukey", 0.1)])
+def test_full_record_fft_entrypoints_remove_channel_offsets(window):
+    fs = 16.0
+    x = np.random.default_rng(16).normal(size=(127, 3)) + [10.0, -30.0, 5.0]
+    freq, expected = _fft_density_reference(x - x.mean(axis=0), fs, 1, window)
+    ts = TimeSeries(x, np.arange(len(x)) / fs)
+    results = [compute_fft(x, fs, window=window)]
+    if window is None:
+        results.append(ts.to_cross_spectral_density())
+    for actual in results:
+        np.testing.assert_allclose(actual.freq, freq)
+        np.testing.assert_allclose(
+            actual.raw_psd, expected, rtol=1e-12, atol=1e-14
+        )
+
+
+def test_tukey_blocks_do_not_inject_block_mean_into_quiet_low_frequencies():
+    # This high-frequency tone has a quiet low-frequency tail, as a blue
+    # spectrum can have. It completes 1443 cycles over the full record, but
+    # 180.375 per block, so the block means differ even after global centering.
+    blocks, length, fs = 8, 512, 1.0
+    sample = np.arange(blocks * length)
+    x = np.sin(2 * np.pi * 180.375 * sample / length + 0.2)[:, None]
+    centered = x - x.mean(axis=0)
+    window = ("tukey", 0.1)
+    _, expected = _fft_density_reference(centered, fs, blocks, window)
+    actual = compute_wishart(x, fs, blocks, window=window)
+    np.testing.assert_allclose(
+        actual.raw_psd, expected, rtol=1e-12, atol=1e-18
+    )
+
+    # The former operator subtracts a boxcar block mean before tapering.
+    # Its extra term, -mean(block) * FFT(window), contaminates the low band.
+    old_blocks = centered.reshape(blocks, length, 1)
+    old_blocks = old_blocks - old_blocks.mean(axis=1, keepdims=True)
+    _, old_density = _fft_density_reference(
+        old_blocks.reshape(-1, 1),
+        fs,
+        blocks,
+        window,
+    )
+    quiet_band = slice(0, 8)
+    corrected_power = actual.raw_psd[quiet_band, 0, 0].real.sum()
+    old_power = old_density[quiet_band, 0, 0].real.sum()
+    assert old_power > 500 * corrected_power
+    assert corrected_power < 1e-6 * actual.raw_psd[:, 0, 0].real.max()
 
 
 @pytest.mark.parametrize("bins", [{"Nh": 4}, {"Nc": 8}, {"Nc": 7}])
@@ -163,7 +300,7 @@ def test_known_signal_periodogram_normalization_dc_and_nyquist(channels):
         + 7.0
     )
     x = np.repeat(signal[:, None], channels, axis=1)
-    data = compute_wishart(x, fs=fs, Nb=1, detrend="constant")
+    data = compute_wishart(x, fs=fs, Nb=1)
     assert data.raw_psd.shape == (n // 2, channels, channels)
     assert data.freq[0] == fs / n and data.freq[-1] == fs / 2
     power = data.raw_psd[:, 0, 0].real

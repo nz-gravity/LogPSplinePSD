@@ -12,10 +12,8 @@ import xarray as xr
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer.util import init_to_value
 
-from log_psplines.inference.model import (
-    _blocked_channel_model,
-    channel_model_kwargs,
-)
+from log_psplines.inference.collapsed import sample_conditional_theta
+from log_psplines.inference.model import prepare_channel_model
 
 
 @dataclass
@@ -151,32 +149,6 @@ def _channel_setting(values, default, channel_index):
         return default
 
 
-def _noncentered_init_values(
-    kwargs: dict[str, Any], channel_index: int
-) -> dict:
-    """Start weak-penalty null modes at zero in experimental non-centering."""
-    j = channel_index
-    blocks = [(f"delta_{j}", kwargs["penalties_delta"][j])]
-    for previous in range(j):
-        blocks.extend(
-            (
-                (
-                    f"theta_re_{j}_{previous}",
-                    kwargs["penalties_theta_re"][j][previous],
-                ),
-                (
-                    f"theta_im_{j}_{previous}",
-                    kwargs["penalties_theta_im"][j][previous],
-                ),
-            )
-        )
-    values = {}
-    for label, penalty in blocks:
-        values[f"weights_{label}_raw"] = np.zeros(penalty.shape[0])
-        values[f"sigma_{label}"] = float(kwargs["roughness_scale"])
-    return values
-
-
 def run_multivariate_nuts(
     model_kwargs: dict[str, Any],
     *,
@@ -203,15 +175,15 @@ def run_multivariate_nuts(
     log_likelihood_parts = []
 
     for channel_index in range(n_channels):
+        model, channel_kwargs, init_values = prepare_channel_model(
+            kwargs, channel_index
+        )
+        key, conditional_key = jax.random.split(keys[channel_index])
         result = run_nuts(
-            _blocked_channel_model,
-            rng_key=keys[channel_index],
-            init_values=(
-                _noncentered_init_values(kwargs, channel_index)
-                if kwargs.get("smoothing_parameterization") == "noncentered"
-                else None
-            ),
-            model_kwargs=channel_model_kwargs(kwargs, channel_index),
+            model,
+            rng_key=key,
+            init_values=init_values,
+            model_kwargs=channel_kwargs,
             n_warmup=n_warmup,
             n_samples=n_samples,
             num_chains=num_chains,
@@ -239,6 +211,26 @@ def run_multivariate_nuts(
                 "diverging",
             ),
         )
+        if channel_index > 0:
+            recovered = sample_conditional_theta(
+                {
+                    name: value.values
+                    for name, value in result.posterior.data_vars.items()
+                },
+                channel_kwargs,
+                conditional_key,
+            )
+            likelihood_name = f"log_likelihood_block_{channel_index}"
+            result.log_likelihood = _mapping_to_dataset(
+                {likelihood_name: recovered.pop(likelihood_name)},
+                num_chains=num_chains,
+            )
+            result.posterior = xr.merge(
+                [
+                    result.posterior,
+                    _mapping_to_dataset(recovered, num_chains=num_chains),
+                ]
+            )
         posterior_parts.append(result.posterior)
         stats = _suffix(result.sample_stats, channel_index)
         if stats is not None:

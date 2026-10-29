@@ -19,6 +19,9 @@ from log_psplines.preprocessing.coarse_grain import (
     apply_coarse_grain_multivar_fft,
     compute_binning_structure,
 )
+from log_psplines.preprocessing.periodogram import (
+    _compute_wishart_from_centered,
+)
 
 from ..logger import logger
 
@@ -29,12 +32,18 @@ def preprocess_to_freq_domain(
     """Standardize, form Wishart data, bin, and exclude frequencies."""
     if not isinstance(data, TimeSeries):
         data = TimeSeries(data=np.asarray(data.data), t=np.asarray(data.t))
-    processed = data.standardise_for_psd().to_wishart_stats(
+    standardized = data.standardise_for_psd()
+    # Standardization already removed the full-record means. Enter the shared
+    # FFT core directly so the fitting path centers each channel exactly once.
+    processed = _compute_wishart_from_centered(
+        standardized.data,
+        fs=standardized.fs,
         Nb=config.Nb,
         fmin=config.fmin,
         fmax=config.fmax,
+        scaling_factor=standardized.scaling_factor,
+        channel_stds=standardized.original_stds,
         window=config.wishart_window,
-        detrend=config.wishart_detrend,
         wishart_floor_fraction=config.wishart_floor_fraction,
     )
     if config.verbose:

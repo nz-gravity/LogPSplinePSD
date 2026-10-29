@@ -7,7 +7,6 @@ Time-frequency power preprocessing lives in ``moving_periodogram.py`` and
 import numpy as np
 from jaxtyping import Float
 from scipy.signal import csd, welch, windows
-from scipy.signal import detrend as signal_detrend
 
 from log_psplines.data.spectral import EmpiricalPSD, WishartData
 from log_psplines.data.spectral_utils import (
@@ -16,6 +15,11 @@ from log_psplines.data.spectral_utils import (
     Y_to_U,
     _get_coherence,
 )
+
+
+def _center_channels(data: np.ndarray) -> np.ndarray:
+    """Subtract each channel's full-record mean without changing the input."""
+    return data - np.mean(data, axis=0, keepdims=True)
 
 
 def _regularize_wishart(Y: np.ndarray, fraction: float) -> np.ndarray:
@@ -67,11 +71,13 @@ def compute_wishart(
     scaling_factor: float | None = 1.0,
     channel_stds: np.ndarray | None = None,
     window: str | tuple | None = None,
-    detrend: str | bool = "constant",
     wishart_floor_fraction: float | None = None,
 ) -> "WishartData":
     """
     Compute block-averaged (Wishart) FFT statistics for multivariate series.
+
+    Each channel's full-record mean is removed before splitting into blocks.
+    Individual blocks are tapered without further mean or trend removal.
 
     Parameters
     ----------
@@ -88,10 +94,6 @@ def compute_wishart(
     window : str or tuple, optional
         Taper applied to each block before the FFT. Defaults to
         ``None`` (rectangular window).
-    detrend : {"constant", "linear"} or bool, optional
-        Per-block detrending applied before tapering. ``"constant"``
-        subtracts the block mean, ``"linear"`` removes a linear trend,
-        and ``False`` disables detrending.
     wishart_floor_fraction : float, optional
         If set, floor the eigenvalues of each Wishart matrix at this
         fraction of the median trace.  Useful for spectra with
@@ -99,6 +101,31 @@ def compute_wishart(
         the spectral matrix becomes near-singular.  A value of 1e-6
         is recommended.
     """
+    return _compute_wishart_from_centered(
+        _center_channels(x),
+        fs=fs,
+        Nb=Nb,
+        fmin=fmin,
+        fmax=fmax,
+        scaling_factor=scaling_factor,
+        channel_stds=channel_stds,
+        window=window,
+        wishart_floor_fraction=wishart_floor_fraction,
+    )
+
+
+def _compute_wishart_from_centered(
+    x: Float[np.ndarray, "n p"],
+    fs: float,
+    Nb: int,
+    fmin: float | int | None = None,
+    fmax: float | int | None = None,
+    scaling_factor: float | None = 1.0,
+    channel_stds: np.ndarray | None = None,
+    window: str | tuple | None = None,
+    wishart_floor_fraction: float | None = None,
+) -> "WishartData":
+    """Form spectra after the public entry point has centered the full record."""
     if isinstance(Nb, bool) or not isinstance(Nb, (int, np.integer)):
         raise TypeError("Nb must be a positive integer.")
     Nb = int(Nb)
@@ -116,16 +143,6 @@ def compute_wishart(
         )
 
     blocks = x.reshape(Nb, Lb, p)
-    if detrend in (False, None):
-        pass
-    elif detrend == "constant":
-        blocks = blocks - np.mean(blocks, axis=1, keepdims=True)
-    elif detrend == "linear":
-        blocks = signal_detrend(blocks, axis=1, type="linear")
-    else:
-        raise ValueError(
-            "detrend must be one of False, None, 'constant', or 'linear'."
-        )
 
     if window is None:
         taper = np.ones(Lb, dtype=np.float64)
@@ -224,6 +241,10 @@ def compute_wishart(
         fs=fs,
         duration=duration,
         enbw=enbw,
+        preprocessing={
+            "mean_removal": "global_per_channel",
+            "window": "rectangular" if window is None else str(window),
+        },
         channel_stds=(
             None
             if channel_stds is None
@@ -238,8 +259,9 @@ def empirical_spectrum(
     nperseg: int | None = None,
     noverlap: int | None = None,
     window: str = "hann",
-    detrend: str | bool = "constant",
 ) -> "EmpiricalPSD":
+    """Estimate Welch spectra after removing each channel's full-record mean."""
+    data = _center_channels(data)
     p = data.shape[1]
 
     if nperseg is None:
@@ -260,7 +282,7 @@ def empirical_spectrum(
             nperseg=nperseg,
             noverlap=noverlap,
             return_onesided=True,
-            detrend=detrend,
+            detrend=False,
             scaling="density",
         )
         psds.append(Pxx)
@@ -283,7 +305,7 @@ def empirical_spectrum(
                 nperseg=nperseg,
                 noverlap=noverlap,
                 return_onesided=True,
-                detrend=detrend,
+                detrend=False,
                 scaling="density",
             )
             S[:, i, j] = Sij

@@ -156,12 +156,12 @@ def _save_preprocessing_plot(
             f"Nc={nc if nc is not None else 'NA'}",
             f"Nh={nh}",
         ]
-        window_name = (
-            "rect"
-            if config.wishart_window is None
-            else str(config.wishart_window)
-        )
+        window_name = processed_data.preprocessing.get("window", "unknown")
         info_parts.append(f"window={window_name}")
+        info_parts.append(
+            "mean_removal="
+            + processed_data.preprocessing.get("mean_removal", "unknown")
+        )
         info_text = ", ".join(info_parts)
 
         out_path.parent.mkdir(parents=True, exist_ok=True)

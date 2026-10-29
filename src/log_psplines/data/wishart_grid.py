@@ -1,6 +1,6 @@
 """Proper complex coefficient sums on grids or paired time-frequency sites."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -32,6 +32,8 @@ class WishartGridData:
     centring is defined on reference_time and must survive receiving pooled
     data. Counts assert the adopted independent proper complex observation
     model; this container cannot establish independence of transform tiles.
+    enbw scales likelihood information, not Y/count or the integer raw counts.
+    Empty preprocessing metadata means the external transform history is unknown.
     """
 
     u_re: np.ndarray
@@ -43,8 +45,13 @@ class WishartGridData:
     reference_frequency: np.ndarray | None = None
     units: str = "data_unit^2/Hz"
     normalization: str = "proper_complex_covariance_psd"
+    preprocessing: dict[str, str] = field(default_factory=dict)
+    enbw: float = 1.0
 
     def __post_init__(self) -> None:
+        self.enbw = float(self.enbw)
+        if not np.isfinite(self.enbw) or self.enbw <= 0:
+            raise ValueError("enbw must be finite and strictly positive")
         real, imag = np.asarray(self.u_re), np.asarray(self.u_im)
         if np.iscomplexobj(real) or np.iscomplexobj(imag):
             raise ValueError("u_re and u_im must be real arrays")
@@ -118,6 +125,8 @@ class WishartGridData:
         *,
         units: str = "data_unit^2/Hz",
         normalization: str = "proper_complex_covariance_psd",
+        preprocessing: dict[str, str] | None = None,
+        enbw: float = 1.0,
     ) -> "WishartGridData":
         """Prepare normalized complex vectors (T,F,C) or (T,F,C,replicate).
 
@@ -143,6 +152,8 @@ class WishartGridData:
             counts=values.shape[-1],
             units=units,
             normalization=normalization,
+            preprocessing={} if preprocessing is None else dict(preprocessing),
+            enbw=enbw,
         )
 
     @classmethod
@@ -156,6 +167,8 @@ class WishartGridData:
         reference_frequency: np.ndarray | None = None,
         units: str = "data_unit^2/Hz",
         normalization: str = "proper_complex_covariance_psd",
+        preprocessing: dict[str, str] | None = None,
+        enbw: float = 1.0,
     ) -> "WishartGridData":
         """Prepare complex (Q,C[,replicate]) vectors at paired finite sites."""
         values = np.asarray(coefficients)
@@ -177,6 +190,8 @@ class WishartGridData:
             reference_frequency=reference_frequency,
             units=units,
             normalization=normalization,
+            preprocessing={} if preprocessing is None else dict(preprocessing),
+            enbw=enbw,
         )
 
     @property

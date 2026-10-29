@@ -9,6 +9,7 @@ import pytest
 import xarray as xr
 from numpyro import handlers
 from numpyro.infer.util import log_density
+from scipy.signal.windows import get_window
 
 from log_psplines import (
     ANOVALogPSpline,
@@ -48,6 +49,7 @@ from log_psplines.likelihoods.wishart import wishart_log_likelihood
 from log_psplines.models.anova import anova_components
 from log_psplines.models.reconstruction import wishart_grid_draws
 from log_psplines.plotting.results import plot_posterior_spectrum
+from log_psplines.preprocessing.periodogram import compute_wishart
 
 
 def _fixture(channels=3, coherent=True):
@@ -338,12 +340,31 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
         model, init = prepare_wishart_grid_row(
             pooled, spline, config, row, pair=pair
         )
-        for label in row_field_labels(row):
-            init[f"g_{label}"] = rng.normal(size=2) * 0.1
-            init[f"eta_{label}"] = rng.normal(size=2) * 0.1
+        init[f"g_delta_{row}"] = rng.normal(size=2) * 0.1
+        init[f"eta_delta_{row}"] = rng.normal(size=2) * 0.1
         trace = handlers.trace(
             handlers.substitute(handlers.seed(model, row), data=init)
         ).get_trace()
+        random_sites = {
+            name
+            for name, site in trace.items()
+            if site["type"] == "sample" and not site.get("is_observed", False)
+        }
+        assert random_sites == set(init)
+        for label in row_field_labels(row)[1:]:
+            assert f"g_{label}" not in random_sites
+            assert f"eta_{label}" not in random_sites
+            assert f"sigma_g_{label}" in random_sites
+            assert f"sigma_eta_{label}" in random_sites
+        likelihood_site = trace[f"wishart_{row}"]
+        assert np.isfinite(
+            likelihood_site["fn"].log_prob(likelihood_site["value"])
+        ).all()
+        # Independent synthetic coefficients exercise reconstruction separately
+        # from the collapsed likelihood, which does not sample theta fields.
+        for label in row_field_labels(row)[1:]:
+            init[f"g_{label}"] = rng.normal(size=2) * 0.1
+            init[f"eta_{label}"] = rng.normal(size=2) * 0.1
         sites.update(
             {
                 name: (
@@ -389,15 +410,10 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
             counts=pooled.counts,
             clip_log_psd=False,
         )
-        np.testing.assert_allclose(
-            trace[f"log_likelihood_block_{row}"]["value"], expected
-        )
-        random_sites = {
-            name
-            for name, site in trace.items()
-            if site["type"] == "sample" and not site.get("is_observed", False)
-        }
-        assert random_sites == set(init)
+        if row == 0:
+            np.testing.assert_allclose(
+                trace[f"log_likelihood_block_{row}"]["value"], expected
+            )
     posterior = xr.Dataset(sites)
     for row in range(data.p):
         posterior = collect_anova_samples(
@@ -445,11 +461,31 @@ def test_local_fourier_normalization_and_real_endpoints(length):
     grid = local_wishart_grid(series, length)
     assert grid.frequency[0] > 0 and grid.frequency[-1] < fs / 2
     assert grid.U.shape[-1] == 1 and np.all(grid.counts == 1)
-    fft = np.fft.rfft(values.reshape(segments, length, 2), axis=1)[
+    assert grid.enbw == 1.0
+    centered = values - values.mean(axis=0, keepdims=True)
+    fft = np.fft.rfft(centered.reshape(segments, length, 2), axis=1)[
         :, 1 : (-1 if length % 2 == 0 else None)
     ]
     np.testing.assert_allclose(
         grid.U[..., 0], np.sqrt(2 / (fs * length)) * fft
+    )
+    shifted = local_wishart_grid(
+        TimeSeries(values + np.array([31.0, -17.0]), series.t), length
+    )
+    np.testing.assert_allclose(shifted.U, grid.U, atol=2e-14, rtol=2e-14)
+    assert grid.preprocessing == {
+        "mean_removal": "global_per_channel",
+        "window": "rectangular",
+    }
+    assert (
+        coarse_grain_wishart_grid(grid, time_bin=2).preprocessing
+        == grid.preprocessing
+    )
+    assert (
+        WishartGridData.from_coefficients(
+            grid.U, grid.time, grid.frequency
+        ).preprocessing
+        == {}
     )
     np.testing.assert_allclose(
         grid.Y.mean(axis=(0, 1)).real, 2 * covariance / fs, rtol=0.12
@@ -457,6 +493,59 @@ def test_local_fourier_normalization_and_real_endpoints(length):
     np.testing.assert_allclose(
         grid.time,
         np.arange(len(values)).reshape(segments, length).mean(axis=1) / fs,
+    )
+
+
+@pytest.mark.parametrize("window", ["hann", ("tukey", 0.1)])
+def test_tapered_local_fft_global_mean_matches_stationary_statistics(window):
+    rng = np.random.default_rng(922)
+    length, blocks, fs = 64, 8, 2.0
+    index = np.arange(length * blocks)
+    slow = np.sin(2 * np.pi * index / len(index))
+    values = np.column_stack((slow, np.roll(slow, 40)))
+    values += 0.05 * rng.normal(size=values.shape) + np.array([7.0, -11.0])
+    original = values.copy()
+    time = index / fs
+    grid = local_wishart_grid(TimeSeries(values, time), length, window=window)
+    taper = get_window(window, length, fftbins=True)
+    normalization = np.sqrt(2 / (fs * np.sum(taper**2)))
+    centered = (values - values.mean(axis=0)).reshape(blocks, length, 2)
+    expected = (
+        normalization
+        * np.fft.rfft(centered * taper[None, :, None], axis=1)[:, 1:-1]
+    )
+    np.testing.assert_allclose(
+        grid.U[..., 0], expected, rtol=2e-14, atol=2e-14
+    )
+    # Block means contain genuine low-frequency signal. Removing them before
+    # tapering changes the first retained Fourier bin and its cross spectrum.
+    wrong = centered - centered.mean(axis=1, keepdims=True)
+    wrong = (
+        normalization
+        * np.fft.rfft(wrong * taper[None, :, None], axis=1)[:, 1:-1]
+    )
+    assert np.max(abs(wrong[:, 0] - expected[:, 0])) > 0.01
+    stationary = compute_wishart(values, fs=fs, Nb=blocks, window=window)
+    np.testing.assert_allclose(
+        grid.enbw, length * np.sum(taper**2) / np.sum(taper) ** 2
+    )
+    np.testing.assert_allclose(grid.enbw, stationary.enbw)
+    assert coarse_grain_wishart_grid(grid, time_bin=2).enbw == grid.enbw
+    assert grid.mask(np.ones_like(grid.counts, dtype=bool)).enbw == grid.enbw
+    np.testing.assert_allclose(
+        grid.Y.sum(axis=0),
+        stationary.Y[:-1] / stationary.duration,
+        rtol=3e-13,
+        atol=3e-13,
+    )
+    assert grid.preprocessing == {
+        "mean_removal": "global_per_channel",
+        "window": str(window),
+    }
+    np.testing.assert_array_equal(values, original)
+    np.testing.assert_allclose(
+        grid.time,
+        np.arange(len(values)).reshape(blocks, length).mean(axis=1) / fs,
     )
 
 
@@ -652,8 +741,14 @@ def test_anova_noncentering_preserves_fields_and_prior_density(sigma_eta):
     config = replace(config, centered=False)
     noncentered, _ = prepare_wishart_grid_row(data, spline, config, 1)
     labels = row_field_labels(1)
-    coordinates = {}
     for label in labels:
+        init[f"sigma_eta_{label}"] = sigma_eta
+    coordinates = {
+        name: value
+        for name, value in init.items()
+        if name.startswith("sigma_")
+    }
+    for label in labels[:1]:
         suffix = f"_{label}" if label else ""
         physical = {
             name: init[f"{name}{suffix}"]
@@ -670,7 +765,9 @@ def test_anova_noncentering_preserves_fields_and_prior_density(sigma_eta):
     centered_density, centered_trace = log_density(centered, (), {}, init)
     raw_density, raw_trace = log_density(noncentered, (), {}, coordinates)
     log_jacobian = 0.0
-    for label in labels:
+    # Only delta is reparameterized: theta coefficients have been integrated
+    # out, so their coordinate Jacobians must not appear in the target.
+    for label in labels[:1]:
         suffix = f"_{label}" if label else ""
         for field in ("g", "eta"):
             name = f"{field}{suffix}"

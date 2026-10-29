@@ -20,6 +20,104 @@ Fitting and results
 .. autoclass:: log_psplines.config.PowerConfig
    :members:
 
+Stationary mean removal
+~~~~~~~~~~~~~~~~~~~~~~~
+
+All stationary time-domain entry points remove each channel's full-record
+mean before splitting the data into blocks and applying the chosen taper.
+This is a fixed convention: no means or linear trends are fitted separately
+inside the blocks. The fitting pipeline combines global centering with
+channel standardization, then passes the centered data directly to the FFT.
+The direct FFT, Wishart and empirical Welch/CSD helpers use the same convention.
+
+Subtracting a block mean before tapering would change its Fourier coefficients
+by a frequency-dependent term:
+
+.. math::
+
+   \mathcal{F}\{w(x-\bar{x}_b)\}_k
+   = \mathcal{F}\{wx\}_k - \bar{x}_b\mathcal{F}\{w\}_k.
+
+For a non-rectangular taper, this term can reach retained frequencies and
+distort a quiet spectrum such as LISA's low-frequency T channel. Global
+centering avoids the additional block-mean term. It removes a full-record
+constant offset; it does not remove time-dependent drift or eliminate the
+ordinary spectral leakage and bin-averaging effects of the analysis window.
+
+**Migration:** remove ``wishart_detrend`` from ``StationaryConfig`` and
+``detrend`` from calls to ``compute_wishart``, ``TimeSeries.to_wishart_stats``
+and ``empirical_spectrum`` (including ``get_empirical_psd`` forwarding).
+These arguments have been removed, including their former ``False`` value;
+there is no replacement selector. The window selection is unchanged.
+``fit`` does not reprocess supplied ``WishartData``. Regenerate statistics
+previously constructed with per-block detrending to use the new convention.
+
+``WishartData.preprocessing`` records the applied ``mean_removal`` and
+``window``. These descriptions survive masking and coarse-graining and are
+saved in ``result.metadata`` and NetCDF files. When precomputed statistics
+have unspecified preprocessing, the result records ``"unknown"`` rather
+than inferring their history from the fitting configuration.
+
+Stationary Gaussian marginalization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Both stationary NUTS and VI integrate the Gaussian cross-spectrum spline
+coefficients out of the numerical fit. The diagonal-spectrum coefficients
+and all smoothing scales remain unknown. Each retained draw restores the
+cross-spectrum coefficients from their joint conditional Gaussian before
+reconstructing the spectral matrix, so ``weights_theta_*`` and their
+uncertainty remain available in ``result.posterior``. This is the only
+stationary multivariate inference path; no configuration switch is needed.
+
+VI approximates the remaining marginal posterior and restores the same exact
+conditional Gaussian. It does not become an exact posterior method. With
+``vi_posterior_draws <= 0``, the multivariate result contains one guide-median
+point for the remaining parameters and one conditional cross-spectrum draw;
+this is not a joint posterior median or an uncertainty summary.
+
+Marginalization preserves the posterior, but raw VI losses need not match
+those from the previous explicit implementation: the integrated Gaussian
+includes fixed normalization constants previously omitted by the centered
+coefficient prior. The Whittle likelihood also omits data-only constants.
+Do not interpret these losses as directly comparable model evidence or
+Bayes factors without restoring consistent normalization.
+
+Enable ``JAX_ENABLE_X64=true`` before Python starts for stationary multivariate
+fits. The first Cholesky row has no cross-spectrum coefficients to integrate.
+See the :doc:`multivariate example <examples/multivariate-example>` for the
+completion-of-the-square derivation and a comparison of NUTS and VI.
+
+Multivariate time-varying Gaussian marginalization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``WishartGridData`` uses the same Gaussian integration for its ANOVA
+cross-spectrum fields. Conditional on the diagonal log-variance field and
+smoothing scales, both the frequency-mean and time-frequency interaction
+coefficients enter the complex regression linearly. They are integrated
+jointly; NUTS samples only diagonal-field coefficients and smoothing scales.
+There is no explicit cross-coefficient sampling option. Enable JAX float64.
+
+The Gaussian calculation preserves the ANOVA null-mode and roughness priors.
+It evaluates residual power at the conditional mean plus the prior quadratic,
+avoiding subtraction of large nearly equal quadratic forms. After sampling,
+one joint conditional draw restores all cross-field coefficients for each
+retained draw. Original-basis ``weights_g_theta_*`` and
+``weights_eta_theta_*`` remain available, and nonlinear spectral summaries
+use the full reconstructed posterior. Saved ``log_likelihood_block_*`` values
+are the ordinary row likelihood evaluated at these conditional draws.
+``row_latent_dimensions`` counts sampled parameters; ``row_coefficient_counts``
+includes reconstructed coefficients. This experimental matrix time-varying
+path currently supports NUTS; its VI path is not implemented.
+
+The mathematical stationary limit requires a zero time contribution and
+matching frequency bases, Gaussian priors, counts and normalization. The
+ANOVA frequency prior differs from ``StationaryConfig``'s default prior,
+so the default fitters need not return identical posteriors. Tests compare
+the marginal integral, gradients and conditional covariance under matched
+priors, including masked observations and non-unit ENBW. A flexible ANOVA fit
+to a stationary realization is a separate sampling/recovery check; it does
+not by itself establish repeated-noise interval calibration.
+
 Posterior summary semantics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -65,6 +163,21 @@ Data Containers
 
 Time-Varying Preprocessing
 --------------------------
+
+Local FFT and moving-periodogram transforms remove each channel's full-record
+mean once before extracting windows. They preserve local mean variation;
+there is no per-window detrending. ``local_wishart_grid`` accepts the ordinary
+``window`` taper specification, defaulting to rectangular windows. Coefficients
+are normalized by ``sqrt(2 / (fs * sum(window**2)))`` in one-sided PSD units;
+DC and an even-length Nyquist ordinate are omitted.
+
+``WishartGridData.enbw`` defaults to one and is computed for local FFT tapers.
+As in the stationary likelihood, ENBW divides both the log-determinant and
+quadratic terms. It changes information weighting, not ``Y/counts`` or the
+integer raw counts. This is an approximation for taper-induced dependence,
+not a proof that adjacent coefficients are independent. ENBW and preprocessing
+history survive masking, pooling and result serialization. Externally supplied
+statistics retain unknown preprocessing history unless it is supplied.
 
 .. autofunction:: log_psplines.preprocessing.wdm.wdm_periodogram
 

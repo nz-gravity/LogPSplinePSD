@@ -308,6 +308,7 @@ def fit_wishart_grid(
         model, init = prepare_wishart_grid_row(
             data, spline, config, channel, pair=pair, design=design
         )
+        logger.info(f"GridTV sampling Cholesky row {channel + 1}/{data.p}")
         start = perf_counter()
         sampled = run_nuts(
             model,
@@ -355,6 +356,9 @@ def fit_wishart_grid(
                 ]
             )
         runtimes.append(perf_counter() - start)
+        logger.info(
+            f"GridTV row {channel + 1}/{data.p} sampling and conditional recovery: {runtimes[-1]:.1f} s"
+        )
         posterior_parts.append(
             collect_anova_samples(
                 sampled.posterior, pair, labels=row_field_labels(channel)

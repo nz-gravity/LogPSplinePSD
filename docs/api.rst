@@ -88,7 +88,7 @@ See the :doc:`multivariate example <examples/multivariate-example>` for the
 completion-of-the-square derivation and a comparison of NUTS and VI.
 
 Multivariate time-varying Gaussian marginalization
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``WishartGridData`` uses the same Gaussian integration for its ANOVA
 cross-spectrum fields. Conditional on the diagonal log-variance field and

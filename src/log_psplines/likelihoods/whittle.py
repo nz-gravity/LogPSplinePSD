@@ -5,9 +5,6 @@ import numpy as np
 from jax import Array
 from jaxtyping import Float, Real
 
-# Preserve the historical inference overflow guard.
-LOG_SPECTRUM_LIMIT = 80.0
-
 
 def power_whittle_log_likelihood(
     summed_power: Float[Array | np.ndarray, "*grid"],
@@ -24,8 +21,8 @@ def power_whittle_log_likelihood(
     omitted powers or log spectra are nonfinite.
 
     This likelihood is unclipped and omits data-only constants. The stationary
-    Fourier entry point below keeps its existing clipping, ENBW and tempering
-    conventions.
+    Fourier entry point below adds ENBW and tempering conventions without
+    changing the log-spectrum target.
     """
     active = counts > 0
     logs = jnp.where(active, log_psd, 0.0)
@@ -41,7 +38,6 @@ def whittle_log_likelihood(
     duration: float | int = 1.0,
     enbw: float | int = 1.0,
     eta: float | int = 1.0,
-    clip_log_psd: bool = True,
 ) -> Float[Array, ""]:
     """Scalar log spectrum and summed power (..., F); return total log L.
 
@@ -49,14 +45,13 @@ def whittle_log_likelihood(
     duration converts FFT power to spectral density. Window bandwidth and
     likelihood tempering follow the existing Wishart convention. Array counts
     weight each cell. Zero-count cells have zero value and gradient, even for
-    nonfinite omitted inputs. Normalized GridTV coefficients use duration=1,
-    enbw=1, eta=1 and disable the historical stationary clipping guard.
+    nonfinite omitted inputs. Normalized GridTV coefficients use duration=1
+    and their saved ENBW. Log spectra are not clipped; multivariate inference
+    uses float64 and appropriately scaled data instead of a spectral bound.
     """
     count = jnp.asarray(count)
     active = count > 0
     logs = jnp.where(active, log_psd, 0.0)
-    if clip_log_psd:
-        logs = jnp.clip(logs, -LOG_SPECTRUM_LIMIT, LOG_SPECTRUM_LIMIT)
     variance = jnp.exp(logs)
     determinant = -jnp.sum(count * logs)
     quadratic = jnp.sum(

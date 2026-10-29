@@ -133,7 +133,11 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
 
 
 def _grid_spline(
-    time: np.ndarray, frequency: np.ndarray, config: PowerConfig
+    time: np.ndarray,
+    frequency: np.ndarray,
+    config: PowerConfig,
+    *,
+    matrix: bool = False,
 ) -> LogPSpline | ANOVALogPSpline:
     """Build scalar fields on the supplied reference grid with shared settings."""
 
@@ -146,6 +150,10 @@ def _grid_spline(
                 "n_interior_knots": getattr(config, f"n_interior_knots_{axis}")
             }
         )
+        if matrix:
+            kwargs.update(
+                normalization="max", ridge=1e-6 if axis == "freq" else 0.0
+            )
         return SplineBasis.from_grid(
             grid,
             degree=getattr(config, f"degree_{axis}"),
@@ -180,8 +188,12 @@ def fit(
     Both integrate Gaussian stationary cross-spectrum coefficients and restore
     their full conditional draws for spectrum reconstruction. Multivariate
     fits require JAX_ENABLE_X64=true. Complex WishartGridData integrates its
-    Gaussian ANOVA cross-spectrum coefficients and currently supports NUTS only,
-    on rectangular grids or at exact paired time-frequency coordinates.
+    Gaussian tensor-spline cross-spectrum coefficients and currently supports
+    NUTS only, on rectangular grids or at exact paired time-frequency coordinates.
+    Matrix frequency penalties retain the stationary max-normalized, ridged
+    convention. A LogPSpline with time=None gives the exact constant-time model;
+    matching a stationary fit also requires the same basis, roughness_scale,
+    duration, counts and ENBW. Explicit PowerConfig settings govern the prior.
     Scalar powers use the tensor or ANOVA structure in PowerConfig.
     ParametricSpectrum also supports joint independent channel powers.
     A partition may pool rectangular powers while retaining native-grid
@@ -191,27 +203,36 @@ def fit(
     true_psd is used only for post-fit analysis, never for inference.
     """
     if isinstance(data, WishartGridData):
-        config = PowerConfig(structure="anova") if config is None else config
+        config = (
+            PowerConfig(roughness_scale=1.28, centered=True)
+            if config is None
+            else config
+        )
         if not isinstance(config, PowerConfig):
             raise TypeError(
-                "WishartGridData requires PowerConfig(structure='anova')"
+                "WishartGridData requires PowerConfig(structure='tensor')"
             )
         if config.method != "nuts":
             raise ValueError(
                 "WishartGridData currently supports method='nuts' only"
             )
-        if config.structure != "anova":
-            raise ValueError("WishartGridData requires structure='anova'")
+        if config.structure != "tensor":
+            raise ValueError("WishartGridData requires structure='tensor'")
         if partition is not None or reference is not None:
             raise ValueError(
                 "pool WishartGridData in preprocessing; matrix reference whitening is unsupported"
             )
         if model is None:
             model = _grid_spline(
-                data.reference_time, data.reference_frequency, config
+                data.reference_time,
+                data.reference_frequency,
+                config,
+                matrix=True,
             )
-        if not isinstance(model, ANOVALogPSpline):
-            raise ValueError("WishartGridData requires ANOVALogPSpline fields")
+        if not isinstance(model, LogPSpline):
+            raise ValueError(
+                "WishartGridData requires LogPSpline tensor fields"
+            )
         from log_psplines.inference.wishart_grid import fit_wishart_grid
 
         return fit_wishart_grid(data, model, config, true_psd=true_psd)

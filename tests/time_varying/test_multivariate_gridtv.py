@@ -13,6 +13,7 @@ from scipy.signal.windows import get_window
 
 from log_psplines import (
     ANOVALogPSpline,
+    LogPSpline,
     PowerConfig,
     PSDResult,
     SpectralMatrix,
@@ -31,13 +32,14 @@ from log_psplines.diagnostics.sampling import (
 )
 from log_psplines.diagnostics.spectrum import spectrum_diagnostics
 from log_psplines.inference.anova_power import (
-    anova_init_values,
-    collect_anova_samples,
     prepare_anova_power_model,
-    prepare_anova_prior,
 )
+from log_psplines.inference.collapsed_grid import grid_field_scales
 from log_psplines.inference.power_results import power_result_spectra
 from log_psplines.inference.wishart_grid import (
+    collect_grid_samples,
+    grid_design,
+    prepare_grid_prior,
     prepare_wishart_grid_row,
     row_field_labels,
 )
@@ -52,7 +54,7 @@ from log_psplines.plotting.results import plot_posterior_spectrum
 from log_psplines.preprocessing.periodogram import compute_wishart
 
 
-def _fixture(channels=3, coherent=True):
+def _fixture(channels=3, coherent=True, stationary=False):
     """Seeded proper Gaussians under independently specified HPD truth."""
     rng = np.random.default_rng(913)
     time, frequency = np.linspace(0, 1, 5), np.linspace(0.1, 1, 7)
@@ -62,7 +64,12 @@ def _fixture(channels=3, coherent=True):
     base = base @ base.conj().T / channels + np.eye(channels)
     if not coherent:
         base = np.diag(np.diag(base).real)
-    amplitude = 1 + 0.2 * time[:, None] + 0.1 * frequency[None, :]
+    amplitude = (
+        1
+        + 0.2 * (0 if stationary else time[:, None])
+        + 0.1 * frequency[None, :]
+    )
+    amplitude = np.broadcast_to(amplitude, (len(time), len(frequency)))
     truth = amplitude[..., None, None] * base
     counts = (np.arange(35).reshape(5, 7) % 4) + 1
     counts[0, 0] = 0
@@ -100,7 +107,6 @@ def _blocked(data, logs, theta):
             data.u_re[..., :row, :],
             data.u_im[..., :row, :],
             counts=data.counts,
-            clip_log_psd=False,
         )
         for row in range(data.p)
     )
@@ -114,9 +120,14 @@ def _direct(data, spectrum):
 
 
 def _spline(data):
-    return ANOVALogPSpline(
+    return LogPSpline(
         SplineBasis.from_grid(
-            data.reference_frequency, 0, degree=1, penalty_order=1
+            data.reference_frequency,
+            0,
+            degree=1,
+            penalty_order=1,
+            normalization="max",
+            ridge=1e-6,
         ),
         SplineBasis.from_grid(
             data.reference_time, 0, degree=1, penalty_order=1
@@ -202,7 +213,6 @@ def test_compression_rank_deficiency_scalar_counts_and_omitted_cells():
             coefficients[..., :row, :].real,
             coefficients[..., :row, :].imag,
             counts=data.counts,
-            clip_log_psd=False,
         )
         for row in range(data.p)
     )
@@ -239,7 +249,6 @@ def test_omitted_nonfinite_inputs_have_zero_value_and_gradient():
             previous,
             previous,
             counts=counts,
-            clip_log_psd=False,
         )
 
     value, gradients = jax.value_and_grad(likelihood, argnums=(0, 1))(
@@ -259,13 +268,32 @@ def test_omitted_nonfinite_inputs_have_zero_value_and_gradient():
     assert np.all(data.U[0, 0] == 0)
 
 
-def test_scalar_reduction_under_matched_complex_normalization():
+@pytest.mark.parametrize("log_scale", [-100.0, 0.0, 100.0])
+def test_scalar_reduction_under_matched_complex_normalization(log_scale):
     data, truth, _ = _fixture(channels=1)
-    logs = np.log(truth[..., 0, 0].real)
+    scale = np.exp(log_scale / 2)
+    data = replace(data, u_re=data.u_re * scale, u_im=data.u_im * scale)
+    logs = np.log(truth[..., 0, 0].real) + log_scale
     power = data.Y[..., 0, 0].real
     actual = _blocked(
         data, logs[..., None], np.zeros((*logs.shape, 1, 1), dtype=complex)
     )
+    expected_gradient = -data.counts + power * np.exp(-logs)
+    matrix_gradient = jax.grad(
+        lambda value: _blocked(
+            data,
+            value[..., None],
+            np.zeros((*logs.shape, 1, 1), dtype=complex),
+        )
+    )(jnp.asarray(logs))
+    scalar_gradient = jax.grad(
+        lambda value: whittle_log_likelihood(value, power, count=data.counts)
+    )(jnp.asarray(logs))
+    np.testing.assert_allclose(
+        actual, -np.sum(data.counts * logs + power * np.exp(-logs)), atol=1e-11
+    )
+    np.testing.assert_allclose(matrix_gradient, expected_gradient, atol=2e-13)
+    np.testing.assert_allclose(scalar_gradient, expected_gradient, atol=2e-13)
     # Scalar PowerData counts REAL components: two per proper complex vector.
     np.testing.assert_allclose(
         actual,
@@ -274,9 +302,7 @@ def test_scalar_reduction_under_matched_complex_normalization():
     )
     np.testing.assert_allclose(
         actual,
-        whittle_log_likelihood(
-            logs, power, count=data.counts, clip_log_psd=False
-        ),
+        whittle_log_likelihood(logs, power, count=data.counts),
         rtol=2e-6,
     )
     empty_theta = np.zeros((*logs.shape, 0))
@@ -289,11 +315,10 @@ def test_scalar_reduction_under_matched_complex_normalization():
         data.u_re[..., :0, :],
         data.u_im[..., :0, :],
         counts=np.asarray(3.0),
-        clip_log_psd=False,
     )
     np.testing.assert_allclose(
         scalar_count,
-        whittle_log_likelihood(logs, power, count=3, clip_log_psd=False),
+        whittle_log_likelihood(logs, power, count=3),
         rtol=2e-6,
     )
     # The historical stationary duration convention remains unchanged.
@@ -328,11 +353,11 @@ def test_matrix_sign_conjugation_and_time_leading_axes():
     assert SpectralMatrix(1)(logs[..., :1]).shape == (3, 4, 1, 1)
 
 
-def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
+def test_tensor_partition_chunked_evaluation_and_independent_row_sites():
     data, _, _ = _fixture(channels=2)
     spline = _spline(data)
-    config = PowerConfig(structure="anova", centered=True)
-    pair = prepare_anova_prior(spline, config)
+    config = PowerConfig(structure="tensor", centered=True)
+    pair = prepare_grid_prior(spline)
     pooled = coarse_grain_wishart_grid(data, time_bin=2, frequency_bin=3)
     rng = np.random.default_rng(55)
     sites = {}
@@ -340,8 +365,7 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
         model, init = prepare_wishart_grid_row(
             pooled, spline, config, row, pair=pair
         )
-        init[f"g_delta_{row}"] = rng.normal(size=2) * 0.1
-        init[f"eta_delta_{row}"] = rng.normal(size=2) * 0.1
+        init[f"s_delta_{row}"] = rng.normal(size=4) * 0.1
         trace = handlers.trace(
             handlers.substitute(handlers.seed(model, row), data=init)
         ).get_trace()
@@ -352,19 +376,16 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
         }
         assert random_sites == set(init)
         for label in row_field_labels(row)[1:]:
-            assert f"g_{label}" not in random_sites
-            assert f"eta_{label}" not in random_sites
-            assert f"sigma_g_{label}" in random_sites
-            assert f"sigma_eta_{label}" in random_sites
+            assert f"s_{label}" not in random_sites
+            assert f"sigma_freq_{label}" in random_sites
+            assert f"sigma_time_{label}" in random_sites
         likelihood_site = trace[f"wishart_{row}"]
         assert np.isfinite(
             likelihood_site["fn"].log_prob(likelihood_site["value"])
         ).all()
-        # Independent synthetic coefficients exercise reconstruction separately
-        # from the collapsed likelihood, which does not sample theta fields.
+        # Synthetic coefficients exercise reconstruction independently of the integral.
         for label in row_field_labels(row)[1:]:
-            init[f"g_{label}"] = rng.normal(size=2) * 0.1
-            init[f"eta_{label}"] = rng.normal(size=2) * 0.1
+            init[f"s_{label}"] = rng.normal(size=4) * 0.1
         sites.update(
             {
                 name: (
@@ -378,16 +399,11 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
                 for name, value in init.items()
             }
         )
-        bt, bf = spline.design(pooled.time, pooled.frequency)
-        evaluated = []
-        for label in row_field_labels(row):
-            g, eta = anova_components(
-                bt @ pair["U_time"],
-                bf @ pair["U_freq"],
-                init[f"g_{label}"],
-                init[f"eta_{label}"].reshape(1, 2),
-            )
-            evaluated.append(g[None, :] + eta)
+        _, _, bt, bf = grid_design(pooled, spline, pair)
+        evaluated = [
+            bt @ init[f"s_{label}"].reshape(2, 2) @ bf.T
+            for label in row_field_labels(row)
+        ]
         logs = evaluated[0]
         re = (
             jnp.stack(evaluated[1::2], axis=-1)
@@ -408,7 +424,6 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
             pooled.u_re[..., :row, :],
             pooled.u_im[..., :row, :],
             counts=pooled.counts,
-            clip_log_psd=False,
         )
         if row == 0:
             np.testing.assert_allclose(
@@ -416,11 +431,12 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
             )
     posterior = xr.Dataset(sites)
     for row in range(data.p):
-        posterior = collect_anova_samples(
+        posterior = collect_grid_samples(
             posterior, pair, labels=row_field_labels(row)
         )
-    bt, bf = spline.design()
-    np.testing.assert_allclose(bt.mean(axis=0), 0, atol=1e-12)
+    bt, bf = np.asarray(spline.time.basis), np.asarray(spline.frequency.basis)
+    np.testing.assert_allclose(bt.sum(axis=1), 1, atol=1e-14)
+    np.testing.assert_allclose(bf.sum(axis=1), 1, atol=1e-14)
     full = wishart_grid_draws(posterior, bt, bf, data.p)
     chunks = np.concatenate(
         [
@@ -430,15 +446,15 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
         axis=3,
     )
     np.testing.assert_allclose(full, chunks, rtol=1e-6)
-    g, eta = spline.components(np.ones(2), np.ones((1, 2)))
-    np.testing.assert_allclose(np.asarray(eta).mean(axis=0), 0, atol=1e-6)
+    # Tensor weights constant along time reproduce a frequency-only field.
+    weights = np.broadcast_to(np.array([0.2, -0.1]), (2, 2))
     np.testing.assert_allclose(
-        spline(np.ones(2), np.zeros((1, 2))), np.broadcast_to(g, eta.shape)
+        spline(weights),
+        np.broadcast_to(bf @ weights[0], (len(bt), len(bf))),
+        atol=1e-14,
     )
-    # A finer output evaluation uses the same transform, rather than a new mean.
-    fine_bt, fine_bf = spline.design(
-        np.linspace(0, 1, 11), np.linspace(0.1, 1, 13)
-    )
+    fine_bt = np.asarray(spline.time.design_at(np.linspace(0, 1, 11)))
+    fine_bf = np.asarray(spline.frequency.design_at(np.linspace(0.1, 1, 13)))
     assert wishart_grid_draws(posterior, fine_bt, fine_bf, 2).shape == (
         1,
         1,
@@ -447,6 +463,73 @@ def test_fixed_centring_chunked_evaluation_and_independent_row_sites():
         2,
         2,
     )
+
+
+def test_constant_time_rows_have_stationary_prior_and_no_time_scale_sites():
+    """The matrix model retains the full stationary penalty, including its ridge."""
+    data, _, _ = _fixture(channels=3, stationary=True)
+    spline = LogPSpline(_spline(data).frequency)
+    pair = prepare_grid_prior(spline)
+    config = PowerConfig(
+        structure="tensor", centered=True, roughness_scale=1.28
+    )
+    size = spline.frequency.basis.shape[1]
+    sites = {}
+    for row in range(3):
+        model, init = prepare_wishart_grid_row(data, spline, config, row)
+        init[f"s_delta_{row}"] = np.linspace(-0.15, 0.2, size)
+        _, trace = log_density(model, (), {}, init)
+        random_sites = {
+            name
+            for name, site in trace.items()
+            if site["type"] == "sample" and not site.get("is_observed", False)
+        }
+        assert random_sites == {
+            f"s_delta_{row}",
+            *[f"sigma_freq_{label}" for label in row_field_labels(row)],
+        }
+        eigen_coefficients = init[f"s_delta_{row}"]
+        physical = pair["U_freq"] @ eigen_coefficients
+        precision = (
+            spline.frequency.penalty / init[f"sigma_freq_delta_{row}"] ** 2
+        )
+        expected_prior = -0.5 * (
+            size * np.log(2 * np.pi)
+            - np.linalg.slogdet(precision)[1]
+            + physical @ precision @ physical
+        )
+        actual_prior = trace[f"s_delta_{row}"]["fn"].log_prob(
+            eigen_coefficients
+        )
+        np.testing.assert_allclose(actual_prior, expected_prior, atol=2e-10)
+        for label in row_field_labels(row)[1:]:
+            init[f"s_{label}"] = np.linspace(0.03, 0.09, size)
+        sites.update(
+            {
+                name: (
+                    (
+                        "chain",
+                        "draw",
+                        *[f"{name}_dim_{i}" for i in range(np.ndim(value))],
+                    ),
+                    np.asarray(value)[None, None],
+                )
+                for name, value in init.items()
+            }
+        )
+    posterior = xr.Dataset(sites)
+    for row in range(3):
+        posterior = collect_grid_samples(
+            posterior, pair, labels=row_field_labels(row)
+        )
+    draws = wishart_grid_draws(
+        posterior, np.ones((len(data.time), 1)), spline.frequency.basis, 3
+    )
+    np.testing.assert_allclose(
+        draws, np.broadcast_to(draws[:, :, :1], draws.shape)
+    )
+    assert np.isfinite(draws).all() and np.linalg.eigvalsh(draws).min() > 0
+    assert np.max(abs(draws.imag)) > 0.01
 
 
 @pytest.mark.parametrize("length", [16, 17])
@@ -571,18 +654,18 @@ def test_invalid_statistics_and_incompatible_data_fail_clearly():
             WishartGridData(
                 data.u_re, data.u_im, data.time, data.frequency, counts
             )
-    with pytest.raises(ValueError, match="structure='anova'"):
-        fit(data, PowerConfig())
+    with pytest.raises(ValueError, match="tensor"):
+        fit(data, PowerConfig(structure="anova"))
     with pytest.raises(ValueError, match="active complex observation"):
         fit(
             data.mask(np.zeros(data.counts.shape, dtype=bool)),
-            PowerConfig(structure="anova"),
+            PowerConfig(structure="tensor"),
             model=_spline(data),
         )
-    with pytest.raises(ValueError, match="reference_time"):
+    with pytest.raises(ValueError, match="spline domain"):
         prepare_wishart_grid_row(
             data,
-            ANOVALogPSpline(
+            LogPSpline(
                 _spline(data).frequency,
                 SplineBasis.from_grid(
                     data.time[:3], 0, degree=1, penalty_order=1
@@ -597,9 +680,11 @@ def test_invalid_statistics_and_incompatible_data_fail_clearly():
     "channels,coherent", [(1, False), (2, False), (2, True)]
 )
 def test_public_nuts_smoke_and_native_results(channels, coherent, outdir):
-    data, truth, _ = _fixture(channels=channels, coherent=coherent)
+    data, truth, _ = _fixture(
+        channels=channels, coherent=coherent, stationary=True
+    )
     config = PowerConfig(
-        structure="anova",
+        structure="tensor",
         degree_time=1,
         degree_freq=1,
         penalty_order_time=1,
@@ -730,72 +815,63 @@ def test_host_reconstruction_keeps_float64_physical_range():
     np.testing.assert_allclose(spectrum.real, np.exp(-110), rtol=1e-12, atol=0)
 
 
-@pytest.mark.parametrize("sigma_eta", [0.4, 1e-5])
-def test_anova_noncentering_preserves_fields_and_prior_density(sigma_eta):
-    """Same physical coefficients, including a narrow funnel and its Jacobian."""
+@pytest.mark.parametrize("sigma_time", [0.4, 1e-5])
+def test_tensor_noncentering_preserves_fields_and_prior_density(sigma_time):
+    """Physical eigen-coefficients agree even for narrow time directions."""
     data, _, _ = _fixture(channels=2)
     spline = _spline(data)
-    config = PowerConfig(structure="anova", centered=True)
-    pair = prepare_anova_prior(spline, config)
+    config = PowerConfig(structure="tensor", centered=True)
+    pair = prepare_grid_prior(spline)
     centered, init = prepare_wishart_grid_row(data, spline, config, 1)
-    config = replace(config, centered=False)
-    noncentered, _ = prepare_wishart_grid_row(data, spline, config, 1)
-    labels = row_field_labels(1)
-    for label in labels:
-        init[f"sigma_eta_{label}"] = sigma_eta
-    coordinates = {
+    noncentered, _ = prepare_wishart_grid_row(
+        data, spline, replace(config, centered=False), 1
+    )
+    for label in row_field_labels(1):
+        init[f"sigma_time_{label}"] = sigma_time
+        init[f"sigma_freq_{label}"] = 0.7
+    scale = np.asarray(grid_field_scales(pair, 0.7, sigma_time)).reshape(-1)
+    init["s_delta_1"] = np.linspace(-0.2, 0.2, len(scale)) * np.minimum(
+        scale, 1.0
+    )
+    raw = {
         name: value
         for name, value in init.items()
         if name.startswith("sigma_")
     }
-    for label in labels[:1]:
-        suffix = f"_{label}" if label else ""
-        physical = {
-            name: init[f"{name}{suffix}"]
-            for name in ("g", "eta", "sigma_g", "sigma_eta")
-        }
-        physical["sigma_eta"] = sigma_eta
-        physical["eta"] = np.full_like(physical["eta"], sigma_eta * 0.1)
-        init.update(
-            {f"{name}{suffix}": value for name, value in physical.items()}
-        )
-        coordinates.update(
-            anova_init_values(physical, pair, config, label=label)
-        )
+    raw["z_delta_1"] = init["s_delta_1"] / scale
     centered_density, centered_trace = log_density(centered, (), {}, init)
-    raw_density, raw_trace = log_density(noncentered, (), {}, coordinates)
-    log_jacobian = 0.0
-    # Only delta is reparameterized: theta coefficients have been integrated
-    # out, so their coordinate Jacobians must not appear in the target.
-    for label in labels[:1]:
-        suffix = f"_{label}" if label else ""
-        for field in ("g", "eta"):
-            name = f"{field}{suffix}"
-            np.testing.assert_allclose(
-                raw_trace[name]["value"],
-                centered_trace[name]["value"],
-                rtol=2e-6,
-            )
-            raw_site = raw_trace[f"z_{name}"]
-            np.testing.assert_allclose(
-                raw_site["fn"].log_prob(raw_site["value"]),
-                -0.5 * np.asarray(raw_site["value"]) ** 2
-                - 0.5 * np.log(2 * np.pi),
-                rtol=2e-6,
-            )
-            log_jacobian += np.log(centered_trace[name]["fn"].scale).sum()
+    raw_density, raw_trace = log_density(noncentered, (), {}, raw)
     np.testing.assert_allclose(
-        raw_density, centered_density + log_jacobian, rtol=2e-6, atol=2e-5
+        raw_trace["s_delta_1"]["value"],
+        centered_trace["s_delta_1"]["value"],
+        rtol=2e-13,
+    )
+    site = raw_trace["z_delta_1"]
+    np.testing.assert_allclose(
+        site["fn"].log_prob(site["value"]),
+        np.sum(
+            -0.5 * np.asarray(site["value"]) ** 2 - 0.5 * np.log(2 * np.pi)
+        ),
+        rtol=2e-13,
+    )
+    # Integrated theta fields contribute no coordinate-transformation Jacobian.
+    np.testing.assert_allclose(
+        raw_density,
+        centered_density + np.log(scale).sum(),
+        atol=2e-10,
+        rtol=2e-12,
     )
 
 
 @pytest.mark.slow
 def test_complex_grid_recovery_with_informative_replicates():
-    """Recover an independent smooth HPD truth with enough data per cell."""
+    """Recover a stationary HPD truth using a flexible tensor matrix model."""
     rng = np.random.default_rng(45)
     time, frequency = np.linspace(0, 1, 5), np.linspace(0.1, 1, 7)
     base = np.array([[1.2, 0.3 + 0.2j], [0.3 - 0.2j, 0.9]])
-    amplitude = np.exp(0.3 * (time[:, None] - 0.5) + 0.2 * frequency[None, :])
+    amplitude = np.broadcast_to(
+        np.exp(0.2 * frequency[None, :]), (len(time), len(frequency))
+    )
     truth = amplitude[..., None, None] * base
     noise = (
         rng.normal(size=(5, 7, 2, 64)) + 1j * rng.normal(size=(5, 7, 2, 64))
@@ -805,7 +881,7 @@ def test_complex_grid_recovery_with_informative_replicates():
     result = fit(
         data,
         PowerConfig(
-            structure="anova",
+            structure="tensor",
             degree_time=1,
             degree_freq=1,
             penalty_order_time=1,
@@ -843,7 +919,7 @@ def test_gridtv_rejects_vi_before_sampling(monkeypatch):
     from log_psplines.inference import wishart_grid
 
     data, _, _ = _fixture(channels=2)
-    config = PowerConfig(structure="anova", method="vi")
+    config = PowerConfig(structure="tensor", method="vi")
 
     def unexpected_sampling(*args, **kwargs):
         pytest.fail("unsupported VI must be rejected before NUTS")
@@ -865,7 +941,9 @@ def test_scalar_anova_retains_centered_sample_sites(centered):
         2 * data.Y[..., 0, 0].real, 2 * data.counts, data.frequency, data.time
     )
     model, _, init = prepare_anova_power_model(
-        powers, _spline(data), PowerConfig(centered=centered)
+        powers,
+        ANOVALogPSpline(_spline(data).frequency, _spline(data).time),
+        PowerConfig(centered=centered),
     )
     _, trace = log_density(model, (), {}, init)
     assert trace["g"]["type"] == trace["eta"]["type"] == "sample"

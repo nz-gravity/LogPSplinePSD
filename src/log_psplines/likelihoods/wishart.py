@@ -23,7 +23,6 @@ def wishart_log_likelihood(
     enbw: float | int = 1.0,
     eta: float | int = 1.0,
     counts: int | float | Real[Array | np.ndarray, "..."] | None = None,
-    clip_log_psd: bool = True,
 ) -> Float[Array, ""]:
     """One channel factor; sum factors to obtain the matrix likelihood.
 
@@ -59,5 +58,4 @@ def wishart_log_likelihood(
         duration=duration,
         enbw=enbw,
         eta=eta,
-        clip_log_psd=clip_log_psd,
     )

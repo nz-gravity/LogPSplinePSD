@@ -1,46 +1,142 @@
-"""Gaussian integration and conditional recovery for ANOVA cross spectra."""
+"""Tensor-spline Gaussian priors and collapsed complex matrix regressions."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import numpyro
+import numpyro.distributions as dist
+import xarray as xr
 from jax.scipy.linalg import solve_triangular
 
+from log_psplines.basis.penalty import whiten_penalty_pair
 from log_psplines.config import PowerConfig
 from log_psplines.data.wishart_grid import WishartGridData
-from log_psplines.inference.anova_power import _mean_scale
 from log_psplines.inference.collapsed import gaussian_linear_conditional
+from log_psplines.models.spectrum import LogPSpline
+
+
+def prepare_grid_prior(spline: LogPSpline) -> dict:
+    """Diagonalize Q = Pt/sigma_time² (x) I + I (x) Pf/sigma_freq².
+
+    Pf is the supplied positive-definite frequency penalty, including its
+    existing ridge and normalization. No extra ridge or null-space prior is
+    added. With time=None, Bt=1 and Pt=0: Q is exactly Pf/sigma_freq², the
+    stationary prior when basis and roughness hyperprior also match.
+    """
+    pf = np.asarray(spline.frequency.penalty, dtype=float)
+    np.linalg.cholesky(pf)
+    pt = (
+        np.zeros((1, 1))
+        if spline.time is None
+        else np.asarray(spline.time.penalty, dtype=float)
+    )
+    pair = whiten_penalty_pair(pt, pf)
+    if np.any(pair["lam_freq"] <= 0):
+        raise ValueError(
+            "matrix tensor frequency penalty must be positive definite"
+        )
+    pair["time_active"] = bool(np.any(pt))
+    return pair
+
+
+def _basis_at(basis, coordinates):
+    coordinates = np.asarray(coordinates)
+    if np.array_equal(coordinates, basis.grid):
+        return np.asarray(basis.basis)
+    indices = np.searchsorted(basis.grid, coordinates)
+    if np.all(indices < len(basis.grid)) and np.array_equal(
+        basis.grid[indices], coordinates
+    ):
+        return np.asarray(basis.basis)[indices]
+    if basis.knot_convention != "clamped":
+        raise ValueError("off-grid matrix splines require clamped bases")
+    if coordinates.min() < basis.grid[0] or coordinates.max() > basis.grid[-1]:
+        raise ValueError(
+            "evaluation coordinates must be inside the spline domain"
+        )
+    return np.asarray(basis.design_at(coordinates))
+
+
+def grid_design(data, spline, pair):
+    """Raw and penalty-eigenbasis designs at the exact observation coordinates."""
+    bt = (
+        np.ones((len(data.time), 1))
+        if spline.time is None
+        else _basis_at(spline.time, data.time)
+    )
+    bf = _basis_at(spline.frequency, data.frequency)
+    return bt, bf, bt @ pair["U_time"], bf @ pair["U_freq"]
 
 
 def grid_field_design(bt, bf, *, paired: bool) -> np.ndarray:
-    """Observation-by-coefficient design for [g, flattened eta] in eigenbases."""
+    """Tensor design with time-major flattened coefficient ordering."""
     if paired:
-        mean = bf
-        interaction = (bt[:, :, None] * bf[:, None, :]).reshape(len(bt), -1)
-    else:
-        mean = np.broadcast_to(bf[None, :, :], (len(bt), *bf.shape)).reshape(
-            -1, bf.shape[1]
+        return (bt[:, :, None] * bf[:, None, :]).reshape(len(bt), -1)
+    return (bt[:, None, :, None] * bf[None, :, None, :]).reshape(
+        len(bt) * len(bf), -1
+    )
+
+
+def grid_field_scales(pair, sigma_freq, sigma_time=None):
+    """Eigen-coefficient scales of the supplied proper tensor precision."""
+    precision = jnp.asarray(pair["lam_freq"])[None, :] / sigma_freq**2
+    precision = jnp.broadcast_to(
+        precision, (len(pair["lam_time"]), len(pair["lam_freq"]))
+    )
+    if pair["time_active"]:
+        precision = (
+            precision + jnp.asarray(pair["lam_time"])[:, None] / sigma_time**2
         )
-        interaction = (bt[:, None, :, None] * bf[None, :, None, :]).reshape(
-            len(bt) * len(bf), -1
+    return jax.lax.rsqrt(precision).reshape(-1)
+
+
+def sample_grid_scales(pair, config, label):
+    sigma_freq = numpyro.sample(
+        f"sigma_freq_{label}", dist.HalfNormal(config.roughness_scale)
+    )
+    sigma_time = None
+    if pair["time_active"]:
+        sigma_time = numpyro.sample(
+            f"sigma_time_{label}", dist.HalfNormal(config.roughness_scale)
         )
-    return np.column_stack((mean, interaction))
+    return sigma_freq, sigma_time
+
+
+def sample_grid_field(pair, config, label):
+    """Sample one delta field; theta uses the same prior analytically."""
+    sigma_freq, sigma_time = sample_grid_scales(pair, config, label)
+    scales = grid_field_scales(pair, sigma_freq, sigma_time)
+    if config.centered:
+        return numpyro.sample(
+            f"s_{label}", dist.Normal(0.0, scales).to_event(1)
+        )
+    z = numpyro.sample(
+        f"z_{label}", dist.Normal(0.0, 1.0).expand(scales.shape).to_event(1)
+    )
+    return numpyro.deterministic(f"s_{label}", z * scales)
+
+
+def grid_theta_scales(pair, sigma_freq, sigma_time=None):
+    return jnp.concatenate(
+        [
+            grid_field_scales(
+                pair,
+                sigma_freq[index],
+                None if sigma_time is None else sigma_time[index],
+            )
+            for index in range(len(sigma_freq))
+        ]
+    )
 
 
 def prepare_grid_theta(
-    data: WishartGridData,
-    pair: dict[str, np.ndarray],
-    design: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
-    channel: int,
+    data: WishartGridData, pair: dict, design: tuple, channel: int
 ) -> dict:
-    """Build real/imaginary regression designs without any observation-square matrix.
-
-    Fields are ordered theta_re(j,0), theta_im(j,0), theta_re(j,1), ...;
-    coefficients within each field are its frequency g followed by flattened eta.
-    """
+    """Form fixed real/imaginary designs for jointly integrated theta fields."""
     if not jax.config.x64_enabled:
         raise ValueError(
             "Multivariate Gaussian marginalization requires JAX_ENABLE_X64=true"
@@ -74,29 +170,11 @@ def prepare_grid_theta(
         "counts": jnp.asarray(data.counts.reshape(-1)),
         "enbw": data.enbw,
         "theta_labels": tuple(labels),
-        "frequency_size": len(pair["lam_freq"]),
         "field_size": field.shape[1],
     }
 
 
-def grid_theta_scales(pair, config, sigma_g, sigma_eta):
-    """Concatenate the existing independent ANOVA coefficient standard deviations."""
-    return jnp.concatenate(
-        [
-            jnp.concatenate(
-                (
-                    _mean_scale(pair, config, sigma_g[index]),
-                    sigma_eta[index]
-                    * jnp.asarray(pair["eta_scale"]).reshape(-1),
-                )
-            )
-            for index in range(len(sigma_g))
-        ]
-    )
-
-
 def grid_theta_conditional(log_variance, prior_scales, prepared):
-    """Return marginal log likelihood and the joint Gaussian theta conditional."""
     inverse_scale = 1 / jnp.asarray(prior_scales)
     return gaussian_linear_conditional(
         jnp.asarray(log_variance).reshape(-1),
@@ -109,45 +187,45 @@ def grid_theta_conditional(log_variance, prior_scales, prepared):
         prior_whitener=jnp.diag(inverse_scale),
         prior_logdet=2 * jnp.sum(jnp.log(inverse_scale)),
         precision_multiplier=1 / prepared["enbw"],
-        clip_log_psd=False,
     )
 
 
 def recover_grid_theta(
     posterior: Mapping,
-    pair: dict[str, np.ndarray],
+    pair: dict,
     config: PowerConfig,
     prepared: dict,
     rng_key: jax.Array,
 ) -> dict[str, jax.Array]:
-    """One joint conditional coefficient draw per retained marginal posterior draw."""
+    """Recover one joint theta coefficient draw per retained marginal draw."""
     channel = prepared["channel"]
-    g = jnp.asarray(posterior[f"g_delta_{channel}"])
-    eta = jnp.asarray(posterior[f"eta_delta_{channel}"])
-    shape = g.shape[:2]
-    coefficients = jnp.concatenate((g, eta), axis=-1).reshape(
-        -1, prepared["field_size"]
-    )
-    sigma_g = jnp.stack(
+    delta = jnp.asarray(posterior[f"s_delta_{channel}"])
+    shape = delta.shape[:2]
+    delta = delta.reshape(-1, prepared["field_size"])
+    sigma_freq = jnp.stack(
         [
-            jnp.asarray(posterior[f"sigma_g_{label}"]).reshape(-1)
+            jnp.asarray(posterior[f"sigma_freq_{label}"]).reshape(-1)
             for label in prepared["theta_labels"]
         ],
         axis=-1,
     )
-    sigma_eta = jnp.stack(
-        [
-            jnp.asarray(posterior[f"sigma_eta_{label}"]).reshape(-1)
-            for label in prepared["theta_labels"]
-        ],
-        axis=-1,
+    sigma_time = (
+        jnp.stack(
+            [
+                jnp.asarray(posterior[f"sigma_time_{label}"]).reshape(-1)
+                for label in prepared["theta_labels"]
+            ],
+            axis=-1,
+        )
+        if pair["time_active"]
+        else jnp.zeros_like(sigma_freq)
     )
-    keys = jax.random.split(rng_key, len(coefficients))
+    keys = jax.random.split(rng_key, len(delta))
 
     def draw(inputs):
-        delta, sg, se, key = inputs
-        logs = prepared["field_basis"] @ delta
-        scales = grid_theta_scales(pair, config, sg, se)
+        coefficients, sf, st, key = inputs
+        logs = prepared["field_basis"] @ coefficients
+        scales = grid_theta_scales(pair, sf, st)
         _, mean, chol, diagonal = grid_theta_conditional(
             logs, scales, prepared
         )
@@ -178,16 +256,43 @@ def recover_grid_theta(
         return beta, beta / scales, likelihood
 
     beta, standardized, likelihood = jax.lax.map(
-        draw, (coefficients, sigma_g, sigma_eta, keys)
+        draw, (delta, sigma_freq, sigma_time, keys)
     )
     output = {f"log_likelihood_block_{channel}": likelihood.reshape(shape)}
-    size, kf = prepared["field_size"], prepared["frequency_size"]
+    size = prepared["field_size"]
     for index, label in enumerate(prepared["theta_labels"]):
-        field = beta[:, index * size : (index + 1) * size]
-        output[f"g_{label}"] = field[:, :kf].reshape(*shape, kf)
-        output[f"eta_{label}"] = field[:, kf:].reshape(*shape, size - kf)
+        output[f"s_{label}"] = beta[
+            :, index * size : (index + 1) * size
+        ].reshape(*shape, size)
         if not config.centered:
-            field = standardized[:, index * size : (index + 1) * size]
-            output[f"z_g_{label}"] = field[:, :kf].reshape(*shape, kf)
-            output[f"z_eta_{label}"] = field[:, kf:].reshape(*shape, size - kf)
+            output[f"z_{label}"] = standardized[
+                :, index * size : (index + 1) * size
+            ].reshape(*shape, size)
+    return output
+
+
+def collect_grid_samples(
+    posterior: xr.Dataset, pair: dict, *, labels: Sequence[str]
+) -> xr.Dataset:
+    """Rotate physical eigen-coefficients into original tensor spline weights."""
+    output = posterior.copy(deep=False)
+    kt, kf = len(pair["lam_time"]), len(pair["lam_freq"])
+    for label in labels:
+        coefficients = np.asarray(posterior[f"s_{label}"]).reshape(
+            *posterior[f"s_{label}"].shape[:2], kt, kf
+        )
+        output[f"weights_{label}"] = xr.DataArray(
+            np.einsum(
+                "ia,cdab,jb->cdij",
+                pair["U_time"],
+                coefficients,
+                pair["U_freq"],
+            ),
+            dims=(
+                "chain",
+                "draw",
+                "time_coefficient",
+                "frequency_coefficient",
+            ),
+        )
     return output

@@ -6,8 +6,8 @@ by default. Frequency mean coefficients have standard deviation
 modes use ``null_precision**-1/2``. Deviation coefficients have standard
 deviation ``sigma_eta * (lambda_t + lambda_f + ridge_eps)**-1/2``; joint null
 modes use ``sigma_eta``. ``sigma_eta ~ HalfNormal(0.5)`` by default.
-Scalar ANOVA retains centered g/eta sites. Complex GridTV fields honor
-``PowerConfig.centered`` with the same physical prior in either coordinate system.
+Scalar ANOVA retains centered g/eta sites. Multivariate Cholesky fields use
+the separate plain tensor-spline model in ``wishart_grid``.
 """
 
 from __future__ import annotations

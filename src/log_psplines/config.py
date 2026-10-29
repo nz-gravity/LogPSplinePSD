@@ -201,8 +201,12 @@ class PowerConfig:
     control NumPyro SVI. Disable ``vi_early_stopping`` to run every step.
     VI returns one chain with ``vi_posterior_draws`` constrained draws and
     stores losses and timings in ``result.vi``. Complex WishartGridData
-    requires structure='anova' and method='nuts'; its independent Cholesky
-    fields honor ``centered``. Scalar ANOVA retains centered g/eta sites.
+    requires structure='tensor' and method='nuts'. Its plain Cholesky tensor
+    fields honor ``centered`` and use their supplied frequency penalty, including
+    its ridge, rather than this config's scalar null_precision/ridge_eps options.
+    interaction_scale applies only to scalar ANOVA, which retains centered g/eta
+    sites. An explicit config's roughness_scale defines each matrix smoothing
+    hyperprior; fitting matrix data with no config uses the stationary value 1.28.
     """
 
     roughness_scale: float = 10.0

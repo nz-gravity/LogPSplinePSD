@@ -21,7 +21,6 @@ from jax.scipy.linalg import solve_triangular
 from scipy.linalg import block_diag
 
 from log_psplines.inference.model import _sample_pspline_block
-from log_psplines.likelihoods.whittle import LOG_SPECTRUM_LIMIT
 
 
 def prepare_collapsed_channel(channel_kwargs: Mapping[str, Any]) -> dict:
@@ -150,7 +149,6 @@ def gaussian_theta_conditional(
         prior_whitener=prior_whitener,
         prior_logdet=logdet_prior,
         precision_multiplier=likelihood_scale / duration,
-        clip_log_psd=True,
     )
 
 
@@ -166,7 +164,6 @@ def gaussian_linear_conditional(
     prior_whitener: jax.Array,
     prior_logdet: jax.Array,
     precision_multiplier: jax.Array | float = 1.0,
-    clip_log_psd: bool = False,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     """Integrate a real Gaussian coefficient vector in a complex regression.
 
@@ -181,8 +178,6 @@ def gaussian_linear_conditional(
     count = jnp.broadcast_to(jnp.asarray(counts), logs.shape)
     active = count > 0
     logs = jnp.where(active, logs, 0.0)
-    if clip_log_psd:
-        logs = jnp.clip(logs, -LOG_SPECTRUM_LIMIT, LOG_SPECTRUM_LIMIT)
     design_re = jnp.where(active[:, None, None], design_re, 0.0)
     design_im = jnp.where(active[:, None, None], design_im, 0.0)
     observed_re = jnp.where(active[:, None], observed_re, 0.0)
@@ -315,7 +310,6 @@ def sample_conditional_theta(
         residual_im = prepared_kwargs["observed_im"] - jnp.einsum(
             "frk,k->fr", prepared_kwargs["design_im"], beta
         )
-        logd = jnp.clip(logd, -LOG_SPECTRUM_LIMIT, LOG_SPECTRUM_LIMIT)
         full_log_likelihood = (
             (
                 -prepared_kwargs["Nb"] * prepared_kwargs["Nh"] * jnp.sum(logd)

@@ -84,39 +84,69 @@ Bayes factors without restoring consistent normalization.
 
 Enable ``JAX_ENABLE_X64=true`` before Python starts for stationary multivariate
 fits. The first Cholesky row has no cross-spectrum coefficients to integrate.
+Log variances are not clipped: stationary and matrix-grid fits use the same
+likelihood, including after a change of physical units. Inputs and calculations
+must remain representable in the chosen floating-point precision.
 See the :doc:`multivariate example <examples/multivariate-example>` for the
 completion-of-the-square derivation and a comparison of NUTS and VI.
 
-Multivariate time-varying Gaussian marginalization
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Multivariate Cholesky splines
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``WishartGridData`` uses the same Gaussian integration for its ANOVA
-cross-spectrum fields. Conditional on the diagonal log-variance field and
-smoothing scales, both the frequency-mean and time-frequency interaction
-coefficients enter the complex regression linearly. They are integrated
-jointly; NUTS samples only diagonal-field coefficients and smoothing scales.
-There is no explicit cross-coefficient sampling option. Enable JAX float64.
+``WishartGridData`` uses ordinary ``LogPSpline`` fields: one spline for each
+log innovation variance and each real or imaginary regression coefficient.
+A frequency-only model has ``time=None``. A tensor model evaluates each
+field as ``Bt @ W @ Bf.T``, or at exact paired coordinates. There is no
+multivariate ANOVA decomposition or alternative matrix ANOVA path.
 
-The Gaussian calculation preserves the ANOVA null-mode and roughness priors.
-It evaluates residual power at the conditional mean plus the prior quadratic,
-avoiding subtraction of large nearly equal quadratic forms. After sampling,
-one joint conditional draw restores all cross-field coefficients for each
-retained draw. Original-basis ``weights_g_theta_*`` and
-``weights_eta_theta_*`` remain available, and nonlinear spectral summaries
-use the full reconstructed posterior. Saved ``log_likelihood_block_*`` values
-are the ordinary row likelihood evaluated at these conditional draws.
-``row_latent_dimensions`` counts sampled parameters; ``row_coefficient_counts``
-includes reconstructed coefficients. This experimental matrix time-varying
-path currently supports NUTS; its VI path is not implemented.
+Conditional on the diagonal field and smoothing scales, cross-spectrum
+coefficients still enter the complex regression linearly. They are integrated
+jointly; NUTS samples diagonal coefficients and smoothing scales. One joint
+conditional Gaussian draw restores every cross-field coefficient for each
+retained draw. There is no explicit cross-coefficient sampling option.
+Enable ``JAX_ENABLE_X64=true``. Matrix grid/paired inference currently
+supports NUTS; its VI path is not implemented.
 
-The mathematical stationary limit requires a zero time contribution and
-matching frequency bases, Gaussian priors, counts and normalization. The
-ANOVA frequency prior differs from ``StationaryConfig``'s default prior,
-so the default fitters need not return identical posteriors. Tests compare
-the marginal integral, gradients and conditional covariance under matched
-priors, including masked observations and non-unit ENBW. A flexible ANOVA fit
-to a stationary realization is a separate sampling/recovery check; it does
-not by itself establish repeated-noise interval calibration.
+For time-major vectorized coefficients, the Gaussian precision is
+
+.. math::
+
+   Q = \sigma_t^{-2}(P_t\otimes I_f)
+       + \sigma_f^{-2}(I_t\otimes P_f).
+
+Each field has independent HalfNormal smoothing scales, with the scale
+specified by ``PowerConfig.roughness_scale``. The frequency penalty ``Pf``
+is positive definite and includes its existing ridge; the time penalty
+``Pt`` is positive semidefinite. No additional tensor ridge or special
+null-mode prior is added. The default matrix frequency basis uses the
+stationary max-normalization and ridge convention. A supplied model retains
+its supplied penalty. With no explicit configuration, the matrix entry point
+uses roughness scale 1.28 and centered coefficient coordinates; an explicit
+``PowerConfig`` controls its own settings.
+
+The Gaussian calculation evaluates residual power at the conditional mean
+plus the prior quadratic, avoiding subtraction of large nearly equal terms.
+Original-basis coefficient draws remain in ``result.posterior``. Nonlinear
+spectral summaries use the reconstructed posterior, and saved
+``log_likelihood_block_*`` values are the ordinary row likelihood at these
+draws. ``row_latent_dimensions`` counts sampled parameters;
+``row_coefficient_counts`` also includes reconstructed coefficients.
+
+The exact stationary restriction is ``LogPSpline(frequency_basis, time=None)``:
+the time basis is the constant one, the time penalty is zero, and no unused
+time smoothing parameter is sampled. Its frequency precision is exactly
+``Pf / sigma_f**2``. Equality with a stationary fit also requires matching
+the basis, penalty, smoothing hyperprior, counts, duration normalization
+and ENBW. Tests compare marginal integrals, gradients and conditional
+covariances under that restriction, including masks and non-unit ENBW.
+Increasing a second-order time penalty alone does not enforce stationarity,
+because a linear time trend is also in its null space.
+
+Stationary simulation controls precede time-varying recovery studies.
+Passing algebraic tests or one fitted realization does not establish
+repeated-noise interval calibration. Marginalization reduces the sampled
+dimension but introduces a coefficient-sized Gaussian factorization per
+likelihood evaluation; runtime still depends on basis size and sampler geometry.
 
 Posterior summary semantics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

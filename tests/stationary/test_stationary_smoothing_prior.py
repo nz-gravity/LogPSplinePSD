@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
+import pytest
 import xarray as xr
 from jax.scipy.linalg import solve_triangular
 from numpyro.infer.util import log_density
@@ -241,7 +242,10 @@ def test_centered_and_noncentered_full_log_posterior_match():
     np.testing.assert_allclose(differences[0], differences[1], atol=0.05)
 
 
-def test_pointwise_likelihood_matches_sampled_channel_likelihoods():
+@pytest.mark.parametrize("log_power_shift", [-100.0, 0.0, 100.0])
+def test_pointwise_likelihood_matches_sampled_channel_likelihoods(
+    log_power_shift,
+):
     config = StationaryConfig(
         n_knots=5, Nb=4, verbose=False, wishart_window="hann"
     )
@@ -277,9 +281,31 @@ def test_pointwise_likelihood_matches_sampled_channel_likelihoods():
                     rng.normal(scale=0.1, size=(1, 2, basis.shape[1])),
                 )
     posterior = xr.Dataset(variables, coords={"chain": [0], "draw": [0, 1]})
+    baseline = compute_pointwise_lnl(
+        posterior=posterior, data=data, model_kwargs=kwargs
+    )
+    for channel in range(data.p):
+        posterior[f"weights_delta_{channel}"] += log_power_shift
+    amplitude_scale = np.exp(log_power_shift / 2)
+    kwargs = {
+        **kwargs,
+        "u_re": kwargs["u_re"] * amplitude_scale,
+        "u_im": kwargs["u_im"] * amplitude_scale,
+    }
     likelihood = compute_pointwise_lnl(
         posterior=posterior, data=data, model_kwargs=kwargs
     )
+    determinant_shift = (
+        kwargs["Nb"] * kwargs["Nh"] * log_power_shift / kwargs["enbw"]
+    )
+    for name in likelihood:
+        channel_count = data.p if name == "log_likelihood" else 1
+        np.testing.assert_allclose(
+            likelihood[name],
+            baseline[name] - channel_count * determinant_shift,
+            rtol=2e-12,
+            atol=2e-10,
+        )
     for draw in range(2):
         total = 0.0
         for channel in range(data.p):

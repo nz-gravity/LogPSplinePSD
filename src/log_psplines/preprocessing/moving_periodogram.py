@@ -294,7 +294,7 @@ def multivariate_moving_periodogram(
     a composite dynamic-Whittle/local-stationarity approximation, adopting
     proper complex coefficients rather than guaranteeing transform
     properness. Thinning does not establish statistical independence.
-    reference_time fixes both ANOVA centring and reconstruction, and must
+    reference_time fixes the spline domain and reconstruction grid, and must
     cover every observed centre. It defaults to all exact centre times;
     supply a smaller grid for long records and share it across comparisons.
     """

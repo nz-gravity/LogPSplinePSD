@@ -28,9 +28,8 @@ class WishartGridData:
     has covariance S in the stated PSD units. Y is a SUM, never an average;
     R is factor width, independent of counts. Widths above C are compressed
     once. Rank-one and zero-count cells need no artificial diagonal power.
-    reference_time/frequency retain the grids before masking/pooling. Time
-    centring is defined on reference_time and must survive receiving pooled
-    data. Counts assert the adopted independent proper complex observation
+    reference_time/frequency retain the spline domains and reconstruction
+    grids before masking/pooling. Counts assert the adopted independent proper complex observation
     model; this container cannot establish independence of transform tiles.
     enbw scales likelihood information, not Y/count or the integer raw counts.
     Empty preprocessing metadata means the external transform history is unknown.

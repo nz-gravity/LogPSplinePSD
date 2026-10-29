@@ -1,4 +1,4 @@
-"""Blocked ANOVA fitting for complex grid or paired-point statistics."""
+"""Blocked tensor-spline fitting for complex grid or paired-point statistics."""
 
 from collections.abc import Callable
 from dataclasses import asdict
@@ -8,37 +8,35 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
-import numpyro.distributions as dist
 import xarray as xr
 
 from log_psplines.config import PowerConfig
-from log_psplines.data.spectral import PowerData
 from log_psplines.data.wishart_grid import WishartGridData
-from log_psplines.inference.anova_power import (
-    anova_init_values,
-    collect_anova_samples,
-    initialize_anova,
-    prepare_anova_prior,
-    sample_anova_field,
-)
 from log_psplines.inference.collapsed_grid import (
+    collect_grid_samples,
+    grid_design,
+    grid_field_design,
+    grid_field_scales,
     grid_theta_conditional,
     grid_theta_scales,
+    prepare_grid_prior,
     prepare_grid_theta,
     recover_grid_theta,
+    sample_grid_field,
+    sample_grid_scales,
 )
 from log_psplines.inference.nuts import _mapping_to_dataset, _suffix, run_nuts
 from log_psplines.inference.power import power_floor
 from log_psplines.inference.power_results import power_result_spectra
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 from log_psplines.logger import logger
-from log_psplines.models.anova import ANOVALogPSpline, anova_components
 from log_psplines.models.reconstruction import wishart_grid_draws
+from log_psplines.models.spectrum import LogPSpline
 from log_psplines.results import PSDResult
 
 
 def row_field_labels(channel: int) -> list[str]:
-    """Row-major names for one diagonal and 2*j signed theta fields."""
+    """One log-innovation field and 2*j real/imaginary regression fields."""
     return [f"delta_{channel}"] + [
         f"theta_{part}_{channel}_{previous}"
         for previous in range(channel)
@@ -46,245 +44,156 @@ def row_field_labels(channel: int) -> list[str]:
     ]
 
 
-def _initialize_scattered(
-    marginal: np.ndarray,
-    counts: np.ndarray,
-    bt: np.ndarray,
-    bf: np.ndarray,
-    pair: dict[str, np.ndarray],
-    config: PowerConfig,
-) -> dict[str, np.ndarray | float]:
-    """Penalized paired-point initialization with at most 4096 design rows.
-
-    Accumulate coefficient-sized normal equations; no Q-by-Q grid is formed.
-    Only starting values use this approximation, never the model likelihood.
-    """
-    active = counts > 0
-    mean = marginal[active] / counts[active]
+def _initialize_field(marginal, counts, field_design, pair, config):
+    """Weighted, penalized tensor initialization in bounded observation chunks."""
+    count = np.asarray(counts).reshape(-1)
+    active = count > 0
+    mean = np.asarray(marginal).reshape(-1)[active] / count[active]
     target = np.log(mean + power_floor(mean))
-    bt, bf = bt[active] @ pair["U_time"], bf[active] @ pair["U_freq"]
-    weights = counts[active] / counts[active].max()
-    kt, kf = bt.shape[1], bf.shape[1]
-    penalty = np.r_[
-        config.init_penalty_freq * pair["lam_freq"],
-        (
-            config.init_penalty_time * pair["lam_time"][:, None]
-            + config.init_penalty_freq * pair["lam_freq"][None, :]
-        ).reshape(-1),
-    ]
-    system = np.diag(penalty + config.ridge_eps)
+    design = np.asarray(field_design)[active]
+    weights = count[active] / count[active].max()
+    penalty = (
+        config.init_penalty_time * pair["lam_time"][:, None]
+        + config.init_penalty_freq * pair["lam_freq"][None, :]
+    ).reshape(-1)
+    system = np.diag(penalty)
     rhs = np.zeros(len(penalty))
     for start in range(0, len(target), 4096):
         section = slice(start, start + 4096)
-        design = np.column_stack(
-            (
-                bf[section],
-                (bt[section, :, None] * bf[section, None, :]).reshape(
-                    -1, kt * kf
-                ),
+        block = design[section]
+        system += block.T @ (weights[section, None] * block)
+        rhs += block.T @ (weights[section] * target[section])
+    result = {
+        "s": np.linalg.solve(system, rhs),
+        "sigma_freq": config.roughness_scale,
+    }
+    if pair["time_active"]:
+        result["sigma_time"] = config.roughness_scale
+    return result
+
+
+def _initial_sampling_values(init, pair, config, label):
+    values = dict(init)
+    if not config.centered:
+        values["z"] = values.pop("s") / np.asarray(
+            grid_field_scales(
+                pair, values["sigma_freq"], values.get("sigma_time")
             )
         )
-        system += design.T @ (weights[section, None] * design)
-        rhs += design.T @ (weights[section] * target[section])
-    coefficients = np.linalg.solve(system, rhs)
-    g, eta = coefficients[:kf], coefficients[kf:].reshape(kt, kf)
-    _, deviation = anova_components(bt, bf, g, eta, paired=True)
-    return {
-        "g": g,
-        "eta": eta.reshape(-1),
-        "sigma_g": min(
-            10.0, np.sqrt((np.sum(pair["lam_freq"] * g**2) + 1e-6) / kf)
-        ),
-        "sigma_eta": float(np.clip(np.std(deviation), 0.05, 1.0)),
-    }
+    return {f"{name}_{label}": value for name, value in values.items()}
 
 
 def prepare_wishart_grid_row(
     data: WishartGridData,
-    spline: ANOVALogPSpline,
+    spline: LogPSpline,
     config: PowerConfig,
     channel: int,
     *,
-    pair: dict[str, np.ndarray] | None = None,
-    design: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-    | None = None,
-) -> tuple[Callable, dict[str, np.ndarray | float]]:
-    """Prepare an independently callable row fit, without matrix inversions.
-
-    Shared designs contain raw time/frequency and their penalty-eigenbasis
-    versions: (T,Kt), (F,Kf), (T,Kt), (F,Kf).
-    Paired observations instead have Q rows in both coordinate designs.
-    Delta samples ANOVA coefficients; theta coefficients are integrated exactly.
-    Every field retains its own smoothing hyperparameters.
-    """
+    pair: dict | None = None,
+    design: tuple | None = None,
+) -> tuple[Callable, dict]:
+    """Sample delta tensor coefficients and scales, integrating theta tensors."""
     if not 0 <= channel < data.p:
         raise ValueError("channel must index a Cholesky row")
-    if not np.array_equal(data.reference_time, spline.time.grid):
-        raise ValueError(
-            "ANOVA time.grid must match data.reference_time for fixed centring"
-        )
-    pair = prepare_anova_prior(spline, config) if pair is None else pair
-    if design is None:
-        bt, bf = spline.design(data.time, data.frequency)
-        design = bt, bf, bt @ pair["U_time"], bf @ pair["U_freq"]
-    bt, bf, bt_eig, bf_eig = design
-    bt_eig, bf_eig = jnp.asarray(bt_eig), jnp.asarray(bf_eig)
-    # Each independent row needs only itself and preceding channels. Keep the
-    # real/imaginary factors separate rather than rebuilding the full complex U.
-    u_re = jnp.asarray(data.u_re[..., channel, :])
-    u_im = jnp.asarray(data.u_im[..., channel, :])
-    prev_re = jnp.asarray(data.u_re[..., :channel, :])
-    prev_im = jnp.asarray(data.u_im[..., :channel, :])
-    counts = jnp.asarray(data.counts)
+    pair = prepare_grid_prior(spline) if pair is None else pair
+    design = grid_design(data, spline, pair) if design is None else design
+    field = grid_field_design(design[2], design[3], paired=data.is_scattered)
+    basis = jnp.asarray(field)
+    real = jnp.asarray(data.u_re.reshape(-1, data.p, data.u_re.shape[-1]))
+    imag = jnp.asarray(data.u_im.reshape(real.shape))
+    counts = jnp.asarray(data.counts.reshape(-1))
     labels = row_field_labels(channel)
-
     prepared = (
         prepare_grid_theta(data, pair, design, channel) if channel else None
     )
 
     def model() -> None:
-        g, interaction = sample_anova_field(
-            pair, config, spline.sigma_eta_prior, label=labels[0]
-        )
-        mean, deviation = anova_components(
-            bt_eig, bf_eig, g, interaction, paired=data.is_scattered
-        )
-        logs = (
-            mean + deviation
-            if data.is_scattered
-            else mean[None, :] + deviation
-        )
+        coefficients = sample_grid_field(pair, config, labels[0])
+        logs = basis @ coefficients
         if channel:
-            sigmas_g, sigmas_eta = [], []
+            sigmas_freq, sigmas_time = [], []
             for label in labels[1:]:
-                sigmas_g.append(
-                    numpyro.sample(
-                        f"sigma_g_{label}",
-                        dist.HalfNormal(config.roughness_scale),
-                    )
-                )
-                sigmas_eta.append(
-                    numpyro.sample(
-                        f"sigma_eta_{label}",
-                        dist.HalfNormal(spline.sigma_eta_prior),
-                    )
-                )
-            scales = grid_theta_scales(pair, config, sigmas_g, sigmas_eta)
+                sf, st = sample_grid_scales(pair, config, label)
+                sigmas_freq.append(sf)
+                sigmas_time.append(st)
+            scales = grid_theta_scales(pair, sigmas_freq, sigmas_time)
             likelihood, _, _, _ = grid_theta_conditional(
                 logs, scales, prepared
             )
         else:
-            empty = jnp.empty((*logs.shape, 0))
+            empty = jnp.empty((len(logs), 0))
             likelihood = wishart_log_likelihood(
                 logs,
                 empty,
                 empty,
-                u_re,
-                u_im,
-                prev_re,
-                prev_im,
+                real[:, channel],
+                imag[:, channel],
+                real[:, :channel],
+                imag[:, :channel],
                 counts=counts,
                 enbw=data.enbw,
-                clip_log_psd=False,
             )
             numpyro.deterministic(
                 f"log_likelihood_block_{channel}", likelihood
             )
         numpyro.factor(f"wishart_{channel}", likelihood)
 
-    # Reuse scalar log-variance initialization only. The inference observations
-    # remain complex multichannel factors, including every cross-spectrum.
     marginal = np.sum(
-        data.u_re[..., channel, :] ** 2 + data.u_im[..., channel, :] ** 2,
+        np.asarray(real[:, channel]) ** 2 + np.asarray(imag[:, channel]) ** 2,
         axis=-1,
     )
-    diagonal_init = (
-        _initialize_scattered(marginal, data.counts, bt, bf, pair, config)
-        if data.is_scattered
-        else initialize_anova(
-            PowerData(
-                2 * marginal, 2 * data.counts, data.frequency, data.time
-            ),
-            bt,
-            bf,
-            spline.time_penalty,
-            np.asarray(spline.frequency.penalty),
-            pair,
-            config,
-        )
-    )
-    theta_sigma_g = float(diagonal_init["sigma_g"])
-    theta_sigma_eta = float(diagonal_init["sigma_eta"])
+    initial = _initialize_field(marginal, data.counts, field, pair, config)
     if channel:
-        # Initialize the innovation spectrum from a regularized conditional
-        # regression, not the often much larger marginal channel spectrum.
-        # A single rank-one cell cannot identify a conditional variance, so
-        # theta is fitted jointly across its whole spline design here.
-        delta = np.concatenate((diagonal_init["g"], diagonal_init["eta"]))
         scales = grid_theta_scales(
             pair,
-            config,
-            np.full(2 * channel, theta_sigma_g),
-            np.full(2 * channel, theta_sigma_eta),
+            np.full(2 * channel, config.roughness_scale),
+            np.full(2 * channel, config.roughness_scale),
         )
         _, beta, _, _ = grid_theta_conditional(
-            prepared["field_basis"] @ delta, scales, prepared
+            basis @ initial["s"], scales, prepared
         )
-        residual_re = np.asarray(
-            prepared["observed_re"]
-            - jnp.einsum("frk,k->fr", prepared["design_re"], beta)
+        residual_re = prepared["observed_re"] - jnp.einsum(
+            "frk,k->fr", prepared["design_re"], beta
         )
-        residual_im = np.asarray(
-            prepared["observed_im"]
-            - jnp.einsum("frk,k->fr", prepared["design_im"], beta)
+        residual_im = prepared["observed_im"] - jnp.einsum(
+            "frk,k->fr", prepared["design_im"], beta
         )
-        innovation = np.sum(residual_re**2 + residual_im**2, axis=-1).reshape(
-            data.counts.shape
+        innovation = np.asarray(
+            jnp.sum(residual_re**2 + residual_im**2, axis=-1)
         )
-        diagonal_init = (
-            _initialize_scattered(
-                innovation, data.counts, bt, bf, pair, config
-            )
-            if data.is_scattered
-            else initialize_anova(
-                PowerData(
-                    2 * innovation, 2 * data.counts, data.frequency, data.time
-                ),
-                bt,
-                bf,
-                spline.time_penalty,
-                np.asarray(spline.frequency.penalty),
-                pair,
-                config,
-            )
+        initial = _initialize_field(
+            innovation, data.counts, field, pair, config
         )
-    init = anova_init_values(diagonal_init, pair, config, label=labels[0])
+    init = _initial_sampling_values(initial, pair, config, labels[0])
     for label in labels[1:]:
-        init[f"sigma_g_{label}"] = theta_sigma_g
-        init[f"sigma_eta_{label}"] = theta_sigma_eta
-
+        init[f"sigma_freq_{label}"] = config.roughness_scale
+        if pair["time_active"]:
+            init[f"sigma_time_{label}"] = config.roughness_scale
     return model, init
 
 
 def fit_wishart_grid(
     data: WishartGridData,
-    spline: ANOVALogPSpline,
+    spline: LogPSpline,
     config: PowerConfig,
     *,
     true_psd: np.ndarray | None = None,
 ) -> PSDResult:
-    """Fit independent ANOVA Cholesky rows with NUTS on reference grids."""
+    """Fit independent tensor Cholesky rows with NUTS on reference grids."""
     if config.method != "nuts":
         raise ValueError(
             "WishartGridData currently supports method='nuts' only"
         )
-    if config.structure != "anova" or not isinstance(spline, ANOVALogPSpline):
+    if config.structure != "tensor" or not isinstance(spline, LogPSpline):
         raise ValueError(
-            "WishartGridData requires ANOVALogPSpline and structure='anova'"
+            "WishartGridData requires LogPSpline and structure='tensor'"
         )
     if not np.any(data.counts > 0):
         raise ValueError("at least one active complex observation is required")
-    output_time, output_frequency = spline.time.grid, spline.frequency.grid
+    output_time = (
+        data.reference_time if spline.time is None else spline.time.grid
+    )
+    output_frequency = spline.frequency.grid
     truth = None
     if true_psd is not None:
         truth = np.asarray(true_psd)
@@ -293,11 +202,10 @@ def fit_wishart_grid(
             raise ValueError(
                 f"true_psd must be finite with output-grid shape {expected}"
             )
-    pair = prepare_anova_prior(spline, config)
-    bt, bf = spline.design(data.time, data.frequency)
-    design = bt, bf, bt @ pair["U_time"], bf @ pair["U_freq"]
+    pair = prepare_grid_prior(spline)
+    design = grid_design(data, spline, pair)
     keys = jax.random.split(jax.random.PRNGKey(config.seed), data.p)
-    coefficient_size = len(pair["lam_freq"]) * (1 + len(pair["lam_time"]))
+    coefficient_size = len(pair["lam_freq"]) * len(pair["lam_time"])
     row_sizes = [coefficient_size * (1 + 2 * j) for j in range(data.p)]
     logger.info(
         f"GridTV reconstructed coefficients per row: {row_sizes}; marginal sampling retains {coefficient_size} delta coefficients per row (plus smoothing scales)"
@@ -360,7 +268,7 @@ def fit_wishart_grid(
             f"GridTV row {channel + 1}/{data.p} sampling and conditional recovery: {runtimes[-1]:.1f} s"
         )
         posterior_parts.append(
-            collect_anova_samples(
+            collect_grid_samples(
                 sampled.posterior, pair, labels=row_field_labels(channel)
             )
         )
@@ -385,7 +293,12 @@ def fit_wishart_grid(
     logger.info(
         f"GridTV materialized spectrum: {final_bytes / 2**20:.2f} MiB; draws per chain={keep}"
     )
-    output_bt, output_bf = spline.design()
+    output_bt = (
+        np.ones((len(output_time), 1))
+        if spline.time is None
+        else np.asarray(spline.time.basis)
+    )
+    output_bf = np.asarray(spline.frequency.basis)
     start = perf_counter()
     spectrum, summary = power_result_spectra(
         posterior,
@@ -454,27 +367,30 @@ def fit_wishart_grid(
                     ("frequency", "frequency_coefficient"),
                     output_bf,
                 ),
-                "time_transform": (
-                    ("original_time_coefficient", "time_coefficient"),
-                    spline.time_transform,
-                ),
             },
             coords={"time": output_time, "frequency": output_frequency},
         ),
         metadata={
-            **asdict(config),
+            **{
+                key: value
+                for key, value in asdict(config).items()
+                if key
+                not in ("interaction_scale", "null_precision", "ridge_eps")
+            },
             "data_type": "multivariate_gridtv",
-            "structure": "anova",
+            "structure": "tensor",
             "observation_geometry": "rectangular"
             if data.is_grid
             else "paired",
             "units": data.units,
             "normalization": data.normalization,
             "counts_convention": "independent_proper_complex_observations; Y=sum(x x^H)",
-            "centring": "fixed_reference_time_grid_before_masking_and_pooling",
+            "tensor_prior": "Pt/sigma_time^2 kron I + I kron Pf/sigma_freq^2; supplied Pf includes its stationary ridge",
+            "time_smoothing_active": pair["time_active"],
             "row_coefficient_counts": row_sizes,
             "row_latent_dimensions": [
-                coefficient_size + 2 * (1 + 2 * j) for j in range(data.p)
+                coefficient_size + (1 + int(pair["time_active"])) * (1 + 2 * j)
+                for j in range(data.p)
             ],
             "theta_parameterization": "marginalized",
             "inference_dtype": "float64"
@@ -486,7 +402,6 @@ def fit_wishart_grid(
             "row_fit_seconds": runtimes,
             "reconstruction_seconds": reconstruction_seconds,
             "spectrum_bytes": final_bytes,
-            "interaction_scale": spline.sigma_eta_prior,
         },
     )
     return result

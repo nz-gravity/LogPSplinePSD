@@ -9,7 +9,7 @@ import xarray as xr
 from jax import Array
 from jaxtyping import Float
 
-from log_psplines.models.anova import ANOVALogPSpline, anova_components
+from log_psplines.models.anova import ANOVALogPSpline
 from log_psplines.models.matrix import SpectralMatrix
 
 if TYPE_CHECKING:
@@ -396,13 +396,12 @@ def wishart_grid_draws(
     """
 
     def field(label: str) -> np.ndarray:
-        g, eta = anova_components(
+        return np.einsum(
+            "ti,cdij,fj->cdtf",
             basis_time,
+            posterior[f"weights_{label}"].values,
             basis_frequency,
-            posterior[f"weights_g_{label}"].values,
-            posterior[f"weights_eta_{label}"].values,
         )
-        return np.asarray(g[..., None, :] + eta)
 
     logs = np.stack([field(f"delta_{j}") for j in range(channels)], axis=-1)
     pairs = list(zip(*np.tril_indices(channels, k=-1), strict=True))

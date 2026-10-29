@@ -10,7 +10,7 @@ from jaxtyping import TypeCheckError
 from numpyro.infer.util import log_density
 
 from log_psplines import (
-    ANOVALogPSpline,
+    LogPSpline,
     PowerConfig,
     PSDResult,
     SplineBasis,
@@ -19,15 +19,16 @@ from log_psplines import (
     fit,
 )
 from log_psplines.diagnostics.sampling import sampling_diagnostics
-from log_psplines.inference.anova_power import prepare_anova_prior
+from log_psplines.inference.collapsed_grid import grid_field_design
 from log_psplines.inference.wishart_grid import (
-    _initialize_scattered,
+    _initialize_field,
+    grid_design,
+    prepare_grid_prior,
     prepare_wishart_grid_row,
     row_field_labels,
 )
 from log_psplines.likelihoods.whittle import power_whittle_log_likelihood
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
-from log_psplines.models.anova import anova_components
 from log_psplines.models.reconstruction import (
     spectral_quantiles,
     wishart_grid_draws,
@@ -41,9 +42,14 @@ from log_psplines.preprocessing.wishart_grid import coarse_grain_wishart_grid
 
 
 def _spline(data):
-    return ANOVALogPSpline(
+    return LogPSpline(
         SplineBasis.from_grid(
-            data.reference_frequency, 1, degree=1, penalty_order=1
+            data.reference_frequency,
+            1,
+            degree=1,
+            penalty_order=1,
+            normalization="max",
+            ridge=1e-6,
         ),
         SplineBasis.from_grid(
             data.reference_time, 0, degree=1, penalty_order=1
@@ -160,7 +166,6 @@ def test_complex_scalar_likelihood_and_gradients_use_physical_psd_units():
             empty_previous,
             empty_previous,
             counts=observed.counts,
-            clip_log_psd=False,
         )
 
     def scalar_likelihood(value):
@@ -214,19 +219,18 @@ def test_lagged_cross_phase_and_exact_white_noise_gram():
 def test_paired_rows_match_rectangular_likelihood_and_full_gradients(row):
     grid = _grid().mask(np.arange(12).reshape(3, 4) != 5)
     paired, spline = _paired(grid), _spline(grid)
-    config = PowerConfig(structure="anova", centered=True)
+    config = PowerConfig(structure="tensor", centered=True)
     grid_model, params = prepare_wishart_grid_row(grid, spline, config, row)
     paired_model, _ = prepare_wishart_grid_row(paired, spline, config, row)
     rng = np.random.default_rng(380 + row)
     for label in row_field_labels(row):
-        for field in ("g", "eta"):
-            if label == f"delta_{row}":
-                params[f"{field}_{label}"] = (
-                    rng.normal(size=params[f"{field}_{label}"].shape) * 0.15
-                )
-            else:
-                assert f"{field}_{label}" not in params
-        params[f"sigma_g_{label}"], params[f"sigma_eta_{label}"] = 0.7, 0.3
+        if label == f"delta_{row}":
+            params[f"s_{label}"] = (
+                rng.normal(size=params[f"s_{label}"].shape) * 0.15
+            )
+        else:
+            assert f"s_{label}" not in params
+        params[f"sigma_freq_{label}"], params[f"sigma_time_{label}"] = 0.7, 0.3
 
     def grid_density(p):
         return log_density(grid_model, (), {}, p)[0]
@@ -240,38 +244,35 @@ def test_paired_rows_match_rectangular_likelihood_and_full_gradients(row):
     point_gradient = jax.grad(paired_density)(params)
     for name, gradient in jax.grad(grid_density)(params).items():
         np.testing.assert_allclose(gradient, point_gradient[name], atol=1e-12)
-    bt, bf = spline.design()
-    point_bt, point_bf = spline.design(paired.time, paired.frequency)
-    g, eta = rng.normal(size=3), rng.normal(size=(1, 3))
-    mean, deviation = anova_components(bt, bf, g, eta)
-    point_mean, point_deviation = anova_components(
-        point_bt, point_bf, g, eta, paired=True
-    )
+    weights = rng.normal(size=(2, 3))
     np.testing.assert_allclose(
-        point_mean + point_deviation,
-        (mean[None] + deviation).reshape(-1),
+        spline.at_points(paired.time, paired.frequency, weights),
+        np.asarray(spline(weights)).reshape(-1),
         atol=1e-14,
     )
 
 
-def test_batched_paired_anova_preserves_duplicate_and_permuted_sites():
+def test_batched_paired_tensor_preserves_duplicate_and_permuted_sites():
     grid = _grid()
     spline, paired = _spline(grid), _paired(grid)
+    pair = prepare_grid_prior(spline)
     indices = np.array([8, 2, 2, 10, 0])
-    bt, bf = spline.design()
-    point_bt, point_bf = spline.design(
-        paired.time[indices], paired.frequency[indices]
+    bt, bf = grid_design(grid, spline, pair)[:2]
+    point_bt = np.asarray(spline.time.design_at(paired.time[indices]))
+    point_bf = np.asarray(
+        spline.frequency.design_at(paired.frequency[indices])
     )
     rng = np.random.default_rng(390)
-    g, eta = rng.normal(size=(2, 3, 3)), rng.normal(size=(2, 3, 1, 3))
-    mean, deviation = anova_components(bt, bf, g, eta)
-    point_mean, point_deviation = anova_components(
-        point_bt, point_bf, jnp.asarray(g), jnp.asarray(eta), paired=True
+    coefficients = rng.normal(size=(2, 3, 6))
+    rectangular = np.einsum(
+        "qk,cdk->cdq", grid_field_design(bt, bf, paired=False), coefficients
     )
-    expected = (mean[..., None, :] + deviation).reshape(2, 3, -1)[..., indices]
-    np.testing.assert_allclose(
-        point_mean + point_deviation, expected, atol=1e-14
+    points = np.einsum(
+        "qk,cdk->cdq",
+        grid_field_design(point_bt, point_bf, paired=True),
+        coefficients,
     )
+    np.testing.assert_allclose(points, rectangular[..., indices], atol=1e-14)
 
 
 def test_paired_compression_permutation_and_masks_retain_reference():
@@ -308,7 +309,7 @@ def test_paired_compression_permutation_and_masks_retain_reference():
         masked.reference_frequency, data.reference_frequency
     )
     np.testing.assert_allclose(
-        _spline(masked).time_basis.mean(axis=0), 0, atol=1e-14
+        _spline(masked).time.basis.sum(axis=1), 1, atol=1e-14
     )
     with pytest.raises(ValueError, match="grid observations"):
         coarse_grain_wishart_grid(masked)
@@ -353,58 +354,45 @@ def test_scattered_initialization_crosses_chunk_boundary_and_matches_qr():
     q = 4099
     rng = np.random.default_rng(580)
     data = _paired(_grid())
-    spline, config = _spline(data), PowerConfig(structure="anova")
-    pair = prepare_anova_prior(spline, config)
+    spline, config = _spline(data), PowerConfig(structure="tensor")
+    pair = prepare_grid_prior(spline)
     time, frequency = rng.uniform(0, 1, q), rng.uniform(0.1, 1, q)
-    bt, bf = spline.design(time, frequency)
+    bt = np.asarray(spline.time.design_at(time)) @ pair["U_time"]
+    bf = np.asarray(spline.frequency.design_at(frequency)) @ pair["U_freq"]
+    design = np.array([np.kron(t, f) for t, f in zip(bt, bf, strict=True)])
     counts = rng.integers(1, 4, q).astype(float)
     counts[0] = 0
     target = 0.5 + 0.2 * time - 0.3 * frequency + 0.1 * time * frequency
     marginal = counts * np.exp(target)
     marginal[0] = np.nan
-    actual = _initialize_scattered(marginal, counts, bt, bf, pair, config)
+    actual = _initialize_field(marginal, counts, design, pair, config)
     active = counts > 0
-    bt_eig, bf_eig = bt[active] @ pair["U_time"], bf[active] @ pair["U_freq"]
-    design = np.column_stack(
-        (
-            bf_eig,
-            np.array(
-                [np.kron(t, f) for t, f in zip(bt_eig, bf_eig, strict=True)]
-            ),
-        )
-    )
     penalty = (
-        np.r_[
-            config.init_penalty_freq * pair["lam_freq"],
-            (
-                config.init_penalty_time * pair["lam_time"][:, None]
-                + config.init_penalty_freq * pair["lam_freq"][None]
-            ).reshape(-1),
-        ]
-        + config.ridge_eps
-    )
+        config.init_penalty_time * pair["lam_time"][:, None]
+        + config.init_penalty_freq * pair["lam_freq"][None]
+    ).reshape(-1)
     weights = counts[active] / counts.max()
     from log_psplines.inference.power import power_floor
 
     mean = marginal[active] / counts[active]
     expected = np.linalg.lstsq(
         np.vstack(
-            (np.sqrt(weights)[:, None] * design, np.diag(np.sqrt(penalty)))
+            (
+                np.sqrt(weights)[:, None] * design[active],
+                np.diag(np.sqrt(penalty)),
+            )
         ),
         np.r_[
             np.sqrt(weights) * np.log(mean + power_floor(mean)), np.zeros(6)
         ],
         rcond=None,
     )[0]
-    np.testing.assert_allclose(
-        np.r_[actual["g"], actual["eta"]], expected, atol=2e-12
-    )
+    np.testing.assert_allclose(actual["s"], expected, atol=2e-12)
     permutation = rng.permutation(q)
-    reordered = _initialize_scattered(
+    reordered = _initialize_field(
         marginal[permutation],
         counts[permutation],
-        bt[permutation],
-        bf[permutation],
+        design[permutation],
         pair,
         config,
     )
@@ -437,7 +425,7 @@ def test_public_paired_fit_preview_and_native_roundtrip(tmp_path):
     result = fit(
         data,
         PowerConfig(
-            structure="anova",
+            structure="tensor",
             degree_time=1,
             degree_freq=1,
             penalty_order_time=1,

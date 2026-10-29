@@ -67,10 +67,9 @@ def _pointwise_multivar_log_likelihood(
         )
         basis_delta = np.asarray(bases_delta[channel_index], dtype=np.float64)
         log_delta_sq = np.einsum("fk,cdk->cdf", basis_delta, weights_delta)
-        log_delta_sq = np.clip(log_delta_sq, a_min=-80.0, a_max=80.0)
         delta_eff_sq = np.exp(log_delta_sq)
 
-        pointwise = -nb * nh * np.log(delta_eff_sq)
+        pointwise = -nb * nh * log_delta_sq
 
         u_re_channel = u_re[:, channel_index, :]
         u_im_channel = u_im[:, channel_index, :]

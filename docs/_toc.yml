@@ -10,6 +10,8 @@ parts:
         title: Multivariate stationary PSD
       - file: examples/timevarying-example
         title: Time-varying PSD
+      - file: examples/multivariate-timevarying-example
+        title: Multivariate time-varying PSD
   - caption: Reference
     chapters:
       - file: api

@@ -131,11 +131,53 @@ Parametric model parameters without Gaussian spline priors are unchanged.
 Multivariate Cholesky splines
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+The target is the Hermitian spectral density matrix :math:`S(t,f)`: its
+diagonal entries are channel PSDs, and its off-diagonal entries are complex
+cross-spectra. Write :math:`h_j=\log D_{jj}` and let :math:`T` be unit lower
+triangular with :math:`T_{jl}=-\theta_{jl}` for :math:`j>l`. Then
+
+.. math::
+
+   D=\operatorname{diag}(e^{h_1},\ldots,e^{h_p}),\qquad
+   S^{-1}=T^\dagger D^{-1}T,\qquad S=T^{-1}D(T^{-1})^\dagger.
+
+There are :math:`p^2` real spline fields: :math:`p` log innovation variances
+and the real and imaginary parts of :math:`p(p-1)/2` regression coefficients.
+The regression coefficients are not themselves CSD entries. For two channels,
+
+.. math::
+
+   S=\begin{pmatrix}
+      e^{h_1} & e^{h_1}\theta_{21}^*\\
+      e^{h_1}\theta_{21} & e^{h_2}+e^{h_1}|\theta_{21}|^2
+   \end{pmatrix}.
+
+Every reconstructed draw is positive definite. Elementwise posterior medians
+and quantiles need not themselves form a positive-definite matrix.
+The :doc:`multivariate time-varying tutorial <examples/multivariate-timevarying-example>`
+walks through a simulated complex-coefficient example, reconstruction and
+sampling diagnostics.
+
 ``WishartGridData`` uses ordinary ``LogPSpline`` fields: one spline for each
 log innovation variance and each real or imaginary regression coefficient.
 A frequency-only model has ``time=None``. A tensor model evaluates each
 field as ``Bt @ W @ Bf.T``, or at exact paired coordinates. There is no
 multivariate ANOVA decomposition or alternative matrix ANOVA path.
+
+At each observed cell, normalized complex coefficients have covariance
+:math:`S(t,f)`. With :math:`Y=\sum_{r=1}^{n}x_rx_r^\dagger`, the likelihood is
+
+.. math::
+
+   \log L=-\sum_{t,f}\left[n_{tf}\log\det S(t,f)
+           +\operatorname{tr}\{S(t,f)^{-1}Y_{tf}\}\right]+\mathrm{constant}
+
+for independent zero-mean proper complex Gaussian coefficients and unit ENBW.
+The local Fourier frontends use this as a Whittle approximation; tapering,
+leakage and dependence between observations affect that approximation. The
+stored ENBW divides the log-likelihood as described below. Real same-cell WDM
+outer products describe a real covariance, not the full complex CSD. A multivariate WDM observation
+model connecting cross-cell covariances to :math:`S(t,f)` is not implemented.
 
 Conditional on the diagonal field and smoothing scales, cross-spectrum
 coefficients still enter the complex regression linearly. They are integrated

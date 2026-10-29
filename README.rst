@@ -64,6 +64,7 @@ Next Steps
 - Follow the `univariate example <docs/examples/univar-example.ipynb>`_.
 - Explore the `multivariate example <docs/examples/multivariate-example.ipynb>`_.
 - Try the `time-varying example <docs/examples/timevarying-example.ipynb>`_.
+- Fit PSDs and complex cross-spectra with the `multivariate time-varying example <docs/examples/multivariate-timevarying-example.ipynb>`_.
 - Read the `spectral conventions <docs/conventions.rst>`_.
 
 Research studies

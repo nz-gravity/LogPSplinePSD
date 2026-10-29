@@ -3,9 +3,9 @@ Home
 
 ``LogPSplinePSD`` estimates power spectral densities (PSDs) with Bayesian
 log-P-splines. It is built around multichannel frequency-domain inference:
-time series are converted into Wishart sufficient statistics, smooth spline
-models are fitted with NumPyro/JAX. Scalar time-varying inference is also
-available for WDM and moving-periodogram powers.
+time series are converted into Wishart sufficient statistics, and smooth spline
+models are fitted with NumPyro/JAX. Time-varying inference supports scalar WDM
+and moving-periodogram powers, and multivariate complex Fourier statistics.
 
 
 .. raw:: html
@@ -42,6 +42,7 @@ Where To Start
 1. :doc:`Stationary PSD <examples/univar-example>` fits a single-channel spectrum.
 2. :doc:`Multivariate stationary PSD <examples/multivariate-example>` fits spectral matrices and coherence.
 3. :doc:`Time-varying PSD <examples/timevarying-example>` fits scalar WDM and moving-periodogram powers.
+4. :doc:`Multivariate time-varying PSD <examples/multivariate-timevarying-example>` fits PSDs, complex cross-spectra and coherence on a time-frequency grid.
 
 The :doc:`api` covers configuration, results, spectral conventions and advanced
 reference-spectrum fits. Contributor instructions are in the repository's

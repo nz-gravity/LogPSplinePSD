@@ -67,7 +67,7 @@ Next Steps
 - Read the `spectral conventions <docs/conventions.rst>`_.
 
 Research studies
----------------
+----------------
 
 Moving-periodogram, Dynamic Whittle and LISA comparison studies live in the
 separate `moving_periodogram_lisa_studies repository

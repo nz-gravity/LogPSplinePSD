@@ -318,11 +318,12 @@ def prepare_components(
         # Keep initialization empirical for now. The analytical PSD may
         # guide knot placement, but the starting spline target should still
         # reflect the observed Wishart matrix on the retained grid.
-        empirical_diag_power = np.real(Y_np[:, i, i]) / Nb
-        empirical_diag_power = np.maximum(
-            empirical_diag_power, 1e-12
-        )  # Avoid log(0)
-        log_diag_target = np.log(empirical_diag_power)
+        # D contains conditional innovation variances, not marginal powers.
+        # Scores already decompose Y/Nb; remove the remaining FFT duration
+        # and coarse-bin replicate count to match the likelihood's units.
+        log_diag_target = diagonal_scores[i] - np.log(
+            float(fft_data.duration) * int(fft_data.Nh)
+        )
         diagonal_model = _build_pspline_from_log_target(
             log_target=log_diag_target,
             knots=knots_diag,

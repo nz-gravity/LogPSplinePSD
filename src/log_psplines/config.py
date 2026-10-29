@@ -67,7 +67,10 @@ VI and NUTS
 ``method``
    Either ``"nuts"`` (default) or ``"vi"``. VI and NUTS are independent,
    standalone fits: VI never seeds NUTS's initial values, and the unselected
-   method never executes.
+   method never executes. Both integrate out Gaussian stationary cross-spectrum
+   coefficients and restore conditional posterior draws afterward. There is no
+   separate coefficient-sampling mode. Multivariate fits require float64
+   (set ``JAX_ENABLE_X64=true`` before Python starts).
 
 ``method="vi"``
    Fit the same model with NumPyro stochastic variational inference. Use

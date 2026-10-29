@@ -22,10 +22,8 @@ from numpyro.infer.autoguide import (
 )
 from numpyro.infer.initialization import init_to_value
 
-from log_psplines.inference.model import (
-    _blocked_channel_model,
-    channel_model_kwargs,
-)
+from log_psplines.inference.collapsed import sample_conditional_theta
+from log_psplines.inference.model import prepare_channel_model
 
 
 def _values_to_dataset(
@@ -268,13 +266,23 @@ def run_multivariate_vi(
     rng_key: jax.Array,
     steps: int = 1500,
     lr: float = 1e-2,
-    guide: str = "diag",
+    guide: str | Callable[..., Any] = "diag",
     posterior_draws: int = 256,
     eta: float = 1.0,
     verbose: bool = False,
     early_stopping: bool = True,
 ) -> VIResult:
-    """Fit independent Cholesky channels and merge constrained draws.
+    """Fit reduced Cholesky rows and restore their Gaussian coefficients.
+
+    The guide approximates only the diagonal spline coefficients and all
+    smoothing scales. Every guide draw is paired with one independent draw
+    from the exact joint conditional Gaussian of that row's theta weights.
+    Thus the joint approximation is q(z) p(theta | z, data); marginalization
+    does not make the approximation q(z) exact.
+
+    ``posterior_draws <= 0`` retains one guide-median hyperparameter point
+    and one conditional theta draw. This is a reproducible single-sample
+    preview, not a joint posterior median or an uncertainty summary.
 
     Timings sum the sequential fits; ``steps_run`` sums their SVI updates.
     ``block_<index>_*`` timing entries retain each channel's measurements.
@@ -282,20 +290,45 @@ def run_multivariate_vi(
     kwargs = {**model_kwargs, "eta": eta}
     n_channels = int(kwargs["n_channels"])
     keys = jax.random.split(rng_key, n_channels)
-    results = [
-        fit_vi(
-            _blocked_channel_model,
-            rng_key=keys[index],
+    results = []
+    for index in range(n_channels):
+        model, channel_kwargs, initial = prepare_channel_model(kwargs, index)
+        fit_key, conditional_key = jax.random.split(keys[index])
+        result = fit_vi(
+            model,
+            rng_key=fit_key,
             vi_steps=steps,
             optimizer_lr=lr,
-            model_kwargs=channel_model_kwargs(kwargs, index),
+            model_kwargs=channel_kwargs,
             guide=guide,
             posterior_draws=posterior_draws,
             progress_bar=verbose,
+            init_values=initial,
             early_stopping=early_stopping,
         )
-        for index in range(n_channels)
-    ]
+        if index > 0:
+            started = perf_counter()
+            if result.posterior is None:
+                raise RuntimeError("VI returned no reduced posterior draws")
+            recovered = sample_conditional_theta(
+                {
+                    name: variable.values
+                    for name, variable in result.posterior.data_vars.items()
+                },
+                channel_kwargs,
+                conditional_key,
+            )
+            recovered.pop(f"log_likelihood_block_{index}")
+            # fit_vi gives every guide a single chain axis. Remove that axis
+            # before the common VI conversion restores it with its labels.
+            restored = _values_to_dataset(
+                {name: value[0] for name, value in recovered.items()}
+            )
+            result.posterior = xr.merge([result.posterior, restored])
+            result.timings["conditional_draw_seconds"] = (
+                perf_counter() - started
+            )
+        results.append(result)
     losses_per_block = [result.losses for result in results]
     n_common = min(int(losses.size) for losses in losses_per_block)
     losses = jnp.sum(

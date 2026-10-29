@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
@@ -92,12 +94,7 @@ def _sample_pspline_block(
     return weights
 
 
-__all__ = [
-    "_blocked_channel_model",
-]
-
-
-def _blocked_channel_model(
+def _scalar_channel_model(
     channel_index: int,
     u_re_channel: jnp.ndarray,
     u_im_channel: jnp.ndarray,
@@ -105,10 +102,6 @@ def _blocked_channel_model(
     u_im_prev: jnp.ndarray,
     basis_delta: jnp.ndarray,
     penalty_delta: jnp.ndarray,
-    basis_theta_re_by_component: tuple[jnp.ndarray, ...],
-    penalty_theta_re_by_component: tuple[jnp.ndarray, ...],
-    basis_theta_im_by_component: tuple[jnp.ndarray, ...],
-    penalty_theta_im_by_component: tuple[jnp.ndarray, ...],
     duration: float,
     Nb: int,
     Nh: int,
@@ -116,80 +109,24 @@ def _blocked_channel_model(
     smoothing_parameterization: str = "centered",
     enbw: float = 1.0,
     eta: float = 1.0,
+    **unused_theta_kwargs: Any,
 ) -> None:
-    """NumPyro model for a single blocked multivariate Cholesky channel."""
-    channel_label = f"{channel_index}"
-
-    # --- Spline model for log(δ²_{jh}) ---
-    # Sample P-spline weights and evaluate: log_delta_sq[h] = log(δ²_{jh})
-    # δ²_{jh} is the j-th diagonal of D_h (the noise variance for this channel
-    # at coarse bin h in the Cholesky factorisation S^{-1} = T* D^{-1} T).
-    delta_weights = _sample_pspline_block(
-        sigma_name=f"sigma_delta_{channel_label}",
-        weights_name=f"weights_delta_{channel_label}",
-        penalty_matrix=penalty_delta,
-        roughness_scale=roughness_scale,
-        smoothing_parameterization=smoothing_parameterization,
+    """The first Cholesky row has no cross-spectrum weights to integrate."""
+    if channel_index != 0:
+        raise ValueError("The scalar channel model requires channel_index=0")
+    weights = _sample_pspline_block(
+        "sigma_delta_0",
+        "weights_delta_0",
+        penalty_delta,
+        roughness_scale,
+        smoothing_parameterization,
     )
-    # log_delta_sq[h] = B_h @ w  →  log(δ²_{jh}), shape (n_coarse_bins,)
-    log_delta_sq = build_spline(basis_delta, delta_weights)
-
-    n_freq = u_re_channel.shape[0]
-    # channel_index == j means there are j preceding channels (l = 0, …, j-1)
-    # whose Cholesky coefficients θ_{jl} couple into this channel's residual.
-    n_theta_block = channel_index
-
-    # --- Spline models for the complex Cholesky off-diagonal coefficients θ_{jl} ---
-    # For each preceding channel l < j, sample Re(θ_{jl}^(h)) and Im(θ_{jl}^(h))
-    # independently as P-splines over the coarse-bin axis h.
-    if n_theta_block > 0:
-        theta_re_components = []
-        theta_im_components = []
-
-        for theta_idx in range(n_theta_block):
-            basis_theta_re = basis_theta_re_by_component[theta_idx]
-            penalty_theta_re = penalty_theta_re_by_component[theta_idx]
-            theta_prefix = f"theta_re_{channel_label}_{theta_idx}"
-            theta_re_block = _sample_pspline_block(
-                sigma_name=f"sigma_{theta_prefix}",
-                weights_name=f"weights_{theta_prefix}",
-                penalty_matrix=penalty_theta_re,
-                roughness_scale=roughness_scale,
-                smoothing_parameterization=smoothing_parameterization,
-            )
-            # Re(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
-            theta_re_components.append(
-                build_spline(basis_theta_re, theta_re_block)
-            )
-
-            basis_theta_im = basis_theta_im_by_component[theta_idx]
-            penalty_theta_im = penalty_theta_im_by_component[theta_idx]
-            theta_im_prefix = f"theta_im_{channel_label}_{theta_idx}"
-            theta_im_block = _sample_pspline_block(
-                sigma_name=f"sigma_{theta_im_prefix}",
-                weights_name=f"weights_{theta_im_prefix}",
-                penalty_matrix=penalty_theta_im,
-                roughness_scale=roughness_scale,
-                smoothing_parameterization=smoothing_parameterization,
-            )
-            # Im(θ_{jl}^(h)) evaluated at each coarse bin, shape (n_coarse_bins,)
-            theta_im_components.append(
-                build_spline(basis_theta_im, theta_im_block)
-            )
-
-        # theta_re/im: shape (n_coarse_bins, n_theta_block=j)
-        # theta_re[h, l] = Re(θ_{jl}^(h)),  theta_im[h, l] = Im(θ_{jl}^(h))
-        theta_re = jnp.stack(theta_re_components, axis=1)
-        theta_im = jnp.stack(theta_im_components, axis=1)
-    else:
-        # Channel 0 has no preceding channels; residual equals the observation.
-        theta_re = jnp.zeros((n_freq, 0))
-        theta_im = jnp.zeros((n_freq, 0))
-
-    log_likelihood = wishart_log_likelihood(
+    log_delta_sq = build_spline(basis_delta, weights)
+    empty_theta = jnp.zeros((u_re_channel.shape[0], 0))
+    likelihood = wishart_log_likelihood(
         log_delta_sq,
-        theta_re,
-        theta_im,
+        empty_theta,
+        empty_theta,
         u_re_channel,
         u_im_channel,
         u_re_prev,
@@ -200,10 +137,77 @@ def _blocked_channel_model(
         enbw=enbw,
         eta=eta,
     )
-    numpyro.factor(f"likelihood_channel_{channel_label}", log_likelihood)
-    numpyro.deterministic(
-        f"log_likelihood_block_{channel_label}", log_likelihood
+    numpyro.factor("likelihood_channel_0", likelihood)
+    numpyro.deterministic("log_likelihood_block_0", likelihood)
+
+
+def empirical_init_values(kwargs: dict[str, Any], channel: int) -> dict:
+    """Initialize the reduced state from empirical conditional-spectrum pilots.
+
+    The pilot selects starting values only; it does not change any prior.
+    Theta weights are integrated out, so only their smoothing scales enter
+    the numerical inference state.
+    """
+    blocks = [
+        (
+            f"delta_{channel}",
+            kwargs["penalties_delta"][channel],
+            kwargs["initial_weights_delta"][channel],
+        )
+    ]
+    for previous in range(channel):
+        for part in ("re", "im"):
+            blocks.append(
+                (
+                    f"theta_{part}_{channel}_{previous}",
+                    kwargs[f"penalties_theta_{part}"][channel][previous],
+                    kwargs[f"initial_weights_theta_{part}"][channel][previous],
+                )
+            )
+    values = {}
+    for label, penalty, weights in blocks:
+        penalty, weights = np.asarray(penalty), np.asarray(weights)
+        sigma = float(
+            np.clip(
+                np.sqrt(
+                    max(float(weights @ penalty @ weights), 0.0) / weights.size
+                ),
+                min(1e-3, float(kwargs["roughness_scale"])),
+                float(kwargs["roughness_scale"]),
+            )
+        )
+        values[f"sigma_{label}"] = sigma
+        if label.startswith("delta"):
+            if kwargs.get("smoothing_parameterization") == "noncentered":
+                values[f"weights_{label}_raw"] = jnp.asarray(
+                    np.linalg.cholesky(penalty).T @ weights / sigma
+                )
+            else:
+                values[f"weights_{label}"] = jnp.asarray(weights)
+    return values
+
+
+def prepare_channel_model(
+    model_kwargs: dict[str, Any],
+    channel_index: int,
+) -> tuple[Callable[..., None], dict[str, Any], dict[str, Any]]:
+    """Shared stationary row model and initialization for NUTS and VI.
+
+    Every row with predecessors integrates all of its theta coefficients.
+    The first row remains a scalar log-spectrum model.
+    """
+    kwargs = channel_model_kwargs(model_kwargs, channel_index)
+    initial = empirical_init_values(model_kwargs, channel_index)
+    if channel_index == 0:
+        return _scalar_channel_model, kwargs, initial
+    # Local import keeps the spline-prior helper available to collapsed.py
+    # without a module initialization cycle.
+    from log_psplines.inference.collapsed import (
+        collapsed_channel_model,
+        prepare_collapsed_channel,
     )
+
+    return collapsed_channel_model, prepare_collapsed_channel(kwargs), initial
 
 
 def prepare_model(
@@ -214,6 +218,10 @@ def prepare_model(
         raise ValueError("roughness_scale must be finite and positive")
     if config.smoothing_parameterization not in ("centered", "noncentered"):
         raise ValueError("Unknown smoothing_parameterization")
+    if data.p > 1 and not jax.config.x64_enabled:
+        raise ValueError(
+            "Multivariate Gaussian marginalization requires JAX_ENABLE_X64=true"
+        )
     spline = prepare_components(
         data,
         n_knots=config.n_knots,
@@ -265,6 +273,17 @@ def prepare_model(
         "penalties_theta_im": penalties_theta_im,
         "roughness_scale": float(config.roughness_scale),
         "smoothing_parameterization": config.smoothing_parameterization,
+        "initial_weights_delta": tuple(
+            m.weights for m in spline.diagonal_models
+        ),
+        "initial_weights_theta_re": tuple(
+            tuple(spline.get_theta_model("re", j, i).weights for i in range(j))
+            for j in range(p)
+        ),
+        "initial_weights_theta_im": tuple(
+            tuple(spline.get_theta_model("im", j, i).weights for i in range(j))
+            for j in range(p)
+        ),
         "duration": float(getattr(data, "duration", 1.0) or 1.0),
         "Nb": int(data.Nb),
         "Nh": int(data.Nh),

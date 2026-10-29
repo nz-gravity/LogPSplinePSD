@@ -288,6 +288,7 @@ def apply_coarse_grain_multivar_fft(
         channel_stds=fft.channel_stds,
         Nh=Nh,
         enbw=float(getattr(fft, "enbw", 1.0) or 1.0),
+        preprocessing=fft.preprocessing,
     )
 
     return fft_coarse

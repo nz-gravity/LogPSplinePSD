@@ -56,8 +56,9 @@ Frequency Selection
    Number of non-overlapping time-domain blocks used to build Wishart
    statistics. ``Nb`` must divide the number of samples.
 
-``wishart_window`` and ``wishart_detrend``
-   Optional block taper and detrending mode used during FFT preprocessing.
+``wishart_window``
+   Optional block taper used during FFT preprocessing. Each channel's
+   full-record mean is removed once before blocking; blocks are not detrended.
    Non-rectangular windows apply an equivalent-noise-bandwidth correction in
    the likelihood.
 
@@ -151,7 +152,6 @@ class StationaryConfig:
     coarse_grain_config: CoarseGrainConfig | dict | None = None
     Nb: int = 1
     wishart_window: str | tuple | None = None
-    wishart_detrend: str | bool = "constant"
     wishart_floor_fraction: float | None = None
 
     n_knots: int | dict[str, int] = 10

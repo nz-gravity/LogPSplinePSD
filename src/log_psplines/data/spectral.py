@@ -70,8 +70,12 @@ class WishartData:
     # posterior width accounts for the reduced effective DOF per frequency
     # bin when a non-rectangular taper is used.
     enbw: float = 1.0
+    # Describes the operations actually used to construct these statistics.
+    # Empty for externally supplied statistics with unspecified provenance.
+    preprocessing: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        self.preprocessing = dict(self.preprocessing)
         self.u_re = np.asarray(self.u_re, dtype=np.float64)
         self.u_im = np.asarray(self.u_im, dtype=np.float64)
         self.freq = np.asarray(self.freq, dtype=np.float64)
@@ -167,6 +171,7 @@ class WishartData:
             duration=self.duration,
             channel_stds=self.channel_stds,
             enbw=self.enbw,
+            preprocessing=self.preprocessing,
         )
 
     def cut(self, fmin: float, fmax: float) -> "WishartData":

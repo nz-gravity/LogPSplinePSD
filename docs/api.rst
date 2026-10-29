@@ -20,6 +20,43 @@ Fitting and results
 .. autoclass:: log_psplines.config.PowerConfig
    :members:
 
+Stationary mean removal
+~~~~~~~~~~~~~~~~~~~~~~~
+
+All stationary time-domain entry points remove each channel's full-record
+mean before splitting the data into blocks and applying the chosen taper.
+This is a fixed convention: no means or linear trends are fitted separately
+inside the blocks. The fitting pipeline combines global centering with
+channel standardization, then passes the centered data directly to the FFT.
+The direct FFT, Wishart and empirical Welch/CSD helpers use the same convention.
+
+Subtracting a block mean before tapering would change its Fourier coefficients
+by a frequency-dependent term:
+
+.. math::
+
+   \mathcal{F}\{w(x-\bar{x}_b)\}_k
+   = \mathcal{F}\{wx\}_k - \bar{x}_b\mathcal{F}\{w\}_k.
+
+For a non-rectangular taper, this term can reach retained frequencies and
+distort a quiet spectrum such as LISA's low-frequency T channel. Global
+centering avoids the additional block-mean term. It removes a full-record
+constant offset; it does not remove time-dependent drift or eliminate the
+ordinary spectral leakage and bin-averaging effects of the analysis window.
+
+**Migration:** remove ``wishart_detrend`` from ``StationaryConfig`` and
+``detrend`` from calls to ``compute_wishart``, ``TimeSeries.to_wishart_stats``
+and ``empirical_spectrum`` (including ``get_empirical_psd`` forwarding).
+These arguments have been removed, including their former ``False`` value;
+there is no replacement selector. Pass ``wishart_floor_fraction`` by keyword
+if used. The window selection is unchanged.
+
+``WishartData.preprocessing`` records the applied ``mean_removal`` and
+``window``. These descriptions survive masking and coarse-graining and are
+saved in ``result.metadata`` and NetCDF files. When precomputed statistics
+have unspecified preprocessing, the result records ``"unknown"`` rather
+than inferring their history from the fitting configuration.
+
 Stationary Gaussian marginalization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

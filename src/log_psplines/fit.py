@@ -109,6 +109,8 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
             "method": config.method,
             "theta_parameterization": "marginalized",
             "inference_dtype": str(model_kwargs["u_re"].dtype),
+            "mean_removal": data.preprocessing.get("mean_removal", "unknown"),
+            "window": data.preprocessing.get("window", "unknown"),
         },
         vi=vi,
         log_likelihood=log_likelihood,

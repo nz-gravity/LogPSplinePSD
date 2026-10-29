@@ -5,10 +5,38 @@ CHANGELOG
 =========
 
 
+.. _changelog-v1.0.0:
+
+v1.0.0 (2026-10-29)
+===================
+
+Breaking
+--------
+
+* fix!: center stationary data globally before blocking (#56)
+
+Remove per-block detrending and its configuration arguments. Use one full-record channel mean subtraction before blocking and tapering across stationary fits, direct FFT/Wishart helpers, and empirical Welch spectra.
+
+Preserve actual preprocessing provenance through masking, pooling and saved results. Document the API change and verify the Fourier construction, quiet-spectrum leakage regression and result round trips. (`efd0c7d`_)
+
+Unknown
+-------
+
+* Update README.rst (`0416ea0`_)
+
+.. _efd0c7d: https://github.com/nz-gravity/LogPSplinePSD/commit/efd0c7d8abe6fbb090ed8eb1a83da3481b623a8f
+.. _0416ea0: https://github.com/nz-gravity/LogPSplinePSD/commit/0416ea052c953eb44b72f15619c5811f78a71ea0
+
+
 .. _changelog-v0.3.0:
 
 v0.3.0 (2026-10-29)
 ===================
+
+Chores
+------
+
+* chore(release): 0.3.0 (`fad7ce6`_)
 
 Features
 --------
@@ -19,6 +47,7 @@ Integrate stationary cross-spectrum spline weights analytically for both NUTS an
 
 Add scalar and matrix completion-of-the-square explanations to the multivariate tutorial, with tests for Gaussian identities, gradients, covariance recovery, and inference outputs. (`0167b8d`_)
 
+.. _fad7ce6: https://github.com/nz-gravity/LogPSplinePSD/commit/fad7ce6e3815879c49f07cebdaf35000190878d8
 .. _0167b8d: https://github.com/nz-gravity/LogPSplinePSD/commit/0167b8d8b9969c467a284fefa2b933f69d9fbc00
 
 

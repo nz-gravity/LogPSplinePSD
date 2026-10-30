@@ -171,7 +171,7 @@ def Y_to_S(
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
-    Nh: int = 1,
+    Nh: int | np.ndarray = 1,
 ) -> Complex[np.ndarray, "N p p"]:
     """Convert Wishart matrices into one-sided PSD matrices.
 
@@ -189,9 +189,14 @@ def Y_to_S(
         raise ValueError("duration must be positive")
 
     Nb_val = _as_positive_int("Nb", Nb)
-    Nh_val = _as_positive_int("Nh", Nh)
-
-    psd = Y / (float(Nb_val * Nh_val) * duration_f)
+    Nh_val = np.asarray(Nh)
+    if (Nh_val.ndim not in (0, 1) or (Nh_val.ndim == 1 and Nh_val.shape != (Y.shape[0],))
+        or Nh_val.dtype.kind not in "iu" or np.any(Nh_val <= 0)):
+        raise ValueError("Nh must be positive integers, scalar or (N,)")
+    denominator = Nb_val * Nh_val.astype(np.float64) * duration_f
+    if Nh_val.ndim == 1:
+        denominator = denominator[:, None, None]
+    psd = Y / denominator
     psd *= float(scaling_factor)
     return psd
 
@@ -202,7 +207,7 @@ def wishart_u_to_psd(
     *,
     duration: float = 1.0,
     scaling_factor: float = 1.0,
-    Nh: int = 1,
+    Nh: int | np.ndarray = 1,
 ) -> Complex[np.ndarray, "N p p"]:
     """Convenience wrapper combining :func:`U_to_Y` and conversion."""
 

@@ -190,8 +190,12 @@ def Y_to_S(
 
     Nb_val = _as_positive_int("Nb", Nb)
     Nh_val = np.asarray(Nh)
-    if (Nh_val.ndim not in (0, 1) or (Nh_val.ndim == 1 and Nh_val.shape != (Y.shape[0],))
-        or Nh_val.dtype.kind not in "iu" or np.any(Nh_val <= 0)):
+    if (
+        Nh_val.ndim not in (0, 1)
+        or (Nh_val.ndim == 1 and Nh_val.shape != (Y.shape[0],))
+        or Nh_val.dtype.kind not in "iu"
+        or np.any(Nh_val <= 0)
+    ):
         raise ValueError("Nh must be positive integers, scalar or (N,)")
     denominator = Nb_val * Nh_val.astype(np.float64) * duration_f
     if Nh_val.ndim == 1:

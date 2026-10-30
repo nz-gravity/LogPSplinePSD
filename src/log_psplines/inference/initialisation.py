@@ -322,7 +322,7 @@ def prepare_components(
         # Scores already decompose Y/Nb; remove the remaining FFT duration
         # and coarse-bin replicate count to match the likelihood's units.
         log_diag_target = diagonal_scores[i] - np.log(
-            float(fft_data.duration) * int(fft_data.Nh)
+            float(fft_data.duration) * fft_data.freq_bin_counts
         )
         diagonal_model = _build_pspline_from_log_target(
             log_target=log_diag_target,

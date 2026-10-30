@@ -129,9 +129,19 @@ class WishartData:
         self.Nh = int(self.Nh)
         if self.Nh <= 0:
             raise ValueError("Nh must be a positive integer")
-        counts = np.full(self.N, self.Nh) if self.freq_bin_counts is None else np.asarray(self.freq_bin_counts)
-        if counts.shape != (self.N,) or counts.dtype.kind not in "iu" or np.any(counts <= 0):
-            raise ValueError("freq_bin_counts must be positive integers with shape (N,)")
+        counts = (
+            np.full(self.N, self.Nh)
+            if self.freq_bin_counts is None
+            else np.asarray(self.freq_bin_counts)
+        )
+        if (
+            counts.shape != (self.N,)
+            or counts.dtype.kind not in "iu"
+            or np.any(counts <= 0)
+        ):
+            raise ValueError(
+                "freq_bin_counts must be positive integers with shape (N,)"
+            )
         self.freq_bin_counts = counts.astype(np.int64, copy=True)
 
         self.enbw = float(self.enbw)

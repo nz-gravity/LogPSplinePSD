@@ -72,7 +72,8 @@ def preprocess_to_freq_domain(
     if coarse_config.enabled:
         if coarse_config.method == "adaptive":
             spec = compute_adaptive_binning_structure(
-                processed, tolerance=coarse_config.tolerance,
+                processed,
+                tolerance=coarse_config.tolerance,
                 max_bin_width=coarse_config.max_bin_width,
                 pilot_window=coarse_config.pilot_window,
             )

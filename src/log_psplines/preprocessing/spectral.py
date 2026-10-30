@@ -17,6 +17,7 @@ from log_psplines.data.timeseries import TimeSeries
 from log_psplines.preprocessing.coarse_grain import (
     CoarseGrainConfig,
     apply_coarse_grain_multivar_fft,
+    compute_adaptive_binning_structure,
     compute_binning_structure,
 )
 from log_psplines.preprocessing.periodogram import (
@@ -56,19 +57,38 @@ def preprocess_to_freq_domain(
         coarse_config = CoarseGrainConfig()
     elif isinstance(coarse_config, dict):
         coarse_config = CoarseGrainConfig(**coarse_config)
+    bands = _normalize_excluded_frequency_bands(config.exclude_freq_bands)
+    # Adaptive bins must never straddle a physically excluded fine-frequency
+    # band. Fixed binning retains its historical post-binning mask behavior.
+    if coarse_config.enabled and coarse_config.method == "adaptive" and bands:
+        fine_mask = np.ones(processed.N, dtype=bool)
+        for low, high in bands:
+            fine_mask &= ~((processed.freq >= low) & (processed.freq <= high))
+        if not fine_mask.any():
+            raise ValueError("Frequency masking removed all inference bins.")
+        processed = processed.apply_mask(fine_mask)
+        bands = ()
+
     if coarse_config.enabled:
-        spec = compute_binning_structure(
-            processed.freq, Nc=coarse_config.Nc, Nh=coarse_config.Nh
-        )
+        if coarse_config.method == "adaptive":
+            spec = compute_adaptive_binning_structure(
+                processed, tolerance=coarse_config.tolerance,
+                max_bin_width=coarse_config.max_bin_width,
+                pilot_window=coarse_config.pilot_window,
+            )
+        else:
+            spec = compute_binning_structure(
+                processed.freq, Nc=coarse_config.Nc, Nh=coarse_config.Nh
+            )
+        fine_count = processed.N
         processed = apply_coarse_grain_multivar_fft(processed, spec)
-        kept_percent = 100.0 / float(spec.Nh)
+        kept_percent = 100.0 * spec.Nc / fine_count
         logger.info(
-            f"Coarse-grained multivariate FFT: {spec} "
+            f"Coarse-grained multivariate FFT ({coarse_config.method}): {spec} "
             f"(kept {kept_percent:.1f}%, "
             f"decimated {100.0 - kept_percent:.1f}%)."
         )
 
-    bands = _normalize_excluded_frequency_bands(config.exclude_freq_bands)
     if bands:
         mask = np.ones(processed.freq.shape, dtype=bool)
         for low, high in bands:

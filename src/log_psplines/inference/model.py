@@ -55,14 +55,15 @@ def channel_model_kwargs(
         "delta_coordinates": spline_coordinates(
             model_kwargs["bases_delta"][j],
             model_kwargs["penalties_delta"][j],
-            model_kwargs["Nb"]
-            * model_kwargs["Nh"]
+            (model_kwargs.get("counts") if model_kwargs.get("counts") is not None
+             else model_kwargs["Nb"] * model_kwargs["Nh"])
             * model_kwargs.get("eta", 1.0)
             / model_kwargs.get("enbw", 1.0),
         ),
         "duration": model_kwargs["duration"],
         "Nb": model_kwargs["Nb"],
         "Nh": model_kwargs["Nh"],
+        "counts": model_kwargs.get("counts"),
         "enbw": model_kwargs.get("enbw", 1.0),
         "eta": model_kwargs.get("eta", 1.0),
     }
@@ -101,6 +102,7 @@ def _scalar_channel_model(
     delta_coordinates: dict,
     enbw: float = 1.0,
     eta: float = 1.0,
+    counts: jnp.ndarray | None = None,
     **unused_theta_kwargs: Any,
 ) -> None:
     """The first Cholesky row has no cross-spectrum weights to integrate."""
@@ -124,6 +126,7 @@ def _scalar_channel_model(
         u_im_prev,
         Nb=Nb,
         Nh=Nh,
+        counts=counts,
         duration=duration,
         enbw=enbw,
         eta=eta,
@@ -278,6 +281,7 @@ def prepare_model(
         "duration": float(getattr(data, "duration", 1.0) or 1.0),
         "Nb": int(data.Nb),
         "Nh": int(data.Nh),
+        "counts": jnp.asarray(data.counts),
         "enbw": float(getattr(data, "enbw", 1.0)),
     }
     return kwargs, spline

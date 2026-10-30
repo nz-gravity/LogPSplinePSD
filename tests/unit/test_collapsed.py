@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import numpyro
 import pytest
+from numpyro.infer.util import log_density
 from scipy.linalg import block_diag
 from scipy.stats import multivariate_normal
 
@@ -17,6 +18,7 @@ from log_psplines.inference.collapsed import (
     prepare_collapsed_channel,
     sample_conditional_theta,
 )
+from log_psplines.inference.explicit import explicit_channel_model
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 
 
@@ -176,6 +178,110 @@ def test_marginal_gradients_match_independent_gaussian_identity():
     )
     np.testing.assert_allclose(
         jax.grad(target)(jnp.asarray(point)), expected, atol=2e-8, rtol=2e-7
+    )
+
+
+@pytest.mark.parametrize("parameterization", ["centered", "noncentered"])
+@pytest.mark.parametrize("backend", ["dense", "banded"])
+def test_explicit_and_marginalized_model_posteriors_match(
+    parameterization, backend
+):
+    """The real models obey p(z, theta) / p(theta | z, y) = p(z)."""
+    kw = jax.tree.map(
+        lambda x: jnp.asarray(x) if isinstance(x, np.ndarray) else x,
+        dict(
+            _example(),
+            smoothing_parameterization=parameterization,
+            theta_backend=backend,
+        ),
+    )
+    prepared = prepare_collapsed_channel(kw)
+    sizes = prepared["theta_sizes"]
+    names = prepared["theta_names"]
+    factors = [
+        np.linalg.cholesky(
+            np.asarray(kw[f"penalty_theta_{part}_by_component"][i])
+        )
+        for i in range(2)
+        for part in ("re", "im")
+    ]
+    prior_logdet = sum(2 * np.log(np.diag(factor)).sum() for factor in factors)
+    constant = 0.5 * (prior_logdet - sum(sizes) * np.log(2 * np.pi))
+    noncentered = parameterization == "noncentered"
+    suffix = "_raw" if noncentered else ""
+
+    def hyperparameters(v):
+        return {
+            f"weights_delta_2{suffix}": v[:3],
+            "sigma_delta_2": jnp.exp(v[-1]),
+            **{
+                f"sigma_{name}": jnp.exp(v[3 + i])
+                for i, name in enumerate(names)
+            },
+        }
+
+    def target(v):
+        return log_density(
+            collapsed_channel_model, (), prepared, hyperparameters(v)
+        )[0]
+
+    def reference(v, beta):
+        values = hyperparameters(jnp.asarray(v))
+        sigmas = np.exp(v[3:7])
+        offset = 0
+        for name, size, factor, sigma in zip(
+            names, sizes, factors, sigmas, strict=True
+        ):
+            block = beta[offset : offset + size]
+            values[f"weights_{name}{suffix}"] = jnp.asarray(
+                factor.T @ block / sigma if noncentered else block
+            )
+            offset += size
+        joint = log_density(explicit_channel_model, (), kw, values)[0]
+        delta_weights = np.exp(v[-1]) * v[:3] if noncentered else v[:3]
+        mean, covariance, *_ = _independent_gaussian(
+            kw, np.asarray(kw["basis_delta"]) @ delta_weights, sigmas
+        )
+        conditional = multivariate_normal.logpdf(
+            beta, mean=mean, cov=covariance
+        )
+        if noncentered:
+            # Transform the independently computed conditional density to
+            # the raw coordinates actually sampled by the explicit model.
+            conditional += (
+                np.asarray(sizes) @ np.log(sigmas) - 0.5 * prior_logdet
+            )
+        # The centered spline helper omits a fixed Gaussian normalization;
+        # it is independent of all sampled parameters and the posterior.
+        return float(joint) - conditional + (0 if noncentered else constant)
+
+    point = np.r_[[0.1, -0.3, 0.15], np.log([0.3, 0.4, 0.8, 0.6, 0.5])]
+    beta = np.linspace(-0.2, 0.4, sum(sizes))
+    for shift in (0, 0.2):
+        v = point + shift
+        for weights in (beta, -beta):
+            np.testing.assert_allclose(
+                target(jnp.asarray(v)),
+                reference(v, weights),
+                atol=2e-9,
+                rtol=2e-11,
+            )
+    step = 1e-5
+    expected = np.array(
+        [
+            (
+                reference(point + step * direction, beta)
+                - reference(point - step * direction, beta)
+            )
+            / (2 * step)
+            for direction in np.eye(len(point))
+        ]
+    )
+    np.testing.assert_allclose(
+        jax.jit(jax.grad(target))(jnp.asarray(point)),
+        expected,
+        atol=2e-7,
+        rtol=3e-7,
     )
 
 

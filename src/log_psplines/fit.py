@@ -107,7 +107,9 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
             "eta": float(config.eta),
             "sampling_eta": float(config.eta),
             "method": config.method,
-            "theta_parameterization": "marginalized",
+            "theta_parameterization": (
+                "marginalized" if config.marginalize_theta else "sampled"
+            ),
             "theta_backend": config.theta_backend,
             "inference_dtype": str(model_kwargs["u_re"].dtype),
             "mean_removal": data.preprocessing.get("mean_removal", "unknown"),
@@ -144,9 +146,10 @@ def fit(
     """Fit stationary Wishart data or time-frequency powers.
 
     ``config.method`` selects NUTS (default) or NumPyro VI for spline models.
-    Both integrate Gaussian stationary cross-spectrum coefficients and restore
-    their full conditional draws for spectrum reconstruction. Multivariate
-    stationary fits require JAX_ENABLE_X64=true.
+    ``config.marginalize_theta`` controls Gaussian integration of stationary
+    cross-spectrum coefficients for either method. The default integrates
+    them and restores full conditional draws; ``False`` samples them jointly.
+    Multivariate stationary fits require JAX_ENABLE_X64=true.
     Scalar powers use the tensor or ANOVA structure in PowerConfig.
     ParametricSpectrum also supports joint independent channel powers.
     A partition may pool rectangular powers while retaining native-grid

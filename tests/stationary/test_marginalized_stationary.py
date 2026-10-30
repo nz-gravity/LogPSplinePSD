@@ -1,4 +1,4 @@
-"""Public marginalized fits retain full complex-matrix posterior outputs."""
+"""Both theta formulations retain full complex-matrix posterior outputs."""
 
 import numpy as np
 import pytest
@@ -7,9 +7,12 @@ from log_psplines import PSDResult, StationaryConfig, WishartData, fit
 
 
 @pytest.mark.parametrize("parameterization", ["centered", "noncentered"])
-@pytest.mark.parametrize("backend", ["dense", "banded"])
-def test_marginalized_three_channel_roundtrip(
-    parameterization, backend, tmp_path
+@pytest.mark.parametrize(
+    "marginalize_theta,backend",
+    [(True, "dense"), (True, "banded"), (False, "auto")],
+)
+def test_three_channel_formulations_roundtrip(
+    parameterization, marginalize_theta, backend, tmp_path
 ):
     rng = np.random.default_rng(29)
     n, replicates = 24, 8
@@ -34,6 +37,7 @@ def test_marginalized_three_channel_roundtrip(
         StationaryConfig(
             smoothing_parameterization=parameterization,
             theta_backend=backend,
+            marginalize_theta=marginalize_theta,
             n_knots={"delta": 5, "theta_re": 4, "theta_im": 3},
             degree=2,
             knot_kwargs={"method": "uniform"},
@@ -54,9 +58,11 @@ def test_marginalized_three_channel_roundtrip(
     np.testing.assert_allclose(spectrum, spectrum.conj().swapaxes(-1, -2))
     assert np.linalg.eigvalsh(spectrum).min() > 0
     assert np.isfinite(result.log_likelihood.log_likelihood).all()
-    path = tmp_path / "marginalized.nc"
+    path = tmp_path / "stationary.nc"
     result.to_netcdf(path)
     restored = PSDResult.from_netcdf(path)
-    assert restored.metadata["theta_parameterization"] == "marginalized"
+    assert restored.metadata["theta_parameterization"] == (
+        "marginalized" if marginalize_theta else "sampled"
+    )
     assert restored.metadata["theta_backend"] == backend
     np.testing.assert_allclose(restored.spectral_density, spectrum)

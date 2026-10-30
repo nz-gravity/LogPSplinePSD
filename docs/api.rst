@@ -61,45 +61,56 @@ than inferring their history from the fitting configuration.
 Stationary Gaussian marginalization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Both stationary NUTS and VI integrate the Gaussian cross-spectrum spline
-coefficients out of the numerical fit. The diagonal-spectrum coefficients
-and all smoothing scales remain unknown. Each retained draw restores the
-cross-spectrum coefficients from their joint conditional Gaussian before
-reconstructing the spectral matrix, so ``weights_theta_*`` and their
-uncertainty remain available in ``result.posterior``. This is the only
-stationary multivariate inference path; no configuration switch is needed.
+``StationaryConfig(marginalize_theta=True)`` is the default for both NUTS and
+VI. It integrates the Gaussian cross-spectrum spline coefficients out of
+the numerical fit, leaving the diagonal-spectrum coefficients and all
+smoothing scales unknown. Each retained draw restores the cross-spectrum
+coefficients from their joint conditional Gaussian before reconstructing
+the spectral matrix.
 
-VI approximates the remaining marginal posterior and restores the same exact
-conditional Gaussian. It does not become an exact posterior method. With
-``vi_posterior_draws <= 0``, the multivariate result contains one guide-median
-point for the remaining parameters and one conditional cross-spectrum draw;
-this is not a joint posterior median or an uncertainty summary.
+Set ``marginalize_theta=False`` to sample all spline coefficients and scales
+jointly. Both formulations use the same priors, bases and Wishart likelihood,
+and return ``weights_theta_*``, spectra and pointwise likelihoods in the same
+format. ``result.metadata["theta_parameterization"]`` records ``"marginalized"``
+or ``"sampled"`` and survives NetCDF serialization. A scalar first row has
+no theta coefficients and uses the explicit model with either setting.
+
+Marginalised VI approximates the remaining marginal posterior and restores
+the same exact conditional Gaussian. Explicit VI approximates the joint
+posterior over all coefficients and scales. These approximating families can
+differ even though the exact target is the same. With
+``vi_posterior_draws <= 0``, the result contains one guide-median point plus
+one conditional theta draw when marginalization is enabled; this is a
+preview, not an uncertainty summary.
 
 Marginalization preserves the posterior, but raw VI losses need not match
-those from the previous explicit implementation: the integrated Gaussian
-includes fixed normalization constants previously omitted by the centered
-coefficient prior. The Whittle likelihood also omits data-only constants.
+those from explicit fitting: the integrated Gaussian includes fixed
+normalization constants omitted by the centered coefficient prior. The
+Whittle likelihood also omits data-only constants.
 Do not interpret these losses as directly comparable model evidence or
 Bayes factors without restoring consistent normalization.
 
 Enable ``JAX_ENABLE_X64=true`` before Python starts for stationary multivariate
-fits. The first Cholesky row has no cross-spectrum coefficients to integrate.
-Fixed design cross-products are cached using exact B-spline support, with
-local frequency blocks avoiding products with known zeros. Design-response
+fits. For marginalised rows, fixed design cross-products are cached using
+exact B-spline support, with local frequency blocks avoiding products with
+known zeros. Design-response
 products share the 32 MiB cache budget per row; oversized designs use uncached
 contractions. The stable quadratic uses its stationarity at the conditional
 mean for differentiation, and the log determinant uses its exact
 ``trace(H^-1 dH)`` derivative from the existing precision factor. Dense,
-centered NUTS rows start with an inverse-Fisher metric for the log-innovation
-weights and still adapt the metric during warmup. These optimizations preserve the likelihood,
-priors and joint conditional reconstruction; finite MCMC trajectories can
-change.
+centered marginalised NUTS rows start with an inverse-Fisher metric for the
+log-innovation weights and still adapt the metric during warmup. These
+optimizations preserve the likelihood, priors and joint conditional
+reconstruction; finite MCMC trajectories can change.
 
-``StationaryConfig(theta_backend="auto")`` uses exact banded algebra on CPU
-for rows with at least 256 theta coefficients and a reordered half-bandwidth
+With marginalization enabled, ``StationaryConfig(theta_backend="auto")``
+uses exact banded algebra on CPU for rows with at least 256 theta
+coefficients and a reordered half-bandwidth
 smaller than one eighth of the coefficient count. Small or wide systems and
 other device backends retain dense algebra. Set ``theta_backend="dense"`` or
-``"banded"`` to select either implementation explicitly. The structural
+``"banded"`` to select either implementation explicitly. ``theta_backend``
+is ignored when ``marginalize_theta=False``; explicit fitting does not prepare
+the marginalization caches or conditional-draw operators. The structural
 ordering includes every overlapping design column and every nonzero prior
 entry, without numerical thresholding or a change to the penalty ridge.
 Banded Cholesky and triangular solves retain the full conditional Gaussian;
@@ -114,6 +125,9 @@ The current size/bandwidth rule is conservative and based on CPU measurements,
 not a performance guarantee for every problem. Fixed design arrays and host
 preparation still use dense storage. These optimizations target repeated
 likelihood evaluation, rather than eliminating all dense setup allocations.
+Marginalization trades fewer sampled coefficients for repeated matrix algebra;
+neither formulation is always faster. Compare effective samples per second
+and convergence on the same data and model when choosing between them.
 See the :doc:`multivariate example <examples/multivariate-example>` for the
 completion-of-the-square derivation and a comparison of NUTS and VI.
 

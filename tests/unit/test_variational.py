@@ -170,7 +170,10 @@ def test_multivariate_timings_and_loss_aggregation(monkeypatch):
         "prepare_channel_model",
         lambda kwargs, index: (
             gaussian_model,
-            {"channel_index": index},
+            {
+                "channel_index": index,
+                **({"theta_names": ("theta_re_1_0",)} if index else {}),
+            },
             {},
         ),
     )

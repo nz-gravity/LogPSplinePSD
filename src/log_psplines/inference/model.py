@@ -1,4 +1,4 @@
-"""Modified-Cholesky channel models and model argument preparation."""
+"""Shared stationary model selection, data operators, and initial values."""
 
 from __future__ import annotations
 
@@ -8,16 +8,16 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpy as np
-import numpyro
-import numpyro.distributions as dist
-from jax.scipy.linalg import solve_triangular
 
 from log_psplines.config import StationaryConfig
 from log_psplines.data.spectral import WishartData
+from log_psplines.inference.collapsed import (
+    collapsed_channel_model,
+    prepare_collapsed_channel,
+)
 from log_psplines.inference.components import SpectralComponents
+from log_psplines.inference.explicit import explicit_channel_model
 from log_psplines.inference.initialisation import prepare_components
-from log_psplines.likelihoods.wishart import wishart_log_likelihood
-from log_psplines.models.spectrum import build_spline
 
 
 def channel_model_kwargs(
@@ -61,93 +61,12 @@ def channel_model_kwargs(
     }
 
 
-def _sample_pspline_block(
-    sigma_name: str,
-    weights_name: str,
-    penalty_matrix: jnp.ndarray,
-    roughness_scale: float,
-    smoothing_parameterization: str = "centered",
-) -> jnp.ndarray:
-    """Draw spline weights; return shape ``(K,)`` under a HalfNormal scale."""
-    sigma = numpyro.sample(sigma_name, dist.HalfNormal(roughness_scale))
-
-    k = penalty_matrix.shape[0]
-    base_normal = dist.Normal(0.0, 1.0).expand((k,)).to_event(1)
-    if smoothing_parameterization == "noncentered":
-        raw_weights = numpyro.sample(f"{weights_name}_raw", base_normal)
-        cholesky = jnp.linalg.cholesky(penalty_matrix)
-        weights = sigma * solve_triangular(
-            cholesky.T, raw_weights, lower=False
-        )
-        numpyro.deterministic(weights_name, weights)
-    else:
-        weights = numpyro.sample(weights_name, base_normal)
-
-    if smoothing_parameterization == "centered":
-        wPw = jnp.dot(weights, jnp.dot(penalty_matrix, weights))
-        precision = sigma**-2
-        log_prior_w = 0.5 * k * jnp.log(precision) - 0.5 * precision * wPw
-        base_log_prob = base_normal.log_prob(weights)
-        numpyro.factor(
-            f"weights_prior_{weights_name}", log_prior_w - base_log_prob
-        )
-
-    return weights
-
-
-def _scalar_channel_model(
-    channel_index: int,
-    u_re_channel: jnp.ndarray,
-    u_im_channel: jnp.ndarray,
-    u_re_prev: jnp.ndarray,
-    u_im_prev: jnp.ndarray,
-    basis_delta: jnp.ndarray,
-    penalty_delta: jnp.ndarray,
-    duration: float,
-    Nb: int,
-    Nh: int,
-    roughness_scale: float,
-    smoothing_parameterization: str = "centered",
-    enbw: float = 1.0,
-    eta: float = 1.0,
-    **unused_theta_kwargs: Any,
-) -> None:
-    """The first Cholesky row has no cross-spectrum weights to integrate."""
-    if channel_index != 0:
-        raise ValueError("The scalar channel model requires channel_index=0")
-    weights = _sample_pspline_block(
-        "sigma_delta_0",
-        "weights_delta_0",
-        penalty_delta,
-        roughness_scale,
-        smoothing_parameterization,
-    )
-    log_delta_sq = build_spline(basis_delta, weights)
-    empty_theta = jnp.zeros((u_re_channel.shape[0], 0))
-    likelihood = wishart_log_likelihood(
-        log_delta_sq,
-        empty_theta,
-        empty_theta,
-        u_re_channel,
-        u_im_channel,
-        u_re_prev,
-        u_im_prev,
-        Nb=Nb,
-        Nh=Nh,
-        duration=duration,
-        enbw=enbw,
-        eta=eta,
-    )
-    numpyro.factor("likelihood_channel_0", likelihood)
-    numpyro.deterministic("log_likelihood_block_0", likelihood)
-
-
 def empirical_init_values(kwargs: dict[str, Any], channel: int) -> dict:
-    """Initialize the reduced state from empirical conditional-spectrum pilots.
+    """Initialize sampled sites from empirical conditional-spectrum pilots.
 
     The pilot selects starting values only; it does not change any prior.
-    Theta weights are integrated out, so only their smoothing scales enter
-    the numerical inference state.
+    Marginalised rows need theta scales only. Explicit rows also initialize
+    their theta weights, with the same whitening used by the spline prior.
     """
     blocks = [
         (
@@ -178,7 +97,9 @@ def empirical_init_values(kwargs: dict[str, Any], channel: int) -> dict:
             )
         )
         values[f"sigma_{label}"] = sigma
-        if label.startswith("delta"):
+        if label.startswith("delta") or not kwargs.get(
+            "marginalize_theta", True
+        ):
             if kwargs.get("smoothing_parameterization") == "noncentered":
                 values[f"weights_{label}_raw"] = jnp.asarray(
                     np.linalg.cholesky(penalty).T @ weights / sigma
@@ -194,21 +115,18 @@ def prepare_channel_model(
 ) -> tuple[Callable[..., None], dict[str, Any], dict[str, Any]]:
     """Shared stationary row model and initialization for NUTS and VI.
 
-    Every row with predecessors integrates all of its theta coefficients.
-    The first row remains a scalar log-spectrum model.
+    The explicit model also handles the first row, which has no theta blocks.
+    Only marginalised rows prepare Gram caches and conditional-draw operators.
     """
     kwargs = channel_model_kwargs(model_kwargs, channel_index)
     initial = empirical_init_values(model_kwargs, channel_index)
-    if channel_index == 0:
-        return _scalar_channel_model, kwargs, initial
-    # Local import keeps the spline-prior helper available to collapsed.py
-    # without a module initialization cycle.
-    from log_psplines.inference.collapsed import (
-        collapsed_channel_model,
-        prepare_collapsed_channel,
-    )
-
-    return collapsed_channel_model, prepare_collapsed_channel(kwargs), initial
+    if channel_index > 0 and model_kwargs.get("marginalize_theta", True):
+        return (
+            collapsed_channel_model,
+            prepare_collapsed_channel(kwargs),
+            initial,
+        )
+    return explicit_channel_model, kwargs, initial
 
 
 def prepare_model(
@@ -223,7 +141,7 @@ def prepare_model(
         raise ValueError("theta_backend must be auto, dense or banded")
     if data.p > 1 and not jax.config.x64_enabled:
         raise ValueError(
-            "Multivariate Gaussian marginalization requires JAX_ENABLE_X64=true"
+            "Multivariate stationary fitting requires JAX_ENABLE_X64=true"
         )
     spline = prepare_components(
         data,
@@ -276,6 +194,7 @@ def prepare_model(
         "penalties_theta_im": penalties_theta_im,
         "roughness_scale": float(config.roughness_scale),
         "theta_backend": config.theta_backend,
+        "marginalize_theta": config.marginalize_theta,
         "smoothing_parameterization": config.smoothing_parameterization,
         "initial_weights_delta": tuple(
             m.weights for m in spline.diagonal_models

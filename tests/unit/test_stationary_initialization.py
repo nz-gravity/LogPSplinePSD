@@ -4,9 +4,10 @@ import importlib
 
 import numpy as np
 import pytest
+from numpyro.infer.util import log_density
 
 from log_psplines import StationaryConfig, WishartData
-from log_psplines.inference.model import prepare_model
+from log_psplines.inference.model import prepare_channel_model, prepare_model
 
 
 def test_initial_delta_targets_conditional_power_in_likelihood_units():
@@ -37,17 +38,56 @@ def test_initial_delta_targets_conditional_power_in_likelihood_units():
         )
 
 
-@pytest.mark.parametrize("method", ["nuts", "vi"])
-def test_marginalized_model_preparation_supports_both_methods(method):
+@pytest.mark.parametrize("parameterization", ["centered", "noncentered"])
+@pytest.mark.parametrize("marginalize_theta", [True, False])
+def test_channel_initialization_matches_sampled_sites(
+    parameterization, marginalize_theta
+):
+    lower = np.array([[1.0, 0], [0.3 + 0.2j, 0.8]])
     data = WishartData(
-        u_re=np.broadcast_to(np.eye(2), (12, 2, 2)).copy(),
-        u_im=np.zeros((12, 2, 2)),
+        u_re=np.broadcast_to(lower.real, (12, 2, 2)).copy(),
+        u_im=np.broadcast_to(lower.imag, (12, 2, 2)).copy(),
         freq=np.linspace(0.1, 0.2, 12),
         N=12,
         p=2,
     )
-    kwargs, _ = prepare_model(data, StationaryConfig(method=method, n_knots=4))
-    assert kwargs["n_channels"] == 2
+    kwargs, _ = prepare_model(
+        data,
+        StationaryConfig(
+            n_knots=4,
+            smoothing_parameterization=parameterization,
+            marginalize_theta=marginalize_theta,
+            theta_backend="banded",
+        ),
+    )
+    for j in range(2):
+        model, prepared, initial = prepare_channel_model(kwargs, j)
+        density, trace = log_density(model, (), prepared, initial)
+        assert np.isfinite(density)
+        sampled = {
+            name
+            for name, site in trace.items()
+            if site["type"] == "sample" and not site.get("is_observed")
+        }
+        assert set(initial) == sampled
+        assert ("theta_names" in prepared) == (marginalize_theta and j > 0)
+        for name in sampled:
+            if name.startswith("weights_"):
+                physical_name = name.removesuffix("_raw")
+                _, kind, part, *_ = physical_name.split("_")
+                pilot = (
+                    kwargs["initial_weights_delta"][j]
+                    if kind == "delta"
+                    else kwargs[f"initial_weights_theta_{part}"][j][0]
+                )
+                np.testing.assert_allclose(
+                    trace[physical_name]["value"],
+                    pilot,
+                    rtol=2e-10,
+                    atol=2e-10,
+                )
+        if not marginalize_theta:
+            assert "design_re" not in prepared and "gram_cache" not in prepared
 
 
 def test_multivariate_precision_guard_does_not_change_scalar_contract(

@@ -259,7 +259,7 @@ def run_multivariate_nuts(
                 "diverging",
             ),
         )
-        if channel_index > 0:
+        if "theta_names" in channel_kwargs:
             recovered = sample_conditional_theta(
                 {
                     name: value.values

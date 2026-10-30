@@ -136,9 +136,13 @@ and `spectrum` are the fitted draws and reconstructed spectral density.
 
 The stationary path is `TimeSeries` -> `WishartData` -> `prepare_model()` ->
 blocked channel NUTS or VI -> `reconstruct_stationary_spectrum()` ->
-`PSDResult`. `StationaryConfig` controls this path. The Cholesky channel
-models in `inference/model.py` share the Wishart likelihood, while
-`inference/initialisation.py` prepares scalar spline components.
+`PSDResult`. `StationaryConfig` controls this path. `inference/model.py`
+prepares channel arguments and selects the explicit or marginalised model
+for both NUTS and VI. `inference/explicit.py` samples all coefficients,
+including the scalar first row; `inference/collapsed.py` integrates theta
+weights and restores their joint conditional draws. Both use
+`inference/priors.py` for the stationary spline prior and share the Wishart
+likelihood. `inference/initialisation.py` prepares scalar spline components.
 `StationaryConfig.analytical_psd` supplies an optional reference spectral
 matrix for density-based knot placement. It does not center the coefficient
 prior.

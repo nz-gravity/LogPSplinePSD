@@ -13,13 +13,13 @@ from scipy.stats import halfnorm
 
 from log_psplines import StationaryConfig, TimeSeries, fit
 from log_psplines.example_datasets.varma_data import VARMAData
+from log_psplines.inference.explicit import explicit_channel_model
 from log_psplines.inference.log_likelihood import compute_pointwise_lnl
 from log_psplines.inference.model import (
-    _sample_pspline_block,
-    _scalar_channel_model,
     channel_model_kwargs,
     prepare_model,
 )
+from log_psplines.inference.priors import sample_pspline_block
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 from log_psplines.preprocessing.spectral import preprocess_to_freq_domain
 
@@ -28,7 +28,7 @@ def test_stationary_model_samples_sigma():
     assert StationaryConfig().roughness_scale == 1.28
 
     def model():
-        _sample_pspline_block(
+        sample_pspline_block(
             "sigma_delta_0", "weights_delta_0", jnp.eye(3), 1.28
         )
 
@@ -54,9 +54,7 @@ def test_sigma_controls_the_existing_stationary_penalty():
     weights = jnp.array([0.5, -0.3])
 
     def model():
-        _sample_pspline_block(
-            "sigma_delta_0", "weights_delta_0", penalty, 1.28
-        )
+        sample_pspline_block("sigma_delta_0", "weights_delta_0", penalty, 1.28)
 
     def density(sigma: float) -> float:
         return float(
@@ -128,7 +126,7 @@ def test_noncentered_prior_has_same_density_after_jacobian():
     penalty = jnp.array([[2.0, 0.2], [0.2, 1.0]])
 
     def model(parameterization: str):
-        _sample_pspline_block(
+        sample_pspline_block(
             "sigma_delta_0",
             "weights_delta_0",
             penalty,
@@ -223,13 +221,13 @@ def test_centered_and_noncentered_full_log_posterior_match():
             "weights_delta_0_raw": jnp.asarray(raw),
         }
         density_c = log_density(
-            _scalar_channel_model,
+            explicit_channel_model,
             (),
             channel_model_kwargs(kwargs_c, 0),
             params_c,
         )[0]
         density_n = log_density(
-            _scalar_channel_model,
+            explicit_channel_model,
             (),
             channel_model_kwargs(kwargs_n, 0),
             params_n,

@@ -1,4 +1,4 @@
-"""Reduced VI guides restore full correlated Gaussian theta uncertainty."""
+"""Shared VI guides and theta reconstruction for both formulations."""
 
 import importlib
 from dataclasses import replace
@@ -51,9 +51,12 @@ def _example(channels=3):
 
 
 @pytest.mark.parametrize("parameterization", ["centered", "noncentered"])
-@pytest.mark.parametrize("theta_backend", ["dense", "banded"])
-def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
-    parameterization, theta_backend, monkeypatch, tmp_path
+@pytest.mark.parametrize(
+    "marginalize_theta,theta_backend",
+    [(True, "dense"), (True, "banded"), (False, "auto")],
+)
+def test_public_vi_guides_and_outputs_follow_theta_formulation(
+    parameterization, marginalize_theta, theta_backend, monkeypatch, tmp_path
 ):
     module = importlib.import_module("log_psplines.inference.vi")
     original = module.resolve_guide
@@ -70,6 +73,7 @@ def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
         config,
         smoothing_parameterization=parameterization,
         theta_backend=theta_backend,
+        marginalize_theta=marginalize_theta,
     )
     result = fit(data, config)
     model_kwargs, _ = prepare_model(data, config)
@@ -83,7 +87,7 @@ def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
         weight_name = f"weights_delta_{j}"
         if parameterization == "noncentered":
             weight_name += "_raw"
-        assert sample_names == {
+        expected_names = {
             weight_name,
             f"sigma_delta_{j}",
             *(
@@ -92,10 +96,21 @@ def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
                 for part in ("re", "im")
             ),
         }
-        assert (
-            guide.latent_dim
-            == model_kwargs["bases_delta"][j].shape[1] + 1 + 2 * j
-        )
+        dimension = model_kwargs["bases_delta"][j].shape[1] + 1 + 2 * j
+        if not marginalize_theta:
+            for i in range(j):
+                for part in ("re", "im"):
+                    name = f"weights_theta_{part}_{j}_{i}"
+                    expected_names.add(
+                        name + "_raw"
+                        if parameterization == "noncentered"
+                        else name
+                    )
+                    dimension += model_kwargs[f"bases_theta_{part}"][j][
+                        i
+                    ].shape[1]
+        assert sample_names == expected_names
+        assert guide.latent_dim == dimension
         for i in range(j):
             for part in ("re", "im"):
                 weights = result.posterior[
@@ -110,11 +125,26 @@ def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
                 assert np.any(np.var(weights, axis=1) > 0)
 
     assert np.isfinite(result.log_likelihood.log_likelihood).all()
-    assert np.linalg.eigvalsh(result.spectral_density).min() > 0
+    spectrum = np.asarray(result.spectral_density)
+    np.testing.assert_allclose(spectrum, spectrum.conj().swapaxes(-1, -2))
+    eigenvalues = np.linalg.eigvalsh(spectrum)
+    # This short VI contract test is not a converged fit. Noncentred guide
+    # draws can be ill-conditioned: allow only eigensolver roundoff relative
+    # to each matrix's scale, without adding a ridge to the fitted spectrum.
+    tolerance = (
+        32
+        * np.finfo(spectrum.real.dtype).eps
+        * np.max(np.abs(eigenvalues), axis=-1, keepdims=True)
+    )
+    assert np.all(eigenvalues >= -tolerance)
+    assert np.all(np.diagonal(spectrum.real, axis1=-2, axis2=-1) > 0)
     path = tmp_path / "marginalized_vi.nc"
     result.to_netcdf(path)
     restored = PSDResult.from_netcdf(path)
     assert restored.metadata["theta_backend"] == theta_backend
+    assert restored.metadata["theta_parameterization"] == (
+        "marginalized" if marginalize_theta else "sampled"
+    )
     np.testing.assert_array_equal(
         restored.spectral_density, result.spectral_density
     )
@@ -122,7 +152,10 @@ def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
         np.testing.assert_array_equal(
             restored.posterior[name], result.posterior[name]
         )
-    assert restored.vi.timings["conditional_draw_seconds"] > 0
+    if marginalize_theta:
+        assert restored.vi.timings["conditional_draw_seconds"] > 0
+    else:
+        assert "conditional_draw_seconds" not in restored.vi.timings
 
 
 @pytest.mark.parametrize("guide", ["mvn", "lowrank:1", "flow:1", "flowbnaf:1"])

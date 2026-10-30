@@ -21,7 +21,7 @@ from jax.scipy.linalg import solve_triangular
 from scipy.linalg import block_diag
 
 from log_psplines.inference import banded
-from log_psplines.inference.model import _sample_pspline_block
+from log_psplines.inference.priors import sample_pspline_block
 from log_psplines.likelihoods.whittle import LOG_SPECTRUM_LIMIT
 
 _DESIGN_CACHE_BYTES = 32 * 1024**2
@@ -522,7 +522,7 @@ def collapsed_channel_model(
     **conditional_kwargs: Any,
 ) -> None:
     """Sample delta coefficients and all scales, integrating theta weights."""
-    weights = _sample_pspline_block(
+    weights = sample_pspline_block(
         f"sigma_delta_{channel_index}",
         f"weights_delta_{channel_index}",
         penalty_delta,

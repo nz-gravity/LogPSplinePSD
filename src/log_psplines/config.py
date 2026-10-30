@@ -68,10 +68,17 @@ VI and NUTS
 ``method``
    Either ``"nuts"`` (default) or ``"vi"``. VI and NUTS are independent,
    standalone fits: VI never seeds NUTS's initial values, and the unselected
-   method never executes. Both integrate out Gaussian stationary cross-spectrum
-   coefficients and restore conditional posterior draws afterward. There is no
-   separate coefficient-sampling mode. Multivariate fits require float64
+   method never executes. Both use the same ``marginalize_theta`` setting.
+   Multivariate fits require float64
    (set ``JAX_ENABLE_X64=true`` before Python starts).
+
+``marginalize_theta``
+   Integrate Gaussian cross-spectrum coefficients out of the numerical fit
+   and restore full joint conditional draws (default ``True``). Set ``False``
+   to sample these coefficients jointly with the remaining parameters.
+   Both formulations target the same posterior; their VI approximations can
+   differ. ``theta_backend`` selects the dense/banded algebra only when
+   marginalization is enabled and is ignored otherwise.
 
 ``method="vi"``
    Fit the same model with NumPyro stochastic variational inference. Use
@@ -186,6 +193,7 @@ class StationaryConfig:
 
     eta: float = 1.0
     theta_backend: Literal["auto", "dense", "banded"] = "auto"
+    marginalize_theta: bool = True
 
 
 __all__ = ["StationaryConfig", "PowerConfig"]

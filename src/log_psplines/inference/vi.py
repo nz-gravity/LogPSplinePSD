@@ -272,17 +272,17 @@ def run_multivariate_vi(
     verbose: bool = False,
     early_stopping: bool = True,
 ) -> VIResult:
-    """Fit reduced Cholesky rows and restore their Gaussian coefficients.
+    """Fit the selected Cholesky formulation with a guide for each row.
 
-    The guide approximates only the diagonal spline coefficients and all
-    smoothing scales. Every guide draw is paired with one independent draw
-    from the exact joint conditional Gaussian of that row's theta weights.
-    Thus the joint approximation is q(z) p(theta | z, data); marginalization
-    does not make the approximation q(z) exact.
+    With marginalization enabled, the guide approximates diagonal spline
+    coefficients and all smoothing scales. Every guide draw is paired with
+    an independent joint conditional theta draw, giving q(z) p(theta | z, data).
+    Otherwise the guide approximates all coefficients and scales jointly.
+    The exact target is the same, but these variational families can differ.
 
-    ``posterior_draws <= 0`` retains one guide-median hyperparameter point
-    and one conditional theta draw. This is a reproducible single-sample
-    preview, not a joint posterior median or an uncertainty summary.
+    ``posterior_draws <= 0`` retains one guide-median point, plus one
+    conditional theta draw for marginalised rows. This is a single-sample
+    preview, not an uncertainty summary.
 
     Timings sum the sequential fits; ``steps_run`` sums their SVI updates.
     ``block_<index>_*`` timing entries retain each channel's measurements.
@@ -306,7 +306,7 @@ def run_multivariate_vi(
             init_values=initial,
             early_stopping=early_stopping,
         )
-        if index > 0:
+        if "theta_names" in channel_kwargs:
             started = perf_counter()
             if result.posterior is None:
                 raise RuntimeError("VI returned no reduced posterior draws")

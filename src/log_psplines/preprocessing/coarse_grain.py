@@ -122,14 +122,29 @@ class CoarseGrainSpec:
         if self.freq_bin_counts is None:
             self.freq_bin_counts = self.J_stop - self.J_start
         self.freq_bin_counts = np.asarray(self.freq_bin_counts, dtype=np.int64)
-        if any(a.shape != (self.Nc,) for a in (self.J_start, self.J_stop, self.J_mid, self.freq_bin_counts, self.f_coarse)):
+        if any(
+            a.shape != (self.Nc,)
+            for a in (
+                self.J_start,
+                self.J_stop,
+                self.J_mid,
+                self.freq_bin_counts,
+                self.f_coarse,
+            )
+        ):
             raise ValueError("partition arrays must have length Nc")
-        if self.J_start[0] != 0 or np.any(self.J_start[1:] != self.J_stop[:-1]):
+        if self.J_start[0] != 0 or np.any(
+            self.J_start[1:] != self.J_stop[:-1]
+        ):
             raise ValueError("partition must be contiguous and start at zero")
-        if np.any(self.J_stop <= self.J_start) or np.any(self.freq_bin_counts != self.J_stop - self.J_start):
+        if np.any(self.J_stop <= self.J_start) or np.any(
+            self.freq_bin_counts != self.J_stop - self.J_start
+        ):
             raise ValueError("partition has invalid bin counts")
         if np.any((self.J_mid < self.J_start) | (self.J_mid >= self.J_stop)):
-            raise ValueError("representative frequency must be within each bin")
+            raise ValueError(
+                "representative frequency must be within each bin"
+            )
 
     def __repr__(self):
         return f"CoarseGrainSpec(Nc={self.Nc}, Nl={self.freq_bin_counts.sum()}, widths={self.freq_bin_counts.min()}..{self.freq_bin_counts.max()})"
@@ -276,10 +291,14 @@ def compute_adaptive_binning_structure(
     max_bin_width = _as_int("max_bin_width", max_bin_width)
     pilot_window = _as_int("pilot_window", pilot_window)
     if max_bin_width < 1 or pilot_window < 1 or pilot_window % 2 != 1:
-        raise ValueError("max_bin_width must be positive, pilot_window positive and odd")
+        raise ValueError(
+            "max_bin_width must be positive, pilot_window positive and odd"
+        )
     f = np.asarray(fft.freq, dtype=float)
     if f.size == 0 or not np.all(np.diff(f) > 0):
-        raise ValueError("frequency grid must be nonempty and strictly increasing")
+        raise ValueError(
+            "frequency grid must be nonempty and strictly increasing"
+        )
     matrix = (
         np.asarray(fft.raw_psd)
         if fft.raw_psd is not None
@@ -289,17 +308,25 @@ def compute_adaptive_binning_structure(
         raise ValueError("pilot spectral matrix must be finite")
     # For a masked Fourier grid, smooth only within uninterrupted runs.
     steps = np.diff(f)
-    gap = np.r_[False, steps > 1.5 * np.min(steps)] if steps.size else np.array([False])
+    gap = (
+        np.r_[False, steps > 1.5 * np.min(steps)]
+        if steps.size
+        else np.array([False])
+    )
     group_edges = np.r_[0, np.flatnonzero(gap), len(f)]
     pilot = np.empty_like(matrix)
-    for left, right in zip(group_edges[:-1], group_edges[1:]):
+    for left, right in zip(group_edges[:-1], group_edges[1:], strict=False):
         block = matrix[left:right]
         radius = pilot_window // 2
         indexes = np.arange(len(block))
         lo = np.maximum(0, indexes - radius)
         hi = np.minimum(len(block), indexes + radius + 1)
-        prefix = np.concatenate([np.zeros_like(block[:1]), np.cumsum(block, axis=0)], axis=0)
-        pilot[left:right] = (prefix[hi] - prefix[lo]) / (hi - lo)[:, None, None]
+        prefix = np.concatenate(
+            [np.zeros_like(block[:1]), np.cumsum(block, axis=0)], axis=0
+        )
+        pilot[left:right] = (prefix[hi] - prefix[lo]) / (hi - lo)[
+            :, None, None
+        ]
     pilot = 0.5 * (pilot + pilot.conj().swapaxes(-1, -2))
 
     def deviation(start: int, stop: int) -> float:
@@ -310,9 +337,7 @@ def compute_adaptive_binning_structure(
         floor = max(float(np.max(np.abs(eig))) * 1e-6, np.finfo(float).tiny)
         inverse_root = (vec / np.sqrt(np.maximum(eig, floor))) @ vec.conj().T
         normalized = inverse_root @ pilot[start:stop] @ inverse_root
-        errors = np.linalg.eigvalsh(
-            normalized - np.eye(fft.p, dtype=complex)
-        )
+        errors = np.linalg.eigvalsh(normalized - np.eye(fft.p, dtype=complex))
         return float(np.max(np.abs(errors)))
 
     starts, stops, mids = [], [], []
@@ -332,8 +357,13 @@ def compute_adaptive_binning_structure(
     stops = np.asarray(stops, dtype=np.int64)
     mids = np.asarray(mids, dtype=np.int64)
     return CoarseGrainSpec(
-        f_coarse=f[mids], Nh=1, J_start=starts, J_stop=stops,
-        J_mid=mids, Nc=len(starts), freq_bin_counts=stops - starts,
+        f_coarse=f[mids],
+        Nh=1,
+        J_start=starts,
+        J_stop=stops,
+        J_mid=mids,
+        Nc=len(starts),
+        freq_bin_counts=stops - starts,
     )
 
 
@@ -356,7 +386,7 @@ def apply_coarse_grain_multivar_fft(
     if Nc <= 0 or spec.J_stop[-1] > fft.N:
         raise ValueError("Invalid coarse-grain partition for frequency grid")
     # Each sum retains the Hermitian cross-spectral matrix, including phase.
-    Y_sel = U_to_Y(u_sel[:spec.J_stop[-1]])
+    Y_sel = U_to_Y(u_sel[: spec.J_stop[-1]])
     Y_bar = np.add.reduceat(Y_sel, spec.J_start, axis=0)
     u_bins = Y_to_U(Y_bar)
 

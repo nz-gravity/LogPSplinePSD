@@ -80,8 +80,11 @@ def prepare_collapsed_channel(channel_kwargs: Mapping[str, Any]) -> dict:
         or spline_coordinates(
             channel_kwargs["basis_delta"],
             channel_kwargs["penalty_delta"],
-            (channel_kwargs.get("counts") if channel_kwargs.get("counts") is not None
-             else channel_kwargs["Nb"] * channel_kwargs["Nh"])
+            (
+                channel_kwargs.get("counts")
+                if channel_kwargs.get("counts") is not None
+                else channel_kwargs["Nb"] * channel_kwargs["Nh"]
+            )
             * channel_kwargs.get("eta", 1.0)
             / channel_kwargs.get("enbw", 1.0),
         ),
@@ -320,8 +323,14 @@ def sample_conditional_theta(
         )
         full_log_likelihood = (
             (
-                -jnp.sum((prepared_kwargs.get("counts") if prepared_kwargs.get("counts") is not None
-                          else prepared_kwargs["Nb"] * prepared_kwargs["Nh"]) * logd)
+                -jnp.sum(
+                    (
+                        prepared_kwargs.get("counts")
+                        if prepared_kwargs.get("counts") is not None
+                        else prepared_kwargs["Nb"] * prepared_kwargs["Nh"]
+                    )
+                    * logd
+                )
                 - jnp.sum(
                     (residual_re**2 + residual_im**2) * jnp.exp(-logd)[:, None]
                 )

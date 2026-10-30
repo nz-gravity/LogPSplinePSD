@@ -64,9 +64,9 @@ where :math:`(\cdot)^*` denotes the conjugate transpose.
 Coarse-graining conventions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We “coarse-grain” the Fourier frequencies by dividing them into :math:`N_c`
-consecutive disjoint subsets :math:`J_h`, each containing :math:`N_h`
-frequencies:
+We coarse-grain the Fourier frequencies into :math:`N_c` consecutive,
+disjoint subsets :math:`J_h`. Each subset contains :math:`n_h=|J_h|`
+fine Fourier frequencies; the fixed-bin method has :math:`n_h=N_h`:
 
 .. math::
 
@@ -79,6 +79,46 @@ coarse-grained sum
 
    \bar{Y}_h = \sum_{f \in J_h} Y(f),
    \qquad h=1,\ldots,N_c.
+
+The approximation assumes that the spectral matrix is nearly constant
+inside each subset. Apart from data-independent constants, its likelihood
+contribution is
+
+.. math::
+
+   \ell_h = -N_b n_h \log|S(\bar f_h)|
+     - \frac{1}{T}\operatorname{tr}\!\left[
+       S(\bar f_h)^{-1}\bar Y_h\right].
+
+The trace term is **not** multiplied by :math:`n_h` again, because
+:math:`\bar Y_h` already sums the fine-frequency matrices. The data
+container saves :math:`n_h` in ``freq_bin_counts`` and supplies
+``counts = Nb * freq_bin_counts`` to the likelihood.
+
+The optional adaptive partition uses a running-mean matrix pilot to
+select bin edges, accepting a candidate only while its whitened
+spectral-matrix deviation remains below ``tolerance`` and its width
+does not exceed ``max_bin_width``. The actual likelihood sums the
+**unsmoothed** fine-frequency Wishart matrices. Frequency exclusion
+occurs before adaptive partitioning, so bins do not bridge excluded
+frequency ranges. The partition is frozen before VI/NUTS, rather than
+updated using fitted PSDs.
+
+Example::
+
+   from log_psplines.preprocessing.coarse_grain import CoarseGrainConfig
+
+   config = StationaryConfig(
+       coarse_grain_config=CoarseGrainConfig(
+           enabled=True, method="adaptive", Nc=None,
+           tolerance=0.15, max_bin_width=32, pilot_window=31,
+       ),
+   )
+
+The pilot-guided, data-dependent partition is an approximation to the
+native Whittle likelihood. The tolerance is heuristic, not a posterior
+error guarantee: validate against fine-frequency inference, especially
+for rapidly varying cross-spectral phase and transfer-function nulls.
 
 We also use the eigendecomposition of :math:`\bar{Y}_h`:
 
@@ -100,7 +140,7 @@ Wishart statistics and PSD matrices. The current conventions are:
   Wishart matrices into PSD matrices using the stored block count, coarse-bin
   multiplier, duration, and scaling factor.
 - **Degrees of freedom** – ``N_b`` is the block count and ``N_h`` is the
-  (constant) coarse-bin size multiplier.
+  coarse-bin size multiplier for fixed bins; adaptive bins use per-bin ``n_h``.
 - **Scaling factor** – The optional ``scaling_factor`` tracks variance
   adjustments applied during time-domain standardisation and is folded into the
   PSD conversion exactly once.
@@ -121,10 +161,9 @@ The multivariate pipeline follows a fixed sequence of transformations:
    eigenvector-weighted Wishart factors ``U(f)`` on the positive-frequency
    grid. The analysis band is controlled by ``StationaryConfig.fmin`` and
    ``StationaryConfig.fmax``.
-3. **CoarseGrain** – optional **linear, full-band** binning combines nearby
-   frequencies by summing :math:`\bar Y_h = \sum_{f\in J_h} Y(f)` and assigns each
-   bin the member count :math:`N_h` for log-determinant scaling. Coarse-grain
-   config controls only binning parameters (``Nc``/``Nh``).
+3. **CoarseGrain** – optional fixed or pilot-guided adaptive bins combine
+   frequencies by summing :math:`\bar Y_h = \sum_{f\in J_h} Y(f)`; each bin
+   retains its member count :math:`n_h` for log-determinant scaling.
 4. **Inference stages** – VI and NUTS stages consume the (possibly coarse)
    Wishart stats and spline models.
 5. **Result construction** – ``wishart_u_to_psd`` populates

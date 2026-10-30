@@ -297,3 +297,26 @@ def test_ridged_spline_logdet_uses_its_positive_definite_factor():
     np.testing.assert_allclose(
         prepared["theta_logdet_penalty"], expected, atol=2e-8
     )
+
+
+def test_irregular_frequency_counts_change_only_collapsed_logdet_weight():
+    """Counts weight the log determinant, never the summed factors twice."""
+    original = _example()
+    weighted = dict(original)
+    new_counts = jnp.asarray([4, 8, 12, 20, 2])
+    weighted["counts"] = new_counts
+    logd = jnp.asarray([-0.4, 0.3, 0.5, -0.1, 0.9])
+    sigmas = jnp.asarray([0.6, 0.9, 0.7, 1.2])
+    old = gaussian_theta_conditional(
+        logd, sigmas, **_conditional_kwargs(prepare_collapsed_channel(original))
+    )
+    updated = gaussian_theta_conditional(
+        logd, sigmas, **_conditional_kwargs(prepare_collapsed_channel(weighted))
+    )
+    expected_delta = (
+        -weighted["eta"] / weighted["enbw"]
+        * jnp.sum((new_counts - weighted["Nb"] * weighted["Nh"]) * logd)
+    )
+    np.testing.assert_allclose(updated[0] - old[0], expected_delta, atol=2e-10)
+    for updated_component, old_component in zip(updated[1:], old[1:]):
+        np.testing.assert_allclose(updated_component, old_component, atol=2e-10)

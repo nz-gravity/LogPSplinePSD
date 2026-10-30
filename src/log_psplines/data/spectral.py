@@ -62,6 +62,9 @@ class WishartData:
     # Coarse-grain multiplicity Nh. For equal-sized bins this is constant
     # across the retained frequency grid. Defaults to 1 (no coarse graining).
     Nh: int = 1
+    # Actual number of fine Fourier frequencies represented by each ordinate.
+    # Defaults to scalar Nh for existing fixed-bin and unbinned inputs.
+    freq_bin_counts: np.ndarray | None = None
     # Normalized Equivalent Noise Bandwidth (NENBW) of the analysis window,
     # in units of frequency bins.  Computed automatically by compute_wishart()
     # as  NENBW = Lb * Σ w(t)² / (Σ w(t))²  (Heinzel et al. 2002, eq. 21).
@@ -126,6 +129,10 @@ class WishartData:
         self.Nh = int(self.Nh)
         if self.Nh <= 0:
             raise ValueError("Nh must be a positive integer")
+        counts = np.full(self.N, self.Nh) if self.freq_bin_counts is None else np.asarray(self.freq_bin_counts)
+        if counts.shape != (self.N,) or counts.dtype.kind not in "iu" or np.any(counts <= 0):
+            raise ValueError("freq_bin_counts must be positive integers with shape (N,)")
+        self.freq_bin_counts = counts.astype(np.int64, copy=True)
 
         self.enbw = float(self.enbw)
         if not np.isfinite(self.enbw) or self.enbw <= 0.0:
@@ -165,6 +172,7 @@ class WishartData:
             raw_psd=raw_psd,
             raw_freq=raw_freq,
             Nh=self.Nh,
+            freq_bin_counts=self.freq_bin_counts[mask],
             Nb=self.Nb,
             scaling_factor=self.scaling_factor,
             fs=self.fs,
@@ -202,6 +210,11 @@ class WishartData:
         return f"WishartData(N={self.N}, p={self.p})"
 
     @property
+    def counts(self) -> np.ndarray:
+        """Number of independent Fourier vectors underlying each bin."""
+        return self.Nb * self.freq_bin_counts
+
+    @property
     def empirical_psd(self) -> "EmpiricalPSD":
         sf = float(self.scaling_factor or 1.0)
         if self.raw_psd is not None:
@@ -218,7 +231,7 @@ class WishartData:
                 Nb=self.Nb,
                 duration=self.duration,
                 scaling_factor=sf,
-                Nh=self.Nh,
+                Nh=self.freq_bin_counts,
             )
 
         coherence = _get_coherence(psd)

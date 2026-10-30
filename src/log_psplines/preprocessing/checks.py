@@ -133,16 +133,17 @@ def _save_preprocessing_plot(
         )
 
         nb = int(processed_data.Nb)
+        widths = np.asarray(processed_data.freq_bin_counts, dtype=int)
         nh = int(processed_data.Nh)
         n_coarse_or_retained = int(processed_data.N)
-        n_ell = n_coarse_or_retained * nh
+        n_ell = int(widths.sum())
         fs = float(processed_data.fs)
         dt = 1.0 / fs
         lb = int(round(float(processed_data.duration) * fs))
         n_time = lb * nb
         total_duration = float(processed_data.duration) * nb
         n_fft = lb // 2 + 1
-        nc = n_coarse_or_retained if nh > 1 else None
+        nc = n_coarse_or_retained if np.any(widths > 1) else None
 
         info_parts = [
             f"n={n_time}",
@@ -154,7 +155,7 @@ def _save_preprocessing_plot(
             f"Nb={nb}",
             f"Lb={lb}",
             f"Nc={nc if nc is not None else 'NA'}",
-            f"Nh={nh}",
+            f"Nh={nh}" if np.all(widths == nh) else f"Nh=[{widths.min()}..{widths.max()}]",
         ]
         window_name = processed_data.preprocessing.get("window", "unknown")
         info_parts.append(f"window={window_name}")

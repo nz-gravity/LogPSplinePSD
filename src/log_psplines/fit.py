@@ -108,6 +108,7 @@ def _fit_stationary(data, config: StationaryConfig) -> PSDResult:
             "sampling_eta": float(config.eta),
             "method": config.method,
             "theta_parameterization": "marginalized",
+            "theta_backend": config.theta_backend,
             "inference_dtype": str(model_kwargs["u_re"].dtype),
             "mean_removal": data.preprocessing.get("mean_removal", "unknown"),
             "window": data.preprocessing.get("window", "unknown"),

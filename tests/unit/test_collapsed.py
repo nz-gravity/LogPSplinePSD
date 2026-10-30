@@ -4,11 +4,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import numpyro
+import pytest
 from scipy.linalg import block_diag
 from scipy.stats import multivariate_normal
 
 from log_psplines.inference.collapsed import (
     _conditional_kwargs,
+    _prepare_gram_cache,
+    _prepare_linear_cache,
     collapsed_channel_model,
     gaussian_theta_conditional,
     prepare_collapsed_channel,
@@ -17,9 +20,9 @@ from log_psplines.inference.collapsed import (
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 
 
-def _example():
+def _example(n=5, replicates=3):
     rng = np.random.default_rng(83)
-    n, replicates, j = 5, 3, 2
+    j = 2
     bases, penalties = {}, {}
     for part, counts in (("re", (2, 1)), ("im", (3, 2))):
         bases[part] = tuple(rng.normal(size=(n, k)) for k in counts)
@@ -271,3 +274,329 @@ def test_ridged_spline_logdet_uses_its_positive_definite_factor():
     np.testing.assert_allclose(
         prepared["theta_logdet_penalty"], expected, atol=2e-8
     )
+
+
+@pytest.mark.parametrize(
+    "cache_kind", ["compact", "sparse", "none", "blocked"]
+)
+def test_cached_marginal_density_gradient_and_curvature(
+    cache_kind, monkeypatch
+):
+    """Compare optimized derivatives with ordinary AD through the full solve."""
+    import log_psplines.inference.collapsed as collapsed
+
+    kw = _example(n=129 if cache_kind == "blocked" else 5)
+    if cache_kind == "blocked":
+        from log_psplines.basis.splines import SplineBasis
+
+        for part, counts in (("re", (7, 9)), ("im", (8, 10))):
+            splines = [
+                SplineBasis.from_knots(
+                    grid=np.linspace(0, 1, 129),
+                    knots=np.linspace(0, 1, count),
+                )
+                for count in counts
+            ]
+            kw[f"basis_theta_{part}_by_component"] = tuple(
+                spline.basis for spline in splines
+            )
+            kw[f"penalty_theta_{part}_by_component"] = tuple(
+                spline.penalty for spline in splines
+            )
+    prepared = prepare_collapsed_channel(kw)
+    kwargs = _conditional_kwargs(prepared)
+    if cache_kind == "blocked":
+        assert kwargs["gram_cache"][2].ndim == 3
+        # This grid needs padding in the last frequency block.
+        assert 129 % kwargs["gram_cache"][2].shape[-1] != 0
+    if cache_kind == "sparse":
+        pairs, _, by_pair = kwargs["gram_cache"]
+        row, freq = np.nonzero(by_pair)
+        kwargs["gram_cache"] = (
+            pairs[row],
+            jnp.asarray(freq),
+            by_pair[row, freq],
+        )
+    elif cache_kind == "none":
+        kwargs["gram_cache"] = None
+        kwargs["linear_cache"] = None
+    point = jnp.asarray(np.r_[[0.1, -0.2, 0.3], np.log([0.3, 0.4, 0.8, 0.6])])
+
+    def conditional(v):
+        return gaussian_theta_conditional(
+            kw["basis_delta"] @ v[:3], jnp.exp(v[3:]), **kwargs
+        )
+
+    def target(v):
+        return conditional(v)[0]
+
+    actual_value, actual_gradient = jax.value_and_grad(target)(point)
+    actual_hessian = jax.jacfwd(jax.grad(target))(point)
+    actual_reverse_hessian = jax.jacrev(jax.grad(target))(point)
+    actual_conditional = conditional(point)[1:]
+    kwargs["gram_cache"] = None
+    kwargs["linear_cache"] = None
+    with monkeypatch.context() as context:
+        context.setattr(
+            collapsed,
+            "_quadratic_at_conditional_mean",
+            collapsed._conditional_quadratic,
+        )
+        context.setattr(
+            collapsed,
+            "_logdet_at_precision",
+            lambda precision, cholesky, scale: (
+                2
+                * (
+                    jnp.sum(jnp.log(scale))
+                    + jnp.sum(jnp.log(jnp.diag(cholesky)))
+                )
+            ),
+        )
+        expected_value, expected_gradient = jax.value_and_grad(target)(point)
+        expected_hessian = jax.jacfwd(jax.grad(target))(point)
+        expected_conditional = conditional(point)[1:]
+    np.testing.assert_allclose(actual_value, expected_value, atol=2e-11)
+    np.testing.assert_allclose(actual_gradient, expected_gradient, atol=2e-10)
+    np.testing.assert_allclose(actual_hessian, expected_hessian, atol=2e-9)
+    np.testing.assert_allclose(
+        actual_reverse_hessian, expected_hessian, atol=2e-9
+    )
+    for actual, expected in zip(
+        actual_conditional, expected_conditional, strict=True
+    ):
+        np.testing.assert_allclose(actual, expected, atol=2e-11)
+
+
+def test_gram_cache_is_exact_sparse_and_bounded():
+    rng = np.random.default_rng(51)
+    n, r, k = 64, 3, 24
+    re, im = np.zeros((n, r, k)), np.zeros((n, r, k))
+    for f in range(n):
+        re[f, :, f % k] = rng.normal(size=r)
+        im[f, :, (f + 7) % k] = rng.normal(size=r)
+    budget = n * 3 * 16  # Only two active coefficients per frequency.
+    cache = _prepare_gram_cache(re, im, max_bytes=budget)
+    assert cache is not None
+    indices, frequencies, values = cache
+    assert values.ndim == 1
+    assert sum(v.nbytes for v in cache) <= budget
+    precision = jnp.exp(jnp.linspace(-2, 2, n))
+    upper = jax.ops.segment_sum(
+        values * precision[frequencies],
+        indices,
+        num_segments=k**2,
+        indices_are_sorted=True,
+    ).reshape(k, k)
+    actual = upper + upper.T - jnp.diag(jnp.diag(upper))
+    expected = np.einsum("frk,frl,f->kl", re, re, precision)
+    expected += np.einsum("frk,frl,f->kl", im, im, precision)
+    np.testing.assert_allclose(actual, expected, atol=1e-13)
+    assert _prepare_gram_cache(re, im, max_bytes=0) is None
+
+
+def test_zero_design_gram_cache():
+    re = np.zeros((5, 2, 3))
+    cache = _prepare_gram_cache(re, re)
+    assert cache is not None
+    pairs, _, values = cache
+    assert pairs.size == values.size == 0
+
+
+def test_fixed_design_caches_share_a_bounded_budget(monkeypatch):
+    import log_psplines.inference.collapsed as collapsed
+
+    budget = 4096
+    monkeypatch.setattr(collapsed, "_DESIGN_CACHE_BYTES", budget)
+    prepared = prepare_collapsed_channel(_example(n=128))
+    caches = [prepared["linear_cache"], *(prepared["gram_cache"] or ())]
+    assert sum(cache.nbytes for cache in caches if cache is not None) <= budget
+    assert prepared["linear_cache"] is None
+    assert prepared["gram_cache"] is None
+    prepared = prepare_collapsed_channel(_example())
+    assert prepared["linear_cache"] is not None
+    caches = [prepared["linear_cache"], *(prepared["gram_cache"] or ())]
+    assert sum(cache.nbytes for cache in caches if cache is not None) <= budget
+    assert (
+        _prepare_linear_cache(
+            prepared["design_re"],
+            prepared["design_im"],
+            prepared["observed_re"],
+            prepared["observed_im"],
+            max_bytes=0,
+        )
+        is None
+    )
+
+
+def test_banded_marginal_matches_independent_gaussian_and_dense_derivatives():
+    kw = _example()
+    prepared = prepare_collapsed_channel(dict(kw, theta_backend="banded"))
+    dense = prepare_collapsed_channel(dict(kw, theta_backend="dense"))
+    plan = prepared["banded_plan"]
+    assert plan is not None
+    point = jnp.asarray(
+        np.r_[np.linspace(-0.7, 0.8, 5), np.log([0.3, 0.4, 0.8, 0.6])]
+    )
+
+    def target(v, prepared):
+        return gaussian_theta_conditional(
+            v[:5], jnp.exp(v[5:]), **_conditional_kwargs(prepared)
+        )[0]
+
+    for operator in (
+        jax.value_and_grad,
+        jax.hessian,
+        lambda f: jax.jacrev(jax.grad(f)),
+    ):
+        actual = jax.jit(operator(lambda v: target(v, prepared)))(point)
+        expected = jax.jit(operator(lambda v: target(v, dense)))(point)
+        for a, b in zip(
+            jax.tree.leaves(actual), jax.tree.leaves(expected), strict=True
+        ):
+            np.testing.assert_allclose(a, b, atol=2e-10, rtol=2e-10)
+    _, mean, factor, scale = gaussian_theta_conditional(
+        point[:5], jnp.exp(point[5:]), **_conditional_kwargs(prepared)
+    )
+    n, width = factor.shape[0], factor.shape[1] - 1
+    lower = np.zeros((n, n))
+    for d in range(width + 1):
+        lower[np.arange(d, n), np.arange(n - d)] = np.asarray(factor)[
+            : n - d, d
+        ]
+    precision = (
+        np.asarray(scale)[:, None]
+        * (lower @ lower.T)
+        * np.asarray(scale)[None, :]
+    )
+    covariance = np.linalg.inv(precision)[
+        np.ix_(plan.inverse_permutation, plan.inverse_permutation)
+    ]
+    expected_mean, expected_covariance, *_ = _independent_gaussian(
+        kw, np.asarray(point[:5]), np.exp(np.asarray(point[5:]))
+    )
+    np.testing.assert_allclose(mean, expected_mean, atol=2e-12, rtol=2e-12)
+    np.testing.assert_allclose(
+        covariance, expected_covariance, atol=2e-12, rtol=2e-12
+    )
+
+
+def test_banded_conditional_draws_keep_joint_moments_and_likelihood():
+    kw = dict(_example(), theta_backend="banded")
+    prepared = prepare_collapsed_channel(kw)
+    weights = np.array([0.1, -0.3, 0.15])
+    sigmas = np.array([0.3, 0.4, 0.8, 0.6])
+    posterior = {"weights_delta_2": np.broadcast_to(weights, (2, 3000, 3))}
+    posterior.update(
+        {
+            f"sigma_{name}": np.full((2, 3000), sigma)
+            for name, sigma in zip(
+                prepared["theta_names"], sigmas, strict=True
+            )
+        }
+    )
+    output = sample_conditional_theta(
+        posterior, prepared, jax.random.PRNGKey(44)
+    )
+    draws = np.concatenate(
+        [output[f"weights_{name}"] for name in prepared["theta_names"]],
+        axis=-1,
+    ).reshape(6000, -1)
+    logd = np.asarray(kw["basis_delta"]) @ weights
+    mean, covariance, _, x, y, precision = _independent_gaussian(
+        kw, logd, sigmas
+    )
+    # Whiten with an independently assembled dense covariance. This checks
+    # joint dependence, including directions with very small uncertainty.
+    white = np.linalg.solve(np.linalg.cholesky(covariance), (draws - mean).T).T
+    assert np.max(np.abs(white.mean(axis=0)) * np.sqrt(len(draws))) < 4
+    identity = np.eye(white.shape[1])
+    covariance_error = np.abs(np.cov(white, rowvar=False) - identity)
+    covariance_mcse = np.sqrt((1 + identity) / (len(draws) - 1))
+    assert np.max(covariance_error / covariance_mcse) < 5
+    full = -kw["eta"] / kw["enbw"] * kw["Nb"] * kw["Nh"] * np.sum(
+        logd
+    ) - np.sum(precision * (y - x @ draws[0]) ** 2)
+    np.testing.assert_allclose(
+        output["log_likelihood_block_2"][0, 0], full, atol=2e-11, rtol=2e-12
+    )
+
+
+def test_banded_selection_and_cache_fallback(monkeypatch):
+    import log_psplines.inference.collapsed as collapsed
+
+    assert (
+        prepare_collapsed_channel(dict(_example(), theta_backend="auto"))[
+            "banded_plan"
+        ]
+        is None
+    )
+    monkeypatch.setattr(collapsed, "_DESIGN_CACHE_BYTES", 0)
+    with pytest.raises(ValueError, match="memory budget"):
+        prepare_collapsed_channel(dict(_example(), theta_backend="banded"))
+    fallback = prepare_collapsed_channel(
+        dict(_example(), theta_backend="auto")
+    )
+    assert fallback["banded_plan"] is fallback["gram_cache"] is None
+
+
+def test_auto_banded_plan_falls_back_when_cache_exceeds_budget(monkeypatch):
+    import log_psplines.inference.collapsed as collapsed
+
+    monkeypatch.setattr(jax, "default_backend", lambda: "cpu")
+    kw = dict(_example(n=128), theta_backend="auto")
+    basis = np.tile(np.eye(64), (2, 1))
+    penalty = 2 * np.eye(64)
+    penalty += np.diag(np.full(63, -0.2), 1)
+    penalty += np.diag(np.full(63, -0.2), -1)
+    for part in ("re", "im"):
+        kw[f"basis_theta_{part}_by_component"] = (basis, basis)
+        kw[f"penalty_theta_{part}_by_component"] = (penalty, penalty)
+    assert prepare_collapsed_channel(kw)["banded_plan"] is not None
+    monkeypatch.setattr(collapsed, "_DESIGN_CACHE_BYTES", 0)
+    prepared = prepare_collapsed_channel(kw)
+    assert prepared["banded_plan"] is prepared["gram_cache"] is None
+
+
+def test_banded_preserves_small_residual_when_channel_is_almost_predictable():
+    from log_psplines.basis.splines import SplineBasis
+
+    kw = _example(n=65)
+    for part, counts in (("re", (9, 13)), ("im", (11, 15))):
+        splines = [
+            SplineBasis.from_knots(
+                grid=np.linspace(0, 1, 65), knots=np.linspace(0, 1, count)
+            )
+            for count in counts
+        ]
+        kw[f"basis_theta_{part}_by_component"] = tuple(
+            s.basis for s in splines
+        )
+        kw[f"penalty_theta_{part}_by_component"] = tuple(
+            s.penalty for s in splines
+        )
+    # A large, nearly explained channel stresses the residual formulation;
+    # subtracting two large marginal quadratic forms loses this information.
+    coefficient = 300.0 + 100.0j
+    previous = np.asarray(kw["u_re_prev"]) + 1j * np.asarray(kw["u_im_prev"])
+    observed = coefficient * previous[:, 0, :]
+    observed += 0.01 * (
+        np.asarray(kw["u_re_channel"]) + 1j * np.asarray(kw["u_im_channel"])
+    )
+    kw["u_re_channel"] = jnp.asarray(observed.real)
+    kw["u_im_channel"] = jnp.asarray(observed.imag)
+    point = jnp.asarray(np.r_[np.full(65, -8.0), np.log([10.0] * 4)])
+
+    def evaluate(backend):
+        prepared = prepare_collapsed_channel(dict(kw, theta_backend=backend))
+
+        def target(v):
+            return gaussian_theta_conditional(
+                v[:65], jnp.exp(v[65:]), **_conditional_kwargs(prepared)
+            )[0]
+
+        return jax.jit(jax.value_and_grad(target))(point)
+
+    dense, packed = evaluate("dense"), evaluate("banded")
+    for actual, expected in zip(packed, dense, strict=True):
+        np.testing.assert_allclose(actual, expected, rtol=2e-8, atol=2e-7)

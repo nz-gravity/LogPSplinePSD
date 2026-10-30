@@ -185,6 +185,7 @@ class StationaryConfig:
     dense_mass: bool = True
 
     eta: float = 1.0
+    theta_backend: Literal["auto", "dense", "banded"] = "auto"
 
 
 __all__ = ["StationaryConfig", "PowerConfig"]

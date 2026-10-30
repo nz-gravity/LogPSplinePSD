@@ -49,6 +49,7 @@ def channel_model_kwargs(
             model_kwargs["penalties_theta_im"][j]
         ),
         "roughness_scale": model_kwargs["roughness_scale"],
+        "theta_backend": model_kwargs.get("theta_backend", "auto"),
         "smoothing_parameterization": model_kwargs.get(
             "smoothing_parameterization", "centered"
         ),
@@ -218,6 +219,8 @@ def prepare_model(
         raise ValueError("roughness_scale must be finite and positive")
     if config.smoothing_parameterization not in ("centered", "noncentered"):
         raise ValueError("Unknown smoothing_parameterization")
+    if config.theta_backend not in ("auto", "dense", "banded"):
+        raise ValueError("theta_backend must be auto, dense or banded")
     if data.p > 1 and not jax.config.x64_enabled:
         raise ValueError(
             "Multivariate Gaussian marginalization requires JAX_ENABLE_X64=true"
@@ -272,6 +275,7 @@ def prepare_model(
         "bases_theta_im": bases_theta_im,
         "penalties_theta_im": penalties_theta_im,
         "roughness_scale": float(config.roughness_scale),
+        "theta_backend": config.theta_backend,
         "smoothing_parameterization": config.smoothing_parameterization,
         "initial_weights_delta": tuple(
             m.weights for m in spline.diagonal_models

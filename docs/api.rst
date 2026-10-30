@@ -84,6 +84,36 @@ Bayes factors without restoring consistent normalization.
 
 Enable ``JAX_ENABLE_X64=true`` before Python starts for stationary multivariate
 fits. The first Cholesky row has no cross-spectrum coefficients to integrate.
+Fixed design cross-products are cached using exact B-spline support, with
+local frequency blocks avoiding products with known zeros. Design-response
+products share the 32 MiB cache budget per row; oversized designs use uncached
+contractions. The stable quadratic uses its stationarity at the conditional
+mean for differentiation, and the log determinant uses its exact
+``trace(H^-1 dH)`` derivative from the existing precision factor. Dense,
+centered NUTS rows start with an inverse-Fisher metric for the log-innovation
+weights and still adapt the metric during warmup. These optimizations preserve the likelihood,
+priors and joint conditional reconstruction; finite MCMC trajectories can
+change.
+
+``StationaryConfig(theta_backend="auto")`` uses exact banded algebra on CPU
+for rows with at least 256 theta coefficients and a reordered half-bandwidth
+smaller than one eighth of the coefficient count. Small or wide systems and
+other device backends retain dense algebra. Set ``theta_backend="dense"`` or
+``"banded"`` to select either implementation explicitly. The structural
+ordering includes every overlapping design column and every nonzero prior
+entry, without numerical thresholding or a change to the penalty ridge.
+Banded Cholesky and triangular solves retain the full conditional Gaussian;
+selected inversion computes exactly the covariance entries needed by the
+log-determinant gradient. The first gradient does not form a dense covariance.
+
+Auto selection also falls back to dense, uncached contractions if the fixed
+Gram cache exceeds its memory budget; explicitly requesting ``"banded"``
+raises an error in that case. The backend setting is stored in result
+metadata; ``"auto"`` can select different implementations for different rows.
+The current size/bandwidth rule is conservative and based on CPU measurements,
+not a performance guarantee for every problem. Fixed design arrays and host
+preparation still use dense storage. These optimizations target repeated
+likelihood evaluation, rather than eliminating all dense setup allocations.
 See the :doc:`multivariate example <examples/multivariate-example>` for the
 completion-of-the-square derivation and a comparison of NUTS and VI.
 

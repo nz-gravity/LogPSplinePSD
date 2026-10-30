@@ -7,7 +7,10 @@ from log_psplines import PSDResult, StationaryConfig, WishartData, fit
 
 
 @pytest.mark.parametrize("parameterization", ["centered", "noncentered"])
-def test_marginalized_three_channel_roundtrip(parameterization, tmp_path):
+@pytest.mark.parametrize("backend", ["dense", "banded"])
+def test_marginalized_three_channel_roundtrip(
+    parameterization, backend, tmp_path
+):
     rng = np.random.default_rng(29)
     n, replicates = 24, 8
     covariance = np.full((3, 3), -0.45)
@@ -30,6 +33,7 @@ def test_marginalized_three_channel_roundtrip(parameterization, tmp_path):
         data,
         StationaryConfig(
             smoothing_parameterization=parameterization,
+            theta_backend=backend,
             n_knots={"delta": 5, "theta_re": 4, "theta_im": 3},
             degree=2,
             knot_kwargs={"method": "uniform"},
@@ -54,4 +58,5 @@ def test_marginalized_three_channel_roundtrip(parameterization, tmp_path):
     result.to_netcdf(path)
     restored = PSDResult.from_netcdf(path)
     assert restored.metadata["theta_parameterization"] == "marginalized"
+    assert restored.metadata["theta_backend"] == backend
     np.testing.assert_allclose(restored.spectral_density, spectrum)

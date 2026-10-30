@@ -113,6 +113,65 @@ def test_default_initializer_is_left_to_numpyro(
     assert "init_strategy" not in sampler_calls["kernel_options"]
 
 
+def test_initial_metric_reaches_numpyro_without_changing_the_model(
+    sampler_calls,
+):
+    metric = np.array([[0.25]])
+    nuts_backend.run_nuts(
+        gaussian_model,
+        rng_key=jax.random.PRNGKey(44),
+        inverse_mass_matrix=metric,
+        n_warmup=2,
+        n_samples=2,
+    )
+    assert sampler_calls["model"] is gaussian_model
+    assert sampler_calls["kernel_options"]["inverse_mass_matrix"] is metric
+
+
+def test_collapsed_initial_metric_is_inverse_fisher_information():
+    basis = np.array([[1.0, 0.0], [1.0, 0.5], [1.0, 1.0]])
+    penalty = np.diag([0.1, 2.0])
+    kwargs = {
+        "channel_index": 1,
+        "theta_names": ("theta_re_1_0", "theta_im_1_0"),
+        "smoothing_parameterization": "centered",
+        "basis_delta": basis,
+        "penalty_delta": penalty,
+        "Nb": 4,
+        "Nh": 2,
+        "eta": 0.6,
+        "enbw": 1.5,
+    }
+    initial = {
+        "sigma_theta_re_1_0": 0.3,
+        "sigma_theta_im_1_0": 0.4,
+        "weights_delta_1": np.array([0.5, -0.1]),
+        "sigma_delta_1": 0.2,
+    }
+    metric = nuts_backend._collapsed_initial_mass(
+        kwargs, initial, dense_mass=True
+    )
+    names = tuple(sorted(initial))
+    assert tuple(metric) == (names,)
+    mass = metric[names]
+    assert mass.shape == (5, 5)
+    assert np.linalg.eigvalsh(mass).min() > 0
+    expected_information = 3.2 * basis.T @ basis + penalty / 0.2**2
+    np.testing.assert_allclose(
+        mass[-2:, -2:] @ expected_information, np.eye(2), atol=1e-13
+    )
+    np.testing.assert_array_equal(mass[:3, :3], np.eye(3))
+    assert (
+        nuts_backend._collapsed_initial_mass(kwargs, initial, dense_mass=False)
+        is None
+    )
+    kwargs["smoothing_parameterization"] = "noncentered"
+    assert (
+        nuts_backend._collapsed_initial_mass(kwargs, initial, dense_mass=True)
+        is None
+    )
+
+
 @pytest.mark.parametrize("values", [{}, {"x": jnp.asarray(0.0)}])
 def test_initialization_controls_are_exclusive_before_kernel_creation(
     sampler_calls: dict[str, Any], values: dict[str, jax.Array]

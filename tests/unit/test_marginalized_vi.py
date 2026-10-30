@@ -51,8 +51,9 @@ def _example(channels=3):
 
 
 @pytest.mark.parametrize("parameterization", ["centered", "noncentered"])
+@pytest.mark.parametrize("theta_backend", ["dense", "banded"])
 def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
-    parameterization, monkeypatch, tmp_path
+    parameterization, theta_backend, monkeypatch, tmp_path
 ):
     module = importlib.import_module("log_psplines.inference.vi")
     original = module.resolve_guide
@@ -65,7 +66,11 @@ def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
 
     monkeypatch.setattr(module, "resolve_guide", collect_guide)
     data, config = _example()
-    config = replace(config, smoothing_parameterization=parameterization)
+    config = replace(
+        config,
+        smoothing_parameterization=parameterization,
+        theta_backend=theta_backend,
+    )
     result = fit(data, config)
     model_kwargs, _ = prepare_model(data, config)
     assert len(guides) == data.p
@@ -109,6 +114,7 @@ def test_public_vi_guides_exclude_theta_weights_and_restore_outputs(
     path = tmp_path / "marginalized_vi.nc"
     result.to_netcdf(path)
     restored = PSDResult.from_netcdf(path)
+    assert restored.metadata["theta_backend"] == theta_backend
     np.testing.assert_array_equal(
         restored.spectral_density, result.spectral_density
     )

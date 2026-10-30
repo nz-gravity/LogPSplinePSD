@@ -155,7 +155,9 @@ def _save_preprocessing_plot(
             f"Nb={nb}",
             f"Lb={lb}",
             f"Nc={nc if nc is not None else 'NA'}",
-            f"Nh={nh}" if np.all(widths == nh) else f"Nh=[{widths.min()}..{widths.max()}]",
+            f"Nh={nh}"
+            if np.all(widths == nh)
+            else f"Nh=[{widths.min()}..{widths.max()}]",
         ]
         window_name = processed_data.preprocessing.get("window", "unknown")
         info_parts.append(f"window={window_name}")

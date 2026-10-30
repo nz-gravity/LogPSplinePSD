@@ -44,14 +44,12 @@ def _closest_divisor(n: int, target: int) -> int:
 
 @dataclass(slots=True)
 class CoarseGrainConfig:
-    """Configuration for frequency-domain coarse graining with equal-sized bins.
+    """Select fixed-width or pilot-guided adaptive frequency aggregation.
 
-    Exactly one of (Nc, Nh) must be provided:
-      - Nc: number of coarse bins
-      - Nh: number of fine-grid frequencies per coarse bin
-
-    The retained frequency count Nl must be divisible by the chosen parameter so
-    that bins are exactly equal-sized across the provided frequency grid.
+    For fixed bins, exactly one of Nc and Nh is required. For adaptive bins,
+    Nc/Nh are ignored and the accepted width is bounded by max_bin_width.
+    A smoothed empirical spectral matrix is only used to choose boundaries;
+    unsmoothed Wishart statistics enter the likelihood.
     """
 
     enabled: bool = False
@@ -100,20 +98,10 @@ class CoarseGrainConfig:
 
 @dataclass(slots=True)
 class CoarseGrainSpec:
-    """Static description of equal-sized coarse bins on a retained frequency grid.
+    """Disjoint contiguous partitions of the retained frequency index grid.
 
-    The provided retained grid of length Nl is partitioned into Nc disjoint,
-    consecutive bins J_h, each of constant size Nh (odd).
-
-    For each bin h:
-      - J_h spans indices J_start[h] : J_start[h] + Nh on the retained grid
-      - J_mid[h] = J_start[h] + (Nh // 2)
-      - f_coarse[h] = freqs_retained[J_mid[h]]
-
-    Notes
-    -----
-    This spec describes consecutive, full-band bins on the retained grid:
-    no gaps, no overlaps, and no per-bin sorting.
+    J_stop is exclusive; freq_bin_counts is the number of fine frequencies
+    per coarse bin. Nh remains a legacy scalar for fixed-width callers.
     """
 
     f_coarse: np.ndarray  # (Nc,)
@@ -352,7 +340,7 @@ def compute_adaptive_binning_structure(
 def apply_coarse_grain_multivar_fft(
     fft: WishartData, spec: CoarseGrainSpec
 ) -> WishartData:
-    """Coarse-grain a WishartData using equal-sized bins.
+    """Coarse-grain WishartData with any contiguous frequency partition.
 
     Notes
     -----

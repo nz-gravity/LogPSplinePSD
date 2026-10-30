@@ -47,8 +47,12 @@ def _pointwise_multivar_log_likelihood(
     bases_delta = model_kwargs["bases_delta"]
     bases_theta_re = model_kwargs["bases_theta_re"]
     bases_theta_im = model_kwargs["bases_theta_im"]
-    counts = np.asarray(model_kwargs.get("counts") if model_kwargs.get("counts") is not None
-                        else float(model_kwargs["Nb"]) * float(model_kwargs["Nh"]), dtype=float)
+    counts = np.asarray(
+        model_kwargs.get("counts")
+        if model_kwargs.get("counts") is not None
+        else float(model_kwargs["Nb"]) * float(model_kwargs["Nh"]),
+        dtype=float,
+    )
     duration = float(model_kwargs["duration"])
     enbw = float(model_kwargs.get("enbw", 1.0))
 

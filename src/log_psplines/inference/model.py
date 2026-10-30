@@ -55,8 +55,11 @@ def channel_model_kwargs(
         "delta_coordinates": spline_coordinates(
             model_kwargs["bases_delta"][j],
             model_kwargs["penalties_delta"][j],
-            (model_kwargs.get("counts") if model_kwargs.get("counts") is not None
-             else model_kwargs["Nb"] * model_kwargs["Nh"])
+            (
+                model_kwargs.get("counts")
+                if model_kwargs.get("counts") is not None
+                else model_kwargs["Nb"] * model_kwargs["Nh"]
+            )
             * model_kwargs.get("eta", 1.0)
             / model_kwargs.get("enbw", 1.0),
         ),

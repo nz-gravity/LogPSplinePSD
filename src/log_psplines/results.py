@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 def observed_wishart_data(data: WishartData) -> xr.Dataset:
-    variables = {}
+    variables = {"counts": (("frequency",), np.asarray(data.counts))}
     coords = {
         "frequency": np.asarray(data.freq, dtype=float),
         "channel": np.arange(int(data.p)),

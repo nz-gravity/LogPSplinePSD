@@ -71,6 +71,10 @@ def prepare_collapsed_channel(channel_kwargs: Mapping[str, Any]) -> dict:
             )
     penalty = block_diag(*penalties)
     penalty_cholesky = np.linalg.cholesky(penalty)
+    counts = channel_kwargs.get("counts")
+    if counts is None:
+        counts = channel_kwargs["Nb"] * channel_kwargs["Nh"]
+    counts = jnp.asarray(counts, dtype=previous_re.dtype)
     return {
         "channel_index": j,
         "basis_delta": channel_kwargs["basis_delta"],
@@ -80,14 +84,14 @@ def prepare_collapsed_channel(channel_kwargs: Mapping[str, Any]) -> dict:
         or spline_coordinates(
             channel_kwargs["basis_delta"],
             channel_kwargs["penalty_delta"],
-            channel_kwargs["Nb"]
-            * channel_kwargs["Nh"]
+            counts
             * channel_kwargs.get("eta", 1.0)
             / channel_kwargs.get("enbw", 1.0),
         ),
         "duration": channel_kwargs["duration"],
         "Nb": channel_kwargs["Nb"],
         "Nh": channel_kwargs["Nh"],
+        "counts": counts,
         "enbw": channel_kwargs.get("enbw", 1.0),
         "eta": channel_kwargs.get("eta", 1.0),
         "design_re": jnp.asarray(np.concatenate(designs_re, axis=-1)),
@@ -119,6 +123,7 @@ def gaussian_theta_conditional(
     Nb: int,
     Nh: int,
     duration: float,
+    counts: jax.Array | None = None,
     enbw: float = 1.0,
     eta: float = 1.0,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
@@ -147,7 +152,7 @@ def gaussian_theta_conditional(
     likelihood_scale = eta / enbw
     return gaussian_linear_conditional(
         log_delta_sq,
-        likelihood_scale * Nb * Nh,
+        likelihood_scale * (Nb * Nh if counts is None else counts),
         design_re=design_re,
         design_im=design_im,
         observed_re=observed_re,
@@ -236,6 +241,7 @@ def _conditional_kwargs(prepared: Mapping[str, Any]) -> dict:
             "duration",
             "enbw",
             "eta",
+            "counts",
         )
     }
 
@@ -318,7 +324,7 @@ def sample_conditional_theta(
         )
         full_log_likelihood = (
             (
-                -prepared_kwargs["Nb"] * prepared_kwargs["Nh"] * jnp.sum(logd)
+                -jnp.sum(prepared_kwargs["counts"] * logd)
                 - jnp.sum(
                     (residual_re**2 + residual_im**2) * jnp.exp(-logd)[:, None]
                 )

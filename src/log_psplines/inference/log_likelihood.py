@@ -47,8 +47,10 @@ def _pointwise_multivar_log_likelihood(
     bases_delta = model_kwargs["bases_delta"]
     bases_theta_re = model_kwargs["bases_theta_re"]
     bases_theta_im = model_kwargs["bases_theta_im"]
-    nb = float(model_kwargs["Nb"])
-    nh = float(model_kwargs["Nh"])
+    counts = model_kwargs.get("counts")
+    if counts is None:
+        counts = model_kwargs["Nb"] * model_kwargs["Nh"]
+    counts = np.asarray(counts, dtype=float)
     duration = float(model_kwargs["duration"])
     enbw = float(model_kwargs.get("enbw", 1.0))
 
@@ -69,7 +71,7 @@ def _pointwise_multivar_log_likelihood(
         log_delta_sq = np.einsum("fk,cdk->cdf", basis_delta, weights_delta)
         delta_eff_sq = np.exp(log_delta_sq)
 
-        pointwise = -nb * nh * log_delta_sq
+        pointwise = -counts * log_delta_sq
 
         u_re_channel = u_re[:, channel_index, :]
         u_im_channel = u_im[:, channel_index, :]

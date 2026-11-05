@@ -248,6 +248,43 @@ def test_pipeline_coarse_graining_and_frequency_mask():
         preprocess_to_freq_domain(ts, masked_config)
 
 
+def test_adaptive_pipeline_excludes_fine_frequencies_before_pooling():
+    ts = TimeSeries(
+        np.random.default_rng(19).normal(size=(256, 2)), np.arange(256) / 32.0
+    )
+    config = StationaryConfig(Nb=4, verbose=False)
+    fine = preprocess_to_freq_domain(ts, config)
+    keep = ~((fine.freq >= 4.0) & (fine.freq <= 6.0))
+    filtered = fine.apply_mask(keep)
+    pooled = preprocess_to_freq_domain(
+        ts,
+        replace(
+            config,
+            exclude_freq_bands=[(4.0, 6.0)],
+            coarse_grain_config=CoarseGrainConfig(
+                enabled=True,
+                method="adaptive",
+                tolerance=1e6,
+                max_bin_width=4,
+                pilot_window=3,
+            ),
+        ),
+    )
+    assert pooled.freq_bin_counts.sum() == keep.sum()
+    stops = pooled.freq_bin_counts.cumsum()
+    starts = np.r_[0, stops[:-1]]
+    np.testing.assert_allclose(
+        pooled.Y,
+        np.add.reduceat(filtered.Y, starts, axis=0),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    for start, stop in zip(starts, stops, strict=True):
+        assert not (
+            filtered.freq[start] < 4.0 and filtered.freq[stop - 1] > 6.0
+        )
+
+
 def test_truth_alignment_interpolates_complex_spectra_without_changing_data():
     data = compute_wishart(
         np.random.default_rng(12).normal(size=(64, 2)), fs=16.0, Nb=2

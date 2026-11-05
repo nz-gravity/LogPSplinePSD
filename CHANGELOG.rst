@@ -5,6 +5,37 @@ CHANGELOG
 =========
 
 
+.. _changelog-v1.1.0:
+
+v1.1.0 (2026-11-05)
+===================
+
+Documentation
+-------------
+
+* docs: link to LISA case studies (`46d4e61`_)
+
+Features
+--------
+
+* feat(multivar): adaptive frequency coarse-graining with per-bin Wishart counts (#60)
+
+Add pilot-guided adaptive FFT bins with per-bin counts throughout stationary inference and saved results.
+
+Preserve complex Wishart sums, normalize knot pilots, and handle near-singular spectra and repeated pooling. Share aggregation and remove obsolete helpers and duplicated computations.
+
+Validation: 308 local tests; GitHub contract tests, recovery fits, formatting, lint, and documentation build. (`dac0c24`_)
+
+Unknown
+-------
+
+* Update README.rst (`4680927`_)
+
+.. _46d4e61: https://github.com/nz-gravity/LogPSplinePSD/commit/46d4e61cd46c72c555bf29a3aa137915609f61ec
+.. _dac0c24: https://github.com/nz-gravity/LogPSplinePSD/commit/dac0c244350c10e6c61d22a2656baef45ff8f612
+.. _4680927: https://github.com/nz-gravity/LogPSplinePSD/commit/468092798cafd3b97415e319cc0280d218eb271a
+
+
 .. _changelog-v1.0.1:
 
 v1.0.1 (2026-10-29)
@@ -14,6 +45,11 @@ Bug Fixes
 ---------
 
 * fix: stabilize spline sampling across stationary and matrix models (`ef04c24`_)
+
+Chores
+------
+
+* chore(release): 1.0.1 (`7433fae`_)
 
 Documentation
 -------------
@@ -42,6 +78,7 @@ Retain joint Gaussian marginalization and global centering. Preserve the supplie
 * Merge main and marginalize multivariate time-varying cross spectra (`d0b3aab`_)
 
 .. _ef04c24: https://github.com/nz-gravity/LogPSplinePSD/commit/ef04c24f5c15c0dae8864e419f06c43e9687c50f
+.. _7433fae: https://github.com/nz-gravity/LogPSplinePSD/commit/7433fae56b4de8714b640c5c67927ac0a636f187
 .. _27d1d1a: https://github.com/nz-gravity/LogPSplinePSD/commit/27d1d1a9e2f43cd5f52c250f5409bb349a4ef0c6
 .. _2b63ee9: https://github.com/nz-gravity/LogPSplinePSD/commit/2b63ee9572dc8b716ff0d8227fa8f649da92d98c
 .. _287f125: https://github.com/nz-gravity/LogPSplinePSD/commit/287f1257084c30f9579dfcb0b43c47e1d61163da

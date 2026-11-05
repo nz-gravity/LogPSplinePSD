@@ -4,14 +4,10 @@ from dataclasses import dataclass
 from math import isqrt
 
 import numpy as np
-from jaxtyping import Complex, Float
+from jaxtyping import Float
 
 from log_psplines.data.spectral import WishartData
-from log_psplines.data.spectral_utils import (
-    U_to_Y,
-    Y_to_S,
-    Y_to_U,
-)
+from log_psplines.data.spectral_utils import Y_to_S, Y_to_U
 
 from ..logger import logger
 
@@ -47,7 +43,7 @@ class CoarseGrainConfig:
     """Select fixed-width or pilot-guided adaptive frequency aggregation.
 
     For fixed bins, exactly one of Nc and Nh is required. For adaptive bins,
-    Nc/Nh are ignored and the accepted width is bounded by max_bin_width.
+    Nc is ignored, Nh must be None, and max_bin_width bounds the width.
     A smoothed empirical spectral matrix is only used to choose boundaries;
     unsmoothed Wishart statistics enter the likelihood.
     """
@@ -100,35 +96,36 @@ class CoarseGrainConfig:
 class CoarseGrainSpec:
     """Disjoint contiguous partitions of the retained frequency index grid.
 
-    J_stop is exclusive; freq_bin_counts is the number of fine frequencies
-    per coarse bin. Nh remains a legacy scalar for fixed-width callers.
+    J_stop is exclusive; freq_bin_counts derives the number of input bins
+    in each partition. Nh remains a legacy scalar for fixed-width callers.
     """
 
     f_coarse: np.ndarray  # (Nc,)
 
-    Nh: int  # constant bin size (odd)
+    Nh: int  # constant bin size for fixed-width partitions
     J_start: np.ndarray  # (Nc,)
     J_mid: np.ndarray  # (Nc,)
     Nc: int  # number of bins
     J_stop: np.ndarray | None = None  # exclusive boundaries
-    freq_bin_counts: np.ndarray | None = None
 
     def __post_init__(self):
-        self.J_start = np.asarray(self.J_start, dtype=np.int64)
-        self.J_mid = np.asarray(self.J_mid, dtype=np.int64)
+        self.Nc = _as_int("Nc", self.Nc)
+        if self.Nc <= 0:
+            raise ValueError("Nc must be positive")
+        self.f_coarse = np.asarray(self.f_coarse, dtype=np.float64)
         if self.J_stop is None:
-            self.J_stop = self.J_start + self.Nh
-        self.J_stop = np.asarray(self.J_stop, dtype=np.int64)
-        if self.freq_bin_counts is None:
-            self.freq_bin_counts = self.J_stop - self.J_start
-        self.freq_bin_counts = np.asarray(self.freq_bin_counts, dtype=np.int64)
+            self.J_stop = np.asarray(self.J_start) + self.Nh
+        for name in ("J_start", "J_stop", "J_mid"):
+            values = np.asarray(getattr(self, name))
+            if values.dtype.kind not in "iu":
+                raise ValueError("partition indices must be integers")
+            setattr(self, name, values.astype(np.int64))
         if any(
             a.shape != (self.Nc,)
             for a in (
                 self.J_start,
                 self.J_stop,
                 self.J_mid,
-                self.freq_bin_counts,
                 self.f_coarse,
             )
         ):
@@ -137,9 +134,7 @@ class CoarseGrainSpec:
             self.J_start[1:] != self.J_stop[:-1]
         ):
             raise ValueError("partition must be contiguous and start at zero")
-        if np.any(self.J_stop <= self.J_start) or np.any(
-            self.freq_bin_counts != self.J_stop - self.J_start
-        ):
+        if np.any(self.J_stop <= self.J_start):
             raise ValueError("partition has invalid bin counts")
         if np.any((self.J_mid < self.J_start) | (self.J_mid >= self.J_stop)):
             raise ValueError(
@@ -148,6 +143,11 @@ class CoarseGrainSpec:
 
     def __repr__(self):
         return f"CoarseGrainSpec(Nc={self.Nc}, Nl={self.freq_bin_counts.sum()}, widths={self.freq_bin_counts.min()}..{self.freq_bin_counts.max()})"
+
+    @property
+    def freq_bin_counts(self) -> np.ndarray:
+        """Number of input frequency bins in each partition."""
+        return self.J_stop - self.J_start
 
 
 def _resolve_equal_bin_params(
@@ -190,39 +190,6 @@ def _resolve_equal_bin_params(
         )
     Nh_int = Nl // Nc_int
     return int(Nc_int), int(Nh_int)
-
-
-def _coarse_grain_wishart_y_to_u(
-    Y_sel: Complex[np.ndarray, "N p p"],
-    *,
-    Nc: int,
-    Nh: int,
-) -> np.ndarray:
-    """Coarse-grain Wishart matrices by summing Y(f) within each bin.
-
-    For each bin h, compute:
-        Y_bar[h] = sum_{f in J_h} Y(f)
-    and return U_bar such that:
-        Y_bar[h] = U_bar[h] U_bar[h]^H
-
-    Y_sel should be the fine-grid Wishart matrix Y(f_k), not the mean FFT.
-    This mirrors the math directly and keeps the compact (p x p) factorization.
-    """
-    if Nc <= 0:
-        raise ValueError("Nc must be positive.")
-    if Nh <= 0:
-        raise ValueError("Nh must be positive.")
-    if Y_sel.ndim != 3:
-        raise ValueError("Y_sel must have shape (Nl, p, p)")
-    if Y_sel.shape[0] != Nc * Nh:
-        raise ValueError(
-            "Y_sel length must equal Nc * Nh on the retained frequency grid"
-        )
-
-    # Coarse-grain by summing within bins.
-    Y_bar = Y_sel.reshape(Nc, Nh, *Y_sel.shape[1:]).sum(axis=1)
-
-    return Y_to_U(Y_bar)
 
 
 def compute_binning_structure(
@@ -295,14 +262,14 @@ def compute_adaptive_binning_structure(
             "max_bin_width must be positive, pilot_window positive and odd"
         )
     f = np.asarray(fft.freq, dtype=float)
-    if f.size == 0 or not np.all(np.diff(f) > 0):
+    if f.size == 0 or not np.isfinite(f).all() or not np.all(np.diff(f) > 0):
         raise ValueError(
-            "frequency grid must be nonempty and strictly increasing"
+            "frequency grid must be finite, nonempty and strictly increasing"
         )
     matrix = (
         np.asarray(fft.raw_psd)
         if fft.raw_psd is not None
-        else fft.Y / (fft.Nb * fft.duration)
+        else fft.Y / (fft.counts[:, None, None] * fft.duration)
     )
     if not np.isfinite(matrix).all():
         raise ValueError("pilot spectral matrix must be finite")
@@ -336,8 +303,8 @@ def compute_adaptive_binning_structure(
         # making the whitened comparison numerically meaningless.
         floor = max(float(np.max(np.abs(eig))) * 1e-6, np.finfo(float).tiny)
         inverse_root = (vec / np.sqrt(np.maximum(eig, floor))) @ vec.conj().T
-        normalized = inverse_root @ pilot[start:stop] @ inverse_root
-        errors = np.linalg.eigvalsh(normalized - np.eye(fft.p, dtype=complex))
+        difference = pilot[start:stop] - pilot[mid]
+        errors = np.linalg.eigvalsh(inverse_root @ difference @ inverse_root)
         return float(np.max(np.abs(errors)))
 
     starts, stops, mids = [], [], []
@@ -363,7 +330,6 @@ def compute_adaptive_binning_structure(
         J_stop=stops,
         J_mid=mids,
         Nc=len(starts),
-        freq_bin_counts=stops - starts,
     )
 
 
@@ -379,28 +345,25 @@ def apply_coarse_grain_multivar_fft(
       the coarse-grid U factors used by the likelihood.
     """
 
-    # FFT is already on the retained analysis band.
-    u_sel = fft.U
-
-    Nc = int(spec.Nc)
-    if Nc <= 0 or spec.J_stop[-1] > fft.N:
+    if spec.J_stop[-1] > fft.N:
         raise ValueError("Invalid coarse-grain partition for frequency grid")
     # Each sum retains the Hermitian cross-spectral matrix, including phase.
-    Y_sel = U_to_Y(u_sel[: spec.J_stop[-1]])
-    Y_bar = np.add.reduceat(Y_sel, spec.J_start, axis=0)
+    stop = spec.J_stop[-1]
+    Y_bar = np.add.reduceat(fft.Y[:stop], spec.J_start, axis=0)
+    counts = np.add.reduceat(fft.freq_bin_counts[:stop], spec.J_start)
     u_bins = Y_to_U(Y_bar)
 
     psd_coarse = Y_to_S(
-        U_to_Y(u_bins),
+        Y_bar,
         Nb=int(fft.Nb),
         duration=float(getattr(fft, "duration", 1.0) or 1.0),
         scaling_factor=float(fft.scaling_factor or 1.0),
-        Nh=spec.freq_bin_counts,
+        Nh=counts,
     )
 
     f_coarse = np.asarray(spec.f_coarse, dtype=np.float64)
 
-    fft_coarse = WishartData(
+    return WishartData(
         u_re=u_bins.real.astype(np.float64),
         u_im=u_bins.imag.astype(np.float64),
         freq=f_coarse,
@@ -413,10 +376,8 @@ def apply_coarse_grain_multivar_fft(
         raw_psd=psd_coarse.astype(np.complex128),
         raw_freq=f_coarse,
         channel_stds=fft.channel_stds,
-        Nh=spec.Nh,
-        freq_bin_counts=spec.freq_bin_counts,
+        Nh=int(counts[0]) if np.all(counts == counts[0]) else 1,
+        freq_bin_counts=counts,
         enbw=float(getattr(fft, "enbw", 1.0) or 1.0),
         preprocessing=fft.preprocessing,
     )
-
-    return fft_coarse

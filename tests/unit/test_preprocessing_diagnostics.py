@@ -50,7 +50,10 @@ def test_eigenvalue_diagnostics_components_and_plot():
     plt.close(fig)
 
 
-def test_preprocessing_check_saves_plot_and_warns(tmp_path, monkeypatch):
+@pytest.mark.parametrize("counts", [None, np.array([1, 2, 3, 1, 4, 2])])
+def test_preprocessing_check_saves_plot_and_warns(
+    tmp_path, monkeypatch, counts
+):
     freq = np.linspace(0.1, 0.6, 6)
     matrix = np.array([np.diag([scale, 0.9 * scale]) for scale in range(2, 8)])
     data = WishartData(
@@ -62,6 +65,7 @@ def test_preprocessing_check_saves_plot_and_warns(tmp_path, monkeypatch):
         Nb=2,
         fs=12.0,
         raw_psd=matrix,
+        freq_bin_counts=counts,
     )
     warnings = []
     monkeypatch.setattr(

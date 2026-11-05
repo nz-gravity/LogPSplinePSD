@@ -29,6 +29,10 @@ def channel_model_kwargs(
 ) -> dict[str, Any]:
     """Extract kwargs for one multivariate Cholesky likelihood factor."""
     j = int(channel_index)
+    counts = model_kwargs.get("counts")
+    if counts is None:
+        counts = model_kwargs["Nb"] * model_kwargs["Nh"]
+    counts = jnp.asarray(counts, dtype=model_kwargs["u_re"].dtype)
     return {
         "channel_index": j,
         "u_re_channel": model_kwargs["u_re"][:, j, :],
@@ -55,18 +59,14 @@ def channel_model_kwargs(
         "delta_coordinates": spline_coordinates(
             model_kwargs["bases_delta"][j],
             model_kwargs["penalties_delta"][j],
-            (
-                model_kwargs.get("counts")
-                if model_kwargs.get("counts") is not None
-                else model_kwargs["Nb"] * model_kwargs["Nh"]
-            )
+            counts
             * model_kwargs.get("eta", 1.0)
             / model_kwargs.get("enbw", 1.0),
         ),
         "duration": model_kwargs["duration"],
         "Nb": model_kwargs["Nb"],
         "Nh": model_kwargs["Nh"],
-        "counts": model_kwargs.get("counts"),
+        "counts": counts,
         "enbw": model_kwargs.get("enbw", 1.0),
         "eta": model_kwargs.get("eta", 1.0),
     }
@@ -284,7 +284,7 @@ def prepare_model(
         "duration": float(getattr(data, "duration", 1.0) or 1.0),
         "Nb": int(data.Nb),
         "Nh": int(data.Nh),
-        "counts": jnp.asarray(data.counts),
+        "counts": jnp.asarray(data.counts, dtype=u_re.dtype),
         "enbw": float(getattr(data, "enbw", 1.0)),
     }
     return kwargs, spline

@@ -94,6 +94,8 @@ The trace term is **not** multiplied by :math:`n_h` again, because
 :math:`\bar Y_h` already sums the fine-frequency matrices. The data
 container saves :math:`n_h` in ``freq_bin_counts`` and supplies
 ``counts = Nb * freq_bin_counts`` to the likelihood.
+Fitted results retain these observation counts in ``observed_data.counts``,
+including after a NetCDF round trip.
 
 The optional adaptive partition uses a running-mean matrix pilot to
 select bin edges, accepting a candidate only while its whitened

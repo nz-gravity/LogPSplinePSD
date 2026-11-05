@@ -221,8 +221,10 @@ def test_stationary_coordinates_keep_full_scalar_posterior_and_tempering(eta):
 
 
 @pytest.mark.parametrize("log_power_shift", [-100.0, 0.0, 100.0])
+@pytest.mark.parametrize("irregular_counts", [False, True])
 def test_pointwise_likelihood_matches_sampled_channel_likelihoods(
     log_power_shift,
+    irregular_counts,
 ):
     config = StationaryConfig(
         n_knots=5, Nb=4, verbose=False, wishart_window="hann"
@@ -234,6 +236,8 @@ def test_pointwise_likelihood_matches_sampled_channel_likelihoods(
         ),
         config,
     )
+    if irregular_counts:
+        data.freq_bin_counts = np.arange(1, data.N + 1)
     kwargs, _ = prepare_model(data, config)
     assert all(
         leaf.dtype == jnp.float64
@@ -274,7 +278,7 @@ def test_pointwise_likelihood_matches_sampled_channel_likelihoods(
         posterior=posterior, data=data, model_kwargs=kwargs
     )
     determinant_shift = (
-        kwargs["Nb"] * kwargs["Nh"] * log_power_shift / kwargs["enbw"]
+        np.asarray(kwargs["counts"]) * log_power_shift / kwargs["enbw"]
     )
     for name in likelihood:
         channel_count = data.p if name == "log_likelihood" else 1
@@ -318,6 +322,7 @@ def test_pointwise_likelihood_matches_sampled_channel_likelihoods(
                     kwargs["u_im"][:, :channel, :],
                     Nb=kwargs["Nb"],
                     Nh=kwargs["Nh"],
+                    counts=kwargs["counts"],
                     duration=kwargs["duration"],
                     enbw=kwargs["enbw"],
                 )

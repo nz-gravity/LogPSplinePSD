@@ -18,7 +18,7 @@ from log_psplines.inference.collapsed import (
 from log_psplines.likelihoods.wishart import wishart_log_likelihood
 
 
-def _example(log_scale=0.0):
+def _example(log_scale=0.0, irregular_counts=False):
     rng = np.random.default_rng(83)
     n, replicates, j = 5, 3, 2
     scale = np.exp(log_scale / 2)
@@ -44,6 +44,7 @@ def _example(log_scale=0.0):
         "roughness_scale": 1.28,
         "Nb": 4,
         "Nh": 3,
+        "counts": jnp.asarray([4, 8, 12, 20, 2]) if irregular_counts else None,
         "duration": 2.3,
         "eta": 0.37,
         "enbw": 1.5,
@@ -99,10 +100,12 @@ def _independent_gaussian(kw, logd, sigmas):
 
 
 @pytest.mark.parametrize("log_scale", [-100.0, 0.0, 100.0])
+@pytest.mark.parametrize("irregular_counts", [False, True])
 def test_collapsed_integral_matches_full_joint_and_conditional_density(
     log_scale,
+    irregular_counts,
 ):
-    kw = _example(log_scale)
+    kw = _example(log_scale, irregular_counts)
     prepared = prepare_collapsed_channel(kw)
     for amplitude in (0.03, 0.7, 4.0):
         logd = np.linspace(-0.7, 0.8, 5) + log_scale
@@ -116,9 +119,10 @@ def test_collapsed_integral_matches_full_joint_and_conditional_density(
             **_conditional_kwargs(prepared),
         )
         beta = expected_mean + np.linspace(-0.1, 0.1, len(expected_mean))
-        full = -kw["eta"] / kw["enbw"] * kw["Nb"] * kw["Nh"] * np.sum(
-            logd
-        ) - np.sum(precision * (y - x @ beta) ** 2)
+        counts = kw["Nb"] * kw["Nh"] if kw["counts"] is None else kw["counts"]
+        full = -kw["eta"] / kw["enbw"] * np.sum(counts * logd) - np.sum(
+            precision * (y - x @ beta) ** 2
+        )
         expected = (
             full
             + multivariate_normal.logpdf(beta, cov=prior)
@@ -139,8 +143,12 @@ def test_collapsed_integral_matches_full_joint_and_conditional_density(
 
 
 @pytest.mark.parametrize("log_scale", [-100.0, 0.0, 100.0])
-def test_marginal_gradients_match_independent_gaussian_identity(log_scale):
-    kw = _example(log_scale)
+@pytest.mark.parametrize("irregular_counts", [False, True])
+def test_marginal_gradients_match_independent_gaussian_identity(
+    log_scale,
+    irregular_counts,
+):
+    kw = _example(log_scale, irregular_counts)
     prepared = prepare_collapsed_channel(kw)
     point = np.r_[
         np.linspace(-0.7, 0.8, 5) + log_scale, np.log([0.3, 0.4, 0.8, 0.6])
@@ -158,9 +166,10 @@ def test_marginal_gradients_match_independent_gaussian_identity(log_scale):
         )
         # Evaluate the identity at beta=0, avoiding shared solve expressions.
         zero = np.zeros(len(mean))
-        ll = -kw["eta"] / kw["enbw"] * kw["Nb"] * kw["Nh"] * np.sum(
-            logd
-        ) - np.sum(precision * y**2)
+        counts = kw["Nb"] * kw["Nh"] if kw["counts"] is None else kw["counts"]
+        ll = -kw["eta"] / kw["enbw"] * np.sum(counts * logd) - np.sum(
+            precision * y**2
+        )
         return (
             ll
             + multivariate_normal.logpdf(zero, cov=prior)
@@ -184,8 +193,12 @@ def test_marginal_gradients_match_independent_gaussian_identity(log_scale):
 
 
 @pytest.mark.parametrize("log_scale", [-100.0, 0.0, 100.0])
-def test_conditional_draws_recover_moments_and_original_likelihood(log_scale):
-    kw = _example(log_scale)
+@pytest.mark.parametrize("irregular_counts", [False, True])
+def test_conditional_draws_recover_moments_and_original_likelihood(
+    log_scale,
+    irregular_counts,
+):
+    kw = _example(log_scale, irregular_counts)
     kw["basis_delta"] = kw["basis_delta"].at[:, 0].set(1.0)
     prepared = prepare_collapsed_channel(kw)
     weights = np.array([0.1 + log_scale, -0.3, 0.15])
@@ -237,7 +250,10 @@ def test_conditional_draws_recover_moments_and_original_likelihood(log_scale):
         kw["u_im_channel"],
         kw["u_re_prev"],
         kw["u_im_prev"],
-        **{key: kw[key] for key in ("Nb", "Nh", "duration", "eta", "enbw")},
+        **{
+            key: kw[key]
+            for key in ("Nb", "Nh", "counts", "duration", "eta", "enbw")
+        },
     )
     assert output["log_likelihood_block_2"].shape == shape
     previous = np.asarray(kw["u_re_prev"]) + 1j * np.asarray(kw["u_im_prev"])
@@ -247,11 +263,12 @@ def test_conditional_draws_recover_moments_and_original_likelihood(log_scale):
     residual = observed - np.einsum(
         "fj,fjr->fr", theta["re"] + 1j * theta["im"], previous
     )
+    counts = kw["Nb"] * kw["Nh"] if kw["counts"] is None else kw["counts"]
     direct = (
         -kw["eta"]
         / kw["enbw"]
         * (
-            kw["Nb"] * kw["Nh"] * np.sum(logd)
+            np.sum(counts * logd)
             + np.sum(np.exp(-logd) * np.sum(abs(residual) ** 2, axis=-1))
             / kw["duration"]
         )
@@ -308,15 +325,24 @@ def test_irregular_frequency_counts_change_only_collapsed_logdet_weight():
     logd = jnp.asarray([-0.4, 0.3, 0.5, -0.1, 0.9])
     sigmas = jnp.asarray([0.6, 0.9, 0.7, 1.2])
     old = gaussian_theta_conditional(
-        logd, sigmas, **_conditional_kwargs(prepare_collapsed_channel(original))
+        logd,
+        sigmas,
+        **_conditional_kwargs(prepare_collapsed_channel(original)),
     )
     updated = gaussian_theta_conditional(
-        logd, sigmas, **_conditional_kwargs(prepare_collapsed_channel(weighted))
+        logd,
+        sigmas,
+        **_conditional_kwargs(prepare_collapsed_channel(weighted)),
     )
     expected_delta = (
-        -weighted["eta"] / weighted["enbw"]
+        -weighted["eta"]
+        / weighted["enbw"]
         * jnp.sum((new_counts - weighted["Nb"] * weighted["Nh"]) * logd)
     )
     np.testing.assert_allclose(updated[0] - old[0], expected_delta, atol=2e-10)
-    for updated_component, old_component in zip(updated[1:], old[1:]):
-        np.testing.assert_allclose(updated_component, old_component, atol=2e-10)
+    for updated_component, old_component in zip(
+        updated[1:], old[1:], strict=True
+    ):
+        np.testing.assert_allclose(
+            updated_component, old_component, atol=2e-10
+        )

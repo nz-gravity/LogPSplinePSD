@@ -62,9 +62,6 @@ class WishartData:
     # Coarse-grain multiplicity Nh. For equal-sized bins this is constant
     # across the retained frequency grid. Defaults to 1 (no coarse graining).
     Nh: int = 1
-    # Actual number of fine Fourier frequencies represented by each ordinate.
-    # Defaults to scalar Nh for existing fixed-bin and unbinned inputs.
-    freq_bin_counts: np.ndarray | None = None
     # Normalized Equivalent Noise Bandwidth (NENBW) of the analysis window,
     # in units of frequency bins.  Computed automatically by compute_wishart()
     # as  NENBW = Lb * Σ w(t)² / (Σ w(t))²  (Heinzel et al. 2002, eq. 21).
@@ -76,6 +73,9 @@ class WishartData:
     # Describes the operations actually used to construct these statistics.
     # Empty for externally supplied statistics with unspecified provenance.
     preprocessing: dict[str, str] = field(default_factory=dict)
+    # Actual number of fine Fourier frequencies represented by each ordinate.
+    # Defaults to scalar Nh for existing fixed-bin and unbinned inputs.
+    freq_bin_counts: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         self.preprocessing = dict(self.preprocessing)

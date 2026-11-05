@@ -61,12 +61,7 @@ def preprocess_to_freq_domain(
     # Adaptive bins must never straddle a physically excluded fine-frequency
     # band. Fixed binning retains its historical post-binning mask behavior.
     if coarse_config.enabled and coarse_config.method == "adaptive" and bands:
-        fine_mask = np.ones(processed.N, dtype=bool)
-        for low, high in bands:
-            fine_mask &= ~((processed.freq >= low) & (processed.freq <= high))
-        if not fine_mask.any():
-            raise ValueError("Frequency masking removed all inference bins.")
-        processed = processed.apply_mask(fine_mask)
+        processed = processed.exclude_frequency_bands(bands)
         bands = ()
 
     if coarse_config.enabled:

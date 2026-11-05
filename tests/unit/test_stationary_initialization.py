@@ -6,16 +6,23 @@ import numpy as np
 import pytest
 
 from log_psplines import StationaryConfig, WishartData
+from log_psplines.inference.components import MultivarComponentKey
 from log_psplines.inference.model import prepare_model
 
 
-def test_initial_delta_targets_conditional_power_in_likelihood_units():
+@pytest.mark.parametrize("irregular_counts", [False, True])
+def test_initial_delta_targets_conditional_power_in_likelihood_units(
+    irregular_counts,
+):
     n, nb, nh, duration = 24, 4, 3, 12.0
     covariance = np.array(
         [[2.0, 0.8, -0.3], [0.8, 1.5, 0.4], [-0.3, 0.4, 1.0]]
     )
     root = np.linalg.cholesky(covariance)
-    u = np.broadcast_to(root * np.sqrt(nb * nh * duration), (n, 3, 3))
+    widths = (
+        np.tile([1, 4, 2, 5], n // 4) if irregular_counts else np.full(n, nh)
+    )
+    u = root * np.sqrt(nb * widths[:, None, None] * duration)
     data = WishartData(
         u_re=u.copy(),
         u_im=np.zeros_like(u),
@@ -24,6 +31,7 @@ def test_initial_delta_targets_conditional_power_in_likelihood_units():
         p=3,
         Nb=nb,
         Nh=nh,
+        freq_bin_counts=widths,
         duration=duration,
     )
     kwargs, components = prepare_model(
@@ -32,6 +40,11 @@ def test_initial_delta_targets_conditional_power_in_likelihood_units():
     expected = 2 * np.log(np.diag(root))
     for j, model in enumerate(components.diagonal_models):
         np.testing.assert_allclose(model(), expected[j], atol=2e-6)
+        np.testing.assert_allclose(
+            components.component_scores[MultivarComponentKey("delta", j)],
+            expected[j],
+            atol=2e-12,
+        )
         np.testing.assert_array_equal(
             kwargs["initial_weights_delta"][j], model.weights
         )

@@ -352,6 +352,8 @@ Coarse Graining
 
 .. autofunction:: log_psplines.preprocessing.coarse_grain.compute_binning_structure
 
+.. autofunction:: log_psplines.preprocessing.coarse_grain.compute_adaptive_binning_structure
+
 .. autofunction:: log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft
 
 

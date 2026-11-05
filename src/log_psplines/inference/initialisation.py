@@ -9,7 +9,7 @@ from jaxtyping import Float
 
 from log_psplines.basis.splines import SplineBasis
 from log_psplines.data import WishartData
-from log_psplines.data.spectral_utils import U_to_Y, psd_to_cholesky_components
+from log_psplines.data.spectral_utils import psd_to_cholesky_components
 from log_psplines.inference.components import (
     MultivarComponentKey,
     SpectralComponents,
@@ -225,13 +225,12 @@ def prepare_components(
         raise ValueError(
             "Multivariate models require Wishart statistics (u_re/u_im)."
         )
-    u_re_np = np.asarray(fft_data.u_re, dtype=np.float64)
-    u_im_np = np.asarray(fft_data.u_im, dtype=np.float64)
-    u_complex_np = u_re_np + 1j * u_im_np
-    # Use channel-space Wishart matrices Y[f] = U[f] U[f]^H.
-    # This is the matrix consumed by the likelihood and preserves
-    # cross-spectral structure for knot scoring.
-    Y_np = U_to_Y(u_complex_np)
+    # Remove bin multiplicity before knot scoring so changes in bin width
+    # cannot create artificial spectral features. The same normalized
+    # components initialize the splines in the likelihood's units.
+    pilot_matrix = fft_data.Y / (
+        float(fft_data.duration) * fft_data.freq_bin_counts[:, None, None]
+    )
     Nb = max(int(fft_data.Nb), 1)
 
     requested_scoring = knot_kwargs.get("scoring")
@@ -247,7 +246,7 @@ def prepare_components(
         offdiag_re_scores,
         offdiag_im_scores,
     ) = multivar_psd_knot_scores(
-        Y_np,
+        pilot_matrix,
         Nb,
         p,
     )
@@ -315,17 +314,10 @@ def prepare_components(
             knot_kwargs=knot_kwargs,
         )
 
-        # Keep initialization empirical for now. The analytical PSD may
-        # guide knot placement, but the starting spline target should still
-        # reflect the observed Wishart matrix on the retained grid.
-        # D contains conditional innovation variances, not marginal powers.
-        # Scores already decompose Y/Nb; remove the remaining FFT duration
-        # and coarse-bin replicate count to match the likelihood's units.
-        log_diag_target = diagonal_scores[i] - np.log(
-            float(fft_data.duration) * fft_data.freq_bin_counts
-        )
+        # Initialize empirical conditional variances; analytical PSDs guide
+        # knot placement only.
         diagonal_model = _build_pspline_from_log_target(
-            log_target=log_diag_target,
+            log_target=score_diag,
             knots=knots_diag,
             degree=degree,
             diff_matrix_order=diffMatrixOrder,
@@ -351,14 +343,7 @@ def prepare_components(
                 f"expected {len(theta_pairs)}, got {len(offdiag_im_scores)}."
             )
 
-        # Keep theta initialization empirical for now. The analytical PSD
-        # may guide knot placement, but we do not inject it into the
-        # initial spline weights unless we intentionally add that policy.
-        # The sampler evaluates theta = B @ w directly (no exp), so weights
-        # must be initialised to reproduce the empirical theta values, not
-        # their log-magnitude.
-        _, theta_emp = psd_to_cholesky_components(Y_np / max(Nb, 1))
-
+        # Theta scores already contain the signed empirical coefficients.
         for theta_idx, (j_idx, l_idx) in enumerate(theta_pairs):
             theta_re_key = MultivarComponentKey(
                 "theta", j_idx, l=l_idx, part="re"
@@ -374,11 +359,6 @@ def prepare_components(
             )
             component_scores[theta_re_key] = score_theta_re
             component_scores[theta_im_key] = score_theta_im
-            # Use actual empirical theta components as initialisation targets.
-            # Re and Im are initialised independently so each spline starts
-            # from the correct signed value rather than a log-magnitude proxy.
-            theta_re_init = np.real(theta_emp[:, j_idx, l_idx])
-            theta_im_init = np.imag(theta_emp[:, j_idx, l_idx])
             knots_theta_re = _build_component_knots(
                 freq=freq,
                 n_knots=family_knot_counts["theta_re"],
@@ -404,7 +384,7 @@ def prepare_components(
                 knot_kwargs=knot_kwargs,
             )
             offdiag_re_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
-                log_target=theta_re_init,
+                log_target=score_theta_re,
                 knots=knots_theta_re,
                 degree=degree,
                 diff_matrix_order=diffMatrixOrder,
@@ -412,7 +392,7 @@ def prepare_components(
                 grid_points=freq_norm,
             )
             offdiag_im_models[(j_idx, l_idx)] = _build_pspline_from_log_target(
-                log_target=theta_im_init,
+                log_target=score_theta_im,
                 knots=knots_theta_im,
                 degree=degree,
                 diff_matrix_order=diffMatrixOrder,

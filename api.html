@@ -445,6 +445,7 @@
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.U"><code class="docutils literal notranslate"><span class="pre">WishartData.U</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.Y"><code class="docutils literal notranslate"><span class="pre">WishartData.Y</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.apply_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.apply_mask()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.counts"><code class="docutils literal notranslate"><span class="pre">WishartData.counts</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.cut"><code class="docutils literal notranslate"><span class="pre">WishartData.cut()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.exclude_frequency_bands"><code class="docutils literal notranslate"><span class="pre">WishartData.exclude_frequency_bands()</span></code></a></li>
 </ul>
@@ -519,8 +520,12 @@
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig"><code class="docutils literal notranslate"><span class="pre">CoarseGrainConfig</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec.freq_bin_counts"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec.freq_bin_counts</span></code></a></li>
+</ul>
+</li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.compute_binning_structure"><code class="docutils literal notranslate"><span class="pre">compute_binning_structure()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.compute_adaptive_binning_structure"><code class="docutils literal notranslate"><span class="pre">compute_adaptive_binning_structure()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="docutils literal notranslate"><span class="pre">apply_coarse_grain_multivar_fft()</span></code></a></li>
 </ul>
 </li>
@@ -550,7 +555,7 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Coarse Graining</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Coarse Graining</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference-spectrum-power-fits">Reference-spectrum power fits</a><ul class="nav section-nav flex-column">
@@ -1078,7 +1083,7 @@ quantiles share the same reduction implementation as <code class="docutils liter
 
 <dl class="py class">
 <dt class="sig sig-object py" id="log_psplines.data.WishartData">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.data.</span></span><span class="sig-name descname"><span class="pre">WishartData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">u_re:</span> <span class="pre">~numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_im:</span> <span class="pre">~numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq:</span> <span class="pre">~numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nb:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scaling_factor:</span> <span class="pre">float</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel_stds:</span> <span class="pre">~numpy.ndarray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fs:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_psd:</span> <span class="pre">~numpy.ndarray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_freq:</span> <span class="pre">~numpy.ndarray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enbw:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preprocessing:</span> <span class="pre">dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.data.WishartData" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.data.</span></span><span class="sig-name descname"><span class="pre">WishartData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">u_re:</span> <span class="pre">~numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_im:</span> <span class="pre">~numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq:</span> <span class="pre">~numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nb:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scaling_factor:</span> <span class="pre">float</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel_stds:</span> <span class="pre">~numpy.ndarray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fs:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duration:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_psd:</span> <span class="pre">~numpy.ndarray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_freq:</span> <span class="pre">~numpy.ndarray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enbw:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preprocessing:</span> <span class="pre">dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq_bin_counts:</span> <span class="pre">~numpy.ndarray</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.data.WishartData" title="Link to this definition">#</a></dt>
 <dd><p>Discrete FFTs for multivariate time series.
 Stores Wishart replicates for multivariate spectral estimation.</p>
 <section id="attributes">
@@ -1124,6 +1129,12 @@ get coarse <code class="docutils literal notranslate"><span class="pre">U</span>
 <dt class="sig sig-object py" id="log_psplines.data.WishartData.apply_mask">
 <span class="sig-name descname"><span class="pre">apply_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.data.WishartData.apply_mask" title="Link to this definition">#</a></dt>
 <dd><p>Return a new WishartData retaining only bins where <code class="docutils literal notranslate"><span class="pre">mask</span></code> is True.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.data.WishartData.counts">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">counts</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#log_psplines.data.WishartData.counts" title="Link to this definition">#</a></dt>
+<dd><p>Number of independent Fourier vectors underlying each bin.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1559,38 +1570,26 @@ the analysis resolution.</p>
 <h2>Coarse Graining<a class="headerlink" href="#coarse-graining" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.CoarseGrainConfig">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">CoarseGrainConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enabled</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig" title="Link to this definition">#</a></dt>
-<dd><p>Configuration for frequency-domain coarse graining with equal-sized bins.</p>
-<dl class="simple">
-<dt>Exactly one of (Nc, Nh) must be provided:</dt><dd><ul class="simple">
-<li><p>Nc: number of coarse bins</p></li>
-<li><p>Nh: number of fine-grid frequencies per coarse bin</p></li>
-</ul>
-</dd>
-</dl>
-<p>The retained frequency count Nl must be divisible by the chosen parameter so
-that bins are exactly equal-sized across the provided frequency grid.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">CoarseGrainConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enabled</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'fixed'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_bin_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pilot_window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">31</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig" title="Link to this definition">#</a></dt>
+<dd><p>Select fixed-width or pilot-guided adaptive frequency aggregation.</p>
+<p>For fixed bins, exactly one of Nc and Nh is required. For adaptive bins,
+Nc is ignored, Nh must be None, and max_bin_width bounds the width.
+A smoothed empirical spectral matrix is only used to choose boundaries;
+unsmoothed Wishart statistics enter the likelihood.</p>
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">CoarseGrainSpec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f_coarse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J_start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J_mid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="Link to this definition">#</a></dt>
-<dd><p>Static description of equal-sized coarse bins on a retained frequency grid.</p>
-<p>The provided retained grid of length Nl is partitioned into Nc disjoint,
-consecutive bins J_h, each of constant size Nh (odd).</p>
-<dl class="simple">
-<dt>For each bin h:</dt><dd><ul class="simple">
-<li><p>J_h spans indices J_start[h] : J_start[h] + Nh on the retained grid</p></li>
-<li><p>J_mid[h] = J_start[h] + (Nh // 2)</p></li>
-<li><p>f_coarse[h] = freqs_retained[J_mid[h]]</p></li>
-</ul>
-</dd>
-</dl>
-<section id="id2">
-<h3>Notes<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
-<p>This spec describes consecutive, full-band bins on the retained grid:
-no gaps, no overlaps, and no per-bin sorting.</p>
-</section>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">CoarseGrainSpec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f_coarse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J_start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J_mid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J_stop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="Link to this definition">#</a></dt>
+<dd><p>Disjoint contiguous partitions of the retained frequency index grid.</p>
+<p>J_stop is exclusive; freq_bin_counts derives the number of input bins
+in each partition. Nh remains a legacy scalar for fixed-width callers.</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec.freq_bin_counts">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">freq_bin_counts</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec.freq_bin_counts" title="Link to this definition">#</a></dt>
+<dd><p>Number of input frequency bins in each partition.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py function">
@@ -1611,11 +1610,21 @@ For even Nh, the lower-middle Fourier frequency is used.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.compute_adaptive_binning_structure">
+<span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">compute_adaptive_binning_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fft</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_bin_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pilot_window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">31</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><span class="pre">CoarseGrainSpec</span></a></span></span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.compute_adaptive_binning_structure" title="Link to this definition">#</a></dt>
+<dd><p>Pilot-guided contiguous frequency bins with a bounded matrix change.</p>
+<p>The pilot <em>only</em> selects bin edges. Actual Wishart statistics are pooled
+from unsmoothed fine-frequency matrices. A relative operator-norm test
+protects both autospectra and complex cross-spectral phase. Gaps in a
+retained Fourier grid separate bins.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft">
 <span class="sig-prename descclassname"><span class="pre">log_psplines.preprocessing.coarse_grain.</span></span><span class="sig-name descname"><span class="pre">apply_coarse_grain_multivar_fft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fft</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec" title="log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><span class="pre">CoarseGrainSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#log_psplines.data.WishartData" title="log_psplines.data.spectral.WishartData"><span class="pre">WishartData</span></a></span></span><a class="headerlink" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft" title="Link to this definition">#</a></dt>
-<dd><p>Coarse-grain a WishartData using equal-sized bins.</p>
-<section id="id3">
-<h3>Notes<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
+<dd><p>Coarse-grain WishartData with any contiguous frequency partition.</p>
+<section id="id2">
+<h3>Notes<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
 <ul class="simple">
 <li><p>Y(f_k) is the Wishart matrix built from block FFTs (second-order). We
 form Y_bar by summing Y(f_k) across bins and then re-factorize to obtain
@@ -1770,9 +1779,9 @@ u^{(k)}_\nu = \sqrt{\lambda^{(k)}_\nu}\, v^{(k)}_\nu,\]</div>
 </section>
 <section id="coarse-graining-conventions">
 <h3>Coarse-graining conventions<a class="headerlink" href="#coarse-graining-conventions" title="Link to this heading">#</a></h3>
-<p>We “coarse-grain” the Fourier frequencies by dividing them into <span class="math notranslate nohighlight">\(N_c\)</span>
-consecutive disjoint subsets <span class="math notranslate nohighlight">\(J_h\)</span>, each containing <span class="math notranslate nohighlight">\(N_h\)</span>
-frequencies:</p>
+<p>We coarse-grain the Fourier frequencies into <span class="math notranslate nohighlight">\(N_c\)</span> consecutive,
+disjoint subsets <span class="math notranslate nohighlight">\(J_h\)</span>. Each subset contains <span class="math notranslate nohighlight">\(n_h=|J_h|\)</span>
+fine Fourier frequencies; the fixed-bin method has <span class="math notranslate nohighlight">\(n_h=N_h\)</span>:</p>
 <div class="math notranslate nohighlight">
 \[\{f_1, \ldots, f_N\} = \bigcup_{h=1}^{N_c} J_h.\]</div>
 <p>Let <span class="math notranslate nohighlight">\(\bar{f}_h\)</span> denote the midpoint Fourier frequency of interval <span class="math notranslate nohighlight">\(J_h\)</span>, and define the
@@ -1780,6 +1789,42 @@ coarse-grained sum</p>
 <div class="math notranslate nohighlight">
 \[\bar{Y}_h = \sum_{f \in J_h} Y(f),
 \qquad h=1,\ldots,N_c.\]</div>
+<p>The approximation assumes that the spectral matrix is nearly constant
+inside each subset. Apart from data-independent constants, its likelihood
+contribution is</p>
+<div class="math notranslate nohighlight">
+\[\ell_h = -N_b n_h \log|S(\bar f_h)|
+  - \frac{1}{T}\operatorname{tr}\!\left[
+    S(\bar f_h)^{-1}\bar Y_h\right].\]</div>
+<p>The trace term is <strong>not</strong> multiplied by <span class="math notranslate nohighlight">\(n_h\)</span> again, because
+<span class="math notranslate nohighlight">\(\bar Y_h\)</span> already sums the fine-frequency matrices. The data
+container saves <span class="math notranslate nohighlight">\(n_h\)</span> in <code class="docutils literal notranslate"><span class="pre">freq_bin_counts</span></code> and supplies
+<code class="docutils literal notranslate"><span class="pre">counts</span> <span class="pre">=</span> <span class="pre">Nb</span> <span class="pre">*</span> <span class="pre">freq_bin_counts</span></code> to the likelihood.
+Fitted results retain these observation counts in <code class="docutils literal notranslate"><span class="pre">observed_data.counts</span></code>,
+including after a NetCDF round trip.</p>
+<p>The optional adaptive partition uses a running-mean matrix pilot to
+select bin edges, accepting a candidate only while its whitened
+spectral-matrix deviation remains below <code class="docutils literal notranslate"><span class="pre">tolerance</span></code> and its width
+does not exceed <code class="docutils literal notranslate"><span class="pre">max_bin_width</span></code>. The actual likelihood sums the
+<strong>unsmoothed</strong> fine-frequency Wishart matrices. Frequency exclusion
+occurs before adaptive partitioning, so bins do not bridge excluded
+frequency ranges. The partition is frozen before VI/NUTS, rather than
+updated using fitted PSDs.</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">log_psplines.preprocessing.coarse_grain</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoarseGrainConfig</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">StationaryConfig</span><span class="p">(</span>
+    <span class="n">coarse_grain_config</span><span class="o">=</span><span class="n">CoarseGrainConfig</span><span class="p">(</span>
+        <span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"adaptive"</span><span class="p">,</span> <span class="n">Nc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="o">=</span><span class="mf">0.15</span><span class="p">,</span> <span class="n">max_bin_width</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">pilot_window</span><span class="o">=</span><span class="mi">31</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The pilot-guided, data-dependent partition is an approximation to the
+native Whittle likelihood. The tolerance is heuristic, not a posterior
+error guarantee: validate against fine-frequency inference, especially
+for rapidly varying cross-spectral phase and transfer-function nulls.</p>
 <p>We also use the eigendecomposition of <span class="math notranslate nohighlight">\(\bar{Y}_h\)</span>:</p>
 <div class="math notranslate nohighlight">
 \[\bar{Y}_h = \sum_{\nu=1}^p \lambda^{(h)}_\nu\, v^{(h)}_\nu v^{(h)*}_\nu
@@ -1797,7 +1842,7 @@ helper <code class="xref py py-func docutils literal notranslate"><span class="p
 Wishart matrices into PSD matrices using the stored block count, coarse-bin
 multiplier, duration, and scaling factor.</p></li>
 <li><p><strong>Degrees of freedom</strong> – <code class="docutils literal notranslate"><span class="pre">N_b</span></code> is the block count and <code class="docutils literal notranslate"><span class="pre">N_h</span></code> is the
-(constant) coarse-bin size multiplier.</p></li>
+coarse-bin size multiplier for fixed bins; adaptive bins use per-bin <code class="docutils literal notranslate"><span class="pre">n_h</span></code>.</p></li>
 <li><p><strong>Scaling factor</strong> – The optional <code class="docutils literal notranslate"><span class="pre">scaling_factor</span></code> tracks variance
 adjustments applied during time-domain standardisation and is folded into the
 PSD conversion exactly once.</p></li>
@@ -1817,10 +1862,9 @@ code all consume spectra with the same units and sidedness.</p>
 eigenvector-weighted Wishart factors <code class="docutils literal notranslate"><span class="pre">U(f)</span></code> on the positive-frequency
 grid. The analysis band is controlled by <code class="docutils literal notranslate"><span class="pre">StationaryConfig.fmin</span></code> and
 <code class="docutils literal notranslate"><span class="pre">StationaryConfig.fmax</span></code>.</p></li>
-<li><p><strong>CoarseGrain</strong> – optional <strong>linear, full-band</strong> binning combines nearby
-frequencies by summing <span class="math notranslate nohighlight">\(\bar Y_h = \sum_{f\in J_h} Y(f)\)</span> and assigns each
-bin the member count <span class="math notranslate nohighlight">\(N_h\)</span> for log-determinant scaling. Coarse-grain
-config controls only binning parameters (<code class="docutils literal notranslate"><span class="pre">Nc</span></code>/<code class="docutils literal notranslate"><span class="pre">Nh</span></code>).</p></li>
+<li><p><strong>CoarseGrain</strong> – optional fixed or pilot-guided adaptive bins combine
+frequencies by summing <span class="math notranslate nohighlight">\(\bar Y_h = \sum_{f\in J_h} Y(f)\)</span>; each bin
+retains its member count <span class="math notranslate nohighlight">\(n_h\)</span> for log-determinant scaling.</p></li>
 <li><p><strong>Inference stages</strong> – VI and NUTS stages consume the (possibly coarse)
 Wishart stats and spline models.</p></li>
 <li><p><strong>Result construction</strong> – <code class="docutils literal notranslate"><span class="pre">wishart_u_to_psd</span></code> populates
@@ -1940,8 +1984,8 @@ migration from the removed detrending arguments.</p>
 <li><p>Optionally coarse grain the retained grid.</p></li>
 </ol>
 </section>
-<section id="id4">
-<h3>Coarse Graining<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
+<section id="id3">
+<h3>Coarse Graining<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
 <p>Coarse graining sums neighbouring Wishart matrices into equal-size consecutive
 frequency bins. It is useful when the frequency grid is much denser than the
 spectral structure being estimated.</p>
@@ -2206,6 +2250,7 @@ A flat loss trace alone does not establish posterior accuracy.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.U"><code class="docutils literal notranslate"><span class="pre">WishartData.U</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.Y"><code class="docutils literal notranslate"><span class="pre">WishartData.Y</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.apply_mask"><code class="docutils literal notranslate"><span class="pre">WishartData.apply_mask()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.counts"><code class="docutils literal notranslate"><span class="pre">WishartData.counts</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.cut"><code class="docutils literal notranslate"><span class="pre">WishartData.cut()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.data.WishartData.exclude_frequency_bands"><code class="docutils literal notranslate"><span class="pre">WishartData.exclude_frequency_bands()</span></code></a></li>
 </ul>
@@ -2280,8 +2325,12 @@ A flat loss trace alone does not establish posterior accuracy.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coarse-graining">Coarse Graining</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainConfig"><code class="docutils literal notranslate"><span class="pre">CoarseGrainConfig</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.CoarseGrainSpec.freq_bin_counts"><code class="docutils literal notranslate"><span class="pre">CoarseGrainSpec.freq_bin_counts</span></code></a></li>
+</ul>
+</li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.compute_binning_structure"><code class="docutils literal notranslate"><span class="pre">compute_binning_structure()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.compute_adaptive_binning_structure"><code class="docutils literal notranslate"><span class="pre">compute_adaptive_binning_structure()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#log_psplines.preprocessing.coarse_grain.apply_coarse_grain_multivar_fft"><code class="docutils literal notranslate"><span class="pre">apply_coarse_grain_multivar_fft()</span></code></a></li>
 </ul>
 </li>
@@ -2311,7 +2360,7 @@ A flat loss trace alone does not establish posterior accuracy.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#time-domain-container">Time-Domain Container</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#wishart-statistics">Wishart Statistics</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#frequency-selection">Frequency Selection</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Coarse Graining</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Coarse Graining</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference-spectrum-power-fits">Reference-spectrum power fits</a><ul class="nav section-nav flex-column">

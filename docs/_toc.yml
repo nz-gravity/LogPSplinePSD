@@ -12,6 +12,8 @@ parts:
         title: Time-varying PSD
       - file: examples/multivariate-timevarying-example
         title: Multivariate time-varying PSD
+      - url: https://github.com/nz-gravity/logpsplines_lisa_case_studies
+        title: LISA case studies
   - caption: Reference
     chapters:
       - file: api

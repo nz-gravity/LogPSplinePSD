@@ -43,6 +43,9 @@ Where To Start
 2. :doc:`Multivariate stationary PSD <examples/multivariate-example>` fits spectral matrices and coherence.
 3. :doc:`Time-varying PSD <examples/timevarying-example>` fits scalar WDM and moving-periodogram powers.
 4. :doc:`Multivariate time-varying PSD <examples/multivariate-timevarying-example>` fits PSDs, complex cross-spectra and coherence on a time-frequency grid.
+5. `LISA case studies <https://github.com/nz-gravity/logpsplines_lisa_case_studies>`_
+   provides runnable examples of nonstationary A-channel noise recovery and
+   correlated XYZ instrument-noise inference, with synthetic data and comparison figures.
 
 The :doc:`api` covers configuration, results, spectral conventions and advanced
 reference-spectrum fits. Contributor instructions are in the repository's

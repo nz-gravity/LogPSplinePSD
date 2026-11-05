@@ -65,7 +65,7 @@ Next Steps
 - Explore the `multivariate example <docs/examples/multivariate-example.ipynb>`_.
 - Try the `time-varying example <docs/examples/timevarying-example.ipynb>`_.
 - Fit PSDs and complex cross-spectra with the `multivariate time-varying example <docs/examples/multivariate-timevarying-example.ipynb>`_.
-- Run the `LISA case studies <https://github.com/nz-gravity/logpsplines_lisa_case_studies>`_ for nonstationary A-channel noise recovery and correlated XYZ instrument-noise inference.
+- Run the `LISA case studies <https://nz-gravity.github.io/logpsplines_lisa_case_studies/>`_ for nonstationary A-channel noise, correlated XYZ inference, and seven-day evolving XYZ spline recovery with gaps.
 - Read the `spectral conventions <docs/conventions.rst>`_.
 
 
